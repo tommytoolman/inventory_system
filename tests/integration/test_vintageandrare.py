@@ -7,6 +7,10 @@ from typing import Dict, List, Optional, Tuple
 import subprocess
 import itertools
 import time
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Get absolute path to inventory_system and add to Python path
 project_root = Path(__file__).resolve().parent.parent.parent.parent / 'inventory_system'
@@ -154,10 +158,10 @@ class VintageAndRareTestCase:
         """Generate command line arguments for the test case"""
         cmd = [
             "python",
-            str(self.script_path),
-            "--username", "PLACEHOLDER_USERNAME",
-            "--password", "PLACEHOLDER_PASSWORD",
-            "--test", "True"
+            str(self.script_path), 
+                "--username", os.environ.get("VINTAGE_AND_RARE_USERNAME"), 
+                "--password", os.environ.get("VINTAGE_AND_RARE_PASSWORD"), 
+                "--test", "True"
         ]
         
         for key, value in self.test_data.items():

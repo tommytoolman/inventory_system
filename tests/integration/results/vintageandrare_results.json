@@ -1,0 +1,82 @@
+[
+  {
+    "test_case": 1,
+    "data": {
+      "brand": "Fender",
+      "model": "Test Model",
+      "year": "1964",
+      "color": "Sunburst",
+      "description": "Test description",
+      "processing_time": "3",
+      "time_unit": "Days",
+      "category": "51",
+      "subcategory": "86",
+      "sub_subcategory": "195",
+      "price": "1500",
+      "shipping": true,
+      "europe_shipping": "50"
+    },
+    "success": false,
+    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 811, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 292, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 688, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 522, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 467, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
+  },
+  {
+    "test_case": 2,
+    "data": {
+      "brand": "Fender",
+      "model": "Test Model",
+      "year": "1964",
+      "color": "Sunburst",
+      "description": "Test description",
+      "processing_time": "3",
+      "time_unit": "Days",
+      "category": "51",
+      "subcategory": "86",
+      "sub_subcategory": "195",
+      "price": "1500",
+      "shipping": true,
+      "usa_shipping": "100"
+    },
+    "success": false,
+    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 811, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 292, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 688, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 522, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 467, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
+  },
+  {
+    "test_case": 3,
+    "data": {
+      "brand": "Fender",
+      "model": "Test Model",
+      "year": "1964",
+      "color": "Sunburst",
+      "description": "Test description",
+      "processing_time": "3",
+      "time_unit": "Days",
+      "category": "51",
+      "subcategory": "86",
+      "sub_subcategory": "195",
+      "price": "1500",
+      "shipping": true,
+      "uk_shipping": "75"
+    },
+    "success": false,
+    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 811, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 292, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 688, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 522, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 467, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
+  },
+  {
+    "test_case": 4,
+    "data": {
+      "brand": "Fender",
+      "model": "Test Model",
+      "year": "1964",
+      "color": "Sunburst",
+      "description": "Test description",
+      "processing_time": "3",
+      "time_unit": "Days",
+      "category": "51",
+      "subcategory": "86",
+      "sub_subcategory": "195",
+      "price": "1500",
+      "shipping": true,
+      "world_shipping": "150"
+    },
+    "success": false,
+    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 811, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 292, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 688, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 522, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 467, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
+  }
+]

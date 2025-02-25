@@ -1,0 +1,544 @@
+{
+  "forms": [
+    {
+      "tag_name": "form",
+      "type": null,
+      "name": "loginForm",
+      "id": "loginForm",
+      "class": ""
+    },
+    {
+      "tag_name": "form",
+      "type": null,
+      "name": "forgotPassword",
+      "id": "forgotPassword",
+      "class": ""
+    },
+    {
+      "tag_name": "form",
+      "type": null,
+      "name": "frm_step1",
+      "id": "frm_step1",
+      "class": ""
+    },
+    {
+      "tag_name": "form",
+      "type": null,
+      "name": "",
+      "id": "",
+      "class": ""
+    }
+  ],
+  "inputs": [
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "google-login-error",
+      "id": "google-login-error",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "username",
+      "id": "username",
+      "class": "txt12"
+    },
+    {
+      "tag_name": "input",
+      "type": "password",
+      "name": "pass",
+      "id": "pass",
+      "class": "txt12"
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "keep_me_signed",
+      "id": "keep_me_signed",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "forgot_password_username",
+      "id": "forgot_password_username",
+      "class": "txt12 txt_b"
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "open_where",
+      "id": "open_where",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "submit",
+      "name": "submit_form",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "advancedSearchFor__hidd",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "search_txt",
+      "id": "advancedSearchFor",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "advancedSearchFirstYear__hidd",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "search_syear",
+      "id": "search_syear",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "search_eyear",
+      "id": "search_eyear",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "advancedSearchFirstPrice__hidd",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "search_sprice",
+      "id": "search_sprice",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "search_eprice",
+      "id": "search_eprice",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "showType",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "add_search_history_suggest",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "",
+      "id": "",
+      "class": "toggle_all"
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "has_media",
+      "id": "has_media",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "",
+      "id": "youtube_upload",
+      "class": "youtube_upload"
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "recipient_name",
+      "id": "recipient_name",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "brand_make_id",
+      "id": "brand_make_id",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "model_name",
+      "id": "model_name",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "year",
+      "id": "year",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "finish_color",
+      "id": "finish_color",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "external_url",
+      "id": "external_url",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "price",
+      "id": "price",
+      "class": "tc"
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "call_price",
+      "id": "call_price",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "show_vat",
+      "id": "show_vat",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "add_offer_discount",
+      "id": "add_offer_discount",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "discounted_price",
+      "id": "discounted_price",
+      "class": "tc"
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "offer_discount",
+      "id": "offer_discount",
+      "class": "tc w50"
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "on_dealers_collective",
+      "id": "on_dealers_collective",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "commission_price",
+      "id": "commission_price",
+      "class": "tc"
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "dealers_collective_discout",
+      "id": "dealers_collective_discout",
+      "class": "tc w50"
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "buy_now",
+      "id": "buy_now",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "local_pickup",
+      "id": "local_pickup",
+      "class": "shipping_methods"
+    },
+    {
+      "tag_name": "input",
+      "type": "checkbox",
+      "name": "available_for_shipment",
+      "id": "available_for_shipment",
+      "class": "shipping_methods"
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "processing_time",
+      "id": "processing_time",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "shipping_fees_fee[]",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "shipping_fees_destination[]",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "shipping_fees_fee[]",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "shipping_fees_destination[]",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "shipping_fees_fee[]",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "shipping_fees_destination[]",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "shipping_fees_fee[]",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "shipping_fees_destination[]",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "section",
+      "id": "section",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "on_boost",
+      "id": "on_boost",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "on_reseller_network",
+      "id": "on_reseller_network",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "added_completed",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "owner_id",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "product_id",
+      "id": "product_id",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "offer_id",
+      "id": "offer_id",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "unique_id",
+      "id": "unique_id",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "version",
+      "id": "version",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "password",
+      "name": "",
+      "id": "",
+      "class": "input_pass"
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "err_video_url_not_valid",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "err_no_video_url",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "max_nr_of_files",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "min_string_length_for_autosuggest",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "",
+      "id": "total_files_size",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "hidden",
+      "name": "newsletter",
+      "id": "",
+      "class": ""
+    },
+    {
+      "tag_name": "input",
+      "type": "text",
+      "name": "email",
+      "id": "newsletter_email1",
+      "class": "txt_1"
+    },
+    {
+      "tag_name": "input",
+      "type": "submit",
+      "name": "subscribe",
+      "id": "",
+      "class": "newsletter_submit"
+    },
+    {
+      "tag_name": "input",
+      "type": "file",
+      "name": "",
+      "id": "",
+      "class": "dz-hidden-input"
+    }
+  ],
+  "selects": [
+    {
+      "tag_name": "select",
+      "type": "select-one",
+      "name": "search_category",
+      "id": "search_category",
+      "class": ""
+    },
+    {
+      "tag_name": "select",
+      "type": "select-one",
+      "name": "categ_level_0",
+      "id": "categ_level_0",
+      "class": ""
+    },
+    {
+      "tag_name": "select",
+      "type": "select-one",
+      "name": "decade",
+      "id": "decade",
+      "class": ""
+    },
+    {
+      "tag_name": "select",
+      "type": "select-one",
+      "name": "hours_days_sel",
+      "id": "hours_days_sel",
+      "class": ""
+    }
+  ],
+  "textareas": [
+    {
+      "tag_name": "textarea",
+      "type": "textarea",
+      "name": "item_desc",
+      "id": "item_desc",
+      "class": "tinyMce"
+    }
+  ],
+  "file_uploads": [
+    {
+      "tag_name": "input",
+      "type": "file",
+      "name": "",
+      "id": "",
+      "class": "dz-hidden-input"
+    }
+  ]
+}

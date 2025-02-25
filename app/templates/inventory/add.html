@@ -1,0 +1,1054 @@
+{% extends "base.html" %}
+
+{% block title %}Add Product - Realtime Inventory Forms Flow{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden max-w-5xl mx-auto">
+        <div class="px-6 py-4 bg-gray-50 border-b">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-gray-900">Add New Product</h1>
+                <a href="/inventory" class="text-blue-600 hover:text-blue-800">Back to List</a>
+            </div>
+        </div>
+
+        <!-- Copy from Existing Product -->
+        <div class="px-6 py-4 bg-blue-50 border-b">
+            <div class="flex items-center space-x-4">
+                <label class="text-sm font-medium text-gray-700 whitespace-nowrap">Copy from Existing:</label>
+                <select id="existingProduct" class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">-- Select a product --</option>
+                    {% for product in existing_products %}
+                    <option value="{{ product.id }}">
+                        {{ product.brand or "Unknown Brand" }} 
+                        {{ (product.model or "")|truncate(70) }} 
+                        ({{ (product.sku or "")|truncate(15) }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <button type="button" id="copyButton" 
+                    class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    Copy Details
+                </button>
+                <div class="ml-4 text-sm text-gray-600">
+                    <span id="copyStatus"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Messages (if any) -->
+        {% if error %}
+        <div class="p-4">
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <span class="block sm:inline">{{ error }}</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <form
+            method="POST" 
+            action="/inventory/add"
+            enctype="multipart/form-data" 
+            class="p-6 space-y-6"
+            id="addProductForm"
+            >
+
+            <!-- Form Sections -->
+            <div class="space-y-6">
+                <!-- Basic Info Section -->
+                <div class="form-section">
+                    <button type="button" 
+                        class="form-section-header flex justify-between items-center w-full py-2 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                        <span class="text-lg font-medium">Basic Information</span>
+                        <svg class="form-section-icon w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div class="form-section-content p-4 border rounded-lg mt-2">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Brand</label>
+                                <input type="text" name="brand" id="brand" required
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.brand if form_data else '' }}">
+                                <datalist id="brandsList">
+                                    {% for brand in existing_brands %}
+                                    <option value="{{ brand }}">
+                                    {% endfor %}
+                                </datalist>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Model</label>
+                                <input type="text" name="model" id="model" required
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.model if form_data else '' }}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">SKU</label>
+                                <div class="flex">
+                                    <input type="text" name="sku" id="sku" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                        value="{{ form_data.sku if form_data else '' }}">
+                                    <button type="button" id="generateSku"
+                                        class="ml-2 px-3 py-1 bg-gray-200 rounded-md hover:bg-gray-300"
+                                        title="Generate SKU">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Year</label>
+                                <input type="number" name="year" id="year"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.year if form_data else '' }}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Decade</label>
+                                <select name="decade" id="decade"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <option value="">-- Select Decade --</option>
+                                    {% for decade in range(1920, 2030, 10) %}
+                                    <option value="{{ decade }}">{{ decade }}s</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Category</label>
+                                <input type="text" name="category" id="category" required list="categoriesList"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.category if form_data else '' }}">
+                                <datalist id="categoriesList">
+                                    {% for category in categories %}
+                                    <option value="{{ category }}">
+                                    {% endfor %}
+                                </datalist>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Finish</label>
+                                <input type="text" name="finish" id="finish"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.finish if form_data else '' }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Description & Condition Section -->
+                <div class="form-section">
+                    <button type="button" 
+                        class="form-section-header flex justify-between items-center w-full py-2 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                        <span class="text-lg font-medium">Description & Condition</span>
+                        <svg class="form-section-icon w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div class="form-section-content p-4 border rounded-lg mt-2">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Description</label>
+                                <textarea name="description" id="description" rows="6"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ form_data.description if form_data else '' }}</textarea>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Condition</label>
+                                    <select name="condition" id="condition" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="NEW" {% if form_data and form_data.condition == 'NEW' %}selected{% endif %}>NEW</option>
+                                        <option value="EXCELLENT" {% if form_data and form_data.condition == 'EXCELLENT' %}selected{% endif %}>EXCELLENT</option>
+                                        <option value="VERYGOOD" {% if form_data and form_data.condition == 'VERYGOOD' %}selected{% endif %}>VERY GOOD</option>
+                                        <option value="GOOD" {% if form_data and form_data.condition == 'GOOD' %}selected{% endif %}>GOOD</option>
+                                        <option value="FAIR" {% if form_data and form_data.condition == 'FAIR' %}selected{% endif %}>FAIR</option>
+                                        <option value="POOR" {% if form_data and form_data.condition == 'POOR' %}selected{% endif %}>POOR</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Status</label>
+                                    <select name="status" id="status" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="DRAFT" {% if form_data and form_data.status == 'DRAFT' %}selected{% endif %}>Draft</option>
+                                        <option value="ACTIVE" {% if form_data and form_data.status == 'ACTIVE' %}selected{% endif %}>Active</option>
+                                        <option value="ARCHIVED" {% if form_data and form_data.status == 'ARCHIVED' %}selected{% endif %}>Archived</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pricing & Inventory Section -->
+                <div class="form-section">
+                    <button type="button" 
+                        class="form-section-header flex justify-between items-center w-full py-2 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                        <span class="text-lg font-medium">Pricing & Inventory</span>
+                        <svg class="form-section-icon w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div class="form-section-content p-4 border rounded-lg mt-2">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Base Price</label>
+                                <div class="mt-1 relative rounded-md shadow-sm">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <span class="text-gray-500 sm:text-sm">$</span>
+                                    </div>
+                                    <input type="number" name="base_price" id="base_price" step="0.01" required
+                                        class="pl-7 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                        value="{{ form_data.base_price if form_data else '' }}">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Cost Price</label>
+                                <div class="mt-1 relative rounded-md shadow-sm">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <span class="text-gray-500 sm:text-sm">$</span>
+                                    </div>
+                                    <input type="number" name="cost_price" id="cost_price" step="0.01"
+                                        class="pl-7 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                        value="{{ form_data.cost_price if form_data else '' }}">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Processing Time (days)</label>
+                                <input type="number" name="processing_time" id="processing_time" min="1" max="30"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.processing_time if form_data else '3' }}">
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Collective Discount (%)</label>
+                                <input type="number" name="collective_discount" id="collective_discount" step="0.1" min="0" max="100"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.collective_discount if form_data else '0' }}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Offer Discount (%)</label>
+                                <input type="number" name="offer_discount" id="offer_discount" step="0.1" min="0" max="100"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.offer_discount if form_data else '0' }}">
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div class="flex items-center">
+                                <input type="checkbox" name="in_collective" id="in_collective"
+                                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    {% if form_data and form_data.in_collective %}checked{% endif %}>
+                                <label for="in_collective" class="ml-2 block text-sm text-gray-700">In Collective</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" name="in_inventory" id="in_inventory"
+                                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    {% if form_data and form_data.in_inventory %}checked{% endif %} checked>
+                                <label for="in_inventory" class="ml-2 block text-sm text-gray-700">In Inventory</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" name="free_shipping" id="free_shipping"
+                                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    {% if form_data and form_data.free_shipping %}checked{% endif %}>
+                                <label for="free_shipping" class="ml-2 block text-sm text-gray-700">Free Shipping</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" name="buy_now" id="buy_now"
+                                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    {% if form_data and form_data.buy_now %}checked{% endif %} checked>
+                                <label for="buy_now" class="ml-2 block text-sm text-gray-700">Buy Now</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" name="show_vat" id="show_vat"
+                                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    {% if form_data and form_data.show_vat %}checked{% endif %} checked>
+                                <label for="show_vat" class="ml-2 block text-sm text-gray-700">Show VAT</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" name="local_pickup" id="local_pickup"
+                                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    {% if form_data and form_data.local_pickup %}checked{% endif %}>
+                                <label for="local_pickup" class="ml-2 block text-sm text-gray-700">Local Pickup</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" name="available_for_shipment" id="available_for_shipment"
+                                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    {% if form_data and form_data.available_for_shipment %}checked{% endif %} checked>
+                                <label for="available_for_shipment" class="ml-2 block text-sm text-gray-700">Available for Shipment</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Images & Media Section -->
+                <div class="form-section">
+                    <button type="button" 
+                        class="form-section-header flex justify-between items-center w-full py-2 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                        <span class="text-lg font-medium">Images & Media</span>
+                        <svg class="form-section-icon w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div class="form-section-content p-4 border rounded-lg mt-2">
+                        <!-- Primary Image -->
+                        <div class="space-y-4">
+                            <h3 class="text-md font-medium text-gray-700">Primary Image</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <!-- File Upload -->
+                                <div class="space-y-1">
+                                    <label class="block text-sm font-medium text-gray-700">Upload File</label>
+                                    <input type="file" 
+                                        name="primary_image_file" 
+                                        id="primary_image_file"
+                                        accept="image/*"
+                                        class="block w-full text-sm text-gray-500
+                                                file:mr-4 file:py-2 file:px-4
+                                                file:rounded-md file:border-0
+                                                file:text-sm file:font-semibold
+                                                file:bg-blue-50 file:text-blue-700
+                                                hover:file:bg-blue-100">
+                                </div>
+
+                                <!-- URL Input -->
+                                <div class="space-y-1">
+                                    <label class="block text-sm font-medium text-gray-700">Or Enter URL</label>
+                                    <input type="url" 
+                                        name="primary_image_url"
+                                        id="primary_image_url"
+                                        placeholder="https://"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                        value="{{ form_data.primary_image_url if form_data else '' }}">
+                                </div>
+                            </div>
+
+                            <!-- Additional Images -->
+                            <div class="mt-6">
+                                <h3 class="text-md font-medium text-gray-700">Additional Images</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+                                    <!-- File Upload -->
+                                    <div class="space-y-1">
+                                        <label class="block text-sm font-medium text-gray-700">Upload Files</label>
+                                        <input type="file" 
+                                            name="additional_images_files"
+                                            id="additional_images_files" 
+                                            accept="image/*"
+                                            multiple
+                                            class="block w-full text-sm text-gray-500
+                                                    file:mr-4 file:py-2 file:px-4
+                                                    file:rounded-md file:border-0
+                                                    file:text-sm file:font-semibold
+                                                    file:bg-blue-50 file:text-blue-700
+                                                    hover:file:bg-blue-100">
+                                    </div>
+
+                                    <!-- URL Input -->
+                                    <div class="space-y-1">
+                                        <label class="block text-sm font-medium text-gray-700">Or Enter URLs (one per line)</label>
+                                        <textarea name="additional_images_urls"
+                                                id="additional_images_urls"
+                                                rows="3"
+                                                placeholder="https://&#10;https://&#10;https://"
+                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ form_data.additional_images_urls if form_data else '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Video Link -->
+                            <div class="mt-6">
+                                <label class="block text-sm font-medium text-gray-700">Video URL (YouTube, Vimeo, etc.)</label>
+                                <input type="url" 
+                                    name="video_url" 
+                                    id="video_url"
+                                    placeholder="https://"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.video_url if form_data else '' }}">
+                            </div>
+
+                            <!-- External Link -->
+                            <div class="mt-4">
+                                <label class="block text-sm font-medium text-gray-700">External Link</label>
+                                <input type="url" 
+                                    name="external_link" 
+                                    id="external_link"
+                                    placeholder="https://"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    value="{{ form_data.external_link if form_data else '' }}">
+                            </div>
+
+                            <!-- Image Preview -->
+                            <div class="mt-6">
+                                <h3 class="text-md font-medium text-gray-700">Image Preview</h3>
+                                <div id="imagePreview" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">
+                                    <!-- Preview images will be inserted here by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Platform-Specific Section -->
+                <div class="form-section">
+                    <button type="button" 
+                        class="form-section-header flex justify-between items-center w-full py-2 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                        <span class="text-lg font-medium">Platform Settings</span>
+                        <svg class="form-section-icon w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div class="form-section-content p-4 border rounded-lg mt-2">
+                        <!-- Platform Tabs -->
+                        <div class="mb-4 border-b">
+                            <ul class="flex flex-wrap -mb-px" id="platformTabs" role="tablist">
+                                <li class="mr-2" role="presentation">
+                                    <button class="inline-block py-2 px-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300 platform-tab active" 
+                                        id="ebay-tab" 
+                                        data-target="ebayTabContent" 
+                                        type="button" 
+                                        role="tab" 
+                                        aria-selected="true">
+                                        eBay
+                                    </button>
+                                </li>
+                                <li class="mr-2" role="presentation">
+                                    <button class="inline-block py-2 px-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300 platform-tab" 
+                                        id="reverb-tab" 
+                                        data-target="reverbTabContent" 
+                                        type="button" 
+                                        role="tab" 
+                                        aria-selected="false">
+                                        Reverb
+                                    </button>
+                                </li>
+                                <li class="mr-2" role="presentation">
+                                    <button class="inline-block py-2 px-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300 platform-tab" 
+                                        id="vr-tab" 
+                                        data-target="vrTabContent" 
+                                        type="button" 
+                                        role="tab" 
+                                        aria-selected="false">
+                                        Vintage & Rare
+                                    </button>
+                                </li>
+                                <li role="presentation">
+                                    <button class="inline-block py-2 px-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300 platform-tab" 
+                                        id="website-tab" 
+                                        data-target="websiteTabContent" 
+                                        type="button" 
+                                        role="tab" 
+                                        aria-selected="false">
+                                        Website
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Tab Content -->
+                        <div class="tab-content">
+                            <!-- eBay Tab Content -->
+                            <div id="ebayTabContent" class="tab-pane active">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">eBay Category ID</label>
+                                        <input type="text" name="platform_data__ebay__category_id" id="ebay_category_id"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">eBay Format</label>
+                                        <select name="platform_data__ebay__format" id="ebay_format"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="FixedPrice">Buy It Now</option>
+                                            <option value="Auction">Auction</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">eBay Duration</label>
+                                        <select name="platform_data__ebay__duration" id="ebay_duration"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="GTC">Good 'Til Cancelled</option>
+                                            <option value="Days_30">30 Days</option>
+                                            <option value="Days_10">10 Days</option>
+                                            <option value="Days_7">7 Days</option>
+                                            <option value="Days_5">5 Days</option>
+                                            <option value="Days_3">3 Days</option>
+                                            <option value="Days_1">1 Day</option>
+                                        </select>
+                                    </div>
+                                    <div class="flex items-center h-full pt-6">
+                                        <input type="checkbox" name="platform_data__ebay__sync_inventory" id="ebay_sync_inventory"
+                                            class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" checked>
+                                        <label for="ebay_sync_inventory" class="ml-2 block text-sm text-gray-700">
+                                            Sync inventory with eBay
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Reverb Tab Content -->
+                            <div id="reverbTabContent" class="tab-pane hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Reverb Product Type</label>
+                                        <select name="platform_data__reverb__product_type" id="reverb_product_type"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="electric">Electric Guitar</option>
+                                            <option value="acoustic">Acoustic Guitar</option>
+                                            <option value="bass">Bass Guitar</option>
+                                            <option value="amp">Amplifier</option>
+                                            <option value="effect">Effect Pedal</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Reverb Primary Category</label>
+                                        <input type="text" name="platform_data__reverb__primary_category" id="reverb_primary_category"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Reverb Shipping Profile</label>
+                                        <select name="platform_data__reverb__shipping_profile" id="reverb_shipping_profile"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="default">Default Profile</option>
+                                            <option value="free">Free Shipping</option>
+                                            <option value="custom">Custom</option>
+                                        </select>
+                                    </div>
+                                    <div class="flex items-center h-full pt-6">
+                                        <input type="checkbox" name="platform_data__reverb__offers_enabled" id="reverb_offers_enabled"
+                                            class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" checked>
+                                        <label for="reverb_offers_enabled" class="ml-2 block text-sm text-gray-700">
+                                            Enable offers
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Vintage & Rare Tab Content -->
+                            <div id="vrTabContent" class="tab-pane hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">V&R Category</label>
+                                        <select name="platform_data__vr__category" id="vr_category"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="electric-guitars">Electric Guitars</option>
+                                            <option value="acoustic-guitars">Acoustic Guitars</option>
+                                            <option value="bass-guitars">Bass Guitars</option>
+                                            <option value="amplifiers">Amplifiers</option>
+                                            <option value="effects">Effects</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">V&R Featured Option</label>
+                                        <select name="platform_data__vr__featured" id="vr_featured"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="none">None</option>
+                                            <option value="featured">Featured</option>
+                                            <option value="premium">Premium Featured</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label class="block text-sm font-medium text-gray-700">V&R Special Notes</label>
+                                        <textarea name="platform_data__vr__notes" id="vr_notes" rows="3"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Website Tab Content -->
+                            <div id="websiteTabContent" class="tab-pane hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Website Category</label>
+                                        <select name="platform_data__website__category" id="website_category"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="guitars">Guitars</option>
+                                            <option value="basses">Basses</option>
+                                            <option value="amps">Amplifiers</option>
+                                            <option value="effects">Effects</option>
+                                            <option value="accessories">Accessories</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Website Display Priority</label>
+                                        <select name="platform_data__website__priority" id="website_priority"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="0">Normal</option>
+                                            <option value="1">Featured</option>
+                                            <option value="2">Homepage Featured</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label class="block text-sm font-medium text-gray-700">SEO Keywords (comma separated)</label>
+                                        <input type="text" name="platform_data__website__seo_keywords" id="website_seo_keywords"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                            placeholder="vintage, guitar, instrument">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label class="block text-sm font-medium text-gray-700">Short Description (for listings)</label>
+                                        <textarea name="platform_data__website__short_description" id="website_short_description" rows="2"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="flex justify-end mt-6">
+                <button type="submit"
+                        class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium">
+                    Add Product
+                </button>
+            </div>
+        </form>
+
+        <!-- Platform Status Section -->
+        <div class="px-6 pb-6">
+            <!-- Platform status indicators here -->
+            <h3 class="text-lg font-semibold mb-4">Platform Status</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <!-- eBay Status -->
+                <div class="border rounded p-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 rounded-full {% if ebay_status == 'success' %}bg-green-500{% elif ebay_status == 'pending' %}bg-yellow-500{% else %}bg-red-500{% endif %}"></div>
+                        <span>eBay</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">{{ ebay_message or 'Waiting for sync' }}</p>
+                </div>
+
+                <!-- Reverb Status -->
+                <div class="border rounded p-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 rounded-full {% if reverb_status == 'success' %}bg-green-500{% elif reverb_status == 'pending' %}bg-yellow-500{% else %}bg-red-500{% endif %}"></div>
+                        <span>Reverb</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">{{ reverb_message or 'Waiting for sync' }}</p>
+                </div>
+
+                <!-- V&R Status -->
+                <div class="border rounded p-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 rounded-full {% if vr_status == 'success' %}bg-green-500{% elif vr_status == 'pending' %}bg-yellow-500{% else %}bg-red-500{% endif %}"></div>
+                        <span>Vintage & Rare</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">{{ vr_message or 'Waiting for sync' }}</p>
+                </div>
+
+                <!-- Website Status -->
+                <div class="border rounded p-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 rounded-full {% if website_status == 'success' %}bg-green-500{% elif website_status == 'pending' %}bg-yellow-500{% else %}bg-red-500{% endif %}"></div>
+                        <span>Website</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">{{ website_message or 'Waiting for sync' }}</p>
+                </div>
+            </div>
+        </div> 
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // =========== SECTION TOGGLING ===========
+        // Handle collapsible sections
+        document.querySelectorAll('.form-section-header').forEach(header => {
+            header.addEventListener('click', function() {
+                const content = this.closest('.form-section').querySelector('.form-section-content');
+                const icon = this.querySelector('.form-section-icon');
+                
+                if (content.classList.contains('hidden')) {
+                    content.classList.remove('hidden');
+                    icon.classList.add('rotate-180');
+                } else {
+                    content.classList.add('hidden');
+                    icon.classList.remove('rotate-180');
+                }
+            });
+        });
+
+        // Open the first section by default
+        const firstSection = document.querySelector('.form-section-header');
+        if (firstSection) {
+            firstSection.click();
+        }
+
+        // Open only the Basic Information section by default
+        const basicInfoSection = document.querySelector('.form-section:first-child .form-section-header');
+        if (basicInfoSection) {
+            basicInfoSection.click();
+        }
+
+        // Make sure all other sections are collapsed
+        document.querySelectorAll('.form-section:not(:first-child) .form-section-content').forEach(content => {
+            content.classList.add('hidden');
+        });
+
+
+        
+        // Legacy image section toggle (for backward compatibility)
+        function toggleImageSection() {
+            const section = document.getElementById('imageSection');
+            const icon = document.getElementById('imageToggleIcon');
+            if (section && icon) {
+                if (section.classList.contains('hidden')) {
+                    section.classList.remove('hidden');
+                    icon.classList.add('rotate-180');
+                } else {
+                    section.classList.add('hidden');
+                    icon.classList.remove('rotate-180');
+                }
+            }
+        }
+        
+        // Make toggleImageSection available globally
+        window.toggleImageSection = toggleImageSection;
+        
+        // =========== PLATFORM TABS ===========
+        // Platform tab switching
+        document.querySelectorAll('.platform-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+
+                // Clear active state from all tabs
+                document.querySelectorAll('.platform-tab').forEach(t => {
+                    t.classList.remove('bg-blue-100', 'border-blue-500', 'border-b-2', 'text-blue-600', 'active');
+                    t.classList.add('text-gray-500');
+                });
+                
+                // Add active state to clicked tab
+                this.classList.add('bg-blue-100', 'border-blue-500', 'border-b-2', 'text-blue-600', 'active');
+                this.classList.remove('text-gray-500');
+                
+                // Hide all tab panes
+                document.querySelectorAll('.tab-pane').forEach(pane => {
+                    pane.classList.add('hidden');
+                    pane.classList.remove('active');
+                });
+                
+                // Show selected tab pane
+                const targetId = this.getAttribute('data-target');
+                const targetPane = document.getElementById(targetId);
+                if (targetPane) {
+                    console.log('Found target pane:', targetId); // Debug
+                    targetPane.classList.remove('hidden');
+                    targetPane.classList.add('active');
+                } else {
+                    console.error('Target pane not found:', targetId); // Debug
+                }
+            });
+        });
+        
+        // Activate the first platform tab by default
+        const firstTab = document.querySelector('.platform-tab');
+        if (firstTab) {
+            firstTab.click();
+        }
+        
+        // =========== IMAGE HANDLING ===========
+        // Image preview for file uploads
+        const fileInputs = document.querySelectorAll('input[type="file"]');
+        const previewContainer = document.getElementById('imagePreview');
+        
+        if (previewContainer) {
+            fileInputs.forEach(input => {
+                input.addEventListener('change', function(e) {
+                    // Clear previous previews if this is the primary image
+                    if (this.name === 'primary_image_file') {
+                        // Only clear the primary image preview
+                        const primaryPreviews = previewContainer.querySelectorAll('[data-source="primary"]');
+                        primaryPreviews.forEach(prev => prev.remove());
+                    }
+                    
+                    if (this.files) {
+                        Array.from(this.files).forEach(file => {
+                            if (file.type.startsWith('image/')) {
+                                const reader = new FileReader();
+                                reader.onload = function(e) {
+                                    const preview = document.createElement('div');
+                                    preview.className = 'relative aspect-square';
+                                    preview.setAttribute('data-source', input.name === 'primary_image_file' ? 'primary' : 'additional');
+                                    preview.innerHTML = `
+                                        <img src="${e.target.result}" 
+                                             class="w-full h-full object-cover rounded-lg shadow-sm"
+                                             alt="Preview">
+                                        <div class="absolute top-1 right-1">
+                                            <button type="button" class="remove-image bg-red-500 text-white rounded-full p-1 hover:bg-red-600">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    `;
+                                    previewContainer.appendChild(preview);
+                                    
+                                    // Add event listener to remove button
+                                    preview.querySelector('.remove-image').addEventListener('click', function() {
+                                        preview.remove();
+                                        // Clear the file input if it's the primary image
+                                        if (input.name === 'primary_image_file') {
+                                            input.value = '';
+                                        }
+                                    });
+                                };
+                                reader.readAsDataURL(file);
+                            } else {
+                                alert('Please select only image files.');
+                                this.value = ''; // Clear the input
+                            }
+                        });
+                    }
+                });
+            });
+        }
+        
+        // =========== COPY FROM EXISTING ===========
+        // Copy from existing product
+        const existingProductSelect = document.getElementById('existingProduct');
+        const copyButton = document.getElementById('copyButton');
+        const copyStatus = document.getElementById('copyStatus');
+        
+        if (existingProductSelect && copyButton && copyStatus) {
+            copyButton.addEventListener('click', function() {
+                const productId = existingProductSelect.value;
+                if (!productId) {
+                    copyStatus.textContent = 'Please select a product first';
+                    copyStatus.classList.add('text-red-600');
+                    return;
+                }
+                
+                copyStatus.textContent = 'Loading product data...';
+                copyStatus.classList.remove('text-red-600');
+                copyStatus.classList.add('text-blue-600');
+                
+                // Fetch product data
+                fetch(`/inventory/api/products/${productId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Fill the form with product data
+                        fillFormWithProductData(data);
+                        copyStatus.textContent = 'Product data copied successfully!';
+                        copyStatus.classList.remove('text-blue-600');
+                        copyStatus.classList.add('text-green-600');
+                        
+                        // Clear the status after 3 seconds
+                        setTimeout(() => {
+                            copyStatus.textContent = '';
+                        }, 3000);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching product data:', error);
+                        copyStatus.textContent = 'Error fetching product data';
+                        copyStatus.classList.remove('text-blue-600');
+                        copyStatus.classList.add('text-red-600');
+                    });
+            });
+        }
+
+        function fillFormWithProductData(data) {
+            // Basic info
+            setValueIfExists('brand', data.brand);
+            setValueIfExists('model', data.model);
+            // Generate a new SKU rather than copying
+            document.getElementById('generateSku')?.click();
+            setValueIfExists('year', data.year);
+            setValueIfExists('decade', data.decade);
+            setValueIfExists('category', data.category);
+            setValueIfExists('finish', data.finish);
+            
+            // Description & Condition
+            setValueIfExists('description', data.description);
+            setValueIfExists('condition', data.condition);
+            setValueIfExists('status', 'DRAFT'); // Always start as draft
+            
+            // Pricing & Inventory
+            setValueIfExists('base_price', data.base_price);
+            setValueIfExists('cost_price', data.cost_price);
+            setValueIfExists('processing_time', data.processing_time || '3');
+            setValueIfExists('collective_discount', data.collective_discount || '0');
+            setValueIfExists('offer_discount', data.offer_discount || '0');
+            
+            // Checkboxes
+            setCheckedIfExists('in_collective', data.in_collective);
+            setCheckedIfExists('in_inventory', data.in_inventory !== false);
+            setCheckedIfExists('free_shipping', data.free_shipping);
+            setCheckedIfExists('buy_now', data.buy_now !== false);
+            setCheckedIfExists('show_vat', data.show_vat !== false);
+            setCheckedIfExists('local_pickup', data.local_pickup);
+            setCheckedIfExists('available_for_shipment', data.available_for_shipment !== false);
+            
+            // URLs
+            setValueIfExists('video_url', data.video_url);
+            setValueIfExists('external_link', data.external_link);
+            
+            // Platform data - eBay
+            if (data.platform_data && data.platform_data.ebay) {
+                setValueIfExists('ebay_category_id', data.platform_data.ebay.category_id);
+                setValueIfExists('ebay_format', data.platform_data.ebay.format || 'FixedPrice');
+                setValueIfExists('ebay_duration', data.platform_data.ebay.duration || 'GTC');
+                setCheckedIfExists('ebay_sync_inventory', data.platform_data.ebay.sync_inventory !== false);
+            }
+            
+            // Platform data - Reverb
+            if (data.platform_data && data.platform_data.reverb) {
+                setValueIfExists('reverb_product_type', data.platform_data.reverb.product_type);
+                setValueIfExists('reverb_primary_category', data.platform_data.reverb.primary_category);
+                setValueIfExists('reverb_shipping_profile', data.platform_data.reverb.shipping_profile);
+                setCheckedIfExists('reverb_offers_enabled', data.platform_data.reverb.offers_enabled !== false);
+            }
+            
+            // Platform data - V&R
+            if (data.platform_data && data.platform_data.vr) {
+                setValueIfExists('vr_category', data.platform_data.vr.category);
+                setValueIfExists('vr_featured', data.platform_data.vr.featured);
+                setValueIfExists('vr_notes', data.platform_data.vr.notes);
+            }
+            
+            // Platform data - Website
+            if (data.platform_data && data.platform_data.website) {
+                setValueIfExists('website_category', data.platform_data.website.category);
+                setValueIfExists('website_priority', data.platform_data.website.priority);
+                setValueIfExists('website_seo_keywords', data.platform_data.website.seo_keywords);
+                setValueIfExists('website_short_description', data.platform_data.website.short_description);
+            }
+        }
+
+        function setValueIfExists(id, value) {
+            const element = document.getElementById(id);
+            if (element && value !== undefined && value !== null) {
+                element.value = value;
+            }
+        }
+
+        function setCheckedIfExists(id, value) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.checked = !!value;
+            }
+        }
+        
+        // =========== GENERATE SKU ===========
+        // Generate SKU
+        const generateSkuButton = document.getElementById('generateSku');
+        if (generateSkuButton) {
+            generateSkuButton.addEventListener('click', function() {
+                const brand = document.getElementById('brand').value.trim();
+                const model = document.getElementById('model').value.trim();
+                const now = new Date();
+                const timestamp = now.getFullYear().toString().substr(-2) + 
+                                (now.getMonth() + 1).toString().padStart(2, '0') + 
+                                now.getDate().toString().padStart(2, '0');
+                
+                if (brand && model) {
+                    const brandCode = brand.substr(0, 3).toUpperCase();
+                    const modelCode = model.substr(0, 3).toUpperCase();
+                    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+                    
+                    const sku = `${brandCode}-${modelCode}-${timestamp}-${random}`;
+                    document.getElementById('sku').value = sku;
+                } else {
+                    alert('Please enter brand and model to generate SKU');
+                }
+            });
+        }
+        
+        // =========== FORM VALIDATION ===========
+        // Form validation and submission
+        const form = document.getElementById('addProductForm');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                let isValid = true;
+                const requiredFields = form.querySelectorAll('[required]');
+                
+                requiredFields.forEach(field => {
+                    if (!field.value.trim()) {
+                        isValid = false;
+                        field.classList.add('border-red-500');
+                        
+                        // Add error message if not exists
+                        const errorId = `${field.id}-error`;
+                        if (!document.getElementById(errorId)) {
+                            const errorMsg = document.createElement('p');
+                            errorMsg.id = errorId;
+                            errorMsg.className = 'text-red-500 text-xs mt-1';
+                            errorMsg.textContent = 'This field is required';
+                            field.parentNode.appendChild(errorMsg);
+                        }
+                    } else {
+                        field.classList.remove('border-red-500');
+                        const errorMsg = document.getElementById(`${field.id}-error`);
+                        if (errorMsg) {
+                            errorMsg.remove();
+                        }
+                    }
+                });
+                
+                if (!isValid) {
+                    e.preventDefault();
+                    
+                    // Scroll to the first error
+                    const firstError = form.querySelector('.border-red-500');
+                    if (firstError) {
+                        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    
+                    return false;
+                }
+                
+                // Log all form values for debugging
+                console.log('Form submission started');
+                const formData = new FormData(form);
+                for (let [key, value] of formData.entries()) {
+                    console.log(`${key}: ${value}`);
+                }
+                
+                console.log('Submitting form to:', form.action);
+                return true;
+            });
+            
+            // Clear validation errors when typing
+            const formInputs = form.querySelectorAll('input, select, textarea');
+            formInputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    this.classList.remove('border-red-500');
+                    const errorMsg = document.getElementById(`${this.id}-error`);
+                    if (errorMsg) {
+                        errorMsg.remove();
+                    }
+                });
+            });
+        }
+    });
+</script>
+
+<style>
+    .transition-transform {
+        transition: transform 0.2s ease-in-out;
+    }
+    
+    .platform-tab.active {
+        border-bottom-width: 2px;
+        border-color: rgb(59, 130, 246);
+        color: rgb(37, 99, 235);
+        background-color: rgb(219, 234, 254);
+    }
+    
+    .tab-pane {
+        display: none;
+    }
+    
+    .tab-pane.active {
+        display: block;
+    }
+</style>
+{% endblock %}

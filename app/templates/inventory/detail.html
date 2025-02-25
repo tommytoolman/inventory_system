@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+        <!-- Product Header -->
+        <div class="px-6 py-4 bg-gray-50 border-b">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-gray-900">
+                    {{ product.brand }} {{ product.model }}
+                </h1>
+                <div class="flex items-center space-x-4">
+                    <span class="px-3 py-1 text-sm rounded-full {% if product.status.value == 'sold' %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %}">
+                        {{ product.status.value|title }}
+                    </span>
+                    <a href="/inventory" class="text-blue-600 hover:text-blue-800">
+                        Back to List
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product Details -->
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Basic Info -->
+            <div>
+                <h2 class="text-lg font-semibold mb-4">Product Information</h2>
+                <dl class="grid grid-cols-2 gap-4">
+                    <dt class="text-gray-600">SKU</dt>
+                    <dd>{{ product.sku or 'N/A' }}</dd>
+
+                    <dt class="text-gray-600">Category</dt>
+                    <dd>{{ product.category or 'N/A' }}</dd>
+                    
+                    <dt class="text-gray-600">Year</dt>
+                    <dd>{{ product.year or 'N/A' }}</dd>
+                    
+                    <dt class="text-gray-600">Condition</dt>
+                    <dd>{{ product.condition or 'N/A' }}</dd>
+                    
+                    <dt class="text-gray-600">Base Price</dt>
+                    <dd>
+                        {% if product.base_price and product.base_price > 0 %}
+                            ${{ "%.2f"|format(product.base_price) }}
+                        {% else %}
+                            <span class="text-gray-500">-</span>
+                        {% endif %}
+                    </dd>
+
+                    {% if product.cost_price %}
+                    <dt class="text-gray-600">Cost Price</dt>
+                    <dd>${{ "%.2f"|format(product.cost_price) }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+
+            <!-- Platform Listings -->
+            <div>
+                <h2 class="text-lg font-semibold mb-4">Platform Listings</h2>
+                <div class="space-y-4">
+                    {% for listing in platform_listings %}
+                    <div class="border rounded p-4">
+                        <div class="flex justify-between items-center">
+                            <span class="font-medium">{{ listing.platform_name|title }}</span>
+                            <span class="px-2 py-1 text-sm rounded bg-blue-100 text-blue-800">
+                                {{ listing.sync_status }}
+                            </span>
+                        </div>
+                        <div class="mt-2 text-sm text-gray-600">
+                            ID: {{ listing.external_id }}
+                        </div>
+                        <div class="mt-1 text-sm text-gray-600">
+                            Last Sync: {{ listing.last_sync.strftime('%Y-%m-%d %H:%M:%S') if listing.last_sync else 'Never' }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if not platform_listings %}
+                    <div class="text-gray-500 italic">
+                        No platform listings available
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="md:col-span-2">
+                <h2 class="text-lg font-semibold mb-4">Description</h2>
+                <div class="prose max-w-none">
+                    {{ product.description|safe or 'No description available.' }}
+                </div>
+            </div>
+
+            <!-- Media Section -->
+            {% if product.primary_image or product.additional_images %}
+            <div class="md:col-span-2">
+                <h2 class="text-lg font-semibold mb-4">Images</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {% if product.primary_image %}
+                    <div class="aspect-w-4 aspect-h-3">
+                        <img src="{{ product.primary_image }}" alt="Primary image" class="product-image">
+                    </div>
+                    {% endif %}
+                    {% for image in product.additional_images %}
+                    <div class="aspect-w-4 aspect-h-3">
+                        <img src="{{ image }}" alt="Additional image" class="object-cover rounded-lg shadow-md">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<style>
+    .product-image {
+        max-width: 200px;
+        max-height: 200px;
+        object-fit: contain;
+    }
+</style>
+{% endblock %}

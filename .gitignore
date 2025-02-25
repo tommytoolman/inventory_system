@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.env
+.ipynb_checkpoints/
+.venv
+env/
+venv/
+ENV/
+.DS_Store
+*.log
+app/services/ebay/ebaysdk-python/
+app/services/vintageandrare/templates/vintageandrare_export_20250203_1032 2.csv
+
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+.Spotlight-V100
+.Trashes

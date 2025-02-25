@@ -1,0 +1,45 @@
+2. Project Description
+Technology Stack
+
+Backend Framework: FastAPI
+Database: PostgreSQL with SQLAlchemy ORM
+Frontend: Jinja2 Templates with minimal JavaScript
+Authentication: FastAPI built-in auth with JWT
+API Integrations: Async clients for each platform
+Deployment: Docker with docker-compose
+Monitoring: Basic logging with optional Sentry integration
+
+Core Features
+
+Inventory Management
+
+Centralized inventory tracking
+Real-time stock updates
+Low stock alerts
+SKU management
+
+
+Platform Integration
+
+eBay: Full API integration using eBay Developer API
+Reverb: REST API integration
+VintageAndRare: Custom API integration
+Website API: Proprietary API integration
+Sync status monitoring
+Error handling and retry logic
+
+
+Data Management
+
+Excel import/export
+Bulk updates
+Historical tracking
+Audit logging
+
+
+User Interface
+
+Clean, minimal dashboard
+Quick edit capabilities
+Platform sync controls
+Error notifications

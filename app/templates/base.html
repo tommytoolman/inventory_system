@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Inventory Management System{% endblock %}</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <!-- Logo -->
+                <div class="flex-shrink-0 flex items-center">
+                    <a href="/inventory" class="text-xl font-bold text-gray-800">
+                        Realtime Inventory Form Feeds System
+                    </a>
+                </div>
+
+                <!-- Center Navigation Links -->
+                <nav class="hidden sm:flex sm:items-center sm:space-x-8">
+                    <a href="/inventory" 
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Products
+                    </a>
+                    <a href="/inventory/add" 
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Add Product
+                    </a>
+                    <!-- Platforms Dropdown -->
+                    <div class="relative inline-block text-left" id="platformDropdown">
+                        <button type="button" 
+                                class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                                onclick="togglePlatformMenu(event)"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" 
+                                class="mr-2">
+                                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
+                                <path d="M3 7v9a2 2 0 0 0 2 2h16v-4"></path>
+                                <path d="M3 7v9a2 2 0 0 0 2 2h16v-4"></path>
+                            </svg>
+                            Platforms
+                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                    
+                        <div id="platformMenu" 
+                            class="hidden absolute left-0 mt-1 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
+                            role="menu"
+                            aria-orientation="vertical"
+                            aria-labelledby="platform-menu-button">
+                            <div class="py-1" role="none">
+                                <a href="https://www.ebay.com" target="_blank" 
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/>
+                                        <path d="M16 12H8"/>
+                                        <path d="M12 16V8"/>
+                                    </svg>
+                                    eBay
+                                </a>
+                                <a href="https://reverb.com" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path d="M9 18V5l12-2v13"/>
+                                        <circle cx="6" cy="18" r="3"/>
+                                        <circle cx="18" cy="16" r="3"/>
+                                    </svg>
+                                    Reverb
+                                </a>
+                                <a href="https://www.vintageandrare.com" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path d="M6 18h12"/>
+                                        <path d="M3 12h18"/>
+                                        <path d="M6 6h12"/>
+                                    </svg>
+                                    Vintage & Rare
+                                </a>
+                            </div>
+                        </div>
+                </div>
+                <a href="/inventory/export/vintageandrare" 
+                    class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                    Export
+                </a>
+            </nav>
+
+            <!-- Right side navigation items (if needed) -->
+            <div class="flex items-center">
+                <!-- Right side items go here -->
+            </div>
+        </div>
+    </div>
+</nav>
+
+    <!-- Page Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+
+    <!-- Footer -->
+    <footer class="bg-white shadow-lg mt-8">
+        <div class="max-w-7xl mx-auto py-4 px-4">
+            <div class="text-center text-gray-500 text-sm">
+                &copy; 2025 Realtime Inventory Forms Feed System
+            </div>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+
+    <!-- Platform dropdown script -->
+    <script>
+        function togglePlatformMenu(event) {
+            event.stopPropagation(); // Prevent immediate document click
+            const menu = document.getElementById('platformMenu');
+            const isHidden = menu.classList.contains('hidden');
+            
+            // Close menu if it's open
+            if (!isHidden) {
+                menu.classList.add('hidden');
+                return;
+            }
+            
+            // Open menu
+            menu.classList.remove('hidden');
+            
+            // Close menu when clicking outside
+            function closeMenu(e) {
+                const dropdown = document.getElementById('platformDropdown');
+                if (!dropdown.contains(e.target)) {
+                    menu.classList.add('hidden');
+                    document.removeEventListener('click', closeMenu);
+                }
+            }
+            
+            document.addEventListener('click', closeMenu);
+        }
+        </script>
+</body>
+</html>

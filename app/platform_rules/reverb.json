@@ -1,0 +1,22 @@
+{
+    "images": {
+        "max_count": 25,
+        "allowed_formats": ["jpg", "jpeg", "png"],
+        "max_size_mb": 3
+    },
+    "text_limits": {
+        "title": 100,
+        "description": 4000,
+        "sku": 40
+    },
+    "listings": {
+        "max_price": 100000,
+        "min_price": 1,
+        "condition_ratings": ["1", "2", "3", "4", "4.5", "5"],
+        "shipping_required": true
+    },
+    "offers": {
+        "minimum_offer_percent": 70,
+        "auto_decline_threshold": 50
+    }
+}

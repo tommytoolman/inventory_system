@@ -24,17 +24,19 @@ Transaction management
 Status tracking
 """
 
-from typing import Optional, Dict, Any
+# app/services/ebay_service.py - Updated
+
+from typing import Optional, Dict, List, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
 
-from app.models.ebay import EbayListing, EbayListingStatus, EbayListingFormat
+from app.models.ebay import EbayListing, EbayListingStatus
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.schemas.platform.ebay import EbayListingCreate
 from app.core.config import Settings
 from app.core.exceptions import EbayAPIError, ListingNotFoundError
-from app.services.product_service import ProductService
+from app.services.ebay.client import EbayClient
 
 class EbayService:
     def __init__(self, db: AsyncSession, settings: Settings):
@@ -43,11 +45,12 @@ class EbayService:
         self._api_key = settings.EBAY_API_KEY
         self._api_secret = settings.EBAY_API_SECRET
         self._sandbox_mode = settings.EBAY_SANDBOX_MODE
+        self.client = EbayClient()  # Use our new client
 
     async def create_draft_listing(
         self,
         platform_id: int,
-        listing_data: EbayListingCreate
+        listing_data: Dict[str, Any]
     ) -> EbayListing:
         """
         Creates a draft listing on eBay.
@@ -63,21 +66,36 @@ class EbayService:
             ebay_listing = await self._create_listing_record(platform_common, listing_data)
 
             # Prepare listing data for eBay API
-            api_listing_data = self._prepare_api_listing_data(ebay_listing, platform_common.product)
+            inventory_item = self._prepare_inventory_item(ebay_listing, platform_common.product)
+            
+            # Create inventory item on eBay
+            success = await self.client.create_or_update_inventory_item(
+                sku=platform_common.product.sku,
+                item_data=inventory_item
+            )
 
-            # Create draft on eBay (not published)
-            ebay_item_id = await self._create_ebay_draft(api_listing_data)
-
-            # Update listing with eBay ID
-            ebay_listing.ebay_item_id = ebay_item_id
-            ebay_listing.listing_status = EbayListingStatus.DRAFT
-            await self.db.flush()  # Make sure flushes are awaited
-            await self.db.commit()
+            if success:
+                # Create an offer for the inventory item
+                offer_data = self._prepare_offer_data(ebay_listing, platform_common.product)
+                offer_result = await self.client.create_offer(offer_data)
+                
+                # Update listing with eBay offer ID
+                ebay_listing.ebay_item_id = offer_result.get('offerId')
+                ebay_listing.listing_status = EbayListingStatus.DRAFT
+                platform_common.sync_status = SyncStatus.SUCCESS
+                platform_common.last_sync = datetime.utcnow()
+                
+                await self.db.flush()
+                await self.db.commit()
+            else:
+                raise EbayAPIError("Failed to create inventory item on eBay")
 
             return ebay_listing
 
         except Exception as e:
             await self.db.rollback()
+            if isinstance(e, EbayAPIError) or isinstance(e, ListingNotFoundError):
+                raise
             raise EbayAPIError(f"Failed to create eBay draft: {str(e)}")
 
     async def publish_listing(self, ebay_listing_id: int) -> bool:
@@ -90,15 +108,17 @@ class EbayService:
             if not listing:
                 raise ListingNotFoundError(f"eBay listing {ebay_listing_id} not found")
 
-            # Call eBay API to publish
-            success = await self._publish_to_ebay(listing.ebay_item_id)
+            # Call eBay API to publish the offer
+            result = await self.client.publish_offer(listing.ebay_item_id)
             
-            if success:
+            if 'listingId' in result:
                 # Update statuses
                 listing.listing_status = EbayListingStatus.ACTIVE
                 listing.platform_listing.status = ListingStatus.ACTIVE
                 listing.platform_listing.sync_status = SyncStatus.SUCCESS
+                listing.platform_listing.external_id = result['listingId']
                 listing.last_synced_at = datetime.utcnow()
+                
                 await self.db.commit()
                 return True
 
@@ -106,62 +126,41 @@ class EbayService:
 
         except Exception as e:
             await self.db.rollback()
+            if isinstance(e, EbayAPIError) or isinstance(e, ListingNotFoundError):
+                raise
             raise EbayAPIError(f"Failed to publish listing: {str(e)}")
 
-    async def update_listing(
-        self,
-        ebay_listing_id: int,
-        update_data: Dict[str, Any]
-    ) -> EbayListing:
+    async def update_inventory_quantity(self, ebay_listing_id: int, quantity: int) -> bool:
         """
-        Updates an existing eBay listing.
+        Updates inventory quantity for an eBay listing
         """
         try:
             listing = await self._get_ebay_listing(ebay_listing_id)
             if not listing:
                 raise ListingNotFoundError(f"eBay listing {ebay_listing_id} not found")
-
-            # Update local record
-            for key, value in update_data.items():
-                if hasattr(listing, key):
-                    setattr(listing, key, value)
-
-            # Update on eBay if listing is active
-            if listing.listing_status == EbayListingStatus.ACTIVE:
-                await self._update_on_ebay(listing.ebay_item_id, update_data)
+                
+            product = listing.platform_listing.product
+            
+            # Update on eBay
+            success = await self.client.update_inventory_item_quantity(
+                sku=product.sku,
+                quantity=quantity
+            )
+            
+            if success:
+                # Update record timestamps
                 listing.last_synced_at = datetime.utcnow()
-
-            await self.db.commit()
-            return listing
-
+                listing.platform_listing.last_sync = datetime.utcnow()
+                listing.platform_listing.sync_status = SyncStatus.SUCCESS
+                await self.db.commit()
+                
+            return success
+        
         except Exception as e:
             await self.db.rollback()
-            raise EbayAPIError(f"Failed to update listing: {str(e)}")
-
-    async def sync_listing_status(self, ebay_listing_id: int) -> EbayListingStatus:
-        """
-        Syncs the listing status with eBay.
-        """
-        listing = await self._get_ebay_listing(ebay_listing_id)
-        if not listing:
-            raise ListingNotFoundError(f"eBay listing {ebay_listing_id} not found")
-
-        try:
-            # Get status from eBay
-            ebay_status = await self._get_ebay_status(listing.ebay_item_id)
-            
-            # Update local status
-            listing.listing_status = ebay_status
-            listing.last_synced_at = datetime.utcnow()
-            listing.platform_listing.sync_status = SyncStatus.SUCCESS
-            
-            await self.db.commit()
-            return ebay_status
-
-        except Exception as e:
-            listing.platform_listing.sync_status = SyncStatus.ERROR
-            await self.db.commit()
-            raise EbayAPIError(f"Failed to sync status: {str(e)}")
+            if isinstance(e, EbayAPIError) or isinstance(e, ListingNotFoundError):
+                raise
+            raise EbayAPIError(f"Failed to update inventory quantity: {str(e)}")
 
     # Private helper methods
     async def _get_platform_common(self, platform_id: int) -> Optional[PlatformCommon]:
@@ -177,65 +176,75 @@ class EbayService:
     async def _create_listing_record(
         self,
         platform_common: PlatformCommon,
-        listing_data: EbayListingCreate
+        listing_data: Dict[str, Any]
     ) -> EbayListing:
         """Creates the local EbayListing record."""
         ebay_listing = EbayListing(
             platform_id=platform_common.id,
-            **listing_data.model_dump(exclude={'platform_id'})
+            ebay_category_id=listing_data.get("category_id"),
+            ebay_condition_id=listing_data.get("condition_id"),
+            format=listing_data.get("format", "Buy it Now"),
+            price=listing_data.get("price", 0),
+            listing_duration=listing_data.get("duration", "GTC"),
+            item_specifics=listing_data.get("item_specifics", {}),
+            listing_status=EbayListingStatus.DRAFT
         )
         self.db.add(ebay_listing)
         await self.db.flush()
         return ebay_listing
 
-    def _prepare_api_listing_data(self, listing: EbayListing, product: Any) -> Dict[str, Any]:
+    def _prepare_inventory_item(self, listing: EbayListing, product: Any) -> Dict[str, Any]:
         """
-        Prepares listing data for eBay API.
-        This will be expanded based on eBay API requirements.
+        Prepares inventory item data for eBay API.
         """
         return {
-            "title": f"{product.brand} {product.model}",
-            "description": product.description,
+            "availability": {
+                "shipToLocationAvailability": {
+                    "quantity": 1
+                }
+            },
+            "condition": listing.ebay_condition_id,
+            "product": {
+                "title": f"{product.brand} {product.model}",
+                "description": product.description or f"{product.brand} {product.model}",
+                "aspects": self._convert_item_specifics(listing.item_specifics),
+                "imageUrls": [product.primary_image] + (product.additional_images or [])
+            }
+        }
+    
+    def _prepare_offer_data(self, listing: EbayListing, product: Any) -> Dict[str, Any]:
+        """
+        Prepares offer data for eBay API.
+        """
+        return {
+            "sku": product.sku,
+            "marketplaceId": "EBAY_US",  # Could be configurable
+            "format": "FIXED_PRICE" if listing.format == "Buy it Now" else "AUCTION",
+            "availableQuantity": 1,  # Initial quantity
             "categoryId": listing.ebay_category_id,
-            "price": str(listing.price),
-            "quantity": listing.quantity,
             "listingPolicies": {
                 "paymentPolicyId": listing.payment_policy_id,
                 "returnPolicyId": listing.return_policy_id,
-                "shippingPolicyId": listing.shipping_policy_id
+                "shippingPolicyId": listing.shipping_policy_id,
+                "fulfillmentPolicyId": listing.shipping_policy_id  # Often the same
             },
-            "itemSpecifics": listing.item_specifics
+            "pricingSummary": {
+                "price": {
+                    "currency": "USD",  # Could be configurable
+                    "value": str(listing.price)
+                }
+            },
+            "listingDescription": product.description or f"{product.brand} {product.model}"
         }
-
-    async def _create_ebay_draft(self, listing_data: Dict[str, Any]) -> str:
+    
+    def _convert_item_specifics(self, item_specifics: Dict[str, Any]) -> Dict[str, List[str]]:
         """
-        Creates draft listing via eBay API.
-        Returns eBay item ID.
-        To be implemented with actual eBay API calls.
+        Convert item specifics to eBay's required format
         """
-        # TODO: Implement actual eBay API call
-        return "draft_ebay_item_id_123"
-
-    async def _publish_to_ebay(self, ebay_item_id: str) -> bool:
-        """
-        Publishes listing via eBay API.
-        To be implemented with actual eBay API calls.
-        """
-        # TODO: Implement actual eBay API call
-        return True
-
-    async def _update_on_ebay(self, ebay_item_id: str, update_data: Dict[str, Any]) -> bool:
-        """
-        Updates listing via eBay API.
-        To be implemented with actual eBay API calls.
-        """
-        # TODO: Implement actual eBay API call
-        return True
-
-    async def _get_ebay_status(self, ebay_item_id: str) -> EbayListingStatus:
-        """
-        Gets listing status from eBay API.
-        To be implemented with actual eBay API calls.
-        """
-        # TODO: Implement actual eBay API call
-        return EbayListingStatus.ACTIVE
+        result = {}
+        for key, value in item_specifics.items():
+            if isinstance(value, list):
+                result[key] = value
+            else:
+                result[key] = [str(value)]
+        return result

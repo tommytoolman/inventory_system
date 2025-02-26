@@ -19,3 +19,6 @@ app/services/vintageandrare/templates/vintageandrare_export_20250203_1032 2.csv
 # Jupyter Notebooks
 *.ipynb
 .ipynb_checkpoints/
+# YAML Files
+*.yml
+*.yaml

@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *.class
 *.so
+*.ipynb
 .env
 .ipynb_checkpoints/
 .venv

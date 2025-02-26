@@ -1,0 +1,8 @@
+app/services/reverb/templates/Reverb_Mass_Upload copy 2.csv
+app/services/reverb/templates/Reverb_Mass_Upload copy.csv
+app/services/reverb/templates/Reverb_Mass_Upload.csv
+app/services/reverb/templates/reverb_inventory_24-01-25 154501.csv
+app/services/vintageandrare/templates/empty_bulk_upload_2025-02-17_09-14.csv
+app/services/vintageandrare/templates/vintage_mappings.csv
+app/services/vintageandrare/templates/vintageandrare_export_20250209_1501.csv
+app/services/vintageandrare/templates/vintageandrare_inventory_2025-01-21_09-28 copy.csv

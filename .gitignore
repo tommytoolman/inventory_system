@@ -2,9 +2,7 @@ __pycache__/
 *.py[cod]
 *.class
 *.so
-*.ipynb
 .env
-.ipynb_checkpoints/
 .venv
 env/
 venv/
@@ -14,10 +12,10 @@ ENV/
 app/services/ebay/ebaysdk-python/
 app/services/vintageandrare/templates/vintageandrare_export_20250203_1032 2.csv
 
-.ipynb_checkpoints/
-*.ipynb_checkpoints
 .Spotlight-V100
 .Trashes__pycache__/
 *.py[cod]
-*.ipynb
 .env
+# Jupyter Notebooks
+*.ipynb
+.ipynb_checkpoints/

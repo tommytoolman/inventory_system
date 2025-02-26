@@ -7,6 +7,13 @@ from typing import Dict, List, Optional, Tuple
 import subprocess
 import itertools
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Get credentials from environment variables, with placeholders as fallbacks
+username = os.environ.get("VINTAGE_AND_RARE_USERNAME", "PLACEHOLDER_USERNAME")
+password = os.environ.get("VINTAGE_AND_RARE_PASSWORD", "PLACEHOLDER_PASSWORD")
 
 # Get absolute path to inventory_system and add to Python path
 project_root = Path(__file__).resolve().parent.parent.parent.parent / 'inventory_system'
@@ -138,28 +145,28 @@ class FormFieldValidator:
             data.get('additional_shipping')
         ]):
             errors.append("At least one shipping option must be provided when shipping is enabled")
-        
+
         return errors
 
 class VintageAndRareTestCase:
     """Represents a test case for the V&R form"""
-    
+
     def __init__(self, test_data: Dict, validator: FormFieldValidator):
         self.test_data = test_data
         self.validator = validator
         self.script_path = project_root / 'app' / 'services' / 'vintageandrare' / 'inspect_form.py'
-    
+
     @property
     def command(self) -> List[str]:
         """Generate command line arguments for the test case"""
         cmd = [
             "python",
             str(self.script_path),
-            "--username", "PLACEHOLDER_USERNAME",
-            "--password", "PLACEHOLDER_PASSWORD",
-            "--test", "True"
+                "--username", username,
+                "--password", password,
+                "--test", "True"
         ]
-        
+
         for key, value in self.test_data.items():
             if isinstance(value, bool):
                 if value:
@@ -168,9 +175,9 @@ class VintageAndRareTestCase:
                 cmd.extend([f"--{key}"] + [str(v) for v in value])
             else:
                 cmd.extend([f"--{key}", str(value)])
-        
+
         return cmd
-    
+
     def validate(self) -> Tuple[bool, List[str]]:
         """Validate the test case data"""
         return self.validator.validate_fields(self.test_data)

@@ -22,3 +22,10 @@ app/services/vintageandrare/templates/vintageandrare_export_20250203_1032 2.csv
 # YAML Files
 *.yml
 *.yaml
+# Data Files
+*.csv
+*.xlsx
+*.jpg
+*.jpeg
+# More Image Files
+*.png

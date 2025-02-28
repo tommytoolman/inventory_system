@@ -1,4 +1,4 @@
-import os
+import os, re
 import sys
 from pathlib import Path
 import json
@@ -7,7 +7,18 @@ from typing import Dict, List, Optional, Tuple
 import subprocess
 import itertools
 import time
+import requests
 from dotenv import load_dotenv
+import pandas as pd
+from datetime import datetime
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+
 
 load_dotenv()
 
@@ -487,6 +498,100 @@ class TestCaseGenerator:
         
         return combinations
 
+# [Your existing functions like setup_driver, login_to_vr, etc.]
+
+# Add these new functions after your existing helper functions
+# but before your test functions
+
+def download_inventory(driver, download_dir=None, timeout=60):
+    """
+    Navigate to the export inventory page and download the inventory CSV.
+    
+    Args:
+        driver: Configured and authenticated Selenium WebDriver
+        download_dir: Directory where CSV will be downloaded
+        timeout: Maximum time to wait for download in seconds
+        
+    Returns:
+        Path to the downloaded file or None if download failed
+    """
+    if not download_dir:
+        download_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+    
+    # Ensure directory exists
+    os.makedirs(download_dir, exist_ok=True)
+    
+    # Record files before download
+    before_files = set(Path(download_dir).glob("*.csv"))
+    
+    try:
+        # Navigate to the export page
+        print("Navigating to export inventory page...")
+        driver.get('https://www.vintageandrare.com/instruments/export_inventory')
+        
+        # Take a screenshot to see what we're dealing with
+        driver.save_screenshot("export_page.png")
+        
+        # Find and click the download button
+        download_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, 
+                "//a[contains(text(), 'Download current V&R inventory')]"))
+        )
+        print("Found download button, clicking...")
+        download_button.click()
+        
+        # Wait for download to start
+        time.sleep(5)
+        
+        # Wait for new file to appear
+        start_time = time.time()
+        new_file = None
+        
+        while time.time() - start_time < timeout:
+            current_files = set(Path(download_dir).glob("*.csv"))
+            new_files = current_files - before_files
+            
+            if new_files:
+                # Find the most recently modified file
+                new_file = max(new_files, key=os.path.getmtime)
+                print(f"Download completed: {new_file}")
+                return new_file
+            
+            # Wait before checking again
+            time.sleep(2)
+            
+        print(f"Download timed out after {timeout} seconds")
+        return None
+        
+    except Exception as e:
+        print(f"Error downloading inventory: {str(e)}")
+        driver.save_screenshot("download_error.png")
+        raise
+
+def process_inventory_csv(csv_path):
+    """
+    Process the downloaded inventory CSV and return a DataFrame.
+    
+    Args:
+        csv_path: Path to the downloaded CSV file
+        
+    Returns:
+        pandas.DataFrame with the inventory data
+    """
+    try:
+        # Read the CSV file
+        df = pd.read_csv(csv_path)
+        print(f"Successfully loaded CSV with {len(df)} rows and {len(df.columns)} columns")
+        print(f"Columns: {df.columns.tolist()}")
+        
+        # Optionally add any processing you need
+        # (cleaning, restructuring, etc.)
+        
+        return df
+    except Exception as e:
+        print(f"Error processing CSV file: {str(e)}")
+        raise
+
 @pytest.mark.integration
 def test_vintage_and_rare_form():
     """Integration test for V&R form submission"""
@@ -531,6 +636,100 @@ def test_vintage_and_rare_form():
     
     # Assert all tests passed
     assert successful == len(test_cases), f"{len(test_cases) - successful} test cases failed"
+
+@pytest.mark.integration
+def test_vintage_and_rare_inventory_download():
+    """Integration test for V&R inventory download"""
+    # Create a temporary directory for downloads
+    download_dir = os.path.join(os.path.expanduser("~"), "Downloads", "vr_test")
+    os.makedirs(download_dir, exist_ok=True)
+
+    # Set up a session for authentication and download
+    session = requests.Session()
+    headers = {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+    }
+    
+    print("1. Getting main page to gather initial cookies...")
+    session.get('https://www.vintageandrare.com', headers=headers)
+    
+    print("2. Attempting login via requests...")
+    login_data = {
+        'username': username,
+        'pass': password,
+        'open_where': 'header'
+    }
+    
+    response = session.post(
+        'https://www.vintageandrare.com/do_login',
+        data=login_data,
+        headers=headers,
+        allow_redirects=True
+    )
+    
+    # Check if login was successful
+    print(f"Login response URL: {response.url}")
+    print(f"Login response status: {response.status_code}")
+    
+    # Now try the direct download approach
+    print("3. Directly downloading inventory file...")
+    download_url = 'https://www.vintageandrare.com/instruments/export_inventory/export_inventory'
+    download_response = session.get(
+        download_url,
+        headers=headers,
+        allow_redirects=True,
+        stream=True  # Important for large file downloads
+    )
+    
+    print(f"Download response status: {download_response.status_code}")
+    
+    # Check for content-disposition header to confirm file download
+    content_disposition = download_response.headers.get('content-disposition', '')
+    print(f"Content-disposition: {content_disposition}")
+    
+    if download_response.status_code == 200 and 'filename=' in content_disposition:
+        # Extract filename from content-disposition
+        filename_match = re.search(r'filename=(.+?)($|;)', content_disposition)
+        if filename_match:
+            filename = filename_match.group(1)
+        else:
+            # Use a default filename with timestamp
+            filename = f"vintageandrare_inventory_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        
+        # Save the file
+        file_path = os.path.join(download_dir, filename)
+        print(f"Saving file to: {file_path}")
+        
+        with open(file_path, 'wb') as f:
+            for chunk in download_response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        print(f"File saved successfully")
+        
+        # Process the CSV
+        try:
+            inventory_df = pd.read_csv(file_path)
+            print(f"Successfully loaded CSV with {len(inventory_df)} rows and {len(inventory_df.columns)} columns")
+            print(f"Columns: {inventory_df.columns.tolist()}")
+            
+            # Validate data
+            assert not inventory_df.empty, "Downloaded inventory file is empty"
+            print(f"Successfully downloaded and processed inventory with {len(inventory_df)} items")
+            
+            return inventory_df
+        except Exception as e:
+            print(f"Error processing CSV file: {e}")
+            raise
+    else:
+        print("Failed to download file")
+        if download_response.status_code != 200:
+            print(f"Unexpected status code: {download_response.status_code}")
+        print("Response content preview:")
+        print(download_response.text[:1000])  # First 1000 chars
+        assert False, "Failed to download inventory file"
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

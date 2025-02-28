@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models.webhook import WebhookEvent
 from app.services.webhook_processor import process_website_sale
-from app.config import get_webhook_secret
+from app.core.config import get_webhook_secret
 import hmac
 import hashlib
 

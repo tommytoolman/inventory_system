@@ -8,5 +8,7 @@ from .exceptions import (
     EbayAPIError,
     ListingNotFoundError,
     SyncError,
-    ValidationError
+    ValidationError,
+    ReverbServiceError, 
+    ReverbAPIError
 )

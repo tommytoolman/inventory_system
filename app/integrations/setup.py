@@ -2,7 +2,7 @@ from typing import Dict
 import asyncio
 from functools import lru_cache
 
-from app.config import get_settings  # Assuming you have a config module
+from app.core.config import get_settings  # Assuming you have a config module
 from app.integrations.stock_manager import StockManager
 from app.integrations.events import StockUpdateEvent
 from app.integrations.platforms.ebay import EbayPlatform

@@ -40,6 +40,15 @@ python inspect_form.py --username "user" --password "pass" [options]
 See --help for full list of options
 """
 
+import os
+import sys
+import json
+import requests
+import argparse
+import time
+from pathlib import Path
+
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -47,11 +56,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-import json
-import requests
-import argparse
-import time
-from pathlib import Path
+
 
 def analyze_form_elements(driver):
     print("\nAnalyzing form elements...")
@@ -712,7 +717,11 @@ def fill_item_form(driver, item_data, test_mode=True):
                 item_data['images'] = item_data['images'][:20]
             
             print(f"Processing {len(item_data['images'])} images...")
-            from media_handler import MediaHandler
+            import os, sys
+            project_root = os.path.expanduser('~/Documents/GitHub/PROJECTS/HANKS/inventory_system')
+            sys.path.append(project_root)
+            
+            from app.services.vintageandrare.media_handler import MediaHandler
             
             with MediaHandler() as handler:
                 for image_url in item_data['images']:

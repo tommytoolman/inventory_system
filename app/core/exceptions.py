@@ -41,3 +41,11 @@ class ValidationError(BaseServiceError):
 class PlatformIntegrationError(PlatformServiceError):
     """Raised when data validation fails."""
     pass
+
+class ReverbServiceError(PlatformServiceError):
+    """Base exception for Reverb-specific errors."""
+    pass
+
+class ReverbAPIError(ReverbServiceError):
+    """Raised when Reverb API calls fail."""
+    pass

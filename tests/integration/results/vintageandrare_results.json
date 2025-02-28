@@ -17,7 +17,7 @@
       "europe_shipping": "50"
     },
     "success": false,
-    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 811, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 292, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 688, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 522, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 467, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
+    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 930, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 335, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 807, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 566, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 510, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
   },
   {
     "test_case": 2,
@@ -37,46 +37,6 @@
       "usa_shipping": "100"
     },
     "success": false,
-    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 811, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 292, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 688, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 522, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 467, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
-  },
-  {
-    "test_case": 3,
-    "data": {
-      "brand": "Fender",
-      "model": "Test Model",
-      "year": "1964",
-      "color": "Sunburst",
-      "description": "Test description",
-      "processing_time": "3",
-      "time_unit": "Days",
-      "category": "51",
-      "subcategory": "86",
-      "sub_subcategory": "195",
-      "price": "1500",
-      "shipping": true,
-      "uk_shipping": "75"
-    },
-    "success": false,
-    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 811, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 292, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 688, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 522, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 467, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
-  },
-  {
-    "test_case": 4,
-    "data": {
-      "brand": "Fender",
-      "model": "Test Model",
-      "year": "1964",
-      "color": "Sunburst",
-      "description": "Test description",
-      "processing_time": "3",
-      "time_unit": "Days",
-      "category": "51",
-      "subcategory": "86",
-      "sub_subcategory": "195",
-      "price": "1500",
-      "shipping": true,
-      "world_shipping": "150"
-    },
-    "success": false,
-    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 811, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 292, in login_and_navigate\n    fill_item_form(driver, item_data, test_mode)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 688, in fill_item_form\n    raise e\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 522, in fill_item_form\n    fill_categories(driver, item_data['category'], item_data.get('subcategory'))\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 467, in fill_categories\n    raise ValueError(f\"System Error: Second subcategory required but not provided for subcategory {sub1_id}\")\nValueError: System Error: Second subcategory required but not provided for subcategory 86\n"
+    "error": "Traceback (most recent call last):\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 930, in <module>\n    login_and_navigate(args.username, args.password, item_data, args.test, args.map_categories)\n  File \"/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/vintageandrare/inspect_form.py\", line 291, in login_and_navigate\n    driver.delete_all_cookies()\n  File \"/opt/miniconda3/lib/python3.12/site-packages/selenium/webdriver/remote/webdriver.py\", line 745, in delete_all_cookies\n    self.execute(Command.DELETE_ALL_COOKIES)\n  File \"/opt/miniconda3/lib/python3.12/site-packages/selenium/webdriver/remote/webdriver.py\", line 429, in execute\n    self.error_handler.check_response(response)\n  File \"/opt/miniconda3/lib/python3.12/site-packages/selenium/webdriver/remote/errorhandler.py\", line 232, in check_response\n    raise exception_class(message, screen, stacktrace)\nselenium.common.exceptions.NoSuchWindowException: Message: no such window: target window already closed\nfrom unknown error: web view not found\n  (Session info: chrome=133.0.6943.127)\nStacktrace:\n0   chromedriver                        0x00000001031282d4 cxxbridge1$str$ptr + 2739836\n1   chromedriver                        0x0000000103120934 cxxbridge1$str$ptr + 2708700\n2   chromedriver                        0x0000000102c81f90 cxxbridge1$string$len + 93360\n3   chromedriver                        0x0000000102c5b964 chromedriver + 129380\n4   chromedriver                        0x0000000102cf0edc cxxbridge1$string$len + 547836\n5   chromedriver                        0x0000000102d09994 cxxbridge1$string$len + 648884\n6   chromedriver                        0x0000000102cbd060 cxxbridge1$string$len + 335232\n7   chromedriver                        0x00000001030f0c38 cxxbridge1$str$ptr + 2512864\n8   chromedriver                        0x00000001030f3f58 cxxbridge1$str$ptr + 2525952\n9   chromedriver                        0x00000001030d6578 cxxbridge1$str$ptr + 2404640\n10  chromedriver                        0x00000001030f4818 cxxbridge1$str$ptr + 2528192\n11  chromedriver                        0x00000001030c6f2c cxxbridge1$str$ptr + 2341588\n12  chromedriver                        0x0000000103110a60 cxxbridge1$str$ptr + 2643464\n13  chromedriver                        0x0000000103110be8 cxxbridge1$str$ptr + 2643856\n14  chromedriver                        0x00000001031205a8 cxxbridge1$str$ptr + 2707792\n15  libsystem_pthread.dylib             0x00000001902edf94 _pthread_start + 136\n16  libsystem_pthread.dylib             0x00000001902e8d34 thread_start + 8\n\n"
   }
 ]

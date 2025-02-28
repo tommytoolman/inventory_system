@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.main import app
-from app.config import Settings
+from app.core.config import Settings
 
 # Test database URL
 TEST_DATABASE_URL = "postgresql+asyncpg://test_user:test_pass@localhost/test_db"

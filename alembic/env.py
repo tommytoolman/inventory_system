@@ -8,13 +8,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-# Import your models
-# from app.models.product import Product, PlatformListing, CSVImportLog
-# To this:
-from app.models.product import (
-    Product, PlatformListing, EbayListing, 
-    ReverbListing, VRListing, WebsiteListing
-)
+from app.models.product import Product
+from app.models.platform_common import PlatformCommon
+from app.models.ebay import EbayListing
+from app.models.reverb import ReverbListing
+from app.models.vr import VRListing
+from app.models.website import WebsiteListing
 from app.database import Base
 
 # this is the Alembic Config object

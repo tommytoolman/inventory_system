@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 
 from app.core.exceptions import ReverbAPIError
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +29,17 @@ class ReverbClient:
         Args:
             api_key: Reverb API key (personal access token)
         """
+        self.settings = get_settings()
         self.api_key = api_key
+        
     
     def _get_headers(self) -> Dict[str, str]:
         """Get headers for API requests with API key authentication"""
         return {
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/hal+json",
             "Accept": "application/hal+json",
             "Accept-Version": "3.0",
-            "Authorization": f"Bearer {self.api_key}"
         }
     
     async def _make_request(
@@ -228,60 +231,60 @@ class ReverbClient:
             data={"reason": reason}
         )
     
-    async def get_my_listings(self, page: int = 1, per_page: int = 50) -> Dict:
-        """
-        Get the authenticated user's listings with pagination
+    # async def get_my_listings(self, page: int = 1, per_page: int = 50) -> Dict:
+    #     """
+    #     Get the authenticated user's listings with pagination
         
-        Args:
-            page: Page number (starting from 1)
-            per_page: Number of listings per page (max 1000)
+    #     Args:
+    #         page: Page number (starting from 1)
+    #         per_page: Number of listings per page (max 1000)
             
-        Returns:
-            Dict: Listings data with pagination info
+    #     Returns:
+    #         Dict: Listings data with pagination info
             
-        Raises:
-            ReverbAPIError: If the API request fails
-        """
-        return await self._make_request(
-            "GET", 
-            "/my/listings", 
-            params={"page": page, "per_page": per_page}
-        )
+    #     Raises:
+    #         ReverbAPIError: If the API request fails
+    #     """
+    #     return await self._make_request(
+    #         "GET", 
+    #         "/my/listings", 
+    #         params={"page": page, "per_page": per_page}
+    #     )
     
-    async def get_all_my_listings(self) -> List[Dict]:
-        """
-        Get all of the authenticated user's listings (handles pagination)
+    # async def get_all_my_listings(self) -> List[Dict]:
+    #     """
+    #     Get all of the authenticated user's listings (handles pagination)
         
-        Returns:
-            List[Dict]: All listings
+    #     Returns:
+    #         List[Dict]: All listings
             
-        Raises:
-            ReverbAPIError: If the API request fails
-        """
-        # Get first page to determine total pages
-        first_page = await self.get_my_listings(page=1, per_page=50)
-        total_items = first_page['total']
-        total_pages = math.ceil(total_items / 50)
+    #     Raises:
+    #         ReverbAPIError: If the API request fails
+    #     """
+    #     # Get first page to determine total pages
+    #     first_page = await self.get_my_listings(page=1, per_page=50)
+    #     total_items = first_page['total']
+    #     total_pages = math.ceil(total_items / 50)
         
-        # If only one page, return those listings
-        if total_pages <= 1:
-            return first_page['listings']
+    #     # If only one page, return those listings
+    #     if total_pages <= 1:
+    #         return first_page['listings']
         
-        # Otherwise, fetch all pages concurrently
-        async def fetch_page(page_num):
-            page_data = await self.get_my_listings(page=page_num, per_page=50)
-            return page_data['listings']
+    #     # Otherwise, fetch all pages concurrently
+    #     async def fetch_page(page_num):
+    #         page_data = await self.get_my_listings(page=page_num, per_page=50)
+    #         return page_data['listings']
         
-        # Create tasks for remaining pages (we already have page 1)
-        tasks = [fetch_page(page) for page in range(2, total_pages + 1)]
-        other_pages_results = await asyncio.gather(*tasks)
+    #     # Create tasks for remaining pages (we already have page 1)
+    #     tasks = [fetch_page(page) for page in range(2, total_pages + 1)]
+    #     other_pages_results = await asyncio.gather(*tasks)
         
-        # Combine all listings (first page + all other pages)
-        all_listings = first_page['listings']
-        for page_listings in other_pages_results:
-            all_listings.extend(page_listings)
+    #     # Combine all listings (first page + all other pages)
+    #     all_listings = first_page['listings']
+    #     for page_listings in other_pages_results:
+    #         all_listings.extend(page_listings)
         
-        return all_listings
+    #     return all_listings
     
     async def get_my_drafts(self) -> Dict:
         """
@@ -327,6 +330,7 @@ class ReverbClient:
         return image_url
     
     async def upload_image_file(self, file_path: str) -> str:
+        
         """
         Upload an image file to Reverb
         
@@ -348,3 +352,77 @@ class ReverbClient:
             "Direct file uploads not implemented. "
             "Please upload the image to a publicly accessible URL first, then use that URL."
         )
+        
+    async def get_my_listings(self, page: int = 1, per_page: int = 50) -> Dict:
+        """
+        Get current user's listings from Reverb
+        """
+        # Use the non-awaited version
+        headers = self._get_headers()
+        url = f"{self.BASE_URL}/my/listings?page={page}&per_page={per_page}"
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers)
+                
+                if response.status_code != 200:
+                    logger.error(f"Reverb API error: {response.text}")
+                    raise ReverbAPIError(f"Failed to get listings: {response.text}")
+                
+                return response.json()
+        
+        except httpx.RequestError as e:
+            logger.error(f"Network error getting listings: {str(e)}")
+            raise ReverbAPIError(f"Network error getting listings: {str(e)}")
+    
+    
+    async def get_all_listings(self) -> List[Dict]:
+        """
+        Get all listings by paginating through results
+        
+        Returns:
+            List[Dict]: All listings
+        """
+        all_listings = []
+        page = 1
+        per_page = 50
+        
+        while True:
+            response = await self.get_my_listings(page=page, per_page=per_page)
+            listings = response.get('listings', [])
+            
+            if not listings:
+                break
+                
+            all_listings.extend(listings)
+            
+            # Check if we've reached the last page
+            total = response.get('total', 0)
+            if page * per_page >= total:
+                break
+                
+            page += 1
+        
+        return all_listings
+    
+    async def get_listing_details(self, listing_id: str) -> Dict:
+        """
+        Get detailed information for a specific listing
+        """
+        # Use the non-awaited version
+        headers = self._get_headers()
+        url = f"{self.BASE_URL}/listings/{listing_id}"
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers)
+                
+                if response.status_code != 200:
+                    logger.error(f"Reverb API error: {response.text}")
+                    raise ReverbAPIError(f"Failed to get listing details: {response.text}")
+                
+                return response.json()
+        
+        except httpx.RequestError as e:
+            logger.error(f"Network error getting listing details: {str(e)}")
+            raise ReverbAPIError(f"Network error getting listing details: {str(e)}")

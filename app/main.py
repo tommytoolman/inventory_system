@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from fastapi.responses import RedirectResponse
 from .database import get_session
-from .routes import inventory
-from .core.config import get_settings
+from app.routes import inventory
+from app.core.config import get_settings
 
 from app import models
 

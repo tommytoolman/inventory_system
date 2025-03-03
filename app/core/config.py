@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     WEBSSITE_URL_OLD: str = ""
     WEBSITE_URL: str = ""
     
+    DROPBOX_APP_KEY: str = ""
+    DROPBOX_APP_SECRET: str = ""
+    DROPBOX_ACCESS_TOKEN: str = ""
+    DROPBOX_REFRESH_TOKEN: str = ""
+     
     # File paths
     UPLOAD_DIR: str = "app/static/uploads"
     

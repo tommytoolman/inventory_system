@@ -17,6 +17,10 @@ class ReverbClient:
     Handles authentication and provides methods for common operations.
     
     Documentation: https://www.reverb-api.com/docs/
+    
+    Enhanced methods for the ReverbClient to better handle API responses with our new schema.
+    This doesn't replace the entire client - just adds/updates methods that need to be modified.
+    
     """
     
     # Base URL for Reverb API
@@ -405,15 +409,61 @@ class ReverbClient:
         
         return all_listings
     
+    async def get_all_listings_detailed(self) -> List[Dict]:
+        """
+        Get all listings with detailed information (handles pagination)
+        
+        This enhanced version gets full listing details for each listing, which
+        provides all the data we need for our enhanced schema.
+        
+        Returns:
+            List[Dict]: All listings with full details
+            
+        Raises:
+            ReverbAPIError: If the API request fails
+        """
+        try:
+            # First get the basic listings to get listing IDs
+            basic_listings = await self.get_all_listings()
+            
+            # Then fetch detailed information for each listing
+            detailed_listings = []
+            
+            for listing in basic_listings:
+                try:
+                    listing_id = listing.get('id')
+                    if listing_id:
+                        details = await self.get_listing_details(listing_id)
+                        detailed_listings.append(details)
+                except Exception as e:
+                    logger.warning(f"Error getting details for listing {listing.get('id')}: {str(e)}")
+                    # Still include the basic listing to maintain the count
+                    detailed_listings.append(listing)
+            
+            return detailed_listings
+        
+        except Exception as e:
+            logger.error(f"Error getting all listings with details: {str(e)}")
+            raise ReverbAPIError(f"Failed to get all listings with details: {str(e)}")
+
+    # Replace the existing get_listing_details method if it exists, or add this new one
     async def get_listing_details(self, listing_id: str) -> Dict:
         """
         Get detailed information for a specific listing
-        """
-        # Use the non-awaited version
-        headers = self._get_headers()
-        url = f"{self.BASE_URL}/listings/{listing_id}"
         
+        Args:
+            listing_id: Reverb listing ID
+            
+        Returns:
+            Dict: Full listing details
+            
+        Raises:
+            ReverbAPIError: If the API request fails
+        """
         try:
+            headers = self._get_headers()
+            url = f"{self.BASE_URL}/listings/{listing_id}"
+            
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, headers=headers)
                 

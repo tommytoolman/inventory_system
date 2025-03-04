@@ -242,15 +242,18 @@ class ReverbImporter:
                     reverb_created_at = None
                     if listing_data.get('created_at'):
                         try:
-                            reverb_created_at = iso8601.parse_date(listing_data['created_at'])
+                            dt = iso8601.parse_date(listing_data['created_at'])
+                            reverb_created_at = self._convert_to_naive_datetime(dt)
                         except Exception as e:
                             logger.warning(f"Could not parse created_at timestamp: {e}")
-                    
+
                     reverb_published_at = None
                     if listing_data.get('published_at'):
                         try:
-                            reverb_published_at = iso8601.parse_date(listing_data['published_at'])
+                            dt = iso8601.parse_date(listing_data['published_at'])
+                            reverb_published_at = self._convert_to_naive_datetime(dt)
                         except Exception as e:
+                            logger.warning(f"Could not parse published_at timestamp: {e}")
                             logger.warning(f"Could not parse published_at timestamp: {e}")
 
                     # Parse state
@@ -266,6 +269,10 @@ class ReverbImporter:
                     if isinstance(stats, dict):
                         view_count = self._safe_int(stats.get('views'), 0)
                         watch_count = self._safe_int(stats.get('watches'), 0)
+                    
+                    created_at = datetime.utcnow()  # These will be naive
+                    updated_at = datetime.utcnow()
+                    last_synced_at = datetime.utcnow()
                     
                     # Create enhanced reverb_listing with new fields
                     reverb_listing = ReverbListing(
@@ -287,8 +294,10 @@ class ReverbImporter:
                         watch_count=watch_count,
                         reverb_created_at=reverb_created_at,
                         reverb_published_at=reverb_published_at,
+                        created_at=created_at,
+                        updated_at=updated_at,
+                        last_synced_at=last_synced_at,
                         handmade=listing_data.get('handmade', False),
-                        last_synced_at=datetime.utcnow(),
                         # Store all other fields in extended_attributes
                         extended_attributes=self._prepare_extended_attributes(listing_data)
                     )
@@ -514,6 +523,7 @@ class ReverbImporter:
         
         return additional_urls
 
+
     def _prepare_extended_attributes(self, listing_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Prepare the extended_attributes JSONB field by:
@@ -538,3 +548,14 @@ class ReverbImporter:
                 del attributes[key]
         
         return attributes
+
+    
+    def _convert_to_naive_datetime(self, dt):
+        """Convert timezone-aware datetime to naive datetime in UTC"""
+        if dt is None:
+            return None
+        
+        if dt.tzinfo:
+            # Convert to UTC and remove timezone info
+            return dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return dt

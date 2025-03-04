@@ -10,7 +10,9 @@ from ...models.product import Product
 from ...models.platform_common import PlatformCommon  # Updated import
 
 class VRExportService:
-    """Service for exporting products to VintageAndRare CSV format."""
+    """ Service for exporting products to VintageAndRare CSV format.
+        04/03/25: Modified VRExportService to work with the enhanced schema
+    """
 
     # Column order matching the bulk upload template
     CSV_COLUMNS = [
@@ -45,6 +47,20 @@ class VRExportService:
 
     def _format_product_for_export(self, product: Product, platform_listing: PlatformCommon | None) -> Dict[str, str]:
         """Format a product for the VintageAndRare CSV export format."""
+        
+        # Get reverb_listing for reference if it exists
+        reverb_listing = None
+        if hasattr(product, 'platform_listings'):
+            for pl in product.platform_listings:
+                if pl.platform_name.lower() == 'reverb':
+                    reverb_listing = pl.reverb_listing
+                    break
+        
+        # Use enhanced pricing fields if available
+        price = product.base_price or 0
+        if reverb_listing and hasattr(reverb_listing, 'list_price') and reverb_listing.list_price:
+            price = reverb_listing.list_price
+
         return {
             'brand name': product.brand or '',
             'category name': product.category or '',

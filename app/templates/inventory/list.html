@@ -90,7 +90,8 @@
                 <td class="px-6 py-4 whitespace-nowrap">{{ product.category }}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     {% if product.base_price and product.base_price > 0 %}
-                        ${{ "%.2f"|format(product.base_price) }}
+                        £{{ "{:,.0f}".format(product.base_price) }}
+                        <!-- ${{ "%.2f"|format(product.base_price) }} -->
                     {% else %}
                         <span class="text-gray-500">-</span>
                     {% endif %}
@@ -102,7 +103,7 @@
                         </span>
                     {% else %}
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            {{ product.status }}
+                            {{ product.status.value if product.status else '' }}
                         </span>
                     {% endif %}
                 </td>

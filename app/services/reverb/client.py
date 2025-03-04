@@ -44,6 +44,7 @@ class ReverbClient:
             "Content-Type": "application/hal+json",
             "Accept": "application/hal+json",
             "Accept-Version": "3.0",
+            "X-Display-Currency": "GBP"
         }
     
     async def _make_request(

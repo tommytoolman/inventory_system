@@ -41,7 +41,7 @@
                     <dt class="text-gray-600">Base Price</dt>
                     <dd>
                         {% if product.base_price and product.base_price > 0 %}
-                            ${{ "%.2f"|format(product.base_price) }}
+                            £{{ "{:,.0f}".format(product.base_price) }}
                         {% else %}
                             <span class="text-gray-500">-</span>
                         {% endif %}
@@ -49,7 +49,7 @@
 
                     {% if product.cost_price %}
                     <dt class="text-gray-600">Cost Price</dt>
-                    <dd>${{ "%.2f"|format(product.cost_price) }}</dd>
+                    <dd>£{{ "{:,.0f}".format(product.base_price) }}</dd>
                     {% endif %}
                 </dl>
             </div>
@@ -94,7 +94,7 @@
             {% if product.primary_image or product.additional_images %}
             <div class="md:col-span-2">
                 <h2 class="text-lg font-semibold mb-4">Images</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
                     {% if product.primary_image %}
                     <div class="aspect-w-4 aspect-h-3">
                         <img src="{{ product.primary_image }}" alt="Primary image" class="product-image">
@@ -102,7 +102,8 @@
                     {% endif %}
                     {% for image in product.additional_images %}
                     <div class="aspect-w-4 aspect-h-3">
-                        <img src="{{ image }}" alt="Additional image" class="object-cover rounded-lg shadow-md">
+                        <!-- <img src="{{ image }}" alt="Additional image" class="object-cover rounded-lg shadow-md"> -->
+                        <img src="{{ image }}" alt="Additional image" class="product-image">
                     </div>
                     {% endfor %}
                 </div>
@@ -113,8 +114,8 @@
 </div>
 <style>
     .product-image {
-        max-width: 200px;
-        max-height: 200px;
+        max-width: 250px;
+        max-height: 250px;
         object-fit: contain;
     }
 </style>

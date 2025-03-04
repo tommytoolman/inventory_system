@@ -1,0 +1,1661 @@
+{
+  "api_fields": [
+    "cloudinary_photos[5].transformation.height",
+    "shipping.rates[2].region_code",
+    "buyer_price.tax_included",
+    "_embedded.price_guide.estimated_value.price_low.symbol",
+    "shipping.rates[1].regional",
+    "photos[5]._links.large_crop.href",
+    "cloudinary_photos[12].format",
+    "year",
+    "_embedded.price_guide.estimated_value.release_date",
+    "cloudinary_photos[10].height",
+    "photos[3]._links.large_crop.href",
+    "cloudinary_photos[10].transformation.height",
+    "cloudinary_photos[0].path",
+    "stats.views",
+    "shipping.rates[1].carrier_calculated",
+    "shipping.initial_offer_rate.rate.display.currency",
+    "sold_as_is",
+    "shipping.initial_offer_rate.rate.original.amount",
+    "cloudinary_photos[1].transformation.angle",
+    "photos[6]._links.small_crop.href",
+    "cloudinary_photos[3].transformation.width",
+    "draft",
+    "cloudinary_photos[1].transformation.crop",
+    "cloudinary_photos[5].path",
+    "price.currency",
+    "photos[8]._links.thumbnail.href",
+    "cloudinary_photos[1].width",
+    "cloudinary_photos[3].width",
+    "shop_name",
+    "cloudinary_photos[8].format",
+    "photos[2]._links.small_crop.href",
+    "shipping.initial_offer_rate.rate.display.display",
+    "photos[11]._links.large_crop.href",
+    "shipping.rates[3].carrier_calculated",
+    "photos[10]._links.large_crop.href",
+    "cloudinary_photos[0].format",
+    "cloudinary_photos[5].transformation.x",
+    "photos[2]._links.thumbnail.href",
+    "photos[6]._links.thumbnail.href",
+    "cloudinary_photos[12].transformation.y",
+    "_embedded.price_guide.estimated_value.price_high.currency",
+    "cloudinary_photos[9].version",
+    "photos[8]._links.large_crop.href",
+    "shipping.rates[3].region_code",
+    "condition.uuid",
+    "cloudinary_photos[10].preview_url",
+    "cloudinary_photos[3].preview_url",
+    "price_guide_id",
+    "cloudinary_photos[10].format",
+    "state.slug",
+    "_links.watchlist.href",
+    "cloudinary_photos[8].width",
+    "shipping.user_region_rate.incremental_rate.symbol",
+    "cloudinary_photos[2].format",
+    "cloudinary_photos[7].id",
+    "photos[6]._links.full.href",
+    "_embedded.price_guide.estimated_value.price_low.amount_cents",
+    "shipping.rates[3].rate.currency",
+    "cloudinary_photos[7].version",
+    "cloudinary_photos[9].transformation.x",
+    "cloudinary_photos[4].path",
+    "shipping.initial_offer_rate.rate.original.amount_cents",
+    "cloudinary_photos[2].transformation.crop",
+    "photos[12]._links.large_crop.href",
+    "photos[5]._links.thumbnail.href",
+    "cloudinary_photos[1].preview_url",
+    "cloudinary_photos[8].transformation.crop",
+    "_embedded.price_guide.estimated_value.price_high.amount_cents",
+    "comparison_shopping_page_id",
+    "_embedded.price_guide._links.photo.href",
+    "cloudinary_photos[4].preview_url",
+    "shipping.initial_offer_rate.rate.display.amount",
+    "cloudinary_photos[5].height",
+    "cloudinary_photos[8].transformation.angle",
+    "cloudinary_photos[8].height",
+    "_embedded.price_guide.estimated_value.price_high.display",
+    "shipping.rates[0].destination_postal_code_needed",
+    "cloudinary_photos[1].transformation.width",
+    "cloudinary_photos[7].preview_url",
+    "local_pickup_only",
+    "cloudinary_photos[5].public_id",
+    "shop.feedback_count",
+    "cloudinary_photos[8].resource_type",
+    "cloudinary_photos[12].transformation.width",
+    "cloudinary_photos[7].public_id",
+    "cloudinary_photos[7].transformation.crop",
+    "cloudinary_photos[11].path",
+    "state.description",
+    "shipping.rates[2].rate.currency",
+    "location.country_code",
+    "cloudinary_photos[2].transformation.height",
+    "cloudinary_photos[4].public_id",
+    "shipping.rates[1].destination_postal_code_needed",
+    "photos[4]._links.small_crop.href",
+    "photos[10]._links.small_crop.href",
+    "_embedded.price_guide.year",
+    "make",
+    "location.locality",
+    "cloudinary_photos[11].height",
+    "cloudinary_photos[11].resource_type",
+    "photos[0]._links.small_crop.href",
+    "shipping.rates[1].rate.display",
+    "_links.edit.href",
+    "cloudinary_photos[6].transformation.crop",
+    "buyer_price.currency",
+    "shipping.user_region_rate.incremental_rate.currency",
+    "cloudinary_photos[4].transformation.height",
+    "shipping.rates[3].rate.symbol",
+    "_links.buy.href",
+    "_embedded.price_guide.categories[0].full_name",
+    "shipping.initial_offer_rate.region_code",
+    "photos[8]._links.small_crop.href",
+    "cloudinary_photos[9].id",
+    "cloudinary_photos[2].path",
+    "cloudinary_photos[0].transformation.angle",
+    "cloudinary_photos[4].width",
+    "cloudinary_photos[8].path",
+    "shipping.rates[0].rate.symbol",
+    "_links.cart.href",
+    "shipping_profile.name",
+    "shipping.rates[1].rate.amount_cents",
+    "cloudinary_photos[1].format",
+    "buyer_price.amount",
+    "cloudinary_photos[1].height",
+    "photos[6]._links.large_crop.href",
+    "cloudinary_photos[8].transformation.x",
+    "is_my_listing",
+    "_links.update.href",
+    "photos[1]._links.small_crop.href",
+    "_links.flag.href",
+    "cloudinary_photos[6].transformation.width",
+    "cloudinary_photos[7].transformation.y",
+    "shipping.rates[2].rate.display",
+    "cloudinary_photos[9].width",
+    "photos[12]._links.small_crop.href",
+    "shipping_policy",
+    "cloudinary_photos[2].resource_type",
+    "_embedded.price_guide._links.transactions.href",
+    "_links.web.href",
+    "cloudinary_photos[8].preview_url",
+    "cloudinary_photos[1].public_id",
+    "shipping.user_region_rate.regional",
+    "cloudinary_photos[1].path",
+    "shipping.initial_offer_rate.rate.display.symbol",
+    "photos[9]._links.large_crop.href",
+    "cloudinary_photos[8].public_id",
+    "photos[7]._links.large_crop.href",
+    "cloudinary_photos[12].preview_url",
+    "offer_count",
+    "_links.end.href",
+    "cloudinary_photos[8].transformation.height",
+    "buyer_price.symbol",
+    "cloudinary_photos[10].transformation.crop",
+    "cloudinary_photos[9].transformation.width",
+    "cloudinary_photos[4].height",
+    "shipping.rates[2].carrier_calculated",
+    "cloudinary_photos[12].public_id",
+    "_links.end.method",
+    "cloudinary_photos[12].transformation.crop",
+    "cloudinary_photos[2].id",
+    "cloudinary_photos[9].resource_type",
+    "photos[3]._links.thumbnail.href",
+    "photos[0]._links.full.href",
+    "live",
+    "cloudinary_photos[0].transformation.width",
+    "shipping.rates[3].destination_postal_code_needed",
+    "_embedded.price_guide.title",
+    "photos[9]._links.small_crop.href",
+    "cloudinary_photos[3].transformation.crop",
+    "cloudinary_photos[10].width",
+    "shipping.rates[0].carrier_calculated",
+    "photos[7]._links.small_crop.href",
+    "cloudinary_photos[4].transformation.angle",
+    "cloudinary_photos[11].transformation.height",
+    "shipping.user_region_rate.incremental_rate.amount_cents",
+    "cloudinary_photos[1].transformation.y",
+    "cloudinary_photos[11].transformation.y",
+    "cloudinary_photos[3].public_id",
+    "cloudinary_photos[3].format",
+    "cloudinary_photos[8].transformation.width",
+    "cloudinary_photos[8].id",
+    "cloudinary_photos[10].id",
+    "_embedded.price_guide.estimated_value.price_high.symbol",
+    "shipping.rates[2].rate.amount_cents",
+    "_embedded.price_guide.finish",
+    "cloudinary_photos[11].width",
+    "has_inventory",
+    "cloudinary_photos[0].id",
+    "location.display_location",
+    "cloudinary_photos[6].id",
+    "cloudinary_photos[6].resource_type",
+    "cloudinary_photos[7].width",
+    "title",
+    "cloudinary_photos[12].path",
+    "shipping.free_expedited_shipping",
+    "shipping.rates[3].rate.amount_cents",
+    "offers_enabled",
+    "cloudinary_photos[1].transformation.height",
+    "shipping.initial_offer_rate.rate.display.amount_cents",
+    "cloudinary_photos[7].height",
+    "cloudinary_photos[5].transformation.angle",
+    "cloudinary_photos[0].transformation.height",
+    "_embedded.price_guide.description",
+    "cloudinary_photos[5].resource_type",
+    "cloudinary_photos[3].height",
+    "photos[7]._links.thumbnail.href",
+    "cloudinary_photos[0].resource_type",
+    "cloudinary_photos[1].transformation.x",
+    "cloudinary_photos[2].public_id",
+    "price.amount_cents",
+    "cloudinary_photos[6].format",
+    "shipping.user_region_rate.rate.amount",
+    "shipping.user_region_rate.rate.display",
+    "cloudinary_photos[4].transformation.width",
+    "cloudinary_photos[2].width",
+    "cloudinary_photos[3].version",
+    "photos[9]._links.full.href",
+    "_embedded.price_guide.estimated_value.price_low.amount",
+    "photos[12]._links.thumbnail.href",
+    "_embedded.price_guide._links.self.href",
+    "price.amount",
+    "cloudinary_photos[0].version",
+    "cloudinary_photos[2].height",
+    "photos[1]._links.thumbnail.href",
+    "cloudinary_photos[3].resource_type",
+    "cloudinary_photos[10].version",
+    "cloudinary_photos[0].height",
+    "cloudinary_photos[11].format",
+    "cloudinary_photos[5].transformation.y",
+    "shipping_profile.id",
+    "shipping.rates[2].regional",
+    "shop_id",
+    "has_offer_for_buyer",
+    "in_watchlist",
+    "cloudinary_photos[2].transformation.width",
+    "cloudinary_photos[12].transformation.angle",
+    "photos[11]._links.small_crop.href",
+    "shipping.local",
+    "_links.update.method",
+    "cloudinary_photos[6].transformation.angle",
+    "cloudinary_photos[9].transformation.crop",
+    "_links.photo.href",
+    "handmade",
+    "photos[10]._links.full.href",
+    "upc_does_not_apply",
+    "shipping.rates[2].rate.symbol",
+    "photos[4]._links.thumbnail.href",
+    "cloudinary_photos[5].format",
+    "shipping.rates[3].rate.amount",
+    "photos[5]._links.small_crop.href",
+    "cloudinary_photos[4].resource_type",
+    "_links.contact_seller.web.href",
+    "_embedded.price_guide._links.web.href",
+    "stats.watches",
+    "cloudinary_photos[7].transformation.width",
+    "id",
+    "cloudinary_photos[11].id",
+    "cloudinary_photos[9].transformation.height",
+    "shipping.user_region_rate.incremental_rate.display",
+    "cloudinary_photos[1].resource_type",
+    "cloudinary_photos[12].version",
+    "_links.bump.href",
+    "shipping.initial_offer_rate.destination_postal_code_needed",
+    "price.tax_included",
+    "shipping.rates[0].rate.display",
+    "model",
+    "cloudinary_photos[0].preview_url",
+    "cloudinary_photos[6].transformation.x",
+    "shipping.user_region_rate.rate.symbol",
+    "shipping.rates[1].rate.amount",
+    "cloudinary_photos[12].width",
+    "photos[10]._links.thumbnail.href",
+    "shipping.rates[1].rate.symbol",
+    "photos[12]._links.full.href",
+    "cloudinary_photos[7].format",
+    "cloudinary_photos[0].public_id",
+    "shipping.initial_offer_rate.regional",
+    "_links.brand.href",
+    "shipping.rates[3].regional",
+    "photos[1]._links.large_crop.href",
+    "cloudinary_photos[10].transformation.x",
+    "cloudinary_photos[3].path",
+    "shipping.initial_offer_rate.rate.original.display",
+    "cloudinary_photos[5].transformation.width",
+    "cloudinary_photos[0].transformation.x",
+    "finish",
+    "_links.self.href",
+    "cloudinary_photos[3].transformation.angle",
+    "_links.make_offer.href",
+    "photos[4]._links.large_crop.href",
+    "cloudinary_photos[11].transformation.angle",
+    "buyer_price.display",
+    "buyer_price.amount_cents",
+    "cloudinary_photos[11].public_id",
+    "cloudinary_photos[6].path",
+    "photos[9]._links.thumbnail.href",
+    "photos[7]._links.full.href",
+    "cloudinary_photos[0].width",
+    "cloudinary_photos[3].transformation.height",
+    "cloudinary_photos[12].transformation.x",
+    "_embedded.price_guide.estimated_value.price_low.currency",
+    "condition.display_name",
+    "shipping.initial_offer_rate.rate.original.currency",
+    "cloudinary_photos[12].height",
+    "_embedded.price_guide.make",
+    "photos[4]._links.full.href",
+    "accepted_payment_methods[1]",
+    "cloudinary_photos[4].transformation.x",
+    "shipping.user_region_rate.region_code",
+    "photos[0]._links.thumbnail.href",
+    "cloudinary_photos[10].transformation.angle",
+    "_embedded.price_guide.model",
+    "cloudinary_photos[2].version",
+    "_links.comparison_shopping.href",
+    "origin_country_code",
+    "cloudinary_photos[6].transformation.height",
+    "cloudinary_photos[11].transformation.crop",
+    "same_day_shipping_ineligible",
+    "cloudinary_photos[5].version",
+    "shop.rating_percentage",
+    "_links.shop.web.href",
+    "cloudinary_photos[5].id",
+    "cloudinary_photos[10].transformation.width",
+    "listing_currency",
+    "cloudinary_photos[5].width",
+    "_links.conversations.href",
+    "cloudinary_photos[4].transformation.y",
+    "categories[0].full_name",
+    "return_policy.description",
+    "shipping.rates[0].rate.amount",
+    "cloudinary_photos[5].transformation.crop",
+    "cloudinary_photos[4].format",
+    "cloudinary_photos[6].version",
+    "price.display",
+    "cloudinary_photos[10].public_id",
+    "cloudinary_photos[1].id",
+    "cloudinary_photos[12].id",
+    "cloudinary_photos[9].format",
+    "shipping.rates[2].rate.amount",
+    "shipping.user_region_rate.carrier_calculated",
+    "photos[3]._links.small_crop.href",
+    "auction",
+    "_embedded.price_guide.id",
+    "cloudinary_photos[2].transformation.y",
+    "accepted_payment_methods[0]",
+    "cloudinary_photos[12].transformation.height",
+    "cloudinary_photos[10].resource_type",
+    "shipping.rates[2].destination_postal_code_needed",
+    "created_at",
+    "cloudinary_photos[7].resource_type",
+    "shipping.rates[1].rate.currency",
+    "cloudinary_photos[3].id",
+    "cloudinary_photos[2].preview_url",
+    "cloudinary_photos[8].version",
+    "cloudinary_photos[11].preview_url",
+    "us_outlet",
+    "location.region",
+    "cloudinary_photos[4].id",
+    "photos[8]._links.full.href",
+    "photos[11]._links.thumbnail.href",
+    "cloudinary_photos[9].path",
+    "cloudinary_photos[8].transformation.y",
+    "published_at",
+    "cloudinary_photos[4].version",
+    "cloudinary_photos[7].path",
+    "cloudinary_photos[1].version",
+    "shipping.user_region_rate.destination_postal_code_needed",
+    "cloudinary_photos[5].preview_url",
+    "cloudinary_photos[9].preview_url",
+    "cloudinary_photos[3].transformation.x",
+    "shipping.rates[0].rate.currency",
+    "cloudinary_photos[6].preview_url",
+    "description",
+    "_embedded.price_guide.estimated_value.price_high.amount",
+    "cloudinary_photos[9].transformation.angle",
+    "shipping.user_region_rate.incremental_rate.amount",
+    "photos[2]._links.large_crop.href",
+    "shipping.initial_offer_rate.rate.original.symbol",
+    "photos[1]._links.full.href",
+    "photos[0]._links.large_crop.href",
+    "shop.preferred_seller",
+    "shipping.rates[0].rate.amount_cents",
+    "photos[5]._links.full.href",
+    "cloudinary_photos[12].resource_type",
+    "cloudinary_photos[6].width",
+    "cloudinary_photos[4].transformation.crop",
+    "cloudinary_photos[9].transformation.y",
+    "shipping.rates[3].rate.display",
+    "_links.sales.href",
+    "cloudinary_photos[3].transformation.y",
+    "cloudinary_photos[11].transformation.width",
+    "cloudinary_photos[10].path",
+    "_embedded.price_guide.categories[0].uuid",
+    "cloudinary_photos[9].public_id",
+    "shipping.rates[0].regional",
+    "cloudinary_photos[9].height",
+    "shipping.user_region_rate.rate.amount_cents",
+    "cloudinary_photos[6].public_id",
+    "cloudinary_photos[7].transformation.x",
+    "shipping.initial_offer_rate.carrier_calculated",
+    "cloudinary_photos[6].height",
+    "photos[2]._links.full.href",
+    "cloudinary_photos[10].transformation.y",
+    "inventory",
+    "shipping.rates[1].region_code",
+    "condition.slug",
+    "_links.make_offer.method",
+    "cloudinary_photos[7].transformation.angle",
+    "shipping.user_region_rate.rate.currency",
+    "cloudinary_photos[11].version",
+    "cloudinary_photos[2].transformation.angle",
+    "_embedded.price_guide.estimated_value.price_low.display",
+    "cloudinary_photos[7].transformation.height",
+    "cloudinary_photos[2].transformation.x",
+    "cloudinary_photos[0].transformation.y",
+    "photos[3]._links.full.href",
+    "categories[0].uuid",
+    "cloudinary_photos[6].transformation.y",
+    "price.symbol",
+    "photos[11]._links.full.href",
+    "_links.shop.href",
+    "cloudinary_photos[0].transformation.crop",
+    "cloudinary_photos[11].transformation.x",
+    "shipping.rates[0].region_code"
+  ],
+  "db_fields": [
+    "external_id",
+    "additional_images",
+    "created_at",
+    "listing_url",
+    "platform_id",
+    "category",
+    "finish",
+    "year",
+    "is_sold",
+    "free_shipping",
+    "sync_status",
+    "id",
+    "platform_specific_data",
+    "primary_image",
+    "processing_time",
+    "buy_now",
+    "offer_discount",
+    "description",
+    "last_sync",
+    "decade",
+    "last_synced_at",
+    "price",
+    "in_reseller",
+    "base_price",
+    "sku",
+    "collective_discount",
+    "condition",
+    "status",
+    "in_inventory",
+    "platform_name",
+    "condition_rating",
+    "shipping_profile_id",
+    "show_vat",
+    "local_pickup",
+    "model",
+    "external_link",
+    "in_collective",
+    "platform_data",
+    "cost_price",
+    "video_url",
+    "available_for_shipment",
+    "handmade",
+    "shop_policies_id",
+    "product_id",
+    "price_notax",
+    "brand",
+    "reverb_listing_id",
+    "updated_at",
+    "offers_enabled",
+    "reverb_category_uuid"
+  ],
+  "missing_fields": [
+    "cloudinary_photos[5].transformation.height",
+    "shipping.rates[2].region_code",
+    "cloudinary_photos[0].version",
+    "buyer_price.tax_included",
+    "_embedded.price_guide.estimated_value.price_low.symbol",
+    "cloudinary_photos[2].height",
+    "photos[1]._links.thumbnail.href",
+    "shipping.rates[1].regional",
+    "cloudinary_photos[3].resource_type",
+    "photos[5]._links.large_crop.href",
+    "cloudinary_photos[10].version",
+    "cloudinary_photos[0].height",
+    "cloudinary_photos[11].format",
+    "cloudinary_photos[5].transformation.y",
+    "shipping_profile.id",
+    "cloudinary_photos[12].format",
+    "shipping.rates[2].regional",
+    "_embedded.price_guide.estimated_value.release_date",
+    "shop_id",
+    "cloudinary_photos[10].height",
+    "photos[3]._links.large_crop.href",
+    "has_offer_for_buyer",
+    "in_watchlist",
+    "cloudinary_photos[10].transformation.height",
+    "cloudinary_photos[2].transformation.width",
+    "cloudinary_photos[0].path",
+    "stats.views",
+    "cloudinary_photos[12].transformation.angle",
+    "shipping.rates[1].carrier_calculated",
+    "shipping.initial_offer_rate.rate.display.currency",
+    "photos[11]._links.small_crop.href",
+    "sold_as_is",
+    "shipping.initial_offer_rate.rate.original.amount",
+    "shipping.local",
+    "_links.update.method",
+    "cloudinary_photos[6].transformation.angle",
+    "cloudinary_photos[1].transformation.angle",
+    "cloudinary_photos[9].transformation.crop",
+    "photos[6]._links.small_crop.href",
+    "cloudinary_photos[3].transformation.width",
+    "draft",
+    "cloudinary_photos[1].transformation.crop",
+    "cloudinary_photos[5].path",
+    "price.currency",
+    "_links.photo.href",
+    "photos[8]._links.thumbnail.href",
+    "cloudinary_photos[1].width",
+    "photos[10]._links.full.href",
+    "cloudinary_photos[3].width",
+    "upc_does_not_apply",
+    "shop_name",
+    "cloudinary_photos[8].format",
+    "shipping.rates[2].rate.symbol",
+    "photos[2]._links.small_crop.href",
+    "shipping.initial_offer_rate.rate.display.display",
+    "photos[4]._links.thumbnail.href",
+    "photos[11]._links.large_crop.href",
+    "shipping.rates[3].carrier_calculated",
+    "photos[10]._links.large_crop.href",
+    "cloudinary_photos[0].format",
+    "cloudinary_photos[5].format",
+    "cloudinary_photos[5].transformation.x",
+    "shipping.rates[3].rate.amount",
+    "photos[5]._links.small_crop.href",
+    "photos[2]._links.thumbnail.href",
+    "cloudinary_photos[4].resource_type",
+    "photos[6]._links.thumbnail.href",
+    "_links.contact_seller.web.href",
+    "_embedded.price_guide._links.web.href",
+    "cloudinary_photos[12].transformation.y",
+    "stats.watches",
+    "cloudinary_photos[7].transformation.width",
+    "_embedded.price_guide.estimated_value.price_high.currency",
+    "cloudinary_photos[11].id",
+    "cloudinary_photos[9].transformation.height",
+    "shipping.user_region_rate.incremental_rate.display",
+    "cloudinary_photos[9].version",
+    "photos[8]._links.large_crop.href",
+    "cloudinary_photos[1].resource_type",
+    "cloudinary_photos[12].version",
+    "_links.bump.href",
+    "shipping.initial_offer_rate.destination_postal_code_needed",
+    "price.tax_included",
+    "shipping.rates[3].region_code",
+    "shipping.rates[0].rate.display",
+    "condition.uuid",
+    "cloudinary_photos[10].preview_url",
+    "cloudinary_photos[0].preview_url",
+    "cloudinary_photos[6].transformation.x",
+    "shipping.user_region_rate.rate.symbol",
+    "shipping.rates[1].rate.amount",
+    "cloudinary_photos[12].width",
+    "photos[10]._links.thumbnail.href",
+    "shipping.rates[1].rate.symbol",
+    "photos[12]._links.full.href",
+    "cloudinary_photos[7].format",
+    "cloudinary_photos[3].preview_url",
+    "price_guide_id",
+    "cloudinary_photos[10].format",
+    "state.slug",
+    "cloudinary_photos[0].public_id",
+    "_links.watchlist.href",
+    "shipping.initial_offer_rate.regional",
+    "_links.brand.href",
+    "cloudinary_photos[8].width",
+    "shipping.user_region_rate.incremental_rate.symbol",
+    "cloudinary_photos[2].format",
+    "cloudinary_photos[7].id",
+    "shipping.rates[3].regional",
+    "photos[1]._links.large_crop.href",
+    "photos[6]._links.full.href",
+    "cloudinary_photos[10].transformation.x",
+    "_embedded.price_guide.estimated_value.price_low.amount_cents",
+    "cloudinary_photos[3].path",
+    "shipping.initial_offer_rate.rate.original.display",
+    "shipping.rates[3].rate.currency",
+    "cloudinary_photos[7].version",
+    "cloudinary_photos[5].transformation.width",
+    "cloudinary_photos[9].transformation.x",
+    "cloudinary_photos[4].path",
+    "shipping.initial_offer_rate.rate.original.amount_cents",
+    "cloudinary_photos[2].transformation.crop",
+    "cloudinary_photos[0].transformation.x",
+    "photos[12]._links.large_crop.href",
+    "_links.self.href",
+    "cloudinary_photos[3].transformation.angle",
+    "photos[5]._links.thumbnail.href",
+    "_links.make_offer.href",
+    "photos[4]._links.large_crop.href",
+    "cloudinary_photos[1].preview_url",
+    "cloudinary_photos[11].transformation.angle",
+    "buyer_price.display",
+    "buyer_price.amount_cents",
+    "cloudinary_photos[8].transformation.crop",
+    "_embedded.price_guide.estimated_value.price_high.amount_cents",
+    "cloudinary_photos[11].public_id",
+    "comparison_shopping_page_id",
+    "cloudinary_photos[6].path",
+    "photos[9]._links.thumbnail.href",
+    "photos[7]._links.full.href",
+    "cloudinary_photos[0].width",
+    "cloudinary_photos[3].transformation.height",
+    "cloudinary_photos[12].transformation.x",
+    "_embedded.price_guide.estimated_value.price_low.currency",
+    "_embedded.price_guide._links.photo.href",
+    "cloudinary_photos[4].preview_url",
+    "condition.display_name",
+    "shipping.initial_offer_rate.rate.display.amount",
+    "cloudinary_photos[5].height",
+    "shipping.initial_offer_rate.rate.original.currency",
+    "cloudinary_photos[12].height",
+    "cloudinary_photos[8].transformation.angle",
+    "_embedded.price_guide.make",
+    "cloudinary_photos[8].height",
+    "photos[4]._links.full.href",
+    "accepted_payment_methods[1]",
+    "_embedded.price_guide.estimated_value.price_high.display",
+    "shipping.rates[0].destination_postal_code_needed",
+    "cloudinary_photos[1].transformation.width",
+    "cloudinary_photos[7].preview_url",
+    "cloudinary_photos[4].transformation.x",
+    "local_pickup_only",
+    "shipping.user_region_rate.region_code",
+    "photos[0]._links.thumbnail.href",
+    "cloudinary_photos[10].transformation.angle",
+    "_embedded.price_guide.model",
+    "cloudinary_photos[5].public_id",
+    "shop.feedback_count",
+    "cloudinary_photos[2].version",
+    "_links.comparison_shopping.href",
+    "origin_country_code",
+    "cloudinary_photos[8].resource_type",
+    "cloudinary_photos[12].transformation.width",
+    "cloudinary_photos[6].transformation.height",
+    "cloudinary_photos[11].transformation.crop",
+    "same_day_shipping_ineligible",
+    "cloudinary_photos[7].public_id",
+    "cloudinary_photos[7].transformation.crop",
+    "cloudinary_photos[11].path",
+    "state.description",
+    "cloudinary_photos[5].version",
+    "shop.rating_percentage",
+    "_links.shop.web.href",
+    "cloudinary_photos[5].id",
+    "shipping.rates[2].rate.currency",
+    "cloudinary_photos[10].transformation.width",
+    "listing_currency",
+    "location.country_code",
+    "cloudinary_photos[5].width",
+    "cloudinary_photos[2].transformation.height",
+    "cloudinary_photos[4].public_id",
+    "shipping.rates[1].destination_postal_code_needed",
+    "photos[4]._links.small_crop.href",
+    "_links.conversations.href",
+    "photos[10]._links.small_crop.href",
+    "cloudinary_photos[4].transformation.y",
+    "categories[0].full_name",
+    "return_policy.description",
+    "shipping.rates[0].rate.amount",
+    "cloudinary_photos[5].transformation.crop",
+    "_embedded.price_guide.year",
+    "make",
+    "location.locality",
+    "cloudinary_photos[4].format",
+    "cloudinary_photos[11].height",
+    "cloudinary_photos[6].version",
+    "cloudinary_photos[11].resource_type",
+    "price.display",
+    "photos[0]._links.small_crop.href",
+    "cloudinary_photos[10].public_id",
+    "cloudinary_photos[1].id",
+    "cloudinary_photos[12].id",
+    "shipping.rates[1].rate.display",
+    "cloudinary_photos[9].format",
+    "shipping.rates[2].rate.amount",
+    "shipping.user_region_rate.carrier_calculated",
+    "photos[3]._links.small_crop.href",
+    "_links.edit.href",
+    "cloudinary_photos[6].transformation.crop",
+    "buyer_price.currency",
+    "auction",
+    "_embedded.price_guide.id",
+    "cloudinary_photos[2].transformation.y",
+    "accepted_payment_methods[0]",
+    "cloudinary_photos[12].transformation.height",
+    "cloudinary_photos[10].resource_type",
+    "shipping.user_region_rate.incremental_rate.currency",
+    "cloudinary_photos[4].transformation.height",
+    "shipping.rates[2].destination_postal_code_needed",
+    "shipping.rates[3].rate.symbol",
+    "cloudinary_photos[7].resource_type",
+    "_links.buy.href",
+    "_embedded.price_guide.categories[0].full_name",
+    "shipping.initial_offer_rate.region_code",
+    "photos[8]._links.small_crop.href",
+    "shipping.rates[1].rate.currency",
+    "cloudinary_photos[3].id",
+    "cloudinary_photos[2].preview_url",
+    "cloudinary_photos[8].version",
+    "cloudinary_photos[9].id",
+    "cloudinary_photos[11].preview_url",
+    "us_outlet",
+    "cloudinary_photos[2].path",
+    "cloudinary_photos[0].transformation.angle",
+    "location.region",
+    "cloudinary_photos[4].width",
+    "cloudinary_photos[8].path",
+    "cloudinary_photos[4].id",
+    "photos[8]._links.full.href",
+    "shipping.rates[0].rate.symbol",
+    "photos[11]._links.thumbnail.href",
+    "cloudinary_photos[9].path",
+    "_links.cart.href",
+    "shipping_profile.name",
+    "cloudinary_photos[8].transformation.y",
+    "shipping.rates[1].rate.amount_cents",
+    "cloudinary_photos[1].format",
+    "buyer_price.amount",
+    "published_at",
+    "cloudinary_photos[1].height",
+    "cloudinary_photos[4].version",
+    "cloudinary_photos[7].path",
+    "photos[6]._links.large_crop.href",
+    "cloudinary_photos[8].transformation.x",
+    "is_my_listing",
+    "_links.update.href",
+    "photos[1]._links.small_crop.href",
+    "_links.flag.href",
+    "cloudinary_photos[1].version",
+    "cloudinary_photos[6].transformation.width",
+    "cloudinary_photos[7].transformation.y",
+    "shipping.rates[2].rate.display",
+    "cloudinary_photos[9].width",
+    "photos[12]._links.small_crop.href",
+    "shipping_policy",
+    "shipping.user_region_rate.destination_postal_code_needed",
+    "cloudinary_photos[2].resource_type",
+    "_embedded.price_guide._links.transactions.href",
+    "_links.web.href",
+    "cloudinary_photos[5].preview_url",
+    "cloudinary_photos[9].preview_url",
+    "cloudinary_photos[3].transformation.x",
+    "cloudinary_photos[8].preview_url",
+    "cloudinary_photos[1].public_id",
+    "shipping.user_region_rate.regional",
+    "shipping.rates[0].rate.currency",
+    "cloudinary_photos[6].preview_url",
+    "_embedded.price_guide.estimated_value.price_high.amount",
+    "cloudinary_photos[9].transformation.angle",
+    "shipping.user_region_rate.incremental_rate.amount",
+    "cloudinary_photos[1].path",
+    "shipping.initial_offer_rate.rate.display.symbol",
+    "photos[9]._links.large_crop.href",
+    "photos[2]._links.large_crop.href",
+    "cloudinary_photos[8].public_id",
+    "photos[7]._links.large_crop.href",
+    "shipping.initial_offer_rate.rate.original.symbol",
+    "photos[1]._links.full.href",
+    "photos[0]._links.large_crop.href",
+    "cloudinary_photos[12].preview_url",
+    "shop.preferred_seller",
+    "offer_count",
+    "_links.end.href",
+    "cloudinary_photos[8].transformation.height",
+    "buyer_price.symbol",
+    "cloudinary_photos[10].transformation.crop",
+    "shipping.rates[0].rate.amount_cents",
+    "photos[5]._links.full.href",
+    "cloudinary_photos[9].transformation.width",
+    "cloudinary_photos[4].height",
+    "cloudinary_photos[12].resource_type",
+    "cloudinary_photos[6].width",
+    "cloudinary_photos[4].transformation.crop",
+    "shipping.rates[2].carrier_calculated",
+    "cloudinary_photos[12].public_id",
+    "cloudinary_photos[9].transformation.y",
+    "_links.end.method",
+    "cloudinary_photos[12].transformation.crop",
+    "shipping.rates[3].rate.display",
+    "cloudinary_photos[2].id",
+    "cloudinary_photos[9].resource_type",
+    "photos[3]._links.thumbnail.href",
+    "_links.sales.href",
+    "photos[0]._links.full.href",
+    "live",
+    "cloudinary_photos[0].transformation.width",
+    "shipping.rates[3].destination_postal_code_needed",
+    "_embedded.price_guide.title",
+    "cloudinary_photos[3].transformation.y",
+    "photos[9]._links.small_crop.href",
+    "cloudinary_photos[3].transformation.crop",
+    "cloudinary_photos[11].transformation.width",
+    "cloudinary_photos[10].width",
+    "shipping.rates[0].carrier_calculated",
+    "photos[7]._links.small_crop.href",
+    "cloudinary_photos[4].transformation.angle",
+    "cloudinary_photos[11].transformation.height",
+    "shipping.user_region_rate.incremental_rate.amount_cents",
+    "cloudinary_photos[10].path",
+    "_embedded.price_guide.categories[0].uuid",
+    "cloudinary_photos[1].transformation.y",
+    "cloudinary_photos[11].transformation.y",
+    "cloudinary_photos[3].public_id",
+    "cloudinary_photos[3].format",
+    "cloudinary_photos[8].transformation.width",
+    "cloudinary_photos[8].id",
+    "cloudinary_photos[10].id",
+    "_embedded.price_guide.estimated_value.price_high.symbol",
+    "shipping.rates[2].rate.amount_cents",
+    "cloudinary_photos[9].public_id",
+    "_embedded.price_guide.finish",
+    "shipping.rates[0].regional",
+    "cloudinary_photos[11].width",
+    "has_inventory",
+    "cloudinary_photos[0].id",
+    "location.display_location",
+    "cloudinary_photos[6].id",
+    "cloudinary_photos[6].resource_type",
+    "cloudinary_photos[9].height",
+    "cloudinary_photos[7].width",
+    "title",
+    "shipping.user_region_rate.rate.amount_cents",
+    "cloudinary_photos[12].path",
+    "shipping.free_expedited_shipping",
+    "shipping.rates[3].rate.amount_cents",
+    "cloudinary_photos[6].public_id",
+    "cloudinary_photos[7].transformation.x",
+    "shipping.initial_offer_rate.carrier_calculated",
+    "cloudinary_photos[6].height",
+    "cloudinary_photos[1].transformation.height",
+    "photos[2]._links.full.href",
+    "cloudinary_photos[10].transformation.y",
+    "shipping.initial_offer_rate.rate.display.amount_cents",
+    "inventory",
+    "cloudinary_photos[7].height",
+    "shipping.rates[1].region_code",
+    "cloudinary_photos[5].transformation.angle",
+    "condition.slug",
+    "_links.make_offer.method",
+    "cloudinary_photos[7].transformation.angle",
+    "cloudinary_photos[0].transformation.height",
+    "_embedded.price_guide.description",
+    "cloudinary_photos[5].resource_type",
+    "cloudinary_photos[3].height",
+    "photos[7]._links.thumbnail.href",
+    "shipping.user_region_rate.rate.currency",
+    "cloudinary_photos[11].version",
+    "cloudinary_photos[2].transformation.angle",
+    "cloudinary_photos[0].resource_type",
+    "cloudinary_photos[1].transformation.x",
+    "_embedded.price_guide.estimated_value.price_low.display",
+    "cloudinary_photos[2].public_id",
+    "cloudinary_photos[7].transformation.height",
+    "cloudinary_photos[2].transformation.x",
+    "cloudinary_photos[0].transformation.y",
+    "price.amount_cents",
+    "photos[3]._links.full.href",
+    "categories[0].uuid",
+    "cloudinary_photos[6].format",
+    "shipping.user_region_rate.rate.amount",
+    "cloudinary_photos[6].transformation.y",
+    "shipping.user_region_rate.rate.display",
+    "cloudinary_photos[4].transformation.width",
+    "cloudinary_photos[2].width",
+    "cloudinary_photos[3].version",
+    "photos[9]._links.full.href",
+    "price.symbol",
+    "photos[11]._links.full.href",
+    "_links.shop.href",
+    "cloudinary_photos[0].transformation.crop",
+    "_embedded.price_guide.estimated_value.price_low.amount",
+    "photos[12]._links.thumbnail.href",
+    "_embedded.price_guide._links.self.href",
+    "cloudinary_photos[11].transformation.x",
+    "shipping.rates[0].region_code",
+    "price.amount"
+  ],
+  "sample": {
+    "id": 87538123,
+    "make": "Fender",
+    "model": "Telecaster",
+    "finish": "Blonde",
+    "year": "1952",
+    "title": "Fender Telecaster 1952 - Blonde",
+    "created_at": "2025-02-27T21:06:57+00:00",
+    "shop_name": "London Vintage Guitars of Denmark Street, UK & Amsterdam, NL",
+    "shop": {
+      "feedback_count": 1843,
+      "preferred_seller": true,
+      "rating_percentage": 1.0
+    },
+    "description": "<p><b><strong>THE TELECASTER</strong></b></p><p>We are happy to offer the following Fender Telecaster from 1952 in its original factory finish. Details as follows.</p><p><b><strong>Fender Telecaster</strong></b></p><p>1952</p><p>Serial Number 3550</p><p>Blonde</p><p>Maple Neck</p><p>Neck &nbsp;Date TG 10-52 ( Tadeo Gomez )</p><p>Body Date 9-52</p><p>Weight 3.4KG</p><p>Internally / Externally Original</p><p>Condition 8.5/10 ( Light , Normal Playing wear )</p><p>Original Case</p><p>Comments</p><p>The above is a classic 52 &nbsp;Fender Telecaster in collector and investor condition.</p><p><b><strong>ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID</strong></b></p><p>All purchases include EU Taxes / Duties paid , ie nothing further is due on receipt of goods to any EU State.</p><p><b><strong>WHY BUY FROM US&nbsp;</strong></b></p><p>We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping each item will be fully serviced and professionally packed&nbsp;</p><p><b><strong>SELL - TRADE - CONSIGN&nbsp;</strong></b></p><p>If you are looking to sell, trade or consign any of your classic gear please contact us by message.</p><p><b><strong>WORLDWIDE COLLECTION - DELIVERY&nbsp;</strong></b></p><p>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam and Chicago.</p><p><b><strong>VALUATION SERVICE&nbsp;</strong></b></p><p>If you require a valuation of any of your classic year please forward a brief description and pictures and we will come back to your ASAP.</p>",
+    "condition": {
+      "uuid": "df268ad1-c462-4ba6-b6db-e007e23922ea",
+      "display_name": "Excellent",
+      "slug": "excellent"
+    },
+    "price": {
+      "tax_included": false,
+      "amount": "70266.95",
+      "amount_cents": 7026695,
+      "currency": "USD",
+      "symbol": "$",
+      "display": "$70,266.95"
+    },
+    "buyer_price": {
+      "tax_included": false,
+      "amount": "70266.95",
+      "amount_cents": 7026695,
+      "currency": "USD",
+      "symbol": "$",
+      "display": "$70,266.95"
+    },
+    "inventory": 1,
+    "has_inventory": false,
+    "offers_enabled": true,
+    "categories": [
+      {
+        "uuid": "e57deb7a-382b-4e18-a008-67d4fbcb2879",
+        "full_name": "Electric Guitars / Solid Body"
+      }
+    ],
+    "listing_currency": "GBP",
+    "published_at": "2025-03-01T21:36:28+00:00",
+    "state": {
+      "slug": "live",
+      "description": "Live"
+    },
+    "auction": false,
+    "shop_id": 46591,
+    "price_guide_id": "2858",
+    "shipping": {
+      "free_expedited_shipping": false,
+      "local": false,
+      "rates": [
+        {
+          "region_code": "GB",
+          "rate": {
+            "amount": "79.55",
+            "amount_cents": 7955,
+            "currency": "USD",
+            "symbol": "$",
+            "display": "$79.55"
+          },
+          "carrier_calculated": false,
+          "regional": false,
+          "destination_postal_code_needed": false
+        },
+        {
+          "region_code": "US",
+          "rate": {
+            "amount": "265.16",
+            "amount_cents": 26516,
+            "currency": "USD",
+            "symbol": "$",
+            "display": "$265.16"
+          },
+          "carrier_calculated": false,
+          "regional": false,
+          "destination_postal_code_needed": false
+        },
+        {
+          "region_code": "EUR_EU",
+          "rate": {
+            "amount": "265.16",
+            "amount_cents": 26516,
+            "currency": "USD",
+            "symbol": "$",
+            "display": "$265.16"
+          },
+          "carrier_calculated": false,
+          "regional": false,
+          "destination_postal_code_needed": false
+        },
+        {
+          "region_code": "XX",
+          "rate": {
+            "amount": "265.16",
+            "amount_cents": 26516,
+            "currency": "USD",
+            "symbol": "$",
+            "display": "$265.16"
+          },
+          "carrier_calculated": false,
+          "regional": false,
+          "destination_postal_code_needed": false
+        }
+      ],
+      "user_region_rate": {
+        "region_code": "GB",
+        "rate": {
+          "amount": "79.55",
+          "amount_cents": 7955,
+          "currency": "USD",
+          "symbol": "$",
+          "display": "$79.55"
+        },
+        "incremental_rate": {
+          "amount": "79.55",
+          "amount_cents": 7955,
+          "currency": "USD",
+          "symbol": "$",
+          "display": "$79.55"
+        },
+        "carrier_calculated": false,
+        "regional": false,
+        "destination_postal_code_needed": false
+      },
+      "initial_offer_rate": {
+        "region_code": "GB",
+        "rate": {
+          "original": {
+            "amount": "60.00",
+            "amount_cents": 6000,
+            "currency": "GBP",
+            "symbol": "\u00a3",
+            "display": "\u00a360"
+          },
+          "display": {
+            "amount": "79.55",
+            "amount_cents": 7955,
+            "currency": "USD",
+            "symbol": "$",
+            "display": "$79.55"
+          }
+        },
+        "carrier_calculated": false,
+        "regional": false,
+        "destination_postal_code_needed": false
+      }
+    },
+    "in_watchlist": false,
+    "us_outlet": false,
+    "_links": {
+      "photo": {
+        "href": "https://rvb-img.reverb.com/image/upload/s--iqInIfe5--/a_0/f_auto,t_large/v1740690453/qj66pabntxofbbmtt2zi.jpg"
+      },
+      "self": {
+        "href": "https://api.reverb.com/api/listings/87538123-fender-telecaster-1952-blonde"
+      },
+      "update": {
+        "href": "https://api.reverb.com/api/listings/87538123-fender-telecaster-1952-blonde",
+        "method": "PUT"
+      },
+      "bump": {
+        "href": "https://api.reverb.com/api/listings/87538123/bump"
+      },
+      "end": {
+        "href": "https://api.reverb.com/api/my/listings/87538123/state/end",
+        "method": "PUT"
+      },
+      "edit": {
+        "href": "https://api.reverb.com/api/listings/87538123-fender-telecaster-1952-blonde/edit"
+      },
+      "web": {
+        "href": "https://reverb.com/item/87538123-fender-telecaster-1952-blonde"
+      },
+      "make_offer": {
+        "href": "https://api.reverb.com/api/listings/87538123-fender-telecaster-1952-blonde/offer",
+        "method": "POST"
+      },
+      "cart": {
+        "href": "https://api.reverb.com/api/cart/87538123"
+      },
+      "watchlist": {
+        "href": "https://api.reverb.com/api/wants/87538123-fender-telecaster-1952-blonde"
+      },
+      "buy": {
+        "href": "https://reverb.com/uk/cart/add?cart_item%5Baction_source_attributes%5D%5Bdevice%5D=web&cart_item%5Bproduct_id%5D=87538123&token=7c15db2bbe8ef3cdea2ec1d734914597d64651aff6034fd1b86cd2d5b680a373"
+      },
+      "flag": {
+        "href": "https://api.reverb.com/api/listings/87538123-fender-telecaster-1952-blonde/flag"
+      },
+      "contact_seller": {
+        "web": {
+          "href": "https://reverb.com/uk/my/messages/new?item=87538123-fender-telecaster-1952-blonde&recipient_uuid=8f5593c2-2e82-4e1a-a20a-5d548493ab36&token=7c15db2bbe8ef3cdea2ec1d734914597d64651aff6034fd1b86cd2d5b680a373"
+        }
+      },
+      "conversations": {
+        "href": "https://api.reverb.com/api/listings/87538123/conversations"
+      },
+      "shop": {
+        "href": "https://api.reverb.com/api/shops/hanks",
+        "web": {
+          "href": "https://reverb.com/uk/shop/hanks"
+        }
+      },
+      "comparison_shopping": {
+        "href": "https://api.reverb.com/api/comparison_shopping_pages/22242"
+      },
+      "sales": {
+        "href": "https://api.reverb.com/api/listings/87538123/sales"
+      },
+      "brand": {
+        "href": "https://api.reverb.com/api/listings?brand_slug=fender"
+      }
+    },
+    "accepted_payment_methods": [
+      "direct_checkout",
+      "paypal"
+    ],
+    "location": {
+      "region": "ENG",
+      "locality": "London",
+      "country_code": "GB",
+      "display_location": "London, United Kingdom"
+    },
+    "handmade": false,
+    "draft": false,
+    "live": true,
+    "local_pickup_only": false,
+    "cloudinary_photos": [
+      {
+        "id": 242014737,
+        "public_id": "qj66pabntxofbbmtt2zi",
+        "version": "1740690453",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690453/qj66pabntxofbbmtt2zi.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--MO20ZwyZ--/v1740690453/qj66pabntxofbbmtt2zi.jpg"
+      },
+      {
+        "id": 242014738,
+        "public_id": "qghuw7rqn2iruy4oyah0",
+        "version": "1740690453",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690453/qghuw7rqn2iruy4oyah0.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--QTMxErDC--/v1740690453/qghuw7rqn2iruy4oyah0.jpg"
+      },
+      {
+        "id": 242014739,
+        "public_id": "wje5u4g8csyzni1jldfs",
+        "version": "1740690453",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690453/wje5u4g8csyzni1jldfs.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--XpllY5lr--/v1740690453/wje5u4g8csyzni1jldfs.jpg"
+      },
+      {
+        "id": 242014740,
+        "public_id": "iqa1xzstlmdynonbn1wa",
+        "version": "1740690453",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690453/iqa1xzstlmdynonbn1wa.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s---nnykh5X--/v1740690453/iqa1xzstlmdynonbn1wa.jpg"
+      },
+      {
+        "id": 242014741,
+        "public_id": "bm8hbxwpzj0bdmhuk5hp",
+        "version": "1740690453",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690453/bm8hbxwpzj0bdmhuk5hp.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--z0YkJ977--/v1740690453/bm8hbxwpzj0bdmhuk5hp.jpg"
+      },
+      {
+        "id": 242014742,
+        "public_id": "l4cwilb5glzcmfb9r64s",
+        "version": "1740690453",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690453/l4cwilb5glzcmfb9r64s.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--X92737LR--/v1740690453/l4cwilb5glzcmfb9r64s.jpg"
+      },
+      {
+        "id": 242014743,
+        "public_id": "syqzbyrpshlaruuxiixb",
+        "version": "1740690454",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690454/syqzbyrpshlaruuxiixb.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--Dh3DGcfc--/v1740690454/syqzbyrpshlaruuxiixb.jpg"
+      },
+      {
+        "id": 242014744,
+        "public_id": "fppb9ysbfeypds7pc1lw",
+        "version": "1740690454",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690454/fppb9ysbfeypds7pc1lw.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--mDabQ4WG--/v1740690454/fppb9ysbfeypds7pc1lw.jpg"
+      },
+      {
+        "id": 242014745,
+        "public_id": "vxkjdimdlt8kxwnlrdv2",
+        "version": "1740690454",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690454/vxkjdimdlt8kxwnlrdv2.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--OXImxic9--/v1740690454/vxkjdimdlt8kxwnlrdv2.jpg"
+      },
+      {
+        "id": 242014746,
+        "public_id": "py4eudue4xvzabj3voii",
+        "version": "1740690454",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690454/py4eudue4xvzabj3voii.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--TROMbLY---/v1740690454/py4eudue4xvzabj3voii.jpg"
+      },
+      {
+        "id": 242014747,
+        "public_id": "dm16dgseawrdmhfm7v3v",
+        "version": "1740690454",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690454/dm16dgseawrdmhfm7v3v.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--_1-yGiSl--/v1740690454/dm16dgseawrdmhfm7v3v.jpg"
+      },
+      {
+        "id": 242014748,
+        "public_id": "q2dhrwomhrw1lcbklxsh",
+        "version": "1740690454",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690454/q2dhrwomhrw1lcbklxsh.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--8Bn8O3o7--/v1740690454/q2dhrwomhrw1lcbklxsh.jpg"
+      },
+      {
+        "id": 242014749,
+        "public_id": "eflpg1710blnwlxlbhzb",
+        "version": "1740690455",
+        "width": 1500,
+        "height": 1500,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": {
+          "width": "",
+          "height": "",
+          "x": "",
+          "y": "",
+          "crop": "",
+          "angle": 0
+        },
+        "path": "v1740690455/eflpg1710blnwlxlbhzb.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--KK0R633c--/v1740690455/eflpg1710blnwlxlbhzb.jpg"
+      }
+    ],
+    "photos": [
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--iqInIfe5--/a_0/f_auto,t_large/v1740690453/qj66pabntxofbbmtt2zi.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--oFFNp1N_--/a_0/t_card-square/v1740690453/qj66pabntxofbbmtt2zi.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--iqInIfe5--/a_0/f_auto,t_large/v1740690453/qj66pabntxofbbmtt2zi.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--oFFNp1N_--/a_0/t_card-square/v1740690453/qj66pabntxofbbmtt2zi.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--8SlfsgTK--/a_0/f_auto,t_large/v1740690453/qghuw7rqn2iruy4oyah0.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Qapi4fUf--/a_0/t_card-square/v1740690453/qghuw7rqn2iruy4oyah0.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--8SlfsgTK--/a_0/f_auto,t_large/v1740690453/qghuw7rqn2iruy4oyah0.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Qapi4fUf--/a_0/t_card-square/v1740690453/qghuw7rqn2iruy4oyah0.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--rAZIT8qF--/a_0/f_auto,t_large/v1740690453/wje5u4g8csyzni1jldfs.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--DidrdlF2--/a_0/t_card-square/v1740690453/wje5u4g8csyzni1jldfs.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--rAZIT8qF--/a_0/f_auto,t_large/v1740690453/wje5u4g8csyzni1jldfs.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--DidrdlF2--/a_0/t_card-square/v1740690453/wje5u4g8csyzni1jldfs.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--9ReFtUp6--/a_0/f_auto,t_large/v1740690453/iqa1xzstlmdynonbn1wa.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--qrT9P4Jo--/a_0/t_card-square/v1740690453/iqa1xzstlmdynonbn1wa.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--9ReFtUp6--/a_0/f_auto,t_large/v1740690453/iqa1xzstlmdynonbn1wa.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--qrT9P4Jo--/a_0/t_card-square/v1740690453/iqa1xzstlmdynonbn1wa.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--_xPdJ5RQ--/a_0/f_auto,t_large/v1740690453/bm8hbxwpzj0bdmhuk5hp.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--3KIu34Vf--/a_0/t_card-square/v1740690453/bm8hbxwpzj0bdmhuk5hp.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--_xPdJ5RQ--/a_0/f_auto,t_large/v1740690453/bm8hbxwpzj0bdmhuk5hp.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--3KIu34Vf--/a_0/t_card-square/v1740690453/bm8hbxwpzj0bdmhuk5hp.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--ZBPGESUr--/a_0/f_auto,t_large/v1740690453/l4cwilb5glzcmfb9r64s.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--09AL4OnY--/a_0/t_card-square/v1740690453/l4cwilb5glzcmfb9r64s.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--ZBPGESUr--/a_0/f_auto,t_large/v1740690453/l4cwilb5glzcmfb9r64s.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--09AL4OnY--/a_0/t_card-square/v1740690453/l4cwilb5glzcmfb9r64s.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--g0bNB7AU--/a_0/f_auto,t_large/v1740690454/syqzbyrpshlaruuxiixb.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--YiLUQF9L--/a_0/t_card-square/v1740690454/syqzbyrpshlaruuxiixb.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--g0bNB7AU--/a_0/f_auto,t_large/v1740690454/syqzbyrpshlaruuxiixb.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--YiLUQF9L--/a_0/t_card-square/v1740690454/syqzbyrpshlaruuxiixb.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--AikO_u8Y--/a_0/f_auto,t_large/v1740690454/fppb9ysbfeypds7pc1lw.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--cdgGWmqs--/a_0/t_card-square/v1740690454/fppb9ysbfeypds7pc1lw.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--AikO_u8Y--/a_0/f_auto,t_large/v1740690454/fppb9ysbfeypds7pc1lw.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--cdgGWmqs--/a_0/t_card-square/v1740690454/fppb9ysbfeypds7pc1lw.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--KWdiKGCB--/a_0/f_auto,t_large/v1740690454/vxkjdimdlt8kxwnlrdv2.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--0DPcY5gJ--/a_0/t_card-square/v1740690454/vxkjdimdlt8kxwnlrdv2.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--KWdiKGCB--/a_0/f_auto,t_large/v1740690454/vxkjdimdlt8kxwnlrdv2.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--0DPcY5gJ--/a_0/t_card-square/v1740690454/vxkjdimdlt8kxwnlrdv2.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--BCIM0lUv--/a_0/f_auto,t_large/v1740690454/py4eudue4xvzabj3voii.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--6na5PUs5--/a_0/t_card-square/v1740690454/py4eudue4xvzabj3voii.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--BCIM0lUv--/a_0/f_auto,t_large/v1740690454/py4eudue4xvzabj3voii.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--6na5PUs5--/a_0/t_card-square/v1740690454/py4eudue4xvzabj3voii.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--IwlThhI1--/a_0/f_auto,t_large/v1740690454/dm16dgseawrdmhfm7v3v.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--juWU0hh7--/a_0/t_card-square/v1740690454/dm16dgseawrdmhfm7v3v.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--IwlThhI1--/a_0/f_auto,t_large/v1740690454/dm16dgseawrdmhfm7v3v.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--juWU0hh7--/a_0/t_card-square/v1740690454/dm16dgseawrdmhfm7v3v.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--lWRA1pZO--/a_0/f_auto,t_large/v1740690454/q2dhrwomhrw1lcbklxsh.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--L7lIUo_4--/a_0/t_card-square/v1740690454/q2dhrwomhrw1lcbklxsh.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--lWRA1pZO--/a_0/f_auto,t_large/v1740690454/q2dhrwomhrw1lcbklxsh.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--L7lIUo_4--/a_0/t_card-square/v1740690454/q2dhrwomhrw1lcbklxsh.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--KgZQfLa---/a_0/f_auto,t_large/v1740690455/eflpg1710blnwlxlbhzb.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--esrnXg3u--/a_0/t_card-square/v1740690455/eflpg1710blnwlxlbhzb.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--KgZQfLa---/a_0/f_auto,t_large/v1740690455/eflpg1710blnwlxlbhzb.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--esrnXg3u--/a_0/t_card-square/v1740690455/eflpg1710blnwlxlbhzb.jpg"
+          }
+        }
+      }
+    ],
+    "stats": {
+      "views": 522,
+      "watches": 43
+    },
+    "offer_count": 0,
+    "shipping_policy": "Please contact us for accurate shipping rates",
+    "sold_as_is": false,
+    "upc_does_not_apply": true,
+    "origin_country_code": "US",
+    "same_day_shipping_ineligible": false,
+    "return_policy": {
+      "description": "This product can be returned within 2 days of receipt."
+    },
+    "has_offer_for_buyer": false,
+    "is_my_listing": true,
+    "shipping_profile": {
+      "name": "Electric Guitars",
+      "id": "15655"
+    },
+    "videos": [],
+    "_embedded": {
+      "price_guide": {
+        "id": 2858,
+        "title": "Fender Telecaster 1952 Blonde",
+        "make": "Fender",
+        "model": "Telecaster",
+        "year": "1952",
+        "finish": "Blonde",
+        "categories": [
+          {
+            "uuid": "dfd39027-d134-4353-b9e4-57dc6be791b9",
+            "full_name": "Electric Guitars"
+          }
+        ],
+        "description": "In early 1951, Fender renamed its only production solid-body guitar the Telecaster, replacing the short-lived Broadcaster moniker used in late 1950. The Telecaster quickly became the guitar of its age, propelling the status of the solid-body electric guitar from\u00a0novelty\u00a0to the defining instrument of popular music. Like most long-lasting guitar models, the Tele has seen its share of variations and\u00a0specialty\u00a0models come off the line since the early '50s. The standard no-frills Telecaster, however, has stayed largely the same, strutting two single-coil pickups, a slab body of Ash (or later Alder), and an unmistakable twang that helped shape the sound of country and rock music.\u00a0<b><br><br></b>(Note: Pictured guitar is refinished and includes many non-original parts)<b><br><br>Years of Production:\u00a0</b>1951 - present<br><br><b>Unique to this Year:\u00a0</b>Philips-head screws used in pickguard starting in late-'52.\u00a0<br><br><b>Body Style:\u00a0</b>Single cutaway solid-body<br><br><b>Wood Composition:</b>\u00a0Ash, one-piece Maple neck<br><br><b>Design Elements:\u00a0</b>\u00a0Two single-coil pickups, black bakelite pickguard, \u00a0volume and tone\u00a0controls, 25 1/2-inch scale length, string thur-body<br><br><b>Finish Specifications:\u00a0</b>Blond was a standard finish for the Telecaster.<br><br><b>Notable Tele Players:</b>\u00a0Keith Richards, Merle Haggard, Johnny Greenwood, James Burton \u00a0",
+        "estimated_value": {
+          "release_date": "2023-10-23",
+          "price_low": {
+            "amount": "1235.00",
+            "amount_cents": 123500,
+            "currency": "USD",
+            "symbol": "$",
+            "display": "$1,235"
+          },
+          "price_high": {
+            "amount": "60145.00",
+            "amount_cents": 6014500,
+            "currency": "USD",
+            "symbol": "$",
+            "display": "$60,145"
+          }
+        },
+        "_links": {
+          "photo": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--8KIClMSZ--/a_exif,c_thumb,f_auto,fl_progressive,g_south,h_296,q_auto:eco,w_296/v1384296580/yw7g5le5bhdlnx3xtacs.jpg"
+          },
+          "self": {
+            "href": "https://api.reverb.com/api/priceguide/2858"
+          },
+          "web": {
+            "href": "https://reverb.com/price-guide/guide/2858-fender-telecaster-1952-blonde"
+          },
+          "transactions": {
+            "href": "https://api.reverb.com/api/priceguide/2858/transactions"
+          }
+        }
+      }
+    },
+    "comparison_shopping_page_id": "22242"
+  }
+}

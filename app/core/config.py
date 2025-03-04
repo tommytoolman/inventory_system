@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     
     # eBay OAuth
     EBAY_CLIENT_ID: str = ""
+    EBAY_DEV_ID: str = ""
     EBAY_CLIENT_SECRET: str = ""
     EBAY_RU_NAME: str = ""
     EBAY_REFRESH_TOKEN: str = ""

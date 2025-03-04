@@ -10,9 +10,14 @@ settings = get_settings()
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=False,  # Removed settings dependency
-    future=True
+    echo=False,
+    future=True,
+    pool_size=10,             # Add these lines
+    max_overflow=20,          # Add these lines
+    pool_timeout=30,          # Add these lines
+    pool_recycle=1800         # Add these lines
 )
+
 
 async_session = async_sessionmaker(
     engine,

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Sync Results{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden max-w-3xl mx-auto">
+        <div class="px-6 py-4 bg-gray-50 border-b">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-gray-900">Sync Results</h1>
+                <a href="/inventory" class="text-blue-600 hover:text-blue-800">Back to List</a>
+            </div>
+        </div>
+
+        <div class="p-6">
+            <div class="mb-6">
+                <div class="flex justify-between mb-2">
+                    <span class="text-gray-700">Total Products:</span>
+                    <span class="font-semibold">{{ results.success + results.errors }}</span>
+                </div>
+                <div class="flex justify-between mb-2">
+                    <span class="text-gray-700">Successfully Synced:</span>
+                    <span class="font-semibold text-green-600">{{ results.success }}</span>
+                </div>
+                <div class="flex justify-between mb-2">
+                    <span class="text-gray-700">Errors:</span>
+                    <span class="font-semibold text-red-600">{{ results.errors }}</span>
+                </div>
+            </div>
+            
+            <div class="border-t pt-4">
+                <h2 class="text-lg font-semibold mb-4">Details</h2>
+                <div class="space-y-2">
+                    {% for message in results.messages %}
+                    <div class="border rounded p-3 {% if 'Error' in message %}bg-red-50 border-red-200 text-red-600{% else %}bg-green-50 border-green-200 text-green-600{% endif %}">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="mt-8 flex justify-end">
+                <a href="/inventory/sync/vintageandrare" class="text-blue-600 hover:text-blue-800 mr-4">
+                    Sync More Products
+                </a>
+                <a href="/inventory" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    Return to Inventory
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -40,9 +40,10 @@
   - [ ] Implement listing sync
   - [ ] Add inventory updates
 - [ ] Reverb Integration
-  - [ ] Set up API client
+  - [x] Set up API client
   - [ ] Implement listing sync
   - [ ] Add inventory updates
+  - [ ] Check reverb_listings schema ... some duplicates and some oddities
 - [ ] Website API Integration
   - [ ] Design API interface
   - [ ] Implement sync system

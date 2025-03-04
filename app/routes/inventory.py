@@ -266,17 +266,17 @@ async def product_detail(
         for listing in platform_listings:
             platform_name = listing.platform_name.lower()
             if platform_name in platform_statuses:
-                if listing.platform_status == "ACTIVE":
+                if listing.status == "ACTIVE":
                     platform_statuses[platform_name] = {
                         "status": "success",
                         "message": f"Active on {listing.platform_name}"
                     }
-                elif listing.platform_status == "DRAFT":
+                elif listing.status == "DRAFT":
                     platform_statuses[platform_name] = {
                         "status": "pending",
                         "message": f"Draft on {listing.platform_name}"
                     }
-                elif listing.platform_status == "ERROR":
+                elif listing.status == "ERROR":
                     platform_statuses[platform_name] = {
                         "status": "error",
                         "message": listing.platform_message or f"Error on {listing.platform_name}"
@@ -836,3 +836,140 @@ async def get_metrics(request: Request):
 @router.get("/test")
 async def test_route():
     return {"message": "Test route working"}
+
+@router.get("/sync/vintageandrare", response_class=HTMLResponse)
+async def sync_vintageandrare_form(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    brand: Optional[str] = None
+):
+    """Show form for selecting products to sync to VintageAndRare"""
+    # Base query for products
+    query = select(Product).outerjoin(
+        PlatformCommon, 
+        and_(
+            PlatformCommon.product_id == Product.id,
+            PlatformCommon.platform_name == 'vintageandrare'
+        )
+    ).where(PlatformCommon.id == None)  # Only products not yet on V&R
+    
+    # Apply filters
+    if search:
+        search = f"%{search}%"
+        query = query.filter(
+            or_(
+                Product.brand.ilike(search),
+                Product.model.ilike(search),
+                Product.category.ilike(search)
+            )
+        )
+    if category:
+        query = query.filter(Product.category == category)
+    if brand:
+        query = query.filter(Product.brand == brand)
+    
+    # Execute query
+    result = await db.execute(query)
+    products = result.scalars().all()
+    
+    # Get categories and brands for filters
+    categories_result = await db.execute(select(Product.category).distinct())
+    categories = [c[0] for c in categories_result.all() if c[0]]
+    
+    brands_result = await db.execute(select(Product.brand).distinct())
+    brands = [b[0] for b in brands_result.all() if b[0]]
+    
+    return templates.TemplateResponse(
+        "inventory/sync_vr.html",
+        {
+            "request": request,
+            "products": products,
+            "categories": categories,
+            "brands": brands,
+            "selected_category": category,
+            "selected_brand": brand,
+            "search": search
+        }
+    )
+
+@router.post("/sync/vintageandrare", response_class=HTMLResponse)
+async def sync_vintageandrare_submit(
+    request: Request,
+    product_ids: List[int] = Form(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Process selected products and sync to VintageAndRare"""
+    results = {
+        "success": 0,
+        "errors": 0,
+        "messages": []
+    }
+    
+    from app.services.vintageandrare.client import VintageAndRareClient
+    settings = get_settings()
+    vr_client = VintageAndRareClient(
+        settings.VINTAGE_AND_RARE_USERNAME,
+        settings.VINTAGE_AND_RARE_PASSWORD
+    )
+    
+    # Initialize services
+    for product_id in product_ids:
+        try:
+            # Get product
+            product = await db.get(Product, product_id)
+            if not product:
+                results["errors"] += 1
+                results["messages"].append(f"Product {product_id} not found")
+                continue
+            
+            # Create platform_common
+            platform_common = PlatformCommon(
+                product_id=product.id,
+                platform_name="vintageandrare",
+                status=ListingStatus.DRAFT,
+                sync_status=SyncStatus.PENDING,
+                last_sync=datetime.utcnow()
+            )
+            db.add(platform_common)
+            await db.flush()
+            
+            # Create VR listing
+            vr_listing = VRListing(
+                platform_id=platform_common.id,
+                in_collective=product.in_collective or False,
+                in_inventory=product.in_inventory or True,
+                in_reseller=product.in_reseller or False,
+                collective_discount=product.collective_discount,
+                price_notax=product.price_notax,
+                show_vat=product.show_vat or True,
+                processing_time=product.processing_time,
+                inventory_quantity=1,
+                vr_state="draft",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                last_synced_at=datetime.utcnow()
+            )
+            db.add(vr_listing)
+            
+            # Prepare data for V&R
+            # This is where you'd call your V&R client to sync the product
+            # For now, we're just creating the database records
+            
+            results["success"] += 1
+            results["messages"].append(f"Created draft for {product.brand} {product.model}")
+            
+        except Exception as e:
+            results["errors"] += 1
+            results["messages"].append(f"Error syncing product {product_id}: {str(e)}")
+    
+    await db.commit()
+    
+    return templates.TemplateResponse(
+        "inventory/sync_vr_results.html",
+        {
+            "request": request,
+            "results": results
+        }
+    )

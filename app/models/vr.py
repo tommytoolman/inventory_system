@@ -26,8 +26,16 @@ class VRListing(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_synced_at = Column(DateTime)
 
+    # Add enhanced fields (similar to ReverbListing)
+    vr_listing_id = Column(String)  # ID assigned by V&R
+    inventory_quantity = Column(Integer, default=1)
+    vr_state = Column(String)  # Status on V&R
+    last_synced_at = Column(DateTime)
+    
+    # Optional: Flexible storage for other attributes
+    extended_attributes = Column(JSONB, default={})
 
     # Relationships
     platform_listing = relationship("PlatformCommon", back_populates="vr_listing")
+    

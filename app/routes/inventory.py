@@ -23,12 +23,15 @@ from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse,
 from fastapi.encoders import jsonable_encoder
 
 # SQLAlchemy imports
-from sqlalchemy import select, or_, distinct, func, desc
+from sqlalchemy import select, or_, distinct, func, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # App imports
+from app.core.config import Settings, get_settings
+from app.core.exceptions import ProductCreationError, PlatformIntegrationError
 from app.models.product import Product, ProductStatus, ProductCondition
-from app.models.platform_common import PlatformCommon
+from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
+from app.models.vr import VRListing
 from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
@@ -37,8 +40,6 @@ from app.services.website_service import WebsiteService
 from app.schemas.product import ProductCreate
 from app.integrations.events import StockUpdateEvent
 from app.dependencies import get_db, templates
-from app.core.config import Settings, get_settings
-from app.core.exceptions import ProductCreationError, PlatformIntegrationError
 
 router = APIRouter()
 
@@ -898,7 +899,8 @@ async def sync_vintageandrare_form(
 async def sync_vintageandrare_submit(
     request: Request,
     product_ids: List[int] = Form(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
 ):
     """Process selected products and sync to VintageAndRare"""
     results = {
@@ -908,17 +910,32 @@ async def sync_vintageandrare_submit(
     }
     
     from app.services.vintageandrare.client import VintageAndRareClient
-    settings = get_settings()
     vr_client = VintageAndRareClient(
         settings.VINTAGE_AND_RARE_USERNAME,
         settings.VINTAGE_AND_RARE_PASSWORD
     )
     
+    # Authenticate first
+    is_authenticated = await vr_client.authenticate()
+    if not is_authenticated:
+        results["errors"] += len(product_ids)
+        results["messages"].append("Failed to authenticate with Vintage & Rare")
+        return templates.TemplateResponse(
+            "inventory/sync_vr_results.html",
+            {
+                "request": request,
+                "results": results
+            }
+        )
+    
     # Initialize services
     for product_id in product_ids:
         try:
             # Get product
-            product = await db.get(Product, product_id)
+            query = select(Product).where(Product.id == product_id)
+            result = await db.execute(query)
+            product = result.scalar_one_or_none()
+            
             if not product:
                 results["errors"] += 1
                 results["messages"].append(f"Product {product_id} not found")
@@ -928,41 +945,65 @@ async def sync_vintageandrare_submit(
             platform_common = PlatformCommon(
                 product_id=product.id,
                 platform_name="vintageandrare",
-                status=ListingStatus.DRAFT,
-                sync_status=SyncStatus.PENDING,
+                status=ListingStatus.DRAFT.value,
+                sync_status=SyncStatus.PENDING.value,
                 last_sync=datetime.utcnow()
             )
             db.add(platform_common)
             await db.flush()
             
-            # Create VR listing
-            vr_listing = VRListing(
-                platform_id=platform_common.id,
-                in_collective=product.in_collective or False,
-                in_inventory=product.in_inventory or True,
-                in_reseller=product.in_reseller or False,
-                collective_discount=product.collective_discount,
-                price_notax=product.price_notax,
-                show_vat=product.show_vat or True,
-                processing_time=product.processing_time,
-                inventory_quantity=1,
-                vr_state="draft",
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-                last_synced_at=datetime.utcnow()
-            )
-            db.add(vr_listing)
+            # SKIP VRListing creation for now due to permission issues
+            # We'll add this back once the DB permissions are fixed
             
-            # Prepare data for V&R
-            # This is where you'd call your V&R client to sync the product
-            # For now, we're just creating the database records
+            # Prepare data for V&R client
+            product_data = {
+                "brand": product.brand,
+                "model": product.model,
+                "year": product.year,
+                "decade": product.decade,
+                "finish": product.finish,
+                "description": product.description,
+                "price": product.base_price,
+                "price_notax": product.price_notax,
+                "category": product.category,
+                "in_collective": product.in_collective,
+                "in_inventory": product.in_inventory,
+                "in_reseller": product.in_reseller,
+                "collective_discount": product.collective_discount,
+                "show_vat": product.show_vat,
+                "local_pickup": product.local_pickup,
+                "available_for_shipment": product.available_for_shipment,
+                "processing_time": product.processing_time,
+                "primary_image": product.primary_image,
+                "additional_images": product.additional_images,
+                "video_url": product.video_url,
+                "external_link": product.external_link
+            }
             
-            results["success"] += 1
-            results["messages"].append(f"Created draft for {product.brand} {product.model}")
+            # Call V&R client to create listing (test mode for now)
+            vr_response = await vr_client.create_listing(product_data, test_mode=True)
+            
+            # Update platform_common with response data
+            if vr_response.get("status") == "success":
+                if vr_response.get("external_id"):
+                    platform_common.external_id = vr_response["external_id"]
+                platform_common.sync_status = SyncStatus.SUCCESS.value
+                platform_common.last_sync = datetime.utcnow()
+                
+                results["success"] += 1
+                results["messages"].append(f"Created draft for {product.brand} {product.model}")
+            else:
+                platform_common.sync_status = SyncStatus.FAILED.value
+                platform_common.last_sync = datetime.utcnow()
+                
+                results["errors"] += 1
+                results["messages"].append(f"Error creating draft for {product.brand} {product.model}: {vr_response.get('message', 'Unknown error')}")
             
         except Exception as e:
             results["errors"] += 1
             results["messages"].append(f"Error syncing product {product_id}: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
     
     await db.commit()
     
@@ -973,3 +1014,4 @@ async def sync_vintageandrare_submit(
             "results": results
         }
     )
+    

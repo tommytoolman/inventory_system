@@ -2,6 +2,7 @@
 import os
 import json
 import aiofiles
+import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -46,6 +47,8 @@ router = APIRouter()
 # Configuration for file uploads
 UPLOAD_DIR = "app/static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+logger = logging.getLogger(__name__)
 
 async def save_upload_file(upload_file: UploadFile) -> str:
     """Save an uploaded file and return its path"""
@@ -910,9 +913,14 @@ async def sync_vintageandrare_submit(
     }
     
     from app.services.vintageandrare.client import VintageAndRareClient
+    from app.services.category_mapping_service import CategoryMappingService
+    
+    # Initialize services
+    mapping_service = CategoryMappingService(db)
     vr_client = VintageAndRareClient(
         settings.VINTAGE_AND_RARE_USERNAME,
-        settings.VINTAGE_AND_RARE_PASSWORD
+        settings.VINTAGE_AND_RARE_PASSWORD,
+        db_session=db
     )
     
     # Authenticate first
@@ -928,7 +936,7 @@ async def sync_vintageandrare_submit(
             }
         )
     
-    # Initialize services
+    # Process each product
     for product_id in product_ids:
         try:
             # Get product
@@ -941,22 +949,54 @@ async def sync_vintageandrare_submit(
                 results["messages"].append(f"Product {product_id} not found")
                 continue
             
-            # Create platform_common
-            platform_common = PlatformCommon(
-                product_id=product.id,
-                platform_name="vintageandrare",
-                status=ListingStatus.DRAFT.value,
-                sync_status=SyncStatus.PENDING.value,
-                last_sync=datetime.utcnow()
+            # Check for existing platform listing
+            query = select(PlatformCommon).where(
+                PlatformCommon.product_id == product.id,
+                PlatformCommon.platform_name == "vintageandrare"
             )
-            db.add(platform_common)
-            await db.flush()
+            platform_result = await db.execute(query)
+            platform_common = platform_result.scalar_one_or_none()
             
-            # SKIP VRListing creation for now due to permission issues
-            # We'll add this back once the DB permissions are fixed
+            # Create new platform listing if needed
+            if not platform_common:
+                platform_common = PlatformCommon(
+                    product_id=product.id,
+                    platform_name="vintageandrare",
+                    status=ListingStatus.DRAFT.value,
+                    sync_status=SyncStatus.PENDING.value,
+                    last_sync=datetime.utcnow()
+                )
+                db.add(platform_common)
+                await db.flush()
+            
+            # Check VR permissions first before attempting to create VRListing
+            try:
+                # Try to create a VRListing record
+                vr_listing = VRListing(
+                    platform_id=platform_common.id,
+                    in_collective=product.in_collective or False,
+                    in_inventory=product.in_inventory or True,
+                    in_reseller=product.in_reseller or False,
+                    collective_discount=product.collective_discount,
+                    price_notax=product.price_notax,
+                    show_vat=product.show_vat or True,
+                    processing_time=product.processing_time,
+                    inventory_quantity=1,
+                    vr_state="draft",
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow(),
+                    last_synced_at=datetime.utcnow()
+                )
+                db.add(vr_listing)
+                await db.flush()
+            except Exception as e:
+                # If permissions error, continue without VRListing
+                logger.warning(f"Unable to create VRListing: {str(e)}")
+                # For demo, continue without VRListing
             
             # Prepare data for V&R client
             product_data = {
+                "id": product.id,  # Include ID for mapping lookup
                 "brand": product.brand,
                 "model": product.model,
                 "year": product.year,

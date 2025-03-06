@@ -1,6 +1,6 @@
 import json
 
-from app.services import dropbox_service
+from app.services.dropbox import dropbox_service
 from dropbox_service import DropboxClient
 
 def main():

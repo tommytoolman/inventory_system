@@ -1,13 +1,14 @@
 # app/services/vintageandrare/client.py
 
 import asyncio
-import os
 import logging
-from typing import Dict, Any, Optional, List, Union
-from datetime import datetime
-
 import requests
+
+from typing import Dict, Any, Optional
+from datetime import datetime
 from pathlib import Path
+
+from app.services.category_mapping_service import CategoryMappingService
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class VintageAndRareClient:
     BASE_URL = "https://www.vintageandrare.com"
     LOGIN_URL = f"{BASE_URL}/do_login"
     
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str, db_session=None):
         """
         Initialize the V&R client.
         
@@ -34,6 +35,7 @@ class VintageAndRareClient:
         self.password = password
         self.session = requests.Session()
         self.authenticated = False
+        self.db_session = db_session
         
         # Default headers
         self.headers = {
@@ -41,6 +43,10 @@ class VintageAndRareClient:
             'Accept-Language': 'en-US,en;q=0.9',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
         }
+        
+        # Initialize mapping service if DB session is provided
+        self.mapping_service = CategoryMappingService(db_session) if db_session else None
+    
     
     async def authenticate(self) -> bool:
         """
@@ -78,7 +84,50 @@ class VintageAndRareClient:
             logger.error(f"V&R Authentication error: {str(e)}")
             self.authenticated = False
             return False
+
+
+    async def map_category(self, category_name: str, category_id: str = None) -> Dict[str, str]:
+        """
+        Map a category from our system to V&R category IDs using the database.
+        
+        Args:
+            category_name: Category name from our system
+            category_id: Category ID from our system (if available)
+            
+        Returns:
+            Dict with category_id and subcategory_id for V&R
+        """
+        if not self.mapping_service or not self.db_session:
+            logger.warning("No DB session available for category mapping")
+            # Fallback to default V&R category
+            return {"category_id": "51", "subcategory_id": "63"}
+        
+        mapping = None
+        
+        # Try to find mapping by ID if available
+        if category_id:
+            mapping = await self.mapping_service.get_mapping("internal", category_id, "vr")
+        
+        # If no mapping found by ID, try by name
+        if not mapping and category_name:
+            mapping = await self.mapping_service.get_mapping_by_name("internal", category_name, "vr")
+        
+        # If still no mapping, get default
+        if not mapping:
+            mapping = await self.mapping_service.get_default_mapping("vr")
+            logger.warning(f"Using default mapping for category '{category_name}'")
+        
+        if mapping:
+            return {
+                "category_id": mapping.target_id,
+                "subcategory_id": mapping.target_subcategory_id
+            }
+        
+        # Ultimate fallback - hard-coded default
+        logger.warning(f"No mapping found for '{category_name}', using hard-coded default")
+        return {"category_id": "51", "subcategory_id": "63"}  # Default to Electric Guitars / Solid Body
     
+
     async def create_listing(self, product_data: Dict[str, Any], test_mode: bool = True) -> Dict[str, Any]:
         """
         Create a listing on V&R using Selenium automation.
@@ -94,34 +143,33 @@ class VintageAndRareClient:
         from app.services.vintageandrare.inspect_form import login_and_navigate, fill_item_form
         
         try:
-            # Define category mapping here to ensure it's in scope
-            category_mapping = {
-                'Electric Guitars': '51',
-                'Electric Guitars / Solid Body': '51',
-                'Acoustic Guitars': '82',
-                'Bass Guitars': '52',
-                'Amplifiers': '53',
-                'Effects': '90'
-            }
+            # Map the category to V&R category IDs
+            category_mapping = await self.map_category(
+                product_data.get('category', ''),
+                str(product_data.get('id', ''))
+            )
             
+            # Convert product data to the format expected by the form automation
             # Convert product data to the format expected by the form automation
             form_data = {
                 # Required fields
                 'brand': product_data.get('brand', ''),
                 'model_name': product_data.get('model', ''),
-                # Default to Guitars (51)
-                'category': '51',
                 'price': str(product_data.get('price', 0)),
+                
+                # Set category and subcategory IDs from mapping
+                'category': category_mapping['category_id'],
+                'subcategory': category_mapping['subcategory_id'],
                 
                 # Optional fields
                 'year': product_data.get('year'),
                 'decade': product_data.get('decade'),
-                'finish_color': product_data.get('finish', ''),
-                'description': product_data.get('description', ''),
-                'processing_time': product_data.get('processing_time'),
+                'finish_color': str(product_data.get('finish', '')) if product_data.get('finish') is not None else '',
+                'description': str(product_data.get('description', '')) if product_data.get('description') is not None else '',
+                'processing_time': product_data.get('processing_time') if product_data.get('processing_time') is not None else '3',
                 'time_unit': product_data.get('time_unit', 'Days'),
-                'youtube_url': product_data.get('video_url', ''),
-                'external_url': product_data.get('external_link', ''),
+                'youtube_url': str(product_data.get('video_url', '')) if product_data.get('video_url') is not None else '',
+                'external_url': str(product_data.get('external_link', '')) if product_data.get('external_link') is not None else '',
                 'show_vat': product_data.get('show_vat', True),
                 
                 # V&R specific fields
@@ -144,13 +192,7 @@ class VintageAndRareClient:
                 # Images
                 'images': []
             }
-            
-            # Map category names to IDs if needed
-            category_name = product_data.get('category', '')
-            if category_name:
-                # Use the mapped ID or default to '51' (Guitars)
-                form_data['category'] = category_mapping.get(category_name, '51')
-            
+
             # Add primary image if available
             if product_data.get('primary_image'):
                 form_data['images'].append(product_data['primary_image'])
@@ -170,8 +212,38 @@ class VintageAndRareClient:
                         # If parsing fails, assume it's a single URL
                         form_data['images'].append(product_data['additional_images'])
             
-            # Print the form data for debugging
-            print(f"Sending form data to V&R: {form_data}")
+            # Log the form data for debugging
+            logger.info(f"Sending form data to V&R: {form_data}")
+            print(f"Mapped category '{product_data.get('category')}' to category_id={form_data['category']}, subcategory_id={form_data['subcategory']}")
+            
+            
+            # # Map category names to IDs if needed
+            # category_name = product_data.get('category', '')
+            # if category_name:
+            #     # Use the mapped ID or default to '51' (Guitars)
+            #     form_data['category'] = category_mapping.get(category_name, '51')
+            
+            # # Add primary image if available
+            # if product_data.get('primary_image'):
+            #     form_data['images'].append(product_data['primary_image'])
+            
+            # # Add additional images if available
+            # if product_data.get('additional_images'):
+            #     if isinstance(product_data['additional_images'], list):
+            #         form_data['images'].extend(product_data['additional_images'])
+            #     else:
+            #         # Parse as JSON if it's a string
+            #         try:
+            #             import json
+            #             additional = json.loads(product_data['additional_images'])
+            #             if isinstance(additional, list):
+            #                 form_data['images'].extend(additional)
+            #         except Exception:
+            #             # If parsing fails, assume it's a single URL
+            #             form_data['images'].append(product_data['additional_images'])
+            
+            # # Print the form data for debugging
+            # print(f"Sending form data to V&R: {form_data}")
             
             # Run the form automation in a separate thread
             # since Selenium is blocking and we're in an async function
@@ -205,9 +277,9 @@ class VintageAndRareClient:
         Returns:
             Dict with status and message
         """
+        
         from app.services.vintageandrare.inspect_form import login_and_navigate
         
-        # Run the form automation with the provided data
         try:
             # This function is blocking and will run the Selenium automation
             login_and_navigate(

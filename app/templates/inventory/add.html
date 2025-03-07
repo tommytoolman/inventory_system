@@ -1131,16 +1131,20 @@
         
         // Function to load Dropbox folders
         function loadDropboxFolders(path = '') {
-            if (!dropboxElements.browser || !dropboxElements.items || !dropboxElements.loading) {
-                console.error('Dropbox UI elements not found');
-                return;
-            }
-            
             // Show loading state
             dropboxElements.items.classList.add('hidden');
             if (dropboxElements.empty) dropboxElements.empty.classList.add('hidden');
             if (dropboxElements.error) dropboxElements.error.classList.add('hidden');
             dropboxElements.loading.classList.remove('hidden');
+            
+            // Update loading with a helpful message
+            dropboxElements.loading.innerHTML = `
+                <svg class="animate-spin h-6 w-6 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="text-sm font-medium">Loading Dropbox folders...</p>
+            `;
             
             // Update current path display
             if (dropboxElements.currentPath) {
@@ -1149,7 +1153,47 @@
             
             // Make API request
             fetch(`/inventory/api/dropbox/folders?path=${encodeURIComponent(path)}`)
-                .then(response => response.json())
+                .then(response => {
+                    // First check status code
+                    if (response.status === 202) {
+                        // The operation is still processing
+                        return response.json().then(data => {
+                            console.log("Received 202 status - operation in progress", data);
+                            
+                            // Update loading message
+                            dropboxElements.loading.innerHTML = `
+                                <svg class="animate-spin h-6 w-6 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <p class="text-sm font-medium">${data.message || 'Initializing Dropbox...'}</p>
+                                <p class="text-xs text-gray-500 mt-1">This may take a minute on first use</p>
+                                <button id="dropbox-retry" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                                    Check Again
+                                </button>
+                            `;
+                            
+                            // Add event listener to retry button
+                            const retryButton = document.getElementById('dropbox-retry');
+                            if (retryButton) {
+                                retryButton.addEventListener('click', function() {
+                                    loadDropboxFolders(path);
+                                });
+                            }
+                            
+                            // Set a timer to automatically retry after 5 seconds
+                            setTimeout(() => {
+                                loadDropboxFolders(path);
+                            }, 5000);
+                            
+                            // Signal that this is a pending state, not an error
+                            throw new Error('PENDING');
+                        });
+                    }
+                    
+                    // For all other status codes, proceed normally
+                    return response.json();
+                })
                 .then(data => {
                     // Hide loading state
                     dropboxElements.loading.classList.add('hidden');
@@ -1244,6 +1288,11 @@
                     }
                 })
                 .catch(error => {
+                    // Skip error handling for PENDING status
+                    if (error.message === 'PENDING') {
+                        return;
+                    }
+                    
                     console.error('Error loading Dropbox folders:', error);
                     dropboxElements.loading.classList.add('hidden');
                     if (dropboxElements.error) {

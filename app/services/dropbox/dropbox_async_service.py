@@ -230,3 +230,25 @@ class AsyncDropboxClient:
         
         print(f"Successfully obtained {len(results)} temporary links")
         return results
+    
+    async def test_connection(self):
+        """Test the connection to Dropbox API"""
+        try:
+            print("Testing Dropbox API connection...")
+            async with aiohttp.ClientSession() as session:
+                # Get current account info (lightweight call)
+                endpoint = f"{self.BASE_URL}/users/get_current_account"
+                
+                async with session.post(endpoint, headers=self.headers) as response:
+                    if response.status != 200:
+                        text = await response.text()
+                        print(f"Connection test failed with status {response.status}: {text}")
+                        return False
+                        
+                    account_info = await response.json()
+                    print(f"Connected to Dropbox account: {account_info.get('email', 'unknown')}")
+                    return True
+                    
+        except Exception as e:
+            print(f"Connection test exception: {str(e)}")
+            return False

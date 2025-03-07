@@ -33,6 +33,8 @@ from app.core.exceptions import ProductCreationError, PlatformIntegrationError
 from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.vr import VRListing
+from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+from app.services.category_mapping_service import CategoryMappingService
 from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
@@ -1054,4 +1056,487 @@ async def sync_vintageandrare_submit(
             "results": results
         }
     )
+
+@router.get("/sync/ebay", response_class=HTMLResponse)
+async def sync_ebay_form(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    brand: Optional[str] = None
+):
+    """Show form for selecting products to sync to eBay"""
+    # Base query for products
+    query = select(Product).outerjoin(
+        PlatformCommon, 
+        and_(
+            PlatformCommon.product_id == Product.id,
+            PlatformCommon.platform_name == 'ebay'
+        )
+    ).where(PlatformCommon.id == None)  # Only products not yet on eBay
     
+    # Apply filters
+    if search:
+        search = f"%{search}%"
+        query = query.filter(
+            or_(
+                Product.brand.ilike(search),
+                Product.model.ilike(search),
+                Product.category.ilike(search)
+            )
+        )
+    if category:
+        query = query.filter(Product.category == category)
+    if brand:
+        query = query.filter(Product.brand == brand)
+    
+    # Execute query
+    result = await db.execute(query)
+    products = result.scalars().all()
+    
+    # Get categories and brands for filters
+    categories_result = await db.execute(select(Product.category).distinct())
+    categories = [c[0] for c in categories_result.all() if c[0]]
+    
+    brands_result = await db.execute(select(Product.brand).distinct())
+    brands = [b[0] for b in brands_result.all() if b[0]]
+    
+    return templates.TemplateResponse(
+        "inventory/sync_ebay.html",  # You'll need to create this template
+        {
+            "request": request,
+            "products": products,
+            "categories": categories,
+            "brands": brands,
+            "selected_category": category,
+            "selected_brand": brand,
+            "search": search
+        }
+    )
+
+@router.post("/sync/ebay", response_class=HTMLResponse)
+async def sync_ebay_submit(
+    request: Request,
+    product_ids: List[int] = Form(...),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
+):
+    """Process selected products and sync to eBay"""
+    results = {
+        "success": 0,
+        "errors": 0,
+        "messages": []
+    }
+    
+    # Initialize services
+    mapping_service = CategoryMappingService(db)
+    ebay_service = EbayService(db, settings)
+    
+    # Process each product
+    for product_id in product_ids:
+        try:
+            # Get product
+            query = select(Product).where(Product.id == product_id)
+            result = await db.execute(query)
+            product = result.scalar_one_or_none()
+            
+            if not product:
+                results["errors"] += 1
+                results["messages"].append(f"Product {product_id} not found")
+                continue
+            
+            # Check for existing platform listing
+            query = select(PlatformCommon).where(
+                PlatformCommon.product_id == product.id,
+                PlatformCommon.platform_name == "ebay"
+            )
+            platform_result = await db.execute(query)
+            platform_common = platform_result.scalar_one_or_none()
+            
+            # Create new platform listing if needed
+            if not platform_common:
+                platform_common = PlatformCommon(
+                    product_id=product.id,
+                    platform_name="ebay",
+                    status=ListingStatus.DRAFT.value,
+                    sync_status=SyncStatus.PENDING.value,
+                    last_sync=datetime.utcnow()
+                )
+                db.add(platform_common)
+                await db.flush()
+            
+            # Map category from our system to eBay category ID
+            category_mapping = await mapping_service.get_mapping(
+                "internal", 
+                str(product.category) if product.category else "default",
+                "ebay"
+            )
+            
+            if not category_mapping:
+                # Try by name if ID mapping failed
+                category_mapping = await mapping_service.get_mapping_by_name(
+                    "internal",
+                    product.category,
+                    "ebay"
+                )
+            
+            if not category_mapping:
+                # Use default if no mapping found
+                category_mapping = await mapping_service.get_default_mapping("ebay")
+                if not category_mapping:
+                    results["errors"] += 1
+                    results["messages"].append(f"No category mapping found for {product.category}")
+                    continue
+            
+            # Prepare data for eBay listing
+            ebay_item_specifics = {
+                "Brand": product.brand,
+                "Model": product.model,
+                "Year": str(product.year) if product.year else "",
+                "MPN": product.sku or "Does Not Apply",
+                "Type": product.category or "",
+                "Condition": product.condition or "Used"
+            }
+            
+            # Add any other product attributes that might be relevant
+            if product.finish:
+                ebay_item_specifics["Finish"] = product.finish
+            
+            # Create eBay listing data
+            ebay_data = {
+                "category_id": category_mapping.target_id,
+                "condition_id": map_condition_to_ebay(product.condition),
+                "price": float(product.base_price) if product.base_price else 0.0,
+                "duration": "GTC",  # Good Till Cancelled
+                "item_specifics": ebay_item_specifics
+            }
+            
+            # Create eBay listing
+            try:
+                ebay_listing = await ebay_service.create_draft_listing(
+                    platform_common.id,
+                    ebay_data
+                )
+                
+                results["success"] += 1
+                results["messages"].append(f"Created eBay draft for {product.brand} {product.model}")
+                
+            except Exception as e:
+                platform_common.sync_status = SyncStatus.FAILED.value
+                platform_common.last_sync = datetime.utcnow()
+                
+                results["errors"] += 1
+                results["messages"].append(f"Error creating eBay draft for {product.brand} {product.model}: {str(e)}")
+            
+        except Exception as e:
+            results["errors"] += 1
+            results["messages"].append(f"Error syncing product {product_id} to eBay: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+    
+    await db.commit()
+    
+    return templates.TemplateResponse(
+        "inventory/sync_ebay_results.html",  # You'll need to create this template based on sync_vr_results.html
+        {
+            "request": request,
+            "results": results
+        }
+    )
+
+def map_condition_to_ebay(condition: str) -> str:
+    """Map our condition values to eBay condition IDs"""
+    # eBay condition IDs: https://developer.ebay.com/devzone/finding/callref/enums/conditionIdList.html
+    condition_mapping = {
+        "NEW": "1000",       # New
+        "EXCELLENT": "1500", # New other (see details)
+        "VERY_GOOD": "2000", # Manufacturer refurbished
+        "VERYGOOD": "2000",  # Manufacturer refurbished
+        "GOOD": "2500",      # Seller refurbished
+        "FAIR": "3000",      # Used
+        "POOR": "7000"       # For parts or not working
+    }
+    
+    if condition and condition.upper() in condition_mapping:
+        return condition_mapping[condition.upper()]
+    
+    # Default to Used if no mapping found
+    return "3000"
+
+@router.get("/api/dropbox/folders", response_class=JSONResponse)
+async def get_dropbox_folders(
+    request: Request,
+    path: str = "",
+    settings: Settings = Depends(get_settings)
+):
+    """API endpoint to get Dropbox folders for navigation with efficient caching"""
+    try:
+        # Check if scan is in progress
+        if hasattr(request.app.state, 'dropbox_scan_in_progress') and request.app.state.dropbox_scan_in_progress:
+            progress = getattr(request.app.state, 'dropbox_scan_progress', {'status': 'scanning', 'progress': 0})
+            return JSONResponse(
+                status_code=202,  # Accepted but processing
+                content={"status": "processing", "message": "Dropbox scan in progress", "progress": progress}
+            )
+        
+        # Initialize if needed
+        if not hasattr(request.app.state, 'dropbox_map') or request.app.state.dropbox_map is None:
+            # Start background scan
+            from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+            background_tasks = BackgroundTasks()
+            background_tasks.add_task(perform_dropbox_scan, request.app, settings.DROPBOX_ACCESS_TOKEN)
+            
+            return JSONResponse(
+                status_code=202,  # Accepted but processing
+                content={
+                    "status": "initializing",
+                    "message": "Starting Dropbox scan. Please try again in a moment."
+                }
+            )
+        
+        # Get cached data
+        dropbox_map = request.app.state.dropbox_map
+        
+        # Handle folder navigation as before with your current caching logic
+        # Remaining code is the same as your current implementation
+        
+        # If first request, return top-level folders
+        if not path:
+            # Return top-level folders
+            folders = []
+            for folder_name, folder_data in dropbox_map['folder_structure'].items():
+                if isinstance(folder_data, dict) and folder_name.startswith('/'):
+                    folders.append({
+                        'name': folder_name.strip('/'),
+                        'path': folder_name,
+                        'is_folder': True
+                    })
+            
+            return {"folders": sorted(folders, key=lambda x: x['name'])}
+        else:
+            # Navigate to the requested path
+            current_level = dropbox_map['folder_structure']
+            current_path = ""
+            path_parts = path.strip('/').split('/')
+            
+            for part in path_parts:
+                if part:
+                    current_path = f"/{part}" if current_path == "" else f"{current_path}/{part}"
+                    if current_path in current_level:
+                        current_level = current_level[current_path]
+                    else:
+                        # Path not found
+                        return {"items": [], "current_path": path, "error": f"Path {path} not found"}
+            
+            # Get folders and files at this level
+            items = []
+            
+            # Process each key in the current level
+            for key, value in current_level.items():
+                # Skip non-string keys or special keys
+                if not isinstance(key, str):
+                    continue
+                
+                if key.startswith('/'):
+                    # This is a subfolder
+                    name = os.path.basename(key)
+                    items.append({
+                        'name': name,
+                        'path': key,
+                        'is_folder': True
+                    })
+                elif key == 'files' and isinstance(value, list):
+                    # This is the files list
+                    for file in value:
+                        if not isinstance(file, dict) or 'path' not in file:
+                            continue
+                            
+                        # Only include image files
+                        if any(file['path'].lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+                            # Get temp link from the map if available
+                            temp_link = None
+                            if file['path'] in dropbox_map['temp_links']:
+                                temp_link = dropbox_map['temp_links'][file['path']]
+                            
+                            items.append({
+                                'name': file.get('name', os.path.basename(file['path'])),
+                                'path': file['path'],
+                                'is_folder': False,
+                                'temp_link': temp_link
+                            })
+            
+            # Sort items (folders first, then files)
+            items.sort(key=lambda x: (not x['is_folder'], x['name'].lower()))
+            
+            return {"items": items, "current_path": path}
+            
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error accessing Dropbox: {str(e)}"}
+        ) 
+
+@router.get("/api/dropbox/images", response_class=JSONResponse)
+async def get_dropbox_images(
+    request: Request,
+    folder_path: str
+):
+    """API endpoint to get images from a Dropbox folder"""
+    # Implementation remains the same as what you have now, with the
+    # understanding that we're using the cached dropbox_map
+    try:
+        # Initialize Dropbox client
+        from app.services.dropbox.dropbox_service import DropboxClient
+        client = DropboxClient()
+        
+        # Check for cached structure
+        if not hasattr(request.app.state, 'dropbox_structure'):
+            dropbox_map = client.scan_and_map_folder()
+            request.app.state.dropbox_structure = dropbox_map
+        else:
+            dropbox_map = request.app.state.dropbox_structure
+        
+        # Parse folder path to find images
+        folder_structure = dropbox_map['folder_structure']
+        path_parts = folder_path.strip('/').split('/')
+        current = folder_structure
+        current_path = ""
+        
+        # Navigate to the folder
+        for part in path_parts:
+            if part:
+                current_path = f"/{part}" if current_path == "" else f"{current_path}/{part}"
+                if current_path in current:
+                    current = current[current_path]
+                else:
+                    # Path not found
+                    return {"images": [], "error": f"Folder {folder_path} not found"}
+        
+        # Look for image files in this folder
+        images = []
+        
+        # Extract images from specified folder
+        def extract_images_from_folder(folder_data, prefix=""):
+            result = []
+            
+            # Check if folder contains files array
+            if isinstance(folder_data, dict) and 'files' in folder_data and isinstance(folder_data['files'], list):
+                for file in folder_data['files']:
+                    if (file.get('path') and any(file['path'].lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif'])):
+                        temp_link = file.get('temporary_link')
+                        if temp_link:
+                            result.append({
+                                'name': file.get('name', os.path.basename(file['path'])),
+                                'path': file['path'],
+                                'url': temp_link
+                            })
+            
+            # Look through subfolders with a priority for specific resolution folders
+            resolution_folders = []
+            other_folders = []
+            
+            for key, value in folder_data.items():
+                if isinstance(key, str) and key.startswith('/') and isinstance(value, dict):
+                    folder_name = os.path.basename(key.rstrip('/'))
+                    # Prioritize resolution folders
+                    if any(res in folder_name.lower() for res in ['1500px', 'hi-res', '640px']):
+                        resolution_folders.append((key, value))
+                    else:
+                        other_folders.append((key, value))
+            
+            # Check resolution folders first
+            for key, subfolder in resolution_folders:
+                result.extend(extract_images_from_folder(subfolder, f"{prefix}{os.path.basename(key)}/"))
+            
+            # If no images found in resolution folders, check other folders
+            if not result and other_folders:
+                for key, subfolder in other_folders:
+                    result.extend(extract_images_from_folder(subfolder, f"{prefix}{os.path.basename(key)}/"))
+            
+            return result
+        
+        # Extract images from the current folder and its subfolders
+        images = extract_images_from_folder(current)
+        
+        # If no images found in folder structure, try looking in temp_links directly
+        if not images and 'temp_links' in dropbox_map:
+            for path, link in dropbox_map['temp_links'].items():
+                if path.startswith(folder_path) and any(path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+                    images.append({
+                        'name': os.path.basename(path),
+                        'path': path,
+                        'url': link
+                    })
+        
+        # Sort images by name for consistent ordering
+        images.sort(key=lambda x: x.get('name', ''))
+        
+        return {"images": images}
+        
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error getting Dropbox images: {str(e)}"}
+        )
+
+@router.get("/api/dropbox/init", response_class=JSONResponse)
+async def init_dropbox_scan(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings)
+):
+    """Initialize Dropbox scan in the background and report progress"""
+    
+    # Check if already scanning
+    if hasattr(request.app.state, 'dropbox_scan_in_progress') and request.app.state.dropbox_scan_in_progress:
+        # Get progress if available
+        progress = getattr(request.app.state, 'dropbox_scan_progress', {'status': 'scanning', 'progress': 0})
+        return JSONResponse(content=progress)
+    
+    # Check if already scanned
+    if hasattr(request.app.state, 'dropbox_map') and request.app.state.dropbox_map:
+        return JSONResponse(content={
+            'status': 'complete', 
+            'last_updated': request.app.state.dropbox_last_updated.isoformat()
+        })
+    
+    # Start scan in background
+    request.app.state.dropbox_scan_in_progress = True
+    request.app.state.dropbox_scan_progress = {'status': 'starting', 'progress': 0}
+    
+    background_tasks.add_task(perform_dropbox_scan, request.app, settings.DROPBOX_ACCESS_TOKEN)
+    
+    return JSONResponse(content={
+        'status': 'started',
+        'message': 'Dropbox scan initiated in background'
+    })
+
+async def perform_dropbox_scan(app, access_token):
+    """Background task to scan Dropbox"""
+    try:
+        # Mark scan as in progress
+        app.state.dropbox_scan_in_progress = True
+        app.state.dropbox_scan_progress = {'status': 'scanning', 'progress': 0}
+        
+        # Create the async client
+        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+        client = AsyncDropboxClient(access_token)
+        
+        # Perform the scan
+        app.state.dropbox_scan_progress = {'status': 'scanning', 'progress': 10, 'message': 'Listing files...'}
+        dropbox_map = await client.scan_and_map_folder()
+        
+        # Store results
+        app.state.dropbox_map = dropbox_map
+        app.state.dropbox_last_updated = datetime.now()
+        app.state.dropbox_scan_progress = {'status': 'complete', 'progress': 100}
+        
+    except Exception as e:
+        print(f"Error in Dropbox scan: {str(e)}")
+        app.state.dropbox_scan_progress = {'status': 'error', 'message': str(e), 'progress': 0}
+    finally:
+        app.state.dropbox_scan_in_progress = False    

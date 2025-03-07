@@ -283,104 +283,127 @@
 
                 <!-- Images & Media Section -->
                 <div class="form-section">
-                    <button type="button" 
-                        class="form-section-header flex justify-between items-center w-full py-2 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-                        <span class="text-lg font-medium">Images & Media</span>
-                        <svg class="form-section-icon w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    <button type="button" class="accordion-button bg-gray-100 p-4 w-full text-left font-medium flex justify-between items-center">
+                        <span>Images & Media</span>
+                        <svg class="w-5 h-5 accordion-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                         </svg>
                     </button>
-                    <div class="form-section-content p-4 border rounded-lg mt-2">
-                        <!-- Primary Image -->
-                        <div class="space-y-4">
-                            <h3 class="text-md font-medium text-gray-700">Primary Image</h3>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <!-- File Upload -->
-                                <div class="space-y-1">
-                                    <label class="block text-sm font-medium text-gray-700">Upload File</label>
-                                    <input type="file" 
-                                        name="primary_image_file" 
-                                        id="primary_image_file"
-                                        accept="image/*"
-                                        class="block w-full text-sm text-gray-500
-                                                file:mr-4 file:py-2 file:px-4
-                                                file:rounded-md file:border-0
-                                                file:text-sm file:font-semibold
-                                                file:bg-blue-50 file:text-blue-700
-                                                hover:file:bg-blue-100">
-                                </div>
-
-                                <!-- URL Input -->
-                                <div class="space-y-1">
-                                    <label class="block text-sm font-medium text-gray-700">Or Enter URL</label>
-                                    <input type="url" 
-                                        name="primary_image_url"
-                                        id="primary_image_url"
-                                        placeholder="https://"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                        value="{{ form_data.primary_image_url if form_data else '' }}">
-                                </div>
-                            </div>
-
-                            <!-- Additional Images -->
-                            <div class="mt-6">
-                                <h3 class="text-md font-medium text-gray-700">Additional Images</h3>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
-                                    <!-- File Upload -->
-                                    <div class="space-y-1">
-                                        <label class="block text-sm font-medium text-gray-700">Upload Files</label>
-                                        <input type="file" 
-                                            name="additional_images_files"
-                                            id="additional_images_files" 
-                                            accept="image/*"
-                                            multiple
-                                            class="block w-full text-sm text-gray-500
-                                                    file:mr-4 file:py-2 file:px-4
-                                                    file:rounded-md file:border-0
-                                                    file:text-sm file:font-semibold
-                                                    file:bg-blue-50 file:text-blue-700
-                                                    hover:file:bg-blue-100">
+                    <div class="accordion-content bg-white p-4 border-t border-gray-200">
+                        <div class="grid grid-cols-1 gap-6">
+                            <div class="col-span-1">
+                                <div class="mt-2">
+                                    <div class="flex space-x-4 mb-4">
+                                        <button type="button" id="tab-upload" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md active-tab">
+                                            Upload Files
+                                        </button>
+                                        <button type="button" id="tab-url" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md">
+                                            Image URLs
+                                        </button>
+                                        <button type="button" id="tab-dropbox" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md">
+                                            Dropbox Images
+                                        </button>
                                     </div>
-
-                                    <!-- URL Input -->
-                                    <div class="space-y-1">
-                                        <label class="block text-sm font-medium text-gray-700">Or Enter URLs (one per line)</label>
-                                        <textarea name="additional_images_urls"
-                                                id="additional_images_urls"
-                                                rows="3"
-                                                placeholder="https://&#10;https://&#10;https://"
-                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ form_data.additional_images_urls if form_data else '' }}</textarea>
+                                    
+                                    <!-- Upload Files Tab -->
+                                    <div id="content-upload" class="mt-4">
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-medium text-gray-700">Primary Image</label>
+                                            <input type="file" name="primary_image_file" accept="image/*" class="mt-1 block w-full" id="primaryImageFile">
+                                        </div>
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-medium text-gray-700">Additional Images</label>
+                                            <input type="file" name="additional_images_files" accept="image/*" multiple class="mt-1 block w-full" id="additionalImageFiles">
+                                            <p class="mt-1 text-sm text-gray-500">You can select multiple files</p>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-
-                            <!-- Video Link -->
-                            <div class="mt-6">
-                                <label class="block text-sm font-medium text-gray-700">Video URL (YouTube, Vimeo, etc.)</label>
-                                <input type="url" 
-                                    name="video_url" 
-                                    id="video_url"
-                                    placeholder="https://"
-                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                    value="{{ form_data.video_url if form_data else '' }}">
-                            </div>
-
-                            <!-- External Link -->
-                            <div class="mt-4">
-                                <label class="block text-sm font-medium text-gray-700">External Link</label>
-                                <input type="url" 
-                                    name="external_link" 
-                                    id="external_link"
-                                    placeholder="https://"
-                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                    value="{{ form_data.external_link if form_data else '' }}">
-                            </div>
-
-                            <!-- Image Preview -->
-                            <div class="mt-6">
-                                <h3 class="text-md font-medium text-gray-700">Image Preview</h3>
-                                <div id="imagePreview" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">
-                                    <!-- Preview images will be inserted here by JavaScript -->
+                                    
+                                    <!-- Image URLs Tab -->
+                                    <div id="content-url" class="mt-4 hidden">
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-medium text-gray-700">Primary Image URL</label>
+                                            <input type="text" name="primary_image_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" id="primaryImageUrl">
+                                        </div>
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-medium text-gray-700">Additional Image URLs</label>
+                                            <textarea name="additional_images_urls" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter one URL per line" id="additionalImageUrls"></textarea>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Dropbox Tab -->
+                                    <div id="content-dropbox" class="mt-4 hidden">
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-medium text-gray-700">Select Images from Dropbox</label>
+                                            
+                                            <!-- Dropbox folder navigation -->
+                                            <div class="flex space-x-2 mb-2 items-center">
+                                                <button type="button" id="dropbox-back" class="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                                                    </svg>
+                                                </button>
+                                                <span id="dropbox-current-path" class="px-2 py-1 text-sm text-gray-600 border rounded flex-grow">/</span>
+                                                <button type="button" id="dropbox-refresh" class="px-2 py-1 text-sm border rounded">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            
+                                            <!-- Dropbox folder & file browser -->
+                                            <div class="border rounded-md p-2 mt-2 max-h-60 overflow-y-auto" id="dropbox-browser">
+                                                <div class="text-center py-8 text-gray-500" id="dropbox-loading">
+                                                    <svg class="animate-spin h-6 w-6 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    Loading Dropbox folders...
+                                                </div>
+                                                <div id="dropbox-items" class="grid grid-cols-2 md:grid-cols-3 gap-2 hidden"></div>
+                                                <div class="text-center py-8 text-gray-500 hidden" id="dropbox-empty">
+                                                    No folders or images found in this location
+                                                </div>
+                                                <div class="text-center py-8 text-gray-500 hidden" id="dropbox-error">
+                                                    Error loading Dropbox content
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Dropbox image selection -->
+                                            <div class="mt-4">
+                                                <h4 class="text-sm font-medium text-gray-700 mb-2">Selected Images</h4>
+                                                <div id="dropbox-selected-images" class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                    <!-- Selected images will be displayed here -->
+                                                    <div class="text-center py-4 text-gray-500 col-span-full" id="dropbox-no-selection">
+                                                        No images selected yet
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- Hidden inputs to store selected Dropbox images -->
+                                                <input type="hidden" id="dropbox-primary-image" name="primary_image_url">
+                                                <input type="hidden" id="dropbox-additional-images" name="additional_images_urls">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Video URL -->
+                                    <div class="mb-4 mt-6">
+                                        <label for="video_url" class="block text-sm font-medium text-gray-700">YouTube Video URL</label>
+                                        <input type="text" name="video_url" id="video_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                    </div>
+                                    
+                                    <!-- External Link -->
+                                    <div class="mb-4">
+                                        <label for="external_link" class="block text-sm font-medium text-gray-700">External Link</label>
+                                        <input type="text" name="external_link" id="external_link" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                    </div>
+                                    
+                                    <!-- Image Preview -->
+                                    <div class="mt-6">
+                                        <h3 class="text-md font-medium text-gray-700">Image Preview</h3>
+                                        <div id="imagePreview" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">
+                                            <!-- Preview images will be inserted here by JavaScript -->
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -709,6 +732,7 @@
         
         // Make toggleImageSection available globally
         window.toggleImageSection = toggleImageSection;
+
         
         // =========== PLATFORM TABS ===========
         // Platform tab switching
@@ -743,6 +767,7 @@
                 }
             });
         });
+
         
         // Activate the first platform tab by default
         const firstTab = document.querySelector('.platform-tab');
@@ -750,6 +775,7 @@
             firstTab.click();
         }
         
+
         // =========== IMAGE HANDLING ===========
         // Image preview for file uploads
         const fileInputs = document.querySelectorAll('input[type="file"]');
@@ -937,6 +963,7 @@
             }
         }
         
+
         // =========== GENERATE SKU ===========
         // Generate SKU
         const generateSkuButton = document.getElementById('generateSku');
@@ -962,6 +989,7 @@
             });
         }
         
+
         // =========== FORM VALIDATION ===========
         // Form validation and submission
         const form = document.getElementById('addProductForm');
@@ -1028,8 +1056,488 @@
                 });
             });
         }
+
+
+        // =========== DROPBOX INTEGRATION ===========
+        // Tab switching functionality for image upload methods
+        const tabs = ['upload', 'url', 'dropbox'];
+        tabs.forEach(tab => {
+            const tabButton = document.getElementById(`tab-${tab}`);
+            if (tabButton) {
+                tabButton.addEventListener('click', function() {
+                    // Hide all content panels
+                    tabs.forEach(t => {
+                        const contentEl = document.getElementById(`content-${t}`);
+                        if (contentEl) {
+                            contentEl.classList.add('hidden');
+                        }
+                        const tabEl = document.getElementById(`tab-${t}`);
+                        if (tabEl) {
+                            tabEl.classList.remove('bg-blue-50', 'border-blue-500', 'text-blue-600');
+                        }
+                    });
+                    
+                    // Show the selected content panel
+                    const contentEl = document.getElementById(`content-${tab}`);
+                    if (contentEl) {
+                        contentEl.classList.remove('hidden');
+                    }
+                    tabButton.classList.add('bg-blue-50', 'border-blue-500', 'text-blue-600');
+                    
+                    // If dropbox tab is selected, load folders
+                    if (tab === 'dropbox') {
+                        loadDropboxFolders();
+                    }
+                });
+            }
+        });
+        
+        // Dropbox functionality
+        let currentPath = '';
+        let navigationHistory = [];
+        let selectedImages = [];
+        
+        const dropboxElements = {
+            browser: document.getElementById('dropbox-browser'),
+            items: document.getElementById('dropbox-items'),
+            loading: document.getElementById('dropbox-loading'),
+            empty: document.getElementById('dropbox-empty'),
+            error: document.getElementById('dropbox-error'),
+            currentPath: document.getElementById('dropbox-current-path'),
+            backButton: document.getElementById('dropbox-back'),
+            refreshButton: document.getElementById('dropbox-refresh'),
+            selectedImages: document.getElementById('dropbox-selected-images'),
+            noSelection: document.getElementById('dropbox-no-selection'),
+            primaryImage: document.getElementById('dropbox-primary-image'),
+            additionalImages: document.getElementById('dropbox-additional-images')
+        };
+        
+        // Initialize dropbox elements
+        if (dropboxElements.backButton) {
+            dropboxElements.backButton.addEventListener('click', function() {
+                if (navigationHistory.length > 0) {
+                    currentPath = navigationHistory.pop();
+                    loadDropboxFolders(currentPath);
+                    dropboxElements.backButton.disabled = navigationHistory.length === 0;
+                }
+            });
+        }
+        
+        if (dropboxElements.refreshButton) {
+            dropboxElements.refreshButton.addEventListener('click', function() {
+                loadDropboxFolders(currentPath);
+            });
+        }
+        
+        // Function to load Dropbox folders
+        function loadDropboxFolders(path = '') {
+            if (!dropboxElements.browser || !dropboxElements.items || !dropboxElements.loading) {
+                console.error('Dropbox UI elements not found');
+                return;
+            }
+            
+            // Show loading state
+            dropboxElements.items.classList.add('hidden');
+            if (dropboxElements.empty) dropboxElements.empty.classList.add('hidden');
+            if (dropboxElements.error) dropboxElements.error.classList.add('hidden');
+            dropboxElements.loading.classList.remove('hidden');
+            
+            // Update current path display
+            if (dropboxElements.currentPath) {
+                dropboxElements.currentPath.textContent = path || '/';
+            }
+            
+            // Make API request
+            fetch(`/inventory/api/dropbox/folders?path=${encodeURIComponent(path)}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Hide loading state
+                    dropboxElements.loading.classList.add('hidden');
+                    
+                    if (data.error) {
+                        if (dropboxElements.error) {
+                            dropboxElements.error.textContent = data.error;
+                            dropboxElements.error.classList.remove('hidden');
+                        }
+                        return;
+                    }
+                    
+                    // Clear items container
+                    dropboxElements.items.innerHTML = '';
+                    
+                    // Handle folder list
+                    const folders = data.folders || data.items || [];
+                    if (folders.length > 0) {
+                        // Display folders
+                        folders.forEach(folder => {
+                            if (!folder.is_folder && !/\.(jpe?g|png|gif)$/i.test(folder.name)) {
+                                return; // Skip non-image files
+                            }
+                            
+                            const itemElement = document.createElement('div');
+                            
+                            if (!folder.is_folder && folder.is_folder !== false) {
+                                folder.is_folder = true; // Default to folder for backward compatibility
+                            }
+                            
+                            if (folder.is_folder) {
+                                // Render folder
+                                itemElement.className = 'p-2 border rounded flex items-center cursor-pointer hover:bg-gray-50';
+                                itemElement.innerHTML = `
+                                    <svg class="h-5 w-5 mr-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                    </svg>
+                                    <span class="text-sm truncate">${folder.name}</span>
+                                `;
+                                
+                                itemElement.addEventListener('click', function() {
+                                    navigationHistory.push(currentPath);
+                                    currentPath = folder.path;
+                                    loadDropboxFolders(folder.path);
+                                    if (dropboxElements.backButton) {
+                                        dropboxElements.backButton.disabled = false;
+                                    }
+                                });
+                            } else {
+                                // Render image file
+                                itemElement.className = 'relative border rounded overflow-hidden cursor-pointer hover:border-blue-500';
+                                
+                                // If we have a temp link, show thumbnail
+                                if (folder.temp_link) {
+                                    itemElement.innerHTML = `
+                                        <div class="aspect-w-1 aspect-h-1">
+                                            <img src="${folder.temp_link}" alt="${folder.name}" class="object-cover w-full h-full">
+                                        </div>
+                                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-1">
+                                            <p class="text-xs truncate">${folder.name}</p>
+                                        </div>
+                                    `;
+                                } else {
+                                    itemElement.innerHTML = `
+                                        <div class="aspect-w-1 aspect-h-1 flex items-center justify-center bg-gray-100">
+                                            <svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                        </div>
+                                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-1">
+                                            <p class="text-xs truncate">${folder.name}</p>
+                                        </div>
+                                    `;
+                                }
+                                
+                                // Add click handler to select image
+                                itemElement.addEventListener('click', function() {
+                                    // Load images from the current folder
+                                    loadDropboxImages(currentPath);
+                                });
+                            }
+                            
+                            dropboxElements.items.appendChild(itemElement);
+                        });
+                        
+                        dropboxElements.items.classList.remove('hidden');
+                    } else {
+                        // Show empty state
+                        if (dropboxElements.empty) {
+                            dropboxElements.empty.classList.remove('hidden');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading Dropbox folders:', error);
+                    dropboxElements.loading.classList.add('hidden');
+                    if (dropboxElements.error) {
+                        dropboxElements.error.textContent = 'Error loading Dropbox content';
+                        dropboxElements.error.classList.remove('hidden');
+                    }
+                });
+        }
+        
+        // Function to load Dropbox images from a folder
+        function loadDropboxImages(folderPath) {
+            if (!dropboxElements.items || !dropboxElements.loading) {
+                console.error('Dropbox UI elements not found');
+                return;
+            }
+            
+            // Show loading state
+            dropboxElements.items.classList.add('hidden');
+            if (dropboxElements.empty) dropboxElements.empty.classList.add('hidden');
+            if (dropboxElements.error) dropboxElements.error.classList.add('hidden');
+            dropboxElements.loading.classList.remove('hidden');
+            
+            // Make API request
+            fetch(`/inventory/api/dropbox/images?folder_path=${encodeURIComponent(folderPath)}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Hide loading state
+                    dropboxElements.loading.classList.add('hidden');
+                    
+                    if (data.error) {
+                        if (dropboxElements.error) {
+                            dropboxElements.error.textContent = data.error;
+                            dropboxElements.error.classList.remove('hidden');
+                        }
+                        return;
+                    }
+                    
+                    // Clear items container
+                    dropboxElements.items.innerHTML = '';
+                    
+                    if (data.images && data.images.length > 0) {
+                        // Display images
+                        data.images.forEach(image => {
+                            const imageItem = document.createElement('div');
+                            imageItem.className = 'relative border rounded overflow-hidden cursor-pointer hover:border-blue-500';
+                            imageItem.innerHTML = `
+                                <div class="aspect-w-1 aspect-h-1">
+                                    <img src="${image.url}" alt="${image.name}" class="object-cover w-full h-full">
+                                </div>
+                                <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-1">
+                                    <p class="text-xs truncate">${image.name}</p>
+                                </div>
+                            `;
+                            
+                            // Add click handler to select image
+                            imageItem.addEventListener('click', function() {
+                                toggleImageSelection(image);
+                            });
+                            
+                            dropboxElements.items.appendChild(imageItem);
+                        });
+                        
+                        dropboxElements.items.classList.remove('hidden');
+                    } else {
+                        // Show empty state
+                        if (dropboxElements.empty) {
+                            dropboxElements.empty.textContent = 'No images found in this folder';
+                            dropboxElements.empty.classList.remove('hidden');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading Dropbox images:', error);
+                    dropboxElements.loading.classList.add('hidden');
+                    if (dropboxElements.error) {
+                        dropboxElements.error.textContent = 'Error loading images';
+                        dropboxElements.error.classList.remove('hidden');
+                    }
+                });
+        }
+        
+        // Toggle image selection
+        function toggleImageSelection(image) {
+            const existingIndex = selectedImages.findIndex(img => img.url === image.url);
+            
+            if (existingIndex >= 0) {
+                // Remove from selection
+                selectedImages.splice(existingIndex, 1);
+            } else {
+                // Add to selection
+                selectedImages.push(image);
+            }
+            
+            // Update selected images display
+            updateSelectedImagesDisplay();
+        }
+        
+        // Update the selected images display
+        function updateSelectedImagesDisplay() {
+            if (!dropboxElements.selectedImages || !dropboxElements.noSelection) {
+                console.error('Dropbox selection elements not found');
+                return;
+            }
+            
+            // Clear the container except for the "no selection" message
+            const children = Array.from(dropboxElements.selectedImages.children);
+            children.forEach(child => {
+                if (child !== dropboxElements.noSelection) {
+                    child.remove();
+                }
+            });
+            
+            if (selectedImages.length > 0) {
+                // Hide the "no selection" message
+                dropboxElements.noSelection.classList.add('hidden');
+                
+                // Display selected images
+                selectedImages.forEach((image, index) => {
+                    const imageItem = document.createElement('div');
+                    imageItem.className = 'relative border rounded overflow-hidden group';
+                    
+                    // First image is primary
+                    const isPrimary = index === 0;
+                    const borderClass = isPrimary ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-300';
+                    
+                    imageItem.innerHTML = `
+                        <div class="aspect-w-1 aspect-h-1 ${borderClass}">
+                            <img src="${image.url}" alt="${image.name}" class="object-cover w-full h-full">
+                            <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 flex items-center justify-center">
+                                <button type="button" class="remove-btn hidden group-hover:block bg-red-500 text-white rounded-full p-1">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-1 flex justify-between items-center">
+                            <span class="text-xs truncate">${isPrimary ? 'Primary' : `Additional ${index}`}</span>
+                        </div>
+                    `;
+
+                                        
+                    // Add remove button functionality
+                    const removeBtn = imageItem.querySelector('.remove-btn');
+                    removeBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        selectedImages.splice(index, 1);
+                        updateSelectedImagesDisplay();
+                    });
+                    
+                    dropboxElements.selectedImages.appendChild(imageItem);
+                });
+                
+                // Update hidden inputs for form submission
+                if (selectedImages.length > 0 && dropboxElements.primaryImage) {
+                    dropboxElements.primaryImage.value = selectedImages[0].url;
+                
+                    if (selectedImages.length > 1 && dropboxElements.additionalImages) {
+                        const additionalUrls = selectedImages.slice(1).map(img => img.url).join('\n');
+                        dropboxElements.additionalImages.value = additionalUrls;
+                    } else if (dropboxElements.additionalImages) {
+                        dropboxElements.additionalImages.value = '';
+                    }
+                
+                    // Also update the main image preview
+                    updateImagePreview();
+                } else {
+                if (dropboxElements.primaryImage) dropboxElements.primaryImage.value = '';
+                if (dropboxElements.additionalImages) dropboxElements.additionalImages.value = '';
+                }
+            }
+        }
+        // Update image preview (both Dropbox and regular)
+        function updateImagePreview() {
+            const imagePreview = document.getElementById('imagePreview');
+            if (!imagePreview) return;
+                
+            // For Dropbox selected images
+            if (selectedImages.length > 0) {
+                // Clear existing previews first
+                const dropboxPreviews = imagePreview.querySelectorAll('[data-source="dropbox"]');
+                dropboxPreviews.forEach(preview => preview.remove());
+                
+                // Add dropbox images to preview
+                selectedImages.forEach((image, index) => {
+                    const isPrimary = index === 0;
+                    const preview = document.createElement('div');
+                    preview.className = 'relative aspect-square';
+                    preview.setAttribute('data-source', 'dropbox');
+                    
+                    preview.innerHTML = `
+                        <img src="${image.url}" 
+                                class="w-full h-full object-cover rounded-lg shadow-sm ${isPrimary ? 'ring-2 ring-blue-500' : ''}"
+                                alt="${isPrimary ? 'Primary' : 'Additional'} Image">
+                        <div class="absolute top-1 right-1">
+                            <button type="button" class="remove-dropbox-image bg-red-500 text-white rounded-full p-1 hover:bg-red-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                            ${isPrimary ? 'Primary' : `Additional ${index}`}
+                        </div>
+                    `;
+                    
+                    // Add event listener to remove button
+                    preview.querySelector('.remove-dropbox-image').addEventListener('click', function() {
+                        selectedImages.splice(index, 1);
+                        preview.remove();
+                        updateSelectedImagesDisplay();
+                    });
+                        
+                    imagePreview.appendChild(preview);
+                });
+            }
+        }
+
+        // Initialize tabs if they exist
+        if (document.getElementById('tab-upload') && !document.getElementById('content-dropbox')) {
+            console.warn('Dropbox content tab not found. Make sure to add the HTML.');
+        }
+
+        // When DOM is loaded, setup the tab functionality - this is a redundant check that's helpful
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            setupDropboxTabs();
+            } 
+        else {
+            document.addEventListener('DOMContentLoaded', setupDropboxTabs);
+        }
+
+        function setupDropboxTabs() {
+            const uploadTab = document.getElementById('tab-upload');
+            const urlTab = document.getElementById('tab-url');
+            const dropboxTab = document.getElementById('tab-dropbox');
+            
+            // Only setup if all tabs exist
+            if (uploadTab && urlTab && dropboxTab) {
+                console.log('Setting up dropbox tabs');
+                    
+                // Setup initial state
+                const contentUpload = document.getElementById('content-upload');
+                const contentUrl = document.getElementById('content-url');
+                const contentDropbox = document.getElementById('content-dropbox');
+                    
+                if (contentUpload && contentUrl && contentDropbox) {
+                    // Show upload tab by default
+                    contentUpload.classList.remove('hidden');
+                    contentUrl.classList.add('hidden');
+                    contentDropbox.classList.add('hidden');
+                    
+                    uploadTab.classList.add('bg-blue-50', 'border-blue-500');
+                    
+                    // Setup click handlers
+                    uploadTab.addEventListener('click', function() {
+                        contentUpload.classList.remove('hidden');
+                        contentUrl.classList.add('hidden');
+                        contentDropbox.classList.add('hidden');
+                        
+                        uploadTab.classList.add('bg-blue-50', 'border-blue-500');
+                        urlTab.classList.remove('bg-blue-50', 'border-blue-500');
+                        dropboxTab.classList.remove('bg-blue-50', 'border-blue-500');
+                    });
+                        
+                    urlTab.addEventListener('click', function() {
+                        contentUpload.classList.add('hidden');
+                        contentUrl.classList.remove('hidden');
+                        contentDropbox.classList.add('hidden');
+                        
+                        uploadTab.classList.remove('bg-blue-50', 'border-blue-500');
+                        urlTab.classList.add('bg-blue-50', 'border-blue-500');
+                        dropboxTab.classList.remove('bg-blue-50', 'border-blue-500');
+                    });
+                    
+                    dropboxTab.addEventListener('click', function() {
+                        contentUpload.classList.add('hidden');
+                        contentUrl.classList.add('hidden');
+                        contentDropbox.classList.remove('hidden');
+                        
+                        uploadTab.classList.remove('bg-blue-50', 'border-blue-500');
+                        urlTab.classList.remove('bg-blue-50', 'border-blue-500');
+                        dropboxTab.classList.add('bg-blue-50', 'border-blue-500');
+                            
+                        // Load dropbox folders if not already loaded
+                        if (!currentPath) {
+                            loadDropboxFolders();
+                        }
+                    });
+                }
+            }
+        }
     });
 </script>
+
 
 <style>
     .transition-transform {

@@ -120,9 +120,15 @@ class DropboxClient:
             print(f"Response: {response.text}")
             return None
     
-    def list_folder_recursive(self, path=""):
-        """List all contents of a folder recursively using Dropbox's recursive parameter"""
-        print(f"Starting recursive scan of '{path}'...")
+    async def list_folder_recursive(self, path="", max_depth=None):
+        """
+        List all contents of a folder recursively
+        
+        Args:
+            path: Starting path
+            max_depth: Maximum folder depth to scan (None for unlimited)
+        """
+        print(f"Starting folder scan for '{path}' (max_depth={max_depth})...")
         start_time = time.time()
         
         all_entries = []
@@ -136,6 +142,12 @@ class DropboxClient:
             "include_has_explicit_shared_members": False,
             "limit": 2000  # Request larger batches for efficiency
         }
+        
+        # If using recursive=True in the API call, there's no easy way to limit depth
+        # So for debugging, you can check if max_depth is set to 1 and use a non-recursive call
+        if max_depth == 1:
+            # Non-recursive call for just top-level
+            data["recursive"] = False
         
         response = requests.post(endpoint, headers=self.headers, json=data)
         

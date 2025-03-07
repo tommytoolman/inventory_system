@@ -1,9 +1,10 @@
 # Standard library imports
 import os
 import json
+import asyncio
 import aiofiles
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 # FastAPI imports
@@ -1266,6 +1267,7 @@ def map_condition_to_ebay(condition: str) -> str:
 @router.get("/api/dropbox/folders", response_class=JSONResponse)
 async def get_dropbox_folders(
     request: Request,
+    background_tasks: BackgroundTasks,  # Move this before any parameters with default values
     path: str = "",
     settings: Settings = Depends(get_settings)
 ):
@@ -1299,6 +1301,11 @@ async def get_dropbox_folders(
         
         # Handle folder navigation as before with your current caching logic
         # Remaining code is the same as your current implementation
+        
+        # Use background_tasks like this:
+        if not hasattr(request.app.state, 'dropbox_map'):
+            background_tasks.add_task(perform_dropbox_scan, request.app, settings.DROPBOX_ACCESS_TOKEN)
+       
         
         # If first request, return top-level folders
         if not path:
@@ -1515,28 +1522,153 @@ async def init_dropbox_scan(
         'message': 'Dropbox scan initiated in background'
     })
 
+
+@router.get("/api/dropbox/debug-scan")
+async def debug_dropbox_scan(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings)
+):
+    """Debug endpoint to trigger Dropbox scan"""
+    # Reset scan state
+    request.app.state.dropbox_scan_in_progress = False
+    
+    # Check token
+    token = settings.DROPBOX_ACCESS_TOKEN
+    if not token:
+        return {"status": "error", "message": "No Dropbox access token configured"}
+    
+    # Start scan
+    print(f"Manually starting Dropbox scan with token (length: {len(token)})")
+    request.app.state.dropbox_scan_in_progress = True
+    request.app.state.dropbox_scan_progress = {'status': 'starting', 'progress': 0}
+    
+    # Add to background tasks
+    background_tasks.add_task(perform_dropbox_scan, request.app, token)
+    
+    return {
+        "status": "started", 
+        "message": "Dropbox scan initiated in background", 
+        "token_available": bool(token)
+    }
+
+
+@router.get("/api/dropbox/debug-token")
+async def debug_dropbox_token(
+    settings: Settings = Depends(get_settings)
+):
+    """Debug endpoint to check Dropbox token"""
+    token = settings.DROPBOX_ACCESS_TOKEN
+    if not token:
+        return {"status": "error", "message": "No token configured"}
+    
+    # Mask token for security
+    masked_token = token[:5] + "..." + token[-5:] if len(token) > 10 else "***"
+    
+    return {
+        "status": "success", 
+        "token_available": bool(token),
+        "token_preview": masked_token,
+        "token_length": len(token)
+    }
+
+
+@router.get("/api/dropbox/direct-scan")
+async def direct_dropbox_scan(
+    request: Request,
+    settings: Settings = Depends(get_settings)
+):
+    """Direct scan endpoint for debugging"""
+    try:
+        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+        
+        token = settings.DROPBOX_ACCESS_TOKEN
+        if not token:
+            return {"status": "error", "message": "No Dropbox access token configured"}
+            
+        client = AsyncDropboxClient(token)
+        
+        # Test connection first
+        test_result = await client.test_connection()
+        if not test_result:
+            return {"status": "error", "message": "Failed to connect to Dropbox API"}
+            
+        # Start a partial scan (just top-level folders)
+        print("Starting direct scan of top-level folders...")
+        
+        # Just list top folders without getting links
+        entries = await client.list_folder_recursive(path="", max_depth=1)
+        
+        # Return top-level folder info
+        folders = []
+        for entry in entries:
+            if entry.get('.tag') == 'folder':
+                path = entry.get('path_lower', '')
+                name = os.path.basename(path)
+                folders.append({"name": name, "path": path})
+                
+        return {
+            "status": "success", 
+            "message": f"Directly scanned {len(folders)} top-level folders", 
+            "folders": folders
+        }
+        
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"status": "error", "message": f"Error in direct scan: {str(e)}"}
+
+
 async def perform_dropbox_scan(app, access_token):
     """Background task to scan Dropbox"""
     try:
+        print("Starting Dropbox scan background task...")
+        print(f"Access token available: {bool(access_token)}")
+        if not access_token:
+            print("ERROR: No access token provided")
+            app.state.dropbox_scan_progress = {'status': 'error', 'message': 'No access token available', 'progress': 0}
+            app.state.dropbox_scan_in_progress = False
+            return
+            
         # Mark scan as in progress
         app.state.dropbox_scan_in_progress = True
         app.state.dropbox_scan_progress = {'status': 'scanning', 'progress': 0}
         
         # Create the async client
+        print("Importing AsyncDropboxClient...")
         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+        print("Creating client instance...")
         client = AsyncDropboxClient(access_token)
         
         # Perform the scan
+        print("Initiating folder scan...")
         app.state.dropbox_scan_progress = {'status': 'scanning', 'progress': 10, 'message': 'Listing files...'}
+        
+        # Try a simple operation first to test the token
+        print("Testing connection...")
+        test_result = await client.test_connection()
+        if not test_result:
+            print("ERROR: Could not connect to Dropbox API")
+            app.state.dropbox_scan_progress = {'status': 'error', 'message': 'Could not connect to Dropbox API', 'progress': 0}
+            app.state.dropbox_scan_in_progress = False
+            return
+            
+        print("Connection successful, starting full scan...")
         dropbox_map = await client.scan_and_map_folder()
         
         # Store results
+        print("Scan complete, saving results...")
         app.state.dropbox_map = dropbox_map
         app.state.dropbox_last_updated = datetime.now()
         app.state.dropbox_scan_progress = {'status': 'complete', 'progress': 100}
         
+        print("Dropbox background scan completed successfully")
     except Exception as e:
-        print(f"Error in Dropbox scan: {str(e)}")
-        app.state.dropbox_scan_progress = {'status': 'error', 'message': str(e), 'progress': 0}
+        print(f"ERROR in Dropbox scan: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        app.state.dropbox_scan_progress = {'status': 'error', 'message': f"Error: {str(e)}", 'progress': 0}
     finally:
-        app.state.dropbox_scan_in_progress = False    
+        app.state.dropbox_scan_in_progress = False
+        print("Background scan task finished")        
+        

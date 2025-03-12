@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="container mx-auto px-4 py-8 mb-16">
     <!-- Filters and Export Section -->
     <div class="mb-8 bg-white p-4 rounded-lg shadow">
         <div class="flex justify-between items-start gap-4">
@@ -17,31 +17,32 @@
             
                 <select name="category" class="p-2 border rounded">
                     <option value="">All Categories</option>
-                    {% for category in categories %}
+                    {% for category, count in categories %}
                     <option value="{{ category }}" {% if category == selected_category and selected_category %}selected{% endif %}>
-                        {{ category }}
+                        {{ category }} ({{ count }})
                     </option>
                     {% endfor %}
                 </select>
                 
                 <select name="brand" class="p-2 border rounded">
                     <option value="">All Brands</option>
-                    {% for brand in brands %}
+                    {% for brand, count in brands %}
                     <option value="{{ brand }}" {% if brand == selected_brand and selected_brand %}selected{% endif %}>
-                        {{ brand }}
+                        {{ brand }} ({{ count }})
                     </option>
                     {% endfor %}
                 </select>
 
                 <div class="flex items-center">
                     <span class="mr-2">Show:</span>
-                    {% set current_per_page = per_page|default(10)|int %}
+                    {% set current_per_page = per_page|default(100)|int %}
                     <select name="per_page" class="p-2 border rounded" onchange="this.form.submit()">
                         {% for count in [10, 25, 50, 100] %}
                         <option value="{{ count }}" {% if count == current_per_page %}selected{% endif %}>
                             {{ count }}
                         </option>
                         {% endfor %}
+                        <option value="all" {% if per_page == 'all' %}selected{% endif %}>All</option>
                     </select>
                     <span class="ml-2">entries</span>
                 </div>
@@ -57,93 +58,193 @@
         </div>
     </div>
 
-<!-- Products Table -->
-<div class="container mx-auto px-4 bg-white rounded-lg shadow overflow-x-auto">
-    <table class="w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Brand
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Model
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Category
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Price
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                </th>
-            </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-            {% for product in products %}
-            <tr>
-                <td class="px-6 py-4 whitespace-nowrap">{{ product.brand }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ product.model }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">{{ product.category }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    {% if product.base_price and product.base_price > 0 %}
-                        £{{ "{:,.0f}".format(product.base_price) }}
-                        <!-- ${{ "%.2f"|format(product.base_price) }} -->
-                    {% else %}
-                        <span class="text-gray-500">-</span>
-                    {% endif %}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    {% if product.status == 'SOLD' %}
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                            Sold
+    <!-- Products Table -->
+    <div class="bg-white rounded-lg shadow overflow-x-auto table-container">
+        <table class="w-full divide-y divide-gray-200">
+            <thead class="sticky-header">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Image
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Brand
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Model
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Category
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Price
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for product in products %}
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="h-10 w-10 rounded-full overflow-hidden">
+                            {% if product.primary_image %}
+                                <img src="{{ product.primary_image }}" alt="{{ product.brand }} {{ product.model }}" class="h-full w-full object-cover">
+                            {% else %}
+                                <div class="h-full w-full bg-gray-200 flex items-center justify-center">
+                                    <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">{{ product.brand }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span title="{{ product.model }}" class="truncate inline-block max-w-xs">
+                            {% if product.model|length > 65 %}
+                                {{ product.model[:65] }}...
+                            {% else %}
+                                {{ product.model }}
+                            {% endif %}
                         </span>
-                    {% else %}
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            {{ product.status.value if product.status else '' }}
-                        </span>
-                    {% endif %}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                    <a href="/inventory/product/{{ product.id }}" class="text-blue-600 hover:text-blue-900">View</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">{{ product.category }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if product.base_price and product.base_price > 0 %}
+                            £{{ "{:,.0f}".format(product.base_price) }}
+                            <!-- ${{ "%.2f"|format(product.base_price) }} -->
+                        {% else %}
+                            <span class="text-gray-500">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if product.status == 'SOLD' %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                Sold
+                            </span>
+                        {% else %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                {{ product.status.value if product.status else '' }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <a href="/inventory/product/{{ product.id }}" class="text-blue-600 hover:text-blue-900">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
-<!-- Pagination Controls -->
-<div class="mt-4 flex items-center justify-between">
-    <div class="text-sm text-gray-700">
-        {% if products %}
-            Showing {{ start_item }} to {{ end_item }} of {{ total }} entries
-        {% else %}
-            No entries to show
-        {% endif %}
+    <!-- Pagination Controls - moved outside table container -->
+    <div class="sticky-footer bg-white px-4">
+        <div class="flex items-center justify-between">
+            <div class="text-sm text-gray-700">
+                {% if products %}
+                    Showing {{ start_item }} to {{ end_item }} of {{ total_products }} entries
+                {% else %}
+                    No entries to show
+                {% endif %}
+            </div>
+            <div class="flex">
+                {% if has_prev %}
+                <a href="?page={{ page - 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}" 
+                class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    Previous
+                </a>
+                {% endif %}
+                
+                {% if has_next %}
+                <a href="?page={{ page + 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}"
+                class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
     </div>
-    <div class="flex">
-        {% if has_prev %}
-        <a href="?page={{ page - 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}" 
-        class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-            Previous
-        </a>
-        {% endif %}
-        
-        {% if has_next %}
-        <a href="?page={{ page + 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}"
-        class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-            Next
-        </a>
-        {% endif %}
-    </div>
-</div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', path='js/inventory.js') }}"></script>
+<style>
+    /* Sticky header */
+    .table-container {
+        position: relative;
+        max-height: calc(100vh - 300px); /* Adjusted height */
+        overflow-y: auto;
+        margin-bottom: 60px; /* Add space for the footer */
+    }
+    
+    .sticky-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: #f9fafb; /* bg-gray-50 */
+    }
+    
+    .sticky-header th {
+        position: sticky;
+        top: 0;
+        z-index: 11;
+        background-color: #f9fafb;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Sticky footer */
+    .sticky-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background-color: white;
+        padding: 1rem;
+        box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.1);
+        z-index: 20;
+        border-top: 1px solid #e5e7eb;
+    }
+    
+    /* Handle long descriptions */
+    .truncate-cell {
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    /* Add bottom padding to main container to prevent footer overlap */
+    .container {
+        padding-bottom: 60px;
+    }
+</style>
+
+<script>
+    // Ensure the sticky header works correctly
+    document.addEventListener('DOMContentLoaded', function() {
+        // Make sure the table container is properly sized
+        function adjustTableContainer() {
+            const tableContainer = document.querySelector('.table-container');
+            const header = document.querySelector('nav');
+            const footer = document.querySelector('.sticky-footer');
+            
+            if (tableContainer && header && footer) {
+                const headerHeight = header.offsetHeight;
+                const footerHeight = footer.offsetHeight;
+                const windowHeight = window.innerHeight;
+                
+                tableContainer.style.maxHeight = `${windowHeight - headerHeight - footerHeight - 40}px`;
+            }
+        }
+        
+        // Run on load and resize
+        adjustTableContainer();
+        window.addEventListener('resize', adjustTableContainer);
+    });
+</script>
 {% endblock %}

@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     DROPBOX_ACCESS_TOKEN: str = ""
     DROPBOX_REFRESH_TOKEN: str = ""
      
+    TINYMCE_API_KEY: str = "" 
+     
     # File paths
     UPLOAD_DIR: str = "app/static/uploads"
     

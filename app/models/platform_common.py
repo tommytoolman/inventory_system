@@ -20,6 +20,8 @@ class ListingStatus(str, Enum):
     DRAFT = "draft"
     ACTIVE = "active"
     ENDED = "ended"
+    SOLD = "sold"
+    REMOVED = "removed"
     DELETED = "deleted"
 
 class PlatformCommon(Base):

@@ -5,28 +5,27 @@ import asyncio
 import aiofiles
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 # FastAPI imports
 from fastapi import (
     APIRouter, 
     Depends, 
     Request, 
-    Query, 
     HTTPException, 
     BackgroundTasks,
     Form, 
     File, 
     UploadFile,
-    Path,
-    Body
 )
+
 from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
 
 # SQLAlchemy imports
 from sqlalchemy import select, or_, distinct, func, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 # App imports
 from app.core.config import Settings, get_settings
@@ -145,98 +144,120 @@ async def get_product_json(
 @router.get("/", response_class=HTMLResponse)
 async def list_products(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    page: int = 1,
+    per_page: Union[int, str] = 100,  # Default to 100
     search: Optional[str] = None,
     category: Optional[str] = None,
     brand: Optional[str] = None,
-    page: int = 1,
-    per_page: Optional[str] = None
+    db: AsyncSession = Depends(get_db),  # Change to AsyncSession
+    settings: Settings = Depends(get_settings)
 ):
-    # Convert and validate per_page
-    try:
-        per_page_int = int(per_page) if per_page else 10
-        if per_page_int not in [10, 25, 50, 100]:
-            per_page_int = 10
-    except ValueError:
-        per_page_int = 10
-
-    # Base query
+    # Handle the case when per_page is 'all'
+    if per_page == 'all':
+        pagination_limit = None  # No limit
+        pagination_offset = 0
+    else:
+        try:
+            per_page = int(per_page)
+        except (ValueError, TypeError):
+            per_page = 100  # Default to 100 if conversion fails
+            
+        pagination_limit = per_page
+        pagination_offset = (page - 1) * per_page
+    
+    # Build query using async style (select instead of query)
     query = select(Product)
     
-    # Execute count query before any filters
-    initial_count = await db.scalar(select(func.count()).select_from(query.subquery()))
-
     # Apply filters
     if search:
-        search = f"%{search}%"
+        search_term = f"%{search}%"
         query = query.filter(
             or_(
-                Product.brand.ilike(search),
-                Product.model.ilike(search),
-                Product.category.ilike(search)
+                Product.brand.ilike(search_term),
+                Product.model.ilike(search_term),
+                Product.sku.ilike(search_term),
+                Product.description.ilike(search_term)
             )
         )
+    
     if category:
         query = query.filter(Product.category == category)
+    
     if brand:
         query = query.filter(Product.brand == brand)
-
-    # Get filtered count
+    
+    # Get total count before pagination
     count_query = select(func.count()).select_from(query.subquery())
-    total_count = await db.scalar(count_query)
-    total = 0 if total_count is None else total_count
-
-    # Apply pagination
-    query = query.offset((page - 1) * per_page_int).limit(per_page_int)
-
-    # Execute main query
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
+    
+    # Apply pagination and ordering
+    query = query.order_by(desc(Product.created_at))
+    
+    if pagination_limit:
+        query = query.offset(pagination_offset).limit(pagination_limit)
+    
+    # Execute query
     result = await db.execute(query)
     products = result.scalars().all()
-
-    # Get and sort categories/brands
-    categories_result = await db.execute(
-        select(Product.category, func.lower(Product.category))
-        .distinct()
+    
+    # Get unique categories and brands for filters
+    categories_query = (
+        select(Product.category, func.count(Product.id).label("count"))
         .filter(Product.category.isnot(None))
-        .order_by(func.lower(Product.category))
+        .group_by(Product.category)
+        .order_by(Product.category)
     )
-    categories = [c[0] for c in categories_result.all() if c[0]]
-
-    brands_result = await db.execute(
-        select(Product.brand, func.lower(Product.brand))
-        .distinct()
+    categories_result = await db.execute(categories_query)
+    categories_with_counts = [(c[0], c[1]) for c in categories_result.all() if c[0]]
+    
+    brands_query = (
+        select(Product.brand, func.count(Product.id).label("count"))
         .filter(Product.brand.isnot(None))
-        .order_by(func.lower(Product.brand))
+        .group_by(Product.brand)
+        .order_by(Product.brand)
     )
-    brands = [b[0] for b in brands_result.all() if b[0]]
-
+    brands_result = await db.execute(brands_query)
+    brands_with_counts = [(b[0], b[1]) for b in brands_result.all() if b[0]]
+    
     # Calculate pagination info
-    total_pages = (total + per_page_int - 1) // per_page_int if total > 0 else 0
-    has_next = page < total_pages
-    has_prev = page > 1
-
-    # Calculate start and end items for display
-    start_item = ((page - 1) * per_page_int) + 1 if total > 0 else 0
-    end_item = min(page * per_page_int, total) if total > 0 else 0
-
+    if per_page != 'all' and per_page > 0:
+        total_pages = (total + per_page - 1) // per_page
+        start_page = max(1, page - 2)
+        end_page = min(total_pages, page + 2)
+        
+        # Calculate start and end items for display
+        start_item = (page - 1) * per_page + 1 if total > 0 else 0
+        end_item = min(page * per_page, total)
+    else:
+        total_pages = 1
+        page = 1
+        start_page = 1
+        end_page = 1
+        # For "all" pages
+        start_item = 1 if total > 0 else 0
+        end_item = total
+    
     return templates.TemplateResponse(
         "inventory/list.html",
         {
             "request": request,
             "products": products,
-            "categories": categories,
-            "brands": brands,
+            "total_products": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages,
+            "start_page": start_page,
+            "end_page": end_page,
+            "start_item": start_item,   # Add these two
+            "end_item": end_item,       # variables to the template context
+            "categories": categories_with_counts,  # Updated
+            "brands": brands_with_counts,  # Updated
             "selected_category": category,
             "selected_brand": brand,
             "search": search,
-            "page": page,
-            "per_page": per_page_int,
-            "total": total,
-            "total_pages": total_pages,
-            "has_next": has_next,
-            "has_prev": has_prev,
-            "start_item": start_item,
-            "end_item": end_item
+            "has_prev": page > 1,
+            "has_next": page < total_pages
         }
     )
 
@@ -304,7 +325,8 @@ async def product_detail(
 @router.get("/add", response_class=HTMLResponse)
 async def add_product_form(
     request: Request,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
 ):
     # Get existing brands for dropdown
     existing_brands = await db.execute(
@@ -341,7 +363,8 @@ async def add_product_form(
             "ebay_status": "pending",
             "reverb_status": "pending",
             "vr_status": "pending",
-            "website_status": "pending"
+            "website_status": "pending",
+            "tinymce_api_key": settings.TINYMCE_API_KEY  # This is important
         }
     )
 
@@ -800,6 +823,34 @@ async def update_product_stock(
         return {"status": "success", "new_quantity": quantity}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/next-sku", response_model=dict)
+async def get_next_sku(db: AsyncSession = Depends(get_db)):
+    """Generate the next available SKU in format DSG-000-001"""
+    try:
+        # Get the highest existing SKU with this pattern
+        query = select(func.max(Product.sku)).where(Product.sku.like('DSG-%'))
+        result = await db.execute(query)
+        highest_sku = result.scalar_one_or_none()
+        
+        if not highest_sku or not highest_sku.startswith('DSG-'):
+            # If no existing SKUs with this pattern, start from 1
+            next_num = 1
+        else:
+            # Extract the numeric part from the end
+            try:
+                last_part = highest_sku.split('-')[-1]
+                next_num = int(last_part) + 1
+            except (ValueError, IndexError):
+                next_num = 1
+        
+        # Format the new SKU
+        new_sku = f"DSG-000-{next_num:03d}"
+        return {"sku": new_sku}
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e)}
 
 @router.get("/export/vintageandrare", response_class=StreamingResponse)
 async def export_vintageandrare(
@@ -1553,6 +1604,62 @@ async def debug_dropbox_scan(
     }
 
 
+# @router.get("/api/dropbox/debug-token")
+# async def debug_dropbox_token(
+#     request: Request,
+#     background_tasks: BackgroundTasks,
+#     settings: Settings = Depends(get_settings)
+# ):
+#     """Debug endpoint to check Dropbox tokens and refresh if needed"""
+#     try:
+#         # Get tokens from settings and environment
+#         access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
+#         refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None) or os.environ.get('DROPBOX_REFRESH_TOKEN')
+#         app_key = getattr(settings, 'DROPBOX_APP_KEY', None) or os.environ.get('DROPBOX_APP_KEY')
+#         app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None) or os.environ.get('DROPBOX_APP_SECRET')
+        
+#         # Create detailed response with token info
+#         response = {
+#             "access_token": {
+#                 "available": bool(access_token),
+#                 "preview": f"{access_token[:5]}...{access_token[-5:]}" if access_token and len(access_token) > 10 else None,
+#                 "length": len(access_token) if access_token else 0,
+#                 "source": "settings" if hasattr(settings, 'DROPBOX_ACCESS_TOKEN') and settings.DROPBOX_ACCESS_TOKEN else "environment" if access_token else None
+#             },
+#             "refresh_token": {
+#                 "available": bool(refresh_token),
+#                 "preview": f"{refresh_token[:5]}...{refresh_token[-5:]}" if refresh_token and len(refresh_token) > 10 else None,
+#                 "length": len(refresh_token) if refresh_token else 0,
+#                 "source": "settings" if hasattr(settings, 'DROPBOX_REFRESH_TOKEN') and settings.DROPBOX_REFRESH_TOKEN else "environment" if refresh_token else None
+#             },
+#             "app_credentials": {
+#                 "app_key_available": bool(app_key),
+#                 "app_secret_available": bool(app_secret),
+#                 "source": "settings" if hasattr(settings, 'DROPBOX_APP_KEY') and settings.DROPBOX_APP_KEY else "environment" if app_key else None
+#             }
+#         }
+        
+#         # Test current access token if available
+#         if access_token:
+#             from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+#             client = AsyncDropboxClient(access_token=access_token)
+#             test_result = await client.test_connection()
+#             response["token_status"] = "valid" if test_result else "invalid"
+#         else:
+#             response["token_status"] = "missing"
+        
+#         # Try to refresh token if invalid and we have refresh credentials
+#         if (response["token_status"] in ["invalid", "missing"] and 
+#             refresh_token and app_key and app_secret):
+            
+#             print("Attempting to refresh token...")
+#             from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+#             refresh_client = AsyncDropboxClient(
+#                 refresh_token=refresh_token,
+#                 app_key=app_key,
+#                 app_secret=app_secret ,
+#             )
+
 @router.get("/api/dropbox/debug-token")
 async def debug_dropbox_token(
     settings: Settings = Depends(get_settings)
@@ -1571,7 +1678,6 @@ async def debug_dropbox_token(
         "token_preview": masked_token,
         "token_length": len(token)
     }
-
 
 @router.get("/api/dropbox/direct-scan")
 async def direct_dropbox_scan(
@@ -1618,38 +1724,90 @@ async def direct_dropbox_scan(
         print(traceback.format_exc())
         return {"status": "error", "message": f"Error in direct scan: {str(e)}"}
 
-
-async def perform_dropbox_scan(app, access_token):
-    """Background task to scan Dropbox"""
+async def perform_dropbox_scan(app, access_token=None):
+    """Background task to scan Dropbox with token refresh support"""
     try:
         print("Starting Dropbox scan background task...")
-        print(f"Access token available: {bool(access_token)}")
-        if not access_token:
-            print("ERROR: No access token provided")
-            app.state.dropbox_scan_progress = {'status': 'error', 'message': 'No access token available', 'progress': 0}
-            app.state.dropbox_scan_in_progress = False
-            return
-            
+        
         # Mark scan as in progress
         app.state.dropbox_scan_in_progress = True
         app.state.dropbox_scan_progress = {'status': 'scanning', 'progress': 0}
+        
+        # Get tokens and credentials from settings
+        settings = getattr(app.state, 'settings', None)
+        
+        # Fallback to environment variables if settings not available
+        if settings:
+            refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None)
+            app_key = getattr(settings, 'DROPBOX_APP_KEY', None)
+            app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None)
+        else:
+            # Get from environment
+            refresh_token = os.environ.get('DROPBOX_REFRESH_TOKEN')
+            app_key = os.environ.get('DROPBOX_APP_KEY')
+            app_secret = os.environ.get('DROPBOX_APP_SECRET')
+            
+        print(f"Access token available: {bool(access_token)}")
+        print(f"Refresh token available: {bool(refresh_token)}")
+        print(f"App key available: {bool(app_key)}")
+        print(f"App secret available: {bool(app_secret)}")
+        
+        if not access_token and not refresh_token:
+            print("ERROR: No access token or refresh token provided")
+            app.state.dropbox_scan_progress = {'status': 'error', 'message': 'No token available', 'progress': 0}
+            app.state.dropbox_scan_in_progress = False
+            return
         
         # Create the async client
         print("Importing AsyncDropboxClient...")
         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
         print("Creating client instance...")
-        client = AsyncDropboxClient(access_token)
+        
+        # Initialize with all available credentials
+        client = AsyncDropboxClient(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            app_key=app_key,
+            app_secret=app_secret
+        )
         
         # Perform the scan
         print("Initiating folder scan...")
         app.state.dropbox_scan_progress = {'status': 'scanning', 'progress': 10, 'message': 'Listing files...'}
         
+        # Try to refresh token first if we have refresh credentials but no access token
+        if refresh_token and app_key and app_secret and not access_token:
+            print("Attempting to refresh token before scan...")
+            refresh_success = await client.refresh_access_token()
+            if not refresh_success:
+                print("ERROR: Failed to refresh access token")
+                app.state.dropbox_scan_progress = {
+                    'status': 'error', 
+                    'message': 'Failed to refresh access token', 
+                    'progress': 0
+                }
+                app.state.dropbox_scan_in_progress = False
+                return
+            
+            # Save the new token
+            access_token = client.access_token
+            # Update in environment
+            os.environ['DROPBOX_ACCESS_TOKEN'] = access_token
+            # Update in app state if settings exist
+            if hasattr(app.state, 'settings'):
+                app.state.settings.DROPBOX_ACCESS_TOKEN = access_token
+            print("Successfully refreshed access token")
+            
         # Try a simple operation first to test the token
         print("Testing connection...")
         test_result = await client.test_connection()
         if not test_result:
             print("ERROR: Could not connect to Dropbox API")
-            app.state.dropbox_scan_progress = {'status': 'error', 'message': 'Could not connect to Dropbox API', 'progress': 0}
+            app.state.dropbox_scan_progress = {
+                'status': 'error', 
+                'message': 'Could not connect to Dropbox API', 
+                'progress': 0
+            }
             app.state.dropbox_scan_in_progress = False
             return
             
@@ -1662,7 +1820,16 @@ async def perform_dropbox_scan(app, access_token):
         app.state.dropbox_last_updated = datetime.now()
         app.state.dropbox_scan_progress = {'status': 'complete', 'progress': 100}
         
-        print("Dropbox background scan completed successfully")
+        # If we got a new token via refresh, store it
+        if client.access_token != access_token:
+            # Update in environment
+            os.environ['DROPBOX_ACCESS_TOKEN'] = client.access_token
+            # Update in app state if settings exist
+            if hasattr(app.state, 'settings'):
+                app.state.settings.DROPBOX_ACCESS_TOKEN = client.access_token
+            print("Updated access token from refresh")
+        
+        print(f"Dropbox background scan completed successfully. Mapped {len(dropbox_map['all_entries'])} entries and {len(dropbox_map['temp_links'])} temporary links.")
     except Exception as e:
         print(f"ERROR in Dropbox scan: {str(e)}")
         import traceback
@@ -1670,5 +1837,4 @@ async def perform_dropbox_scan(app, access_token):
         app.state.dropbox_scan_progress = {'status': 'error', 'message': f"Error: {str(e)}", 'progress': 0}
     finally:
         app.state.dropbox_scan_in_progress = False
-        print("Background scan task finished")        
-        
+        print("Background scan task finished")

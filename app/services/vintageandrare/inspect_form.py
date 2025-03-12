@@ -708,9 +708,37 @@ def fill_item_form(driver, item_data, test_mode=True):
             except Exception as e:
                 print(f"Error setting up shipping: {str(e)}")
 
+        # Before starting image upload, handle the brand dropdown issue
+        try:
+            # Find processing time field to defocus brand dropdown
+            time_field = wait.until(
+                EC.element_to_be_clickable((By.ID, "processing_time"))
+            )
+            time_field.click()
+        except Exception as e:
+            print(f"Error defocusing brand dropdown: {str(e)}")
+        
+        # Small pause
+        time.sleep(1)
+
         # Handle image uploads
         if 'images' in item_data:
             print("Starting image upload process...")
+            
+            # Scroll to top of page before image uploads
+            try:
+                driver.execute_script("window.scrollTo(0, 0);")
+                print("Scrolled to top of page")
+                time.sleep(2)  # Small pause to ensure visibility
+            except Exception as e:
+                print(f"Error scrolling to top: {str(e)}")
+            
+            if len(item_data['images']) > 20:
+                print(f"Warning: Received {len(item_data['images'])} images but maximum allowed is 20.")
+                print("Only the first 20 images will be processed.")
+                item_data['images'] = item_data['images'][:20]
+            
+            
             if len(item_data['images']) > 20:
                 print(f"Warning: Received {len(item_data['images'])} images but maximum allowed is 20.")
                 print("Only the first 20 images will be processed.")

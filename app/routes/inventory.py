@@ -1318,26 +1318,84 @@ def map_condition_to_ebay(condition: str) -> str:
 @router.get("/api/dropbox/folders", response_class=JSONResponse)
 async def get_dropbox_folders(
     request: Request,
-    background_tasks: BackgroundTasks,  # Move this before any parameters with default values
+    background_tasks: BackgroundTasks,
     path: str = "",
     settings: Settings = Depends(get_settings)
 ):
-    """API endpoint to get Dropbox folders for navigation with efficient caching"""
+    """
+    API endpoint to get Dropbox folders for navigation with token refresh support.
+    
+    This endpoint:
+    1. Handles token refresh if needed
+    2. Uses the cached folder structure when available
+    3. Returns folder and file information for UI navigation
+    4. Initializes a background scan if needed
+    """
     try:
-        # Check if scan is in progress
+        # Check if scan is already in progress
         if hasattr(request.app.state, 'dropbox_scan_in_progress') and request.app.state.dropbox_scan_in_progress:
             progress = getattr(request.app.state, 'dropbox_scan_progress', {'status': 'scanning', 'progress': 0})
             return JSONResponse(
                 status_code=202,  # Accepted but processing
-                content={"status": "processing", "message": "Dropbox scan in progress", "progress": progress}
+                content={
+                    "status": "processing", 
+                    "message": "Dropbox scan in progress", 
+                    "progress": progress
+                }
             )
         
-        # Initialize if needed
-        if not hasattr(request.app.state, 'dropbox_map') or request.app.state.dropbox_map is None:
+        # Get credentials
+        access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
+        refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None) or os.environ.get('DROPBOX_REFRESH_TOKEN')
+        app_key = getattr(settings, 'DROPBOX_APP_KEY', None) or os.environ.get('DROPBOX_APP_KEY')
+        app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None) or os.environ.get('DROPBOX_APP_SECRET')
+        
+        # Direct fallback to environment variables if not in settings
+        if not access_token:
+            access_token = os.environ.get('DROPBOX_ACCESS_TOKEN')
+            print(f"Loading access token directly from environment: {bool(access_token)}")
+        
+        if not refresh_token:
+            refresh_token = os.environ.get('DROPBOX_REFRESH_TOKEN')
+            print(f"Loading refresh token directly from environment: {bool(refresh_token)}")
+            
+        if not app_key:
+            app_key = os.environ.get('DROPBOX_APP_KEY')
+            print(f"Loading app key directly from environment: {bool(app_key)}")
+            
+        if not app_secret:
+            app_secret = os.environ.get('DROPBOX_APP_SECRET')
+            print(f"Loading app secret directly from environment: {bool(app_secret)}")
+        
+        # Check if all credentials are available now
+        if not access_token and not refresh_token:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "error",
+                    "message": "Dropbox credentials not available. Please configure DROPBOX_ACCESS_TOKEN or DROPBOX_REFRESH_TOKEN in .env file."
+                }
+            )
+            
+        
+        # Check if we need to initialize a scan
+        if (not hasattr(request.app.state, 'dropbox_map') or 
+            request.app.state.dropbox_map is None):
+            
+            # We need refresh credentials to start a scan if no access token
+            if not access_token and (not refresh_token or not app_key or not app_secret):
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "message": "No valid Dropbox credentials available"
+                    }
+                )
+            
             # Start background scan
-            from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
-            background_tasks = BackgroundTasks()
-            background_tasks.add_task(perform_dropbox_scan, request.app, settings.DROPBOX_ACCESS_TOKEN)
+            request.app.state.dropbox_scan_in_progress = True
+            request.app.state.dropbox_scan_progress = {'status': 'starting', 'progress': 0}
+            background_tasks.add_task(perform_dropbox_scan, request.app, access_token)
             
             return JSONResponse(
                 status_code=202,  # Accepted but processing
@@ -1350,19 +1408,54 @@ async def get_dropbox_folders(
         # Get cached data
         dropbox_map = request.app.state.dropbox_map
         
-        # Handle folder navigation as before with your current caching logic
-        # Remaining code is the same as your current implementation
+        # Create client for direct interaction
+        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+        client = AsyncDropboxClient(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            app_key=app_key,
+            app_secret=app_secret
+        )
         
-        # Use background_tasks like this:
-        if not hasattr(request.app.state, 'dropbox_map'):
-            background_tasks.add_task(perform_dropbox_scan, request.app, settings.DROPBOX_ACCESS_TOKEN)
-       
+        # If the token might be expired, verify it
+        last_updated = getattr(request.app.state, 'dropbox_last_updated', None)
+        token_age_hours = ((datetime.now() - last_updated).total_seconds() / 3600) if last_updated else None
+        
+        if token_age_hours and token_age_hours > 3:  # Check if token is older than 3 hours
+            # Test connection and refresh if needed
+            test_result = await client.test_connection()
+            if not test_result:
+                # Connection failed - token might be expired
+                # This function handles refresh internally
+                print("Token may be expired, getting fresh folder data")
+                
+                # Get specific folder contents
+                if path:
+                    folder_data = await client.get_folder_contents(path)
+                    return folder_data
+                else:
+                    # For root, just list top-level folders
+                    entries = await client.list_folder_recursive(path="", max_depth=1)
+                    folders = []
+                    for entry in entries:
+                        if entry.get('.tag') == 'folder':
+                            folder_path = entry.get('path_lower', '')
+                            folder_name = os.path.basename(folder_path)
+                            folders.append({
+                                'name': folder_name,
+                                'path': folder_path,
+                                'is_folder': True
+                            })
+                    return {"folders": sorted(folders, key=lambda x: x['name'])}
+            
+        # If we get here, we can use the cached structure
+        folder_structure = dropbox_map['folder_structure']
         
         # If first request, return top-level folders
         if not path:
             # Return top-level folders
             folders = []
-            for folder_name, folder_data in dropbox_map['folder_structure'].items():
+            for folder_name, folder_data in folder_structure.items():
                 if isinstance(folder_data, dict) and folder_name.startswith('/'):
                     folders.append({
                         'name': folder_name.strip('/'),
@@ -1370,10 +1463,10 @@ async def get_dropbox_folders(
                         'is_folder': True
                     })
             
-            return {"folders": sorted(folders, key=lambda x: x['name'])}
+            return {"folders": sorted(folders, key=lambda x: x['name'].lower())}
         else:
             # Navigate to the requested path
-            current_level = dropbox_map['folder_structure']
+            current_level = folder_structure
             current_path = ""
             path_parts = path.strip('/').split('/')
             
@@ -1413,7 +1506,7 @@ async def get_dropbox_folders(
                         if any(file['path'].lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
                             # Get temp link from the map if available
                             temp_link = None
-                            if file['path'] in dropbox_map['temp_links']:
+                            if 'temp_links' in dropbox_map and file['path'] in dropbox_map['temp_links']:
                                 temp_link = dropbox_map['temp_links'][file['path']]
                             
                             items.append({
@@ -1434,30 +1527,64 @@ async def get_dropbox_folders(
         return JSONResponse(
             status_code=500,
             content={"error": f"Error accessing Dropbox: {str(e)}"}
-        ) 
+        )
 
 @router.get("/api/dropbox/images", response_class=JSONResponse)
 async def get_dropbox_images(
     request: Request,
     folder_path: str
 ):
-    """API endpoint to get images from a Dropbox folder"""
-    # Implementation remains the same as what you have now, with the
-    # understanding that we're using the cached dropbox_map
+    """
+    API endpoint to get images from a Dropbox folder.
+    
+    This function uses two approaches to find images:
+    1. First it directly searches for images in the temp_links cache with matching paths
+    2. Then it tries to navigate the folder structure if no direct matches are found
+    
+    Args:
+        request: The FastAPI request object
+        folder_path: The Dropbox folder path to get images from
+        
+    Returns:
+        JSON response with list of images and their temporary links
+    """
     try:
-        # Initialize Dropbox client
-        from app.services.dropbox.dropbox_service import DropboxClient
-        client = DropboxClient()
-        
         # Check for cached structure
-        if not hasattr(request.app.state, 'dropbox_structure'):
-            dropbox_map = client.scan_and_map_folder()
-            request.app.state.dropbox_structure = dropbox_map
-        else:
-            dropbox_map = request.app.state.dropbox_structure
+        dropbox_map = getattr(request.app.state, 'dropbox_map', None)
+        if not dropbox_map:
+            return {"images": [], "error": "No Dropbox cache found. Please refresh the page."}
         
-        # Parse folder path to find images
-        folder_structure = dropbox_map['folder_structure']
+        # Normalize the folder path for consistent comparisons
+        normalized_folder_path = folder_path.lower().rstrip('/')
+        
+        # APPROACH 1: First directly look in temp_links for images in this folder
+        images = []
+        temp_links = dropbox_map.get('temp_links', {})
+        
+        # Search for images directly in the requested folder
+        for path, link in temp_links.items():
+            path_lower = path.lower()
+            
+            # Match files directly in this folder (not in subfolders)
+            folder_part = os.path.dirname(path_lower)
+            
+            if folder_part == normalized_folder_path:
+                if any(path_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+                    images.append({
+                        'name': os.path.basename(path),
+                        'path': path,
+                        'url': link
+                    })
+        
+        # If images found directly, return them
+        if images:
+            print(f"Found {len(images)} images directly in folder {folder_path}")
+            # Sort images by name for consistent ordering
+            images.sort(key=lambda x: x.get('name', ''))
+            return {"images": images}
+            
+        # APPROACH 2: If no images found directly, try navigating the folder structure
+        folder_structure = dropbox_map.get('folder_structure', {})
         path_parts = folder_path.strip('/').split('/')
         current = folder_structure
         current_path = ""
@@ -1469,13 +1596,28 @@ async def get_dropbox_images(
                 if current_path in current:
                     current = current[current_path]
                 else:
-                    # Path not found
+                    # Try a more flexible path search in temp_links as a fallback
+                    fallback_images = []
+                    search_prefix = f"{normalized_folder_path}/"
+                    
+                    for path, link in temp_links.items():
+                        if path.lower().startswith(search_prefix) and any(path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+                            fallback_images.append({
+                                'name': os.path.basename(path),
+                                'path': path,
+                                'url': link
+                            })
+                    
+                    if fallback_images:
+                        print(f"Found {len(fallback_images)} images using fallback search for {folder_path}")
+                        fallback_images.sort(key=lambda x: x.get('name', ''))
+                        return {"images": fallback_images}
+                    
+                    # If no fallback images found either, return empty list
+                    print(f"Folder {folder_path} not found in structure")
                     return {"images": [], "error": f"Folder {folder_path} not found"}
         
-        # Look for image files in this folder
-        images = []
-        
-        # Extract images from specified folder
+        # Extract images from specified folder using recursive helper function
         def extract_images_from_folder(folder_data, prefix=""):
             result = []
             
@@ -1483,7 +1625,11 @@ async def get_dropbox_images(
             if isinstance(folder_data, dict) and 'files' in folder_data and isinstance(folder_data['files'], list):
                 for file in folder_data['files']:
                     if (file.get('path') and any(file['path'].lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif'])):
-                        temp_link = file.get('temporary_link')
+                        # Get temp link from the map
+                        temp_link = None
+                        if 'temp_links' in dropbox_map and file['path'] in dropbox_map['temp_links']:
+                            temp_link = dropbox_map['temp_links'][file['path']]
+                            
                         if temp_link:
                             result.append({
                                 'name': file.get('name', os.path.basename(file['path'])),
@@ -1518,10 +1664,13 @@ async def get_dropbox_images(
         # Extract images from the current folder and its subfolders
         images = extract_images_from_folder(current)
         
-        # If no images found in folder structure, try looking in temp_links directly
+        # APPROACH 3: Final fallback - if still no images found, search entire temp_links
         if not images and 'temp_links' in dropbox_map:
+            search_prefix = f"{normalized_folder_path}/"
+            
             for path, link in dropbox_map['temp_links'].items():
-                if path.startswith(folder_path) and any(path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+                path_lower = path.lower()
+                if path_lower.startswith(search_prefix) and any(path_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
                     images.append({
                         'name': os.path.basename(path),
                         'path': path,
@@ -1531,6 +1680,7 @@ async def get_dropbox_images(
         # Sort images by name for consistent ordering
         images.sort(key=lambda x: x.get('name', ''))
         
+        print(f"Found {len(images)} images in folder {folder_path}")
         return {"images": images}
         
     except Exception as e:
@@ -1573,7 +1723,6 @@ async def init_dropbox_scan(
         'message': 'Dropbox scan initiated in background'
     })
 
-
 @router.get("/api/dropbox/debug-scan")
 async def debug_dropbox_scan(
     request: Request,
@@ -1603,126 +1752,485 @@ async def debug_dropbox_scan(
         "token_available": bool(token)
     }
 
-
-# @router.get("/api/dropbox/debug-token")
-# async def debug_dropbox_token(
-#     request: Request,
-#     background_tasks: BackgroundTasks,
-#     settings: Settings = Depends(get_settings)
-# ):
-#     """Debug endpoint to check Dropbox tokens and refresh if needed"""
-#     try:
-#         # Get tokens from settings and environment
-#         access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
-#         refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None) or os.environ.get('DROPBOX_REFRESH_TOKEN')
-#         app_key = getattr(settings, 'DROPBOX_APP_KEY', None) or os.environ.get('DROPBOX_APP_KEY')
-#         app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None) or os.environ.get('DROPBOX_APP_SECRET')
-        
-#         # Create detailed response with token info
-#         response = {
-#             "access_token": {
-#                 "available": bool(access_token),
-#                 "preview": f"{access_token[:5]}...{access_token[-5:]}" if access_token and len(access_token) > 10 else None,
-#                 "length": len(access_token) if access_token else 0,
-#                 "source": "settings" if hasattr(settings, 'DROPBOX_ACCESS_TOKEN') and settings.DROPBOX_ACCESS_TOKEN else "environment" if access_token else None
-#             },
-#             "refresh_token": {
-#                 "available": bool(refresh_token),
-#                 "preview": f"{refresh_token[:5]}...{refresh_token[-5:]}" if refresh_token and len(refresh_token) > 10 else None,
-#                 "length": len(refresh_token) if refresh_token else 0,
-#                 "source": "settings" if hasattr(settings, 'DROPBOX_REFRESH_TOKEN') and settings.DROPBOX_REFRESH_TOKEN else "environment" if refresh_token else None
-#             },
-#             "app_credentials": {
-#                 "app_key_available": bool(app_key),
-#                 "app_secret_available": bool(app_secret),
-#                 "source": "settings" if hasattr(settings, 'DROPBOX_APP_KEY') and settings.DROPBOX_APP_KEY else "environment" if app_key else None
-#             }
-#         }
-        
-#         # Test current access token if available
-#         if access_token:
-#             from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
-#             client = AsyncDropboxClient(access_token=access_token)
-#             test_result = await client.test_connection()
-#             response["token_status"] = "valid" if test_result else "invalid"
-#         else:
-#             response["token_status"] = "missing"
-        
-#         # Try to refresh token if invalid and we have refresh credentials
-#         if (response["token_status"] in ["invalid", "missing"] and 
-#             refresh_token and app_key and app_secret):
-            
-#             print("Attempting to refresh token...")
-#             from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
-#             refresh_client = AsyncDropboxClient(
-#                 refresh_token=refresh_token,
-#                 app_key=app_key,
-#                 app_secret=app_secret ,
-#             )
-
 @router.get("/api/dropbox/debug-token")
 async def debug_dropbox_token(
+    request: Request,
+    background_tasks: BackgroundTasks,
     settings: Settings = Depends(get_settings)
 ):
-    """Debug endpoint to check Dropbox token"""
-    token = settings.DROPBOX_ACCESS_TOKEN
-    if not token:
-        return {"status": "error", "message": "No token configured"}
-    
-    # Mask token for security
-    masked_token = token[:5] + "..." + token[-5:] if len(token) > 10 else "***"
-    
-    return {
-        "status": "success", 
-        "token_available": bool(token),
-        "token_preview": masked_token,
-        "token_length": len(token)
-    }
+    """Debug endpoint to check Dropbox tokens and refresh if needed"""
+    try:
+        # Get tokens from settings and environment
+        access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
+        refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None) or os.environ.get('DROPBOX_REFRESH_TOKEN')
+        app_key = getattr(settings, 'DROPBOX_APP_KEY', None) or os.environ.get('DROPBOX_APP_KEY')
+        app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None) or os.environ.get('DROPBOX_APP_SECRET')
+        
+        # Create detailed response with token info
+        response = {
+            "access_token": {
+                "available": bool(access_token),
+                "preview": f"{access_token[:5]}...{access_token[-5:]}" if access_token and len(access_token) > 10 else None,
+                "length": len(access_token) if access_token else 0,
+                "source": "settings" if hasattr(settings, 'DROPBOX_ACCESS_TOKEN') and settings.DROPBOX_ACCESS_TOKEN else "environment" if access_token else None
+            },
+            "refresh_token": {
+                "available": bool(refresh_token),
+                "preview": f"{refresh_token[:5]}...{refresh_token[-5:]}" if refresh_token and len(refresh_token) > 10 else None,
+                "length": len(refresh_token) if refresh_token else 0,
+                "source": "settings" if hasattr(settings, 'DROPBOX_REFRESH_TOKEN') and settings.DROPBOX_REFRESH_TOKEN else "environment" if refresh_token else None
+            },
+            "app_credentials": {
+                "app_key_available": bool(app_key),
+                "app_secret_available": bool(app_secret),
+                "source": "settings" if hasattr(settings, 'DROPBOX_APP_KEY') and settings.DROPBOX_APP_KEY else "environment" if app_key else None
+            }
+        }
+        
+        # Test current access token if available
+        if access_token:
+            from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+            client = AsyncDropboxClient(access_token=access_token)
+            test_result = await client.test_connection()
+            response["token_status"] = "valid" if test_result else "invalid"
+        else:
+            response["token_status"] = "missing"
+        
+        # Try to refresh token if invalid and we have refresh credentials
+        if (response["token_status"] in ["invalid", "missing"] and 
+            refresh_token and app_key and app_secret):
+            
+            print("Attempting to refresh token...")
+            from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+            refresh_client = AsyncDropboxClient(
+                refresh_token=refresh_token,
+                app_key=app_key,
+                app_secret=app_secret
+            )
+            
+            refresh_success = await refresh_client.refresh_access_token()
+            
+            if refresh_success:
+                # We got a new token
+                new_token = refresh_client.access_token
+                
+                # Save it to use in future requests
+                if hasattr(request.app.state, 'settings'):
+                    request.app.state.settings.DROPBOX_ACCESS_TOKEN = new_token
+                
+                # Update environment variable
+                os.environ["DROPBOX_ACCESS_TOKEN"] = new_token
+                
+                # Start background scan with new token
+                request.app.state.dropbox_scan_in_progress = True
+                request.app.state.dropbox_scan_progress = {'status': 'starting', 'progress': 0}
+                background_tasks.add_task(perform_dropbox_scan, request.app, new_token)
+                
+                response["refresh_result"] = {
+                    "success": True,
+                    "new_token_preview": f"{new_token[:5]}...{new_token[-5:]}",
+                    "new_token_length": len(new_token),
+                    "scan_initiated": True
+                }
+            else:
+                response["refresh_result"] = {
+                    "success": False,
+                    "error": "Failed to refresh token"
+                }
+        
+        return response
+    except Exception as e:
+        import traceback
+        print(f"Debug token error: {str(e)}")
+        print(traceback.format_exc())
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
 
 @router.get("/api/dropbox/direct-scan")
 async def direct_dropbox_scan(
     request: Request,
     settings: Settings = Depends(get_settings)
 ):
-    """Direct scan endpoint for debugging"""
+    """
+    Direct scan endpoint for debugging - attempts to scan a folder directly
+    without using background tasks for immediate feedback
+    """
     try:
         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
         
-        token = settings.DROPBOX_ACCESS_TOKEN
-        if not token:
-            return {"status": "error", "message": "No Dropbox access token configured"}
+        # Get tokens from settings and environment
+        access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
+        refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None) or os.environ.get('DROPBOX_REFRESH_TOKEN')
+        app_key = getattr(settings, 'DROPBOX_APP_KEY', None) or os.environ.get('DROPBOX_APP_KEY')
+        app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None) or os.environ.get('DROPBOX_APP_SECRET')
+        
+        if not access_token and not refresh_token:
+            return {
+                "status": "error", 
+                "message": "No Dropbox access token or refresh token configured"
+            }
             
-        client = AsyncDropboxClient(token)
+        # Create the client with all credentials
+        client = AsyncDropboxClient(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            app_key=app_key,
+            app_secret=app_secret
+        )
+        
+        # Try to refresh token if we have refresh credentials but no access token
+        if refresh_token and app_key and app_secret and not access_token:
+            print("Attempting to refresh token before direct scan...")
+            refresh_success = await client.refresh_access_token()
+            if refresh_success:
+                # We got a new token
+                access_token = client.access_token
+                # Update in app state if settings exist
+                if hasattr(request.app.state, 'settings'):
+                    request.app.state.settings.DROPBOX_ACCESS_TOKEN = access_token
+                # Update in environment
+                os.environ['DROPBOX_ACCESS_TOKEN'] = access_token
+                print("Successfully refreshed access token for direct scan")
+            else:
+                return {
+                    "status": "error",
+                    "message": "Failed to refresh access token"
+                }
         
         # Test connection first
         test_result = await client.test_connection()
         if not test_result:
-            return {"status": "error", "message": "Failed to connect to Dropbox API"}
+            return {
+                "status": "error", 
+                "message": "Failed to connect to Dropbox API - invalid token"
+            }
             
-        # Start a partial scan (just top-level folders)
+        # Start scan of top-level folders for quick test
         print("Starting direct scan of top-level folders...")
         
-        # Just list top folders without getting links
+        # Just list top folders with max_depth=1 for quicker results
         entries = await client.list_folder_recursive(path="", max_depth=1)
         
-        # Return top-level folder info
+        # Collect folder information
         folders = []
+        files = []
+        
         for entry in entries:
-            if entry.get('.tag') == 'folder':
-                path = entry.get('path_lower', '')
-                name = os.path.basename(path)
-                folders.append({"name": name, "path": path})
-                
+            entry_type = entry.get('.tag', '')
+            path = entry.get('path_lower', '')
+            name = os.path.basename(path)
+            
+            if entry_type == 'folder':
+                folders.append({
+                    "name": name, 
+                    "path": path
+                })
+            elif entry_type == 'file' and client._is_image_file(path):
+                files.append({
+                    "name": name, 
+                    "path": path,
+                    "size": entry.get('size', 0),
+                })
+        
+        # Get a sample of temp links for quick testing (max 5 files)
+        sample_files = files[:5]
+        temp_links = {}
+        
+        if sample_files:
+            sample_paths = [f['path'] for f in sample_files]
+            temp_links = await client.get_temporary_links_async(sample_paths)
+        
         return {
             "status": "success", 
-            "message": f"Directly scanned {len(folders)} top-level folders", 
-            "folders": folders
+            "message": f"Directly scanned {len(folders)} top-level folders and {len(files)} files", 
+            "folders": folders[:10],  # Limit to first 10
+            "files": files[:10],      # Limit to first 10
+            "temp_links_sample": len(temp_links),
+            "token_refreshed": access_token != getattr(settings, 'DROPBOX_ACCESS_TOKEN', None)
         }
         
     except Exception as e:
         import traceback
+        traceback_str = traceback.format_exc()
+        print(f"Error in direct scan: {str(e)}")
+        print(traceback_str)
+        return {
+            "status": "error", 
+            "message": f"Error in direct scan: {str(e)}",
+            "traceback": traceback_str.split("\n")[-10:] if len(traceback_str) > 0 else []
+        }
+
+@router.get("/api/dropbox/refresh-token")
+async def force_refresh_dropbox_token(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings)
+):
+    """Force refresh of the Dropbox access token using refresh token"""
+    try:
+        # Get refresh credentials
+        refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None) or os.environ.get('DROPBOX_REFRESH_TOKEN')
+        app_key = getattr(settings, 'DROPBOX_APP_KEY', None) or os.environ.get('DROPBOX_APP_KEY')
+        app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None) or os.environ.get('DROPBOX_APP_SECRET')
+        
+        if not refresh_token or not app_key or not app_secret:
+            return {
+                "status": "error",
+                "message": "Missing required refresh credentials",
+                "refresh_token_available": bool(refresh_token),
+                "app_key_available": bool(app_key),
+                "app_secret_available": bool(app_secret)
+            }
+        
+        # Create client for token refresh
+        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+        client = AsyncDropboxClient(
+            refresh_token=refresh_token,
+            app_key=app_key,
+            app_secret=app_secret
+        )
+        
+        # Attempt to refresh the token
+        print("Forcing Dropbox token refresh...")
+        refresh_success = await client.refresh_access_token()
+        
+        if refresh_success:
+            # We got a new token
+            new_token = client.access_token
+            
+            # Update in app state if settings exist
+            if hasattr(request.app.state, 'settings'):
+                request.app.state.settings.DROPBOX_ACCESS_TOKEN = new_token
+            
+            # Update in environment
+            os.environ['DROPBOX_ACCESS_TOKEN'] = new_token
+            
+            # Start background scan with new token if requested
+            start_scan = request.query_params.get('start_scan', 'false').lower() == 'true'
+            if start_scan:
+                request.app.state.dropbox_scan_in_progress = True
+                request.app.state.dropbox_scan_progress = {'status': 'starting', 'progress': 0}
+                background_tasks.add_task(perform_dropbox_scan, request.app, new_token)
+                
+            return {
+                "status": "success",
+                "message": "Successfully refreshed access token",
+                "new_token_preview": f"{new_token[:5]}...{new_token[-5:]}",
+                "new_token_length": len(new_token),
+                "scan_initiated": start_scan
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to refresh access token",
+                "refresh_token_preview": f"{refresh_token[:5]}...{refresh_token[-5:]}" if len(refresh_token) > 10 else None
+            }
+    
+    except Exception as e:
+        import traceback
+        print(f"Error in token refresh: {str(e)}")
         print(traceback.format_exc())
-        return {"status": "error", "message": f"Error in direct scan: {str(e)}"}
+        return {
+            "status": "error",
+            "message": f"Exception during token refresh: {str(e)}",
+            "error_type": type(e).__name__
+        }
+
+@router.get("/api/dropbox/test-credentials", response_class=JSONResponse)
+async def test_dropbox_credentials(
+    settings: Settings = Depends(get_settings)
+):
+    """Test that Dropbox credentials are being loaded correctly"""
+    return {
+        "app_key_available": bool(settings.DROPBOX_APP_KEY),
+        "app_secret_available": bool(settings.DROPBOX_APP_SECRET),
+        "refresh_token_available": bool(settings.DROPBOX_REFRESH_TOKEN),
+        "access_token_available": bool(settings.DROPBOX_ACCESS_TOKEN),
+        "app_key_preview": settings.DROPBOX_APP_KEY[:5] + "..." if settings.DROPBOX_APP_KEY else None,
+        "refresh_token_preview": settings.DROPBOX_REFRESH_TOKEN[:5] + "..." if settings.DROPBOX_REFRESH_TOKEN else None
+    }
+
+# Add this to app/routes/inventory.py
+@router.get("/api/dropbox/debug-cache")
+async def debug_dropbox_cache(request: Request):
+    """Debug endpoint to see what's in the Dropbox cache"""
+    dropbox_map = getattr(request.app.state, 'dropbox_map', None)
+    
+    if not dropbox_map:
+        return {"status": "no_cache", "message": "No Dropbox cache found"}
+    
+    # Count temporary links
+    temp_links_count = len(dropbox_map.get('temp_links', {}))
+    
+    # Get some sample paths with temporary links
+    sample_links = {}
+    for i, (path, link) in enumerate(dropbox_map.get('temp_links', {}).items()):
+        if i >= 5:  # Just get 5 samples
+            break
+        sample_links[path] = link[:50] + "..." if link else None
+    
+    return {
+        "status": "ok",
+        "last_updated": getattr(request.app.state, 'dropbox_last_updated', None),
+        "has_folder_structure": "folder_structure" in dropbox_map,
+        "temp_links_count": temp_links_count,
+        "sample_links": sample_links,
+        "sample_folder_paths": list(dropbox_map.get('folder_structure', {}).keys())[:5]
+    }
+
+@router.get("/api/dropbox/debug-credentials")
+async def debug_dropbox_credentials(
+    settings: Settings = Depends(get_settings)
+):
+    """Debug endpoint to check how credentials are loaded"""
+    
+    # Check settings first
+    settings_creds = {
+        "settings_access_token": bool(getattr(settings, 'DROPBOX_ACCESS_TOKEN', None)),
+        "settings_refresh_token": bool(getattr(settings, 'DROPBOX_REFRESH_TOKEN', None)),
+        "settings_app_key": bool(getattr(settings, 'DROPBOX_APP_KEY', None)),
+        "settings_app_secret": bool(getattr(settings, 'DROPBOX_APP_SECRET', None))
+    }
+    
+    # Check environment variables directly
+    env_creds = {
+        "env_access_token": bool(os.environ.get('DROPBOX_ACCESS_TOKEN')),
+        "env_refresh_token": bool(os.environ.get('DROPBOX_REFRESH_TOKEN')),
+        "env_app_key": bool(os.environ.get('DROPBOX_APP_KEY')),
+        "env_app_secret": bool(os.environ.get('DROPBOX_APP_SECRET'))
+    }
+    
+    # Sample values (first 5 chars only)
+    samples = {
+        "access_token_sample": os.environ.get('DROPBOX_ACCESS_TOKEN', '')[:5] + "..." if os.environ.get('DROPBOX_ACCESS_TOKEN') else None,
+        "refresh_token_sample": os.environ.get('DROPBOX_REFRESH_TOKEN', '')[:5] + "..." if os.environ.get('DROPBOX_REFRESH_TOKEN') else None
+    }
+    
+    return {
+        "settings_loaded": settings_creds,
+        "environment_loaded": env_creds,
+        "samples": samples
+    }
+
+@router.get("/api/dropbox/debug-folder-images")
+async def debug_folder_images(
+    request: Request,
+    folder_path: str
+):
+    """Debug endpoint to check what images exist for a specific folder"""
+    dropbox_map = getattr(request.app.state, 'dropbox_map', None)
+    
+    if not dropbox_map:
+        return {"status": "no_cache", "message": "No Dropbox cache found"}
+    
+    # Count all temporary links
+    all_temp_links = dropbox_map.get('temp_links', {})
+    
+    # Find images in this folder from temp_links
+    folder_images = []
+    for path, link in all_temp_links.items():
+        normalized_path = path.lower()
+        normalized_folder = folder_path.lower()
+        
+        # Check if this path is in the requested folder
+        if normalized_path.startswith(normalized_folder + '/') or normalized_path == normalized_folder:
+            if any(path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+                folder_images.append({
+                    'path': path,
+                    'link': link[:50] + "..." if link else None
+                })
+    
+    # Get folder structure info
+    folder_structure = dropbox_map.get('folder_structure', {})
+    current = folder_structure
+    
+    # Try to navigate to the folder (if it exists in structure)
+    path_parts = folder_path.strip('/').split('/')
+    current_path = ""
+    for part in path_parts:
+        if not part:
+            continue
+        current_path = f"/{part}" if current_path == "" else f"{current_path}/{part}"
+        if current_path in current:
+            current = current[current_path]
+        else:
+            current = None
+            break
+    
+    return {
+        "status": "ok",
+        "folder_path": folder_path,
+        "folder_exists_in_structure": current is not None,
+        "folder_structure_details": current if isinstance(current, dict) and len(str(current)) < 1000 else "(too large to display)",
+        "images_found_in_temp_links": len(folder_images),
+        "sample_images": folder_images[:5]
+    }
+
+@router.get("/api/dropbox/generate-links", response_class=JSONResponse)
+async def generate_folder_links(
+    request: Request,
+    folder_path: str,
+    settings: Settings = Depends(get_settings)
+):
+    """Generate temporary links for all images in a specific folder"""
+    try:
+        # Get access token
+        access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
+        
+        # Create client
+        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+        client = AsyncDropboxClient(access_token=access_token)
+        
+        # Check connection
+        test_result = await client.test_connection()
+        if not test_result:
+            return {
+                "status": "error", 
+                "message": "Failed to connect to Dropbox API - invalid token"
+            }
+            
+        # Get the folder structure from cache if available
+        dropbox_map = getattr(request.app.state, 'dropbox_map', None)
+        if not dropbox_map:
+            return {"status": "error", "message": "No Dropbox cache available"}
+        
+        # Use our new dedicated method to get links for this folder
+        temp_links = await client.get_temp_links_for_folder(folder_path)
+        
+        print(f"Generated {len(temp_links)} temporary links for folder {folder_path}")
+        
+        # Update the cache with new temporary links
+        if dropbox_map and 'temp_links' in dropbox_map:
+            dropbox_map['temp_links'].update(temp_links)
+            print(f"Updated cache with {len(temp_links)} new temporary links")
+        
+        # Return images with links for UI
+        images = []
+        for path, link in temp_links.items():
+            images.append({
+                'name': os.path.basename(path),
+                'path': path,
+                'url': link
+            })
+            
+        return {
+            "status": "success",
+            "message": f"Generated {len(temp_links)} temporary links",
+            "images": images
+        }
+            
+    except Exception as e:
+        import traceback
+        print(f"Error generating links: {str(e)}")
+        print(traceback.format_exc())
+        return {
+            "status": "error", 
+            "message": f"Error generating links: {str(e)}"
+        }
+
 
 async def perform_dropbox_scan(app, access_token=None):
     """Background task to scan Dropbox with token refresh support"""
@@ -1748,9 +2256,9 @@ async def perform_dropbox_scan(app, access_token=None):
             app_secret = os.environ.get('DROPBOX_APP_SECRET')
             
         print(f"Access token available: {bool(access_token)}")
-        print(f"Refresh token available: {bool(refresh_token)}")
-        print(f"App key available: {bool(app_key)}")
-        print(f"App secret available: {bool(app_secret)}")
+        print(f"Refresh token available: {bool(refresh_token)}{' (starts with: ' + refresh_token[:5] + '...)' if refresh_token else ''}")
+        print(f"App key available: {bool(app_key)}{' (starts with: ' + app_key[:5] + '...)' if app_key else ''}")
+        print(f"App secret available: {bool(app_secret)}{' (starts with: ' + app_secret[:5] + '...)' if app_secret else ''}")
         
         if not access_token and not refresh_token:
             print("ERROR: No access token or refresh token provided")
@@ -1759,11 +2267,10 @@ async def perform_dropbox_scan(app, access_token=None):
             return
         
         # Create the async client
-        print("Importing AsyncDropboxClient...")
-        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
         print("Creating client instance...")
         
         # Initialize with all available credentials
+        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
         client = AsyncDropboxClient(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -1771,33 +2278,39 @@ async def perform_dropbox_scan(app, access_token=None):
             app_secret=app_secret
         )
         
-        # Perform the scan
-        print("Initiating folder scan...")
-        app.state.dropbox_scan_progress = {'status': 'scanning', 'progress': 10, 'message': 'Listing files...'}
-        
-        # Try to refresh token first if we have refresh credentials but no access token
-        if refresh_token and app_key and app_secret and not access_token:
+        # Try to refresh token first if we have refresh credentials
+        if refresh_token and app_key and app_secret:
             print("Attempting to refresh token before scan...")
-            refresh_success = await client.refresh_access_token()
-            if not refresh_success:
-                print("ERROR: Failed to refresh access token")
+            try:
+                refresh_success = await client.refresh_access_token()
+                if refresh_success:
+                    print("Successfully refreshed access token")
+                    # Save the new token
+                    access_token = client.access_token
+                    # Update in environment
+                    os.environ['DROPBOX_ACCESS_TOKEN'] = access_token
+                    # Update in app state if settings exist
+                    if hasattr(app.state, 'settings'):
+                        app.state.settings.DROPBOX_ACCESS_TOKEN = access_token
+                else:
+                    print("Failed to refresh access token")
+                    app.state.dropbox_scan_progress = {
+                        'status': 'error', 
+                        'message': 'Failed to refresh access token', 
+                        'progress': 0
+                    }
+                    app.state.dropbox_scan_in_progress = False
+                    return
+            except Exception as refresh_error:
+                print(f"Error refreshing token: {str(refresh_error)}")
                 app.state.dropbox_scan_progress = {
                     'status': 'error', 
-                    'message': 'Failed to refresh access token', 
+                    'message': f'Error refreshing token: {str(refresh_error)}', 
                     'progress': 0
                 }
                 app.state.dropbox_scan_in_progress = False
                 return
-            
-            # Save the new token
-            access_token = client.access_token
-            # Update in environment
-            os.environ['DROPBOX_ACCESS_TOKEN'] = access_token
-            # Update in app state if settings exist
-            if hasattr(app.state, 'settings'):
-                app.state.settings.DROPBOX_ACCESS_TOKEN = access_token
-            print("Successfully refreshed access token")
-            
+                
         # Try a simple operation first to test the token
         print("Testing connection...")
         test_result = await client.test_connection()
@@ -1812,6 +2325,9 @@ async def perform_dropbox_scan(app, access_token=None):
             return
             
         print("Connection successful, starting full scan...")
+        app.state.dropbox_scan_progress = {'status': 'scanning', 'progress': 10}
+        
+        # Perform the scan with cache support
         dropbox_map = await client.scan_and_map_folder()
         
         # Store results
@@ -1829,7 +2345,7 @@ async def perform_dropbox_scan(app, access_token=None):
                 app.state.settings.DROPBOX_ACCESS_TOKEN = client.access_token
             print("Updated access token from refresh")
         
-        print(f"Dropbox background scan completed successfully. Mapped {len(dropbox_map['all_entries'])} entries and {len(dropbox_map['temp_links'])} temporary links.")
+        print(f"Dropbox background scan completed successfully. Mapped {len(dropbox_map.get('all_entries', []))} entries and {len(dropbox_map.get('temp_links', {}))} temporary links.")
     except Exception as e:
         print(f"ERROR in Dropbox scan: {str(e)}")
         import traceback
@@ -1838,3 +2354,4 @@ async def perform_dropbox_scan(app, access_token=None):
     finally:
         app.state.dropbox_scan_in_progress = False
         print("Background scan task finished")
+

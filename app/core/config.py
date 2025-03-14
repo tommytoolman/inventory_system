@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     DROPBOX_APP_SECRET: str = ""
     DROPBOX_ACCESS_TOKEN: str = ""
     DROPBOX_REFRESH_TOKEN: str = ""
-     
+        
     TINYMCE_API_KEY: str = "" 
      
     # File paths
@@ -96,3 +96,6 @@ def get_settings():
 def get_webhook_secret():
     """Get the webhook secret for authentication"""
     return get_settings().WEBSITE_WEBHOOK_SECRET
+
+def get_settings():
+    return Settings()

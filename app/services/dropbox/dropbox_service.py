@@ -228,7 +228,7 @@ class DropboxClient:
             print(f"Error getting temporary link for {file_path}: {response.status_code}")
             return None
     
-    def get_temporary_links_batch(self, file_paths, max_workers=10):
+    def get_temporary_links_batch(self, file_paths, max_workers=10, max_retries=3):
         """Get temporary links for multiple files using parallel requests"""
         # print(f"Getting temporary links for {len(file_paths)} files...")
         start_time = time.time()

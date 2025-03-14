@@ -21,6 +21,7 @@ import asyncio
 import aiohttp
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Union
@@ -74,7 +75,15 @@ class AsyncDropboxClient:
             self.headers = self._get_headers()
         else:
             self.headers = {}
-            
+
+        # Setup cache directory
+        self.cache_dir = os.path.join("app", "cache", "dropbox")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
+         # Cache file paths
+        self.temp_links_cache_file = os.path.join(self.cache_dir, "temp_links.json")
+        self.folder_structure_cache_file = os.path.join(self.cache_dir, "folder_structure.json")
+
         # Initialize caches
         self.file_links_cache = {}  # Cache for temporary links: path -> (link, expiry)
         self.folder_structure = {}  # Cached folder structure
@@ -83,8 +92,9 @@ class AsyncDropboxClient:
     def _get_headers(self) -> Dict[str, str]:
         """Get headers with current access token"""
         return {
-            'Authorization': f'Bearer {self.access_token}',
-            'Content-Type': 'application/json'
+            'Authorization': f'Bearer {self.access_token}'
+            # Note: We don't set 'Content-Type': 'application/json' here
+            # because it will be set per request as needed
         }
 
     async def refresh_access_token(self) -> bool:
@@ -169,6 +179,84 @@ class AsyncDropboxClient:
             else:
                 # Re-raise other errors
                 raise
+
+    def save_temp_links_to_cache(self, temp_links):
+        """Save temporary links to cache file"""
+        try:
+            # Store links with timestamp for expiration checking
+            cache_data = {
+                "timestamp": datetime.now().isoformat(),
+                "links": temp_links
+            }
+            
+            with open(self.temp_links_cache_file, 'w') as f:
+                json.dump(cache_data, f)
+                
+            print(f"Saved {len(temp_links)} temporary links to cache")
+            return True
+        except Exception as e:
+            print(f"Error saving temp links to cache: {str(e)}")
+            return False
+
+    def load_temp_links_from_cache(self):
+        """Load temporary links from cache if not expired"""
+        try:
+            if not os.path.exists(self.temp_links_cache_file):
+                return {}
+                
+            with open(self.temp_links_cache_file, 'r') as f:
+                cache_data = json.load(f)
+                
+            # Check if cache is expired (temporary links expire after 4 hours)
+            timestamp = datetime.fromisoformat(cache_data["timestamp"])
+            if datetime.now() - timestamp > timedelta(hours=3.5):  # Use 3.5 hours to be safe
+                print("Cache expired, links need refresh")
+                return {}
+                
+            print(f"Loaded {len(cache_data['links'])} temporary links from cache")
+            return cache_data["links"]
+        except Exception as e:
+            print(f"Error loading temp links from cache: {str(e)}")
+            return {}
+
+    def save_folder_structure_to_cache(self, folder_structure):
+        """Save folder structure to cache file"""
+        try:
+            # Store structure with timestamp
+            cache_data = {
+                "timestamp": datetime.now().isoformat(),
+                "structure": folder_structure
+            }
+            
+            with open(self.folder_structure_cache_file, 'w') as f:
+                json.dump(cache_data, f)
+                
+            print(f"Saved folder structure to cache")
+            return True
+        except Exception as e:
+            print(f"Error saving folder structure to cache: {str(e)}")
+            return False
+
+    def load_folder_structure_from_cache(self):
+        """Load folder structure from cache if not expired"""
+        try:
+            if not os.path.exists(self.folder_structure_cache_file):
+                return None
+                
+            with open(self.folder_structure_cache_file, 'r') as f:
+                cache_data = json.load(f)
+                
+            # Check if cache is expired (consider folder structure valid for 1 day)
+            timestamp = datetime.fromisoformat(cache_data["timestamp"])
+            if datetime.now() - timestamp > timedelta(days=1):
+                print("Folder structure cache expired")
+                return None
+                
+            print(f"Loaded folder structure from cache")
+            return cache_data["structure"]
+        except Exception as e:
+            print(f"Error loading folder structure from cache: {str(e)}")
+            return None
                 
     async def test_connection(self) -> bool:
         """
@@ -184,25 +272,37 @@ class AsyncDropboxClient:
                 # Get current account info (lightweight call)
                 endpoint = f"{self.BASE_URL}/users/get_current_account"
                 
-                async with session.post(endpoint, headers=self.headers) as response:
-                    if response.status != 200:
-                        text = await response.text()
-                        logger.error(f"Connection test failed with status {response.status}: {text}")
-                        # If this is an auth error, raise specifically so we can refresh
-                        if response.status == 401:
-                            raise aiohttp.ClientResponseError(
-                                request_info=response.request_info,
-                                history=response.history,
-                                status=response.status,
-                                message="Unauthorized",
-                                headers=response.headers
-                            )
-                        return False
-                        
-                    account_info = await response.json()
-                    logger.info(f"Connected to Dropbox account: {account_info.get('email', 'unknown')}")
-                    return True
-                    
+                headers = self.headers.copy()
+                headers['Content-Type'] = 'application/json'
+                
+                try:
+                    # Use raw data approach
+                    async with session.post(
+                        endpoint, 
+                        headers=headers,
+                        data='null'  # Simply send 'null' as raw data
+                    ) as response:
+                        if response.status != 200:
+                            text = await response.text()
+                            logger.error(f"Connection test failed with status {response.status}: {text}")
+                            # If this is an auth error, raise specifically so we can refresh
+                            if response.status == 401:
+                                raise aiohttp.ClientResponseError(
+                                    request_info=response.request_info,
+                                    history=response.history,
+                                    status=response.status,
+                                    message="Unauthorized",
+                                    headers=response.headers
+                                )
+                            return False
+                            
+                        account_info = await response.json()
+                        logger.info(f"Connected to Dropbox account: {account_info.get('email', 'unknown')}")
+                        return True
+                except Exception as e:
+                    logger.error(f"Error in test connection request: {str(e)}")
+                    return False
+    
         try:
             return await self.execute_with_token_refresh(_test_connection)
         except Exception as e:
@@ -664,15 +764,14 @@ class AsyncDropboxClient:
             logger.error(f"Final error getting link for {file_path}: {str(e)}")
             return file_path, None
     
-    async def get_temporary_links_async(
-        self, file_paths: List[str], batch_size: int = 20
-    ) -> Dict[str, str]:
+    async def get_temporary_links_async(self, file_paths: List[str], batch_size: int = 20, max_retries=3) -> Dict[str, str]:
         """
         Get temporary links for multiple files with parallel processing.
         
         Args:
             file_paths: List of file paths to get links for
             batch_size: Number of files to process in each batch
+            max_retries: Number of retry attempts for rate-limited requests
             
         Returns:
             Dict mapping file paths to temporary links
@@ -686,28 +785,75 @@ class AsyncDropboxClient:
             logger.info(f"Processing batch {i//batch_size + 1}/{(len(file_paths) + batch_size - 1)//batch_size}")
             
             async with aiohttp.ClientSession() as session:
-                # Create a list of coroutines for this batch
-                tasks = [self.get_temporary_link(session, path) for path in batch]
+                # Process each file in the batch
+                for path in batch:
+                    # Try with retries for each file
+                    for retry in range(max_retries + 1):
+                        try:
+                            # Get temporary link
+                            link = await self.get_temporary_link(session, path)
+                            if link[1]:  # If link was successful
+                                results[link[0]] = link[1]
+                            # Success - break retry loop
+                            break
+                        except aiohttp.ClientResponseError as e:
+                            if e.status == 429:  # Rate limit exceeded
+                                if retry < max_retries:
+                                    # Calculate exponential backoff delay
+                                    delay = 2 ** retry + 1  # 1, 3, 7 seconds
+                                    logger.info(f"Rate limit hit for {path}, retrying in {delay}s (retry {retry+1}/{max_retries})")
+                                    await asyncio.sleep(delay)
+                                else:
+                                    logger.error(f"Rate limit exceeded for {path} after {max_retries} retries")
+                            else:
+                                # Other error - log and continue
+                                logger.error(f"Error getting link for {path}: {e.status} - {str(e)}")
+                                break
+                        except Exception as e:
+                            # General error - log and continue
+                            logger.error(f"Exception getting link for {path}: {str(e)}")
+                            break
                 
-                try:
-                    # Execute them concurrently
-                    batch_results = await asyncio.gather(*tasks)
-                    
-                    # Add successful results to the dictionary
-                    for path, link in batch_results:
-                        if link:
-                            results[path] = link
-                except Exception as e:
-                    logger.error(f"Error in batch processing: {str(e)}")
-                    # Continue with next batch even if one fails
-            
-            # Small delay between batches to avoid rate limiting
+            # Add a significant delay between batches to avoid rate limits
             if i + batch_size < len(file_paths):
-                await asyncio.sleep(0.1)
-        
+                await asyncio.sleep(1.0)  # 1 second between batches
+
         logger.info(f"Successfully obtained {len(results)} temporary links")
         return results
+
+    async def get_temp_links_for_folder(self, folder_path: str) -> Dict[str, str]:
+        """
+        Generate temporary links specifically for a given folder.
         
+        Args:
+            folder_path: The folder path to generate links for
+            
+        Returns:
+            Dict mapping file paths to temporary links
+        """
+        logger.info(f"Generating temporary links for folder: {folder_path}")
+        
+        # List all entries in this folder recursively, but with limited depth 
+        entries = await self.list_folder_recursive(path=folder_path, max_depth=5)
+        
+        # Find image files in this folder
+        image_paths = []
+        for entry in entries:
+            if entry.get('.tag') == 'file' and self._is_image_file(entry.get('path_lower', '')):
+                image_paths.append(entry.get('path_lower', ''))
+        
+        logger.info(f"Found {len(image_paths)} images in folder {folder_path}")
+        
+        # If no images found, return empty dict
+        if not image_paths:
+            return {}
+        
+        # Generate temporary links for these images
+        temp_links = await self.get_temporary_links_async(image_paths, batch_size=20, max_retries=3)
+        logger.info(f"Generated {len(temp_links)} temporary links for folder {folder_path}")
+        
+        return temp_links
+
     async def setup_webhook(self, webhook_url: str) -> Optional[str]:
         """
         Set up a webhook for file changes in the Dropbox account.
@@ -1164,271 +1310,3 @@ class AsyncDropboxClient:
         return images
     
     
-    
-    
-    
-    
-    
-    
-class AsyncDropboxClientOld:
-    """Fully asynchronous Dropbox client for optimal performance"""
-    
-    BASE_URL = "https://api.dropboxapi.com/2"
-    TOKEN_URL = "https://api.dropbox.com/oauth2/token"
-    
-    def __init__(self, access_token=None, refresh_token=None, app_key=None, app_secret=None):
-        self.access_token = access_token
-        self.refresh_token = refresh_token or os.environ.get("DROPBOX_REFRESH_TOKEN")
-        self.app_key = app_key or os.environ.get("DROPBOX_APP_KEY")
-        self.app_secret = app_secret or os.environ.get("DROPBOX_APP_SECRET")
-        
-        # Only set headers if we have a token
-        if self.access_token:
-            self.headers = self._get_headers()
-        else:
-            self.headers = {}
-            
-        self.file_links_cache = {}  # Cache for temporary links
-    
-    def _get_headers(self):
-        """Get headers with current access token"""
-        return {
-            'Authorization': f'Bearer {self.access_token}',
-            'Content-Type': 'application/json'
-        }
-    
-    async def scan_and_map_folder(self, path=""):
-        """Asynchronously scan and map a Dropbox folder structure with optimal performance"""
-        print(f"Starting async Dropbox scan of '{path}'...")
-        start_time = datetime.now()
-        
-        # Step 1: Get all entries recursively (this is still sequential due to API pagination)
-        all_entries = await self.list_folder_recursive(path)
-        step1_time = datetime.now()
-        print(f"Step 1: Folder listing completed in {(step1_time - start_time).total_seconds():.2f} seconds")
-        
-        # Step 2: Build folder structure (this is CPU-bound, not I/O-bound)
-        folder_structure = self.build_folder_structure(all_entries)
-        step2_time = datetime.now()
-        print(f"Step 2: Structure building completed in {(step2_time - step1_time).total_seconds():.2f} seconds")
-        
-        # Step 3: Get image file paths from the structure
-        image_paths = []
-        for entry in all_entries:
-            if entry.get('.tag') == 'file':
-                path = entry.get('path_lower', '')
-                if any(path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
-                    image_paths.append(path)
-        
-        step3_time = datetime.now()
-        print(f"Step 3: Found {len(image_paths)} image files in {(step3_time - step2_time).total_seconds():.2f} seconds")
-        
-        # Step 4: Get temporary links for images in parallel batches
-        # This is where we can make massive improvements with async
-        temp_links = await self.get_temporary_links_async(image_paths)
-        step4_time = datetime.now()
-        print(f"Step 4: Generated {len(temp_links)} temp links in {(step4_time - step3_time).total_seconds():.2f} seconds")
-        
-        # Build the final map
-        dropbox_map = {
-            'folder_structure': folder_structure,
-            'all_entries': all_entries,
-            'temp_links': temp_links
-        }
-        
-        print(f"Total scan time: {(datetime.now() - start_time).total_seconds():.2f} seconds")
-        return dropbox_map
-    
-    async def list_folder_recursive(self, path=""):
-        """List all contents of a folder recursively"""
-        print(f"Starting folder scan for '{path}'...")
-        
-        all_entries = []
-        try:
-            async with aiohttp.ClientSession() as session:
-                # Initial request
-                endpoint = f"{self.BASE_URL}/files/list_folder"
-                data = {
-                    "path": path,
-                    "recursive": True,
-                    "include_media_info": True,
-                    "include_deleted": False,
-                    "include_has_explicit_shared_members": False,
-                    "limit": 2000
-                }
-                
-                async with session.post(endpoint, headers=self.headers, json=data) as response:
-                    if response.status != 200:
-                        text = await response.text()
-                        print(f"Error listing folder: {response.status}")
-                        print(f"Response: {text}")
-                        return []
-                    
-                    result = await response.json()
-                    entries = result.get('entries', [])
-                    all_entries.extend(entries)
-                    
-                    # Handle pagination
-                    has_more = result.get('has_more', False)
-                    cursor = result.get('cursor')
-                    
-                    while has_more and cursor:
-                        print(f"Getting more entries... ({len(all_entries)} so far)")
-                        continue_data = {"cursor": cursor}
-                        
-                        continue_endpoint = f"{self.BASE_URL}/files/list_folder/continue"
-                        async with session.post(continue_endpoint, headers=self.headers, json=continue_data) as continue_response:
-                            if continue_response.status != 200:
-                                break
-                                
-                            continue_result = await continue_response.json()
-                            more_entries = continue_result.get('entries', [])
-                            all_entries.extend(more_entries)
-                            has_more = continue_result.get('has_more', False)
-                            cursor = continue_result.get('cursor')
-                
-                print(f"Found {len(all_entries)} total entries")
-                return all_entries
-                
-        except Exception as e:
-            print(f"Error in list_folder_recursive: {str(e)}")
-            return []
-    
-    def build_folder_structure(self, entries):
-        """Build hierarchical folder structure from entries (CPU-bound, not async)"""
-        # This implementation remains the same as your current one
-        folder_structure = {}
-        
-        # First create folder structure
-        for entry in entries:
-            if entry.get('.tag') == 'folder':
-                path = entry.get('path_lower', '')
-                self._ensure_path_exists(folder_structure, path)
-        
-        # Then add files to the structure
-        for entry in entries:
-            if entry.get('.tag') == 'file':
-                path = entry.get('path_lower', '')
-                parent_path = os.path.dirname(path)
-                file_name = os.path.basename(path)
-                
-                # Ensure parent folder exists
-                parent = self._get_folder_at_path(folder_structure, parent_path)
-                
-                # Add file to parent's files list
-                if 'files' not in parent:
-                    parent['files'] = []
-                
-                file_entry = {
-                    'name': file_name,
-                    'path': path,
-                    'size': entry.get('size', 0),
-                }
-                
-                parent['files'].append(file_entry)
-        
-        return folder_structure
-    
-    def _ensure_path_exists(self, structure, path):
-        """Helper to ensure a folder path exists in the structure"""
-        if not path or path == '/':
-            return structure
-        
-        parts = path.strip('/').split('/')
-        current = structure
-        
-        current_path = ""
-        for part in parts:
-            current_path = f"{current_path}/{part}".replace('//', '/')
-            
-            if current_path not in current:
-                current[current_path] = {}
-                
-            current = current[current_path]
-            
-        return current
-    
-    def _get_folder_at_path(self, structure, path):
-        """Helper to get folder at a specific path"""
-        if not path or path == '/':
-            return structure
-            
-        return structure.get(path, {})
-    
-    async def get_temporary_link(self, session, file_path):
-        """Get a temporary link for a single file using aiohttp session"""
-        try:
-            endpoint = f"{self.BASE_URL}/files/get_temporary_link"
-            data = {"path": file_path}
-            
-            async with session.post(endpoint, headers=self.headers, json=data) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    return file_path, result.get('link')
-                else:
-                    text = await response.text()
-                    print(f"Error getting link for {file_path}: {text}")
-                    return file_path, None
-        except Exception as e:
-            print(f"Exception getting link for {file_path}: {str(e)}")
-            return file_path, None
-    
-    async def get_temporary_links_async(self, file_paths, batch_size=20):
-        """
-        Get temporary links for multiple files with true async processing
-        
-        This optimizes by:
-        1. Using aiohttp for async HTTP
-        2. Processing in concurrent batches to avoid rate limits
-        3. Using asyncio.gather for true concurrency
-        """
-        results = {}
-        print(f"Getting temporary links for {len(file_paths)} files in batches of {batch_size}...")
-        
-        # Process in batches to avoid overwhelming the API
-        for i in range(0, len(file_paths), batch_size):
-            batch = file_paths[i:i+batch_size]
-            print(f"Processing batch {i//batch_size + 1}/{(len(file_paths) + batch_size - 1)//batch_size}")
-            
-            async with aiohttp.ClientSession() as session:
-                # Create a list of coroutines for this batch
-                tasks = [self.get_temporary_link(session, path) for path in batch]
-                
-                # Execute them concurrently
-                batch_results = await asyncio.gather(*tasks)
-                
-                # Add successful results to the dictionary
-                for path, link in batch_results:
-                    if link:
-                        results[path] = link
-            
-            # Optional small delay between batches to avoid rate limiting
-            if i + batch_size < len(file_paths):
-                await asyncio.sleep(0.1)
-        
-        print(f"Successfully obtained {len(results)} temporary links")
-        return results
-    
-    async def test_connection(self):
-        """Test the connection to Dropbox API"""
-        try:
-            print("Testing Dropbox API connection...")
-            async with aiohttp.ClientSession() as session:
-                # Get current account info (lightweight call)
-                endpoint = f"{self.BASE_URL}/users/get_current_account"
-                
-                async with session.post(endpoint, headers=self.headers) as response:
-                    if response.status != 200:
-                        text = await response.text()
-                        print(f"Connection test failed with status {response.status}: {text}")
-                        return False
-                        
-                    account_info = await response.json()
-                    print(f"Connected to Dropbox account: {account_info.get('email', 'unknown')}")
-                    return True
-                    
-        except Exception as e:
-            print(f"Connection test exception: {str(e)}")
-            return False
-        
-  

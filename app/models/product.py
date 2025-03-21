@@ -6,7 +6,7 @@ It provides the database structure for storing product information and tracking 
 products are listed across different e-commerce platforms.
 """
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB, ENUM
 from pydantic import BaseModel, Field, validator
@@ -14,6 +14,8 @@ from enum import Enum
 from datetime import datetime
 import enum
 from ..database import Base
+from app.models.shipping import ShippingProfile
+from sqlalchemy.dialects.postgresql import JSONB
 
 class ProductStatus(enum.Enum):
     DRAFT = "DRAFT"
@@ -80,6 +82,20 @@ class Product(Base):
     processing_time = Column(Integer)
     platform_data = Column(JSONB, default=dict)
     
+    # Shipping
+    # shipping_profile_id = Column(Integer, ForeignKey('shipping_profiles.id'), nullable=True)
+    # custom_package_type = Column(String, nullable=True)
+    # custom_length = Column(Float, nullable=True)
+    # custom_width = Column(Float, nullable=True)
+    # custom_height = Column(Float, nullable=True)
+    # custom_weight = Column(Float, nullable=True)
+
+    package_type = Column(String, nullable=True)
+    package_weight = Column(Float, nullable=True)
+    package_dimensions = Column(JSONB, nullable=True)  # Using JSONB for dimensions
+    
     # Relationships
     platform_listings = relationship("PlatformCommon", back_populates="product")
     sales = relationship("Sale", back_populates="product")
+    shipping_profile = relationship("ShippingProfile", back_populates="products")
+    shipping_profile_id = Column(Integer, ForeignKey('shipping_profiles.id'), nullable=True)

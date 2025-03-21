@@ -84,6 +84,23 @@ class Settings(BaseSettings):
     ADAM_EMAIL: str = ""
     SIMON_EMAIL: str = ""
     
+    # DHL Express settings
+    
+    DHL_API_KEY: str = ""
+    DHL_API_SECRET: str = ""
+    DHL_ACCOUNT_NUMBER: str = ""
+    DHL_TEST_MODE: bool = True
+    DHL_EMAIL: str = ""
+    DHL_PWD: str = ""
+    DHL_DEV_EMAIL: str = ""
+    DHL_DEV_PWD: str = ""
+    
+    TNT_EMAIL: str = ""
+    TNT_PWD: str = ""
+
+    FDX_USERNAME: str = ""
+    FDX_PWD: str = ""
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

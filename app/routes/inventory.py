@@ -30,8 +30,11 @@ from sqlalchemy.orm import Session
 # App imports
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ProductCreationError, PlatformIntegrationError
+from app.dependencies import get_db, templates
+from app.integrations.events import StockUpdateEvent
 from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
+from app.models.shipping import ShippingProfile
 from app.models.vr import VRListing
 from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
 from app.services.category_mapping_service import CategoryMappingService
@@ -41,8 +44,6 @@ from app.services.reverb_service import ReverbService
 from app.services.vintageandrare.export import VRExportService
 from app.services.website_service import WebsiteService
 from app.schemas.product import ProductCreate
-from app.integrations.events import StockUpdateEvent
-from app.dependencies import get_db, templates
 
 router = APIRouter()
 
@@ -2053,7 +2054,6 @@ async def test_dropbox_credentials(
         "refresh_token_preview": settings.DROPBOX_REFRESH_TOKEN[:5] + "..." if settings.DROPBOX_REFRESH_TOKEN else None
     }
 
-# Add this to app/routes/inventory.py
 @router.get("/api/dropbox/debug-cache")
 async def debug_dropbox_cache(request: Request):
     """Debug endpoint to see what's in the Dropbox cache"""
@@ -2230,6 +2230,33 @@ async def generate_folder_links(
             "status": "error", 
             "message": f"Error generating links: {str(e)}"
         }
+
+@router.get("/shipping-profiles")
+async def get_shipping_profiles(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all shipping profiles."""
+    from app.models.shipping import ShippingProfile
+    
+    profiles = await db.execute(select(ShippingProfile).order_by(ShippingProfile.name))
+    result = profiles.scalars().all()
+    
+    # Convert to dict for JSON response compatible with your frontend
+    return [
+        {
+            "id": profile.id,
+            "name": profile.name,
+            "description": profile.description,
+            "package_type": profile.package_type,
+            "dimensions": profile.dimensions,  # Return dimensions as JSONB 
+            "weight": profile.weight,
+            "carriers": profile.carriers,
+            "options": profile.options,
+            "rates": profile.rates,
+            "is_default": profile.is_default
+        }
+        for profile in result
+    ]
 
 
 async def perform_dropbox_scan(app, access_token=None):

@@ -71,3 +71,4 @@ class ReverbListing(Base):
     
     # Relationships
     platform_listing = relationship("PlatformCommon", back_populates="reverb_listing")
+    

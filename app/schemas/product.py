@@ -1,23 +1,11 @@
+"""
+Schemas for product-related API endpoints.
+"""
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field, validator
-from enum import Enum
 from datetime import datetime
 
-class ProductStatus(str, Enum):
-    """Product status values that match the database enum"""
-    DRAFT = "DRAFT"
-    ACTIVE = "ACTIVE"
-    SOLD = "SOLD"
-    ARCHIVED = "ARCHIVED"
-
-class ProductCondition(str, Enum):
-    """Product condition values that match the database enum"""
-    NEW = "NEW"
-    EXCELLENT = "EXCELLENT"
-    VERY_GOOD = "VERYGOOD"
-    GOOD = "GOOD"
-    FAIR = "FAIR"
-    POOR = "POOR"
+from app.core.enums import ProductStatus, ProductCondition
 
 class ProductBase(BaseModel):
     """Base model for product data common to all operations"""
@@ -118,35 +106,9 @@ class ProductBase(BaseModel):
                 pass
         return {}
     
-    @validator('condition', pre=True)
-    def validate_condition(cls, v):
-        """Handle condition value properly"""
-        if v is None:
-            raise ValueError('Condition is required')
-        try:
-            # Try to convert string to enum
-            if isinstance(v, str):
-                return ProductCondition(v)
-            return v
-        except ValueError:
-            raise ValueError(f'Invalid condition: {v}')
-    
-    @validator('status', pre=True)
-    def validate_status(cls, v):
-        """Handle status value properly"""
-        if v is None:
-            return ProductStatus.DRAFT
-        try:
-            # Try to convert string to enum
-            if isinstance(v, str):
-                return ProductStatus(v)
-            return v
-        except ValueError:
-            raise ValueError(f'Invalid status: {v}')
-    
     class Config:
-        """Configuration for Pydantic model"""
-        from_attributes = True  # Allow conversion from ORM objects (replacement for orm_mode)
+        from_attributes = True  # Allow conversion from ORM objects
+        populate_by_name = True  # Allow population by attribute name and alias
 
 class ProductCreate(ProductBase):
     """Model for creating a new product"""
@@ -197,10 +159,9 @@ class ProductUpdate(BaseModel):
     processing_time: Optional[int] = None
     platform_data: Optional[Dict[str, Dict[str, Any]]] = None
     
-    # Duplicate validators instead of referencing them
+    # Reuse the same validators from ProductBase
     @validator('base_price', 'cost_price', 'price', 'price_notax', 'collective_discount', 'offer_discount', pre=True)
     def validate_price(cls, v):
-        """Ensure prices are valid floats"""
         if v is None:
             return None
         try:
@@ -210,7 +171,6 @@ class ProductUpdate(BaseModel):
     
     @validator('year', 'decade', 'processing_time', pre=True)
     def validate_integers(cls, v):
-        """Ensure integer fields are valid integers"""
         if v is None or v == '':
             return None
         try:
@@ -218,102 +178,16 @@ class ProductUpdate(BaseModel):
         except (ValueError, TypeError):
             raise ValueError('Value must be a valid integer')
     
-    @validator('additional_images', pre=True)
-    def validate_additional_images(cls, v):
-        """Ensure additional_images is a list"""
-        if v is None:
-            return None
-        if isinstance(v, list):
-            return v
-        if isinstance(v, str):
-            # Handle JSON string
-            import json
-            try:
-                return json.loads(v)
-            except json.JSONDecodeError:
-                # If it's not JSON, it might be a newline-separated list
-                if '\n' in v:
-                    return [url.strip() for url in v.split('\n') if url.strip()]
-                return [v]
-        return []
-    
-    @validator('platform_data', pre=True)
-    def validate_platform_data(cls, v):
-        """Ensure platform_data is a dictionary"""
-        if v is None:
-            return None
-        if isinstance(v, dict):
-            return v
-        if isinstance(v, str):
-            # Handle JSON string
-            import json
-            try:
-                return json.loads(v)
-            except json.JSONDecodeError:
-                pass
-        return {}
-    
-    @validator('condition', pre=True)
-    def validate_condition(cls, v):
-        """Handle condition value properly"""
-        if v is None:
-            return None
-        try:
-            # Try to convert string to enum
-            if isinstance(v, str):
-                return ProductCondition(v)
-            return v
-        except ValueError:
-            raise ValueError(f'Invalid condition: {v}')
-    
-    @validator('status', pre=True)
-    def validate_status(cls, v):
-        """Handle status value properly"""
-        if v is None:
-            return None
-        try:
-            # Try to convert string to enum
-            if isinstance(v, str):
-                return ProductStatus(v)
-            return v
-        except ValueError:
-            raise ValueError(f'Invalid status: {v}')
-    
     class Config:
-        """Configuration for Pydantic model"""
-        validate_assignment = True
-        from_attributes = True  # Replacement for orm_mode
+        from_attributes = True  # Allow conversion from ORM objects
+        populate_by_name = True  # Allow population by attribute name and alias
 
 class ProductRead(ProductBase):
-    """Model for reading a product (for backward compatibility)"""
+    """Model for reading a product"""
     id: int
     created_at: datetime
     updated_at: datetime
     
     class Config:
-        """Configuration for Pydantic model"""
-        from_attributes = True  # Replacement for orm_mode
-
-class ProductResponse(ProductBase):
-    """Model for returning a product"""
-    id: int
-    created_at: datetime
-    updated_at: datetime
-    
-    class Config:
-        """Configuration for Pydantic model"""
-        from_attributes = True  # Replacement for orm_mode
-
-class ProductSummary(BaseModel):
-    """Model for returning a summary of a product"""
-    id: int
-    sku: str
-    brand: str
-    model: str
-    primary_image: Optional[str] = None
-    base_price: float
-    status: ProductStatus
-    
-    class Config:
-        """Configuration for Pydantic model"""
-        from_attributes = True  # Replacement for orm_mode
+        from_attributes = True  # Allow conversion from ORM objects
+        populate_by_name = True  # Allow population by attribute name and alias

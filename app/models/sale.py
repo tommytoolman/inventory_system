@@ -37,3 +37,4 @@ class Sale(Base):
     # Relationships
     product = relationship("Product", back_populates="sales")
     platform_listing = relationship("PlatformCommon", back_populates="sale")
+    shipments = relationship("Shipment", back_populates="sale")    

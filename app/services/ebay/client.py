@@ -1,8 +1,8 @@
-import json
 import logging
 import httpx
 
 from typing import Dict, List, Optional, Any
+
 from app.core.exceptions import EbayAPIError
 from app.services.ebay.auth import EbayAuthManager
 
@@ -211,7 +211,7 @@ class EbayClient:
             # If the item doesn't exist, this will fail
             logger.error(f"Error updating inventory quantity: {str(e)}")
             raise
-            
+    
     async def get_categories(self, category_tree_id: str = "0") -> Dict:
         """
         Get eBay categories from a specific category tree

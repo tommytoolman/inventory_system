@@ -1,3 +1,20 @@
-# app/schemas/__init__.py
+"""
+Schema exports.
+"""
+from .base import BaseSchema, TimestampedSchema
 from .product import ProductCreate, ProductUpdate, ProductRead
-from .platform.common import PlatformListingCreate, PlatformListingUpdate, PlatformListingRead
+
+# Platform schemas
+from .platform.common import (
+    PlatformListingBase,
+    PlatformListingCreate,
+    PlatformListingUpdate,
+    PlatformListingRead
+)
+
+from .platform.ebay import (
+    EbayListingCreate,
+    EbayListingUpdate,
+    EbayListingRead,
+    EbayListingStatus
+)

@@ -30,13 +30,21 @@ class Settings(BaseSettings):
     EBAY_RU_NAME: str = ""
     EBAY_REFRESH_TOKEN: str = ""
     EBAY_ENCODED_AUTH_CODE: str = ""
-    EBAY_CLIENT_ID_SANDBOX: str = ""
-    EBAY_CLIENT_SECRET_SANDBOX: str = ""
-    EBAY_RU_NAME_SANDBOX: str = "" 
+    EBAY_SANDBOX_CLIENT_ID: str = ""
+    EBAY_SANDBOX_CLIENT_SECRET: str = ""
+    EBAY_SANDBOX_DEV_ID: str = ""
+    EBAY_SANDBOX_RU_NAME: str = ""
+    EBAY_SANDBOX_ENCODED_AUTH_CODE: str = ""
+    EBAY_SANDBOX_REFRESH_TOKEN: str = ""
     
     EBAY_USERNAME: str = ""
     EBAY_PASSWORD: str = ""
+    EBAY_DEV_USERNAME: str = ""
     EBAY_DEV_PASSWORD: str = ""
+    EBAY_SANDBOX_USERNAME: str = ""
+    EBAY_SANDBOX_PASSWORD: str = ""
+    EBAY_DEV_PASSWORD: str = ""
+
     
     # Reverb API
     REVERB_API_KEY: str = ""

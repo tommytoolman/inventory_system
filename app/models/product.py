@@ -14,22 +14,10 @@ from enum import Enum
 from datetime import datetime
 import enum
 from ..database import Base
+
+from app.core.enums import ProductStatus, ProductCondition
 from app.models.shipping import ShippingProfile
 from sqlalchemy.dialects.postgresql import JSONB
-
-class ProductStatus(enum.Enum):
-    DRAFT = "DRAFT"
-    ACTIVE = "ACTIVE"
-    SOLD = "SOLD"
-    ARCHIVED = "ARCHIVED"
-
-class ProductCondition(enum.Enum):
-    NEW = "NEW"
-    EXCELLENT = "EXCELLENT"
-    VERY_GOOD = "VERYGOOD"
-    GOOD = "GOOD"
-    FAIR = "FAIR"
-    POOR = "POOR"
 
 class Product(Base):
     __tablename__ = "products"

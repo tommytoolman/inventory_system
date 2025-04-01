@@ -19,4 +19,6 @@ __all__ = [
     'VRListing',
     'WebsiteListing',
     'Sale'
+    'Shipping'
+    # 'User'
 ]

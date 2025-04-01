@@ -10,6 +10,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
+from app.models.order import Order
 
 class ShipmentStatus(enum.Enum):
     """Shipment status enum"""
@@ -62,12 +63,19 @@ class Shipment(Base):
     label_format = Column(String, nullable=True)  # e.g., "pdf", "png"
     
     # User reference (optional)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    user = relationship("User", back_populates="shipments")
+    # user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # user = relationship("User", back_populates="shipments")
     
     # Order reference (optional)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
     order = relationship("Order", back_populates="shipments")
+  
+    sale_id = Column(Integer, ForeignKey("sales.id"), nullable=True)
+    sale = relationship("Sale", back_populates="shipments")
+    
+    # Remove order_id and replace with platform_listing_id
+    platform_listing_id = Column(Integer, ForeignKey("platform_common.id"), nullable=True)
+    platform_listing = relationship("PlatformCommon", back_populates="shipments")
     
     def __repr__(self):
         return f"<Shipment {self.id}: {self.carrier} - {self.shipment_tracking_number}>"

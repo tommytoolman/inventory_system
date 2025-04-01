@@ -5,8 +5,9 @@ import asyncio
 import math
 import iso8601
 from typing import Dict, List, Any, Optional
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 from app.models.product import Product, ProductStatus, ProductCondition
@@ -144,7 +145,6 @@ class ReverbImporter:
             # Re-raise to caller
             raise ImportError(f"Failed to import Reverb listings: {str(e)}") from e
 
-
     async def _create_database_records_batch(self, listings_data: List[Dict[str, Any]]) -> None:
         """Create multiple records in a single database operation"""
         if not listings_data:
@@ -155,6 +155,26 @@ class ReverbImporter:
         platform_commons = []
         reverb_listings = []
         listing_ids = []  # Track successful IDs for logging
+        
+        # First collect all SKUs we're about to create
+        skus_to_create = []
+        for listing_data in listings_data:
+            if isinstance(listing_data, dict) and 'id' in listing_data:
+                sku = f"REV-{listing_data['id']}"
+                skus_to_create.append(sku)
+        
+        # Check which SKUs already exist
+        existing_skus = set()
+        if skus_to_create:
+            # Use IN query to efficiently check all SKUs at once
+            # Modified SQL syntax with proper parameter mapping
+            skus_list = list(skus_to_create)  # Convert to list if it's not already
+            stmt = text("SELECT sku FROM products WHERE sku = ANY(:skus)")
+            result = await self.db.execute(stmt, {"skus": skus_list})
+            existing_skus = {row[0] for row in result.fetchall()}
+            
+            if existing_skus:
+                logger.info(f"Found {len(existing_skus)} existing SKUs that will be skipped")
         
         try:
             # First pass: prepare all product objects
@@ -169,6 +189,12 @@ class ReverbImporter:
                     listing_id = str(listing_data.get('id', ''))
                     if not listing_id:
                         logger.warning("Skipping listing with missing ID")
+                        continue
+                    
+                    # Create SKU and check if it already exists
+                    sku = f"REV-{listing_id}"
+                    if sku in existing_skus:
+                        logger.info(f"Skipping duplicate SKU: {sku}")
                         continue
                     
                     # Extract and validate all required data with proper type conversion
@@ -208,14 +234,20 @@ class ReverbImporter:
                 try:
                     product = products[i]
                     
+                    # When creating PlatformCommon objects
+                    now = datetime.now(timezone.utc)
+                    now_naive = self._convert_to_naive_datetime(now)  # Convert to naive datetime
+                    
                     platform_common = PlatformCommon(
                         product_id=product.id,
                         platform_name="reverb",
                         external_id=listing_id,
                         status=ListingStatus.ACTIVE,
                         sync_status=SyncStatus.SUCCESS,
-                        last_sync=datetime.utcnow(),
-                        listing_url=self._safe_get(listing_data, '_links', 'web', 'href', default='')
+                        last_sync=self._convert_to_naive_datetime(datetime.now(timezone.utc)),
+                        listing_url=self._safe_get(listing_data, '_links', 'web', 'href', default=''),
+                        created_at=now_naive,
+                        updated_at=now_naive,
                     )
                     platform_commons.append(platform_common)
                     
@@ -254,7 +286,11 @@ class ReverbImporter:
                             reverb_published_at = self._convert_to_naive_datetime(dt)
                         except Exception as e:
                             logger.warning(f"Could not parse published_at timestamp: {e}")
-                            logger.warning(f"Could not parse published_at timestamp: {e}")
+
+                    # Use naive datetimes for all datetime fields
+                    created_at = self._convert_to_naive_datetime(datetime.now(timezone.utc))
+                    updated_at = self._convert_to_naive_datetime(datetime.now(timezone.utc))
+                    last_synced_at = self._convert_to_naive_datetime(datetime.now(timezone.utc))
 
                     # Parse state
                     state = ""
@@ -268,12 +304,8 @@ class ReverbImporter:
                     stats = listing_data.get('stats', {})
                     if isinstance(stats, dict):
                         view_count = self._safe_int(stats.get('views'), 0)
-                        watch_count = self._safe_int(stats.get('watches'), 0)
-                    
-                    created_at = datetime.utcnow()  # These will be naive
-                    updated_at = datetime.utcnow()
-                    last_synced_at = datetime.utcnow()
-                    
+                        watch_count = self._safe_int(stats.get('watches'), 0)                   
+
                     # Create enhanced reverb_listing with new fields
                     reverb_listing = ReverbListing(
                         platform_id=platform_common.id,
@@ -549,13 +581,12 @@ class ReverbImporter:
         
         return attributes
 
-    
     def _convert_to_naive_datetime(self, dt):
-        """Convert timezone-aware datetime to naive datetime in UTC"""
+        """Convert a timezone-aware datetime to a naive datetime for PostgreSQL"""
         if dt is None:
             return None
         
-        if dt.tzinfo:
-            # Convert to UTC and remove timezone info
-            return dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        # If datetime has timezone info, convert to UTC and remove timezone
+        if dt.tzinfo is not None:
+            return dt.replace(tzinfo=None)
         return dt

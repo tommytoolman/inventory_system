@@ -17,20 +17,18 @@ logger = logging.getLogger(__name__)
 class TokenStorage:
     """Handles persistent storage of token information"""
     
-    def __init__(self, storage_dir="tokens"):
+    def __init__(self, storage_dir=None, token_file_name="ebay_tokens.json"):
         """
         Initialize the token storage
         
         Args:
             storage_dir: Directory to store token files
         """
-        self.storage_dir = storage_dir
-        self.token_file = os.path.join(storage_dir, "ebay_tokens.json")
+        self.storage_dir = storage_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), "tokens")
+        os.makedirs(self.storage_dir, exist_ok=True)
+        self.token_file_name = token_file_name
+        self.token_file = os.path.join(self.storage_dir, self.token_file_name)
         
-        # Create directory if it doesn't exist
-        os.makedirs(storage_dir, exist_ok=True)
-        
-        # Print debug info
         print(f"Token storage directory: {self.storage_dir}")
         print(f"Token file path: {self.token_file}")
     
@@ -42,51 +40,44 @@ class TokenStorage:
             token_data: Dictionary containing token data including expiration
         """
         try:
-            # Calculate expiration dates if not already provided
-            now = datetime.now()
+            # Create directory if it doesn't exist
+            os.makedirs(self.storage_dir, exist_ok=True)
             
-            # If we have a new refresh token, calculate its expiration
-            if 'refresh_token' in token_data and 'refresh_token_expires_in' in token_data:
-                refresh_token_expires_at = now + timedelta(seconds=token_data["refresh_token_expires_in"])
-                token_data['refresh_token_expires_at'] = refresh_token_expires_at.isoformat()
-                token_data['refresh_token_created_at'] = now.isoformat()
-                
-                # Log when it will expire
-                days_until_expiry = (refresh_token_expires_at - now).days
-                logger.info(f"New refresh token will expire in {days_until_expiry} days")
-            
-            # If we have a new access token, calculate its expiration
-            if 'access_token' in token_data and 'expires_in' in token_data:
-                access_token_expires_at = now + timedelta(seconds=token_data["expires_in"])
-                token_data['access_token_expires_at'] = access_token_expires_at.isoformat()
-            
-            # Load existing data to merge with new data
+            # Load existing token data if it exists
             existing_data = self.load_token_info()
+            
+            # Update with new token data
             existing_data.update(token_data)
+            
+            # Add formatted expiration dates
+            if "expires_in" in token_data:
+                expires_at = datetime.now() + timedelta(seconds=token_data["expires_in"])
+                existing_data["access_token_expires_at"] = expires_at.isoformat()
+                
+            if "refresh_token_expires_in" in token_data:
+                refresh_expires_at = datetime.now() + timedelta(seconds=token_data["refresh_token_expires_in"])
+                existing_data["refresh_token_expires_at"] = refresh_expires_at.isoformat()
             
             # Write to file
             with open(self.token_file, 'w') as f:
                 json.dump(existing_data, f, indent=2)
                 
-            logger.debug("Token information saved successfully")
-                
+            return True
         except Exception as e:
-            logger.error(f"Error saving token information: {str(e)}")
+            logger.error(f"Error saving token info: {str(e)}")
+            return False
     
     def load_token_info(self):
-        """
-        Load token information
-        
-        Returns:
-            dict: Token information or empty dict if no file exists
-        """
-        try:
-            if os.path.exists(self.token_file):
+        """Load token information from storage"""
+        if os.path.exists(self.token_file):
+            try:
                 with open(self.token_file, 'r') as f:
                     return json.load(f)
-            return {}
-        except Exception as e:
-            logger.error(f"Error loading token information: {str(e)}")
+            except Exception as e:
+                logger.error(f"Error loading token info: {str(e)}")
+                return {}
+        else:
+            # Return empty dict if file doesn't exist yet
             return {}
     
     def get_token_expiry_info(self):
@@ -168,43 +159,70 @@ class EbayAuthManager:
     2. Refresh Token -> Access Token (valid 2 hours)
     
     This class manages storage, retrieval, and renewal of tokens as needed.
-    """
-    
-    # Token storage path - consider moving this to a database or secure store in production
-    TOKEN_FILE = "/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/ebay/tokens/ebay_tokens.json"
-    
-    def __init__(self):
+    """  
+       
+    def __init__(self, sandbox=False):
         """Initialize the auth manager with settings"""
         self.settings = get_settings()
-        self.client_id = self.settings.EBAY_CLIENT_ID
-        self.client_secret = self.settings.EBAY_CLIENT_SECRET
-        self.ru_name = self.settings.EBAY_RU_NAME
+        self.sandbox = sandbox
+        
+        # Debug settings
+        print("Settings object type:", type(self.settings))
+        
+        # Use different credentials based on environment
+        if self.sandbox:
+            # Debug the sandbox settings
+            sandbox_client_id = getattr(self.settings, 'EBAY_SANDBOX_CLIENT_ID', '')
+            sandbox_client_secret = getattr(self.settings, 'EBAY_SANDBOX_CLIENT_SECRET', '')
+            sandbox_ru_name = getattr(self.settings, 'EBAY_SANDBOX_RU_NAME', '')
+            
+            print("Sandbox Settings:")
+            print(f"EBAY_SANDBOX_CLIENT_ID: '{sandbox_client_id}'")
+            print(f"EBAY_SANDBOX_CLIENT_SECRET: '{sandbox_client_secret}'")
+            print(f"EBAY_SANDBOX_RU_NAME: '{sandbox_ru_name}'")
+            
+            self.client_id = sandbox_client_id
+            self.client_secret = sandbox_client_secret
+            self.ru_name = sandbox_ru_name
+            self.token_file_name = "ebay_sandbox_tokens.json"
+            self.auth_url = "https://auth.sandbox.ebay.com/oauth2/authorize"
+            self.token_url = "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
+        else:
+            self.client_id = getattr(self.settings, 'EBAY_CLIENT_ID', '')
+            self.client_secret = getattr(self.settings, 'EBAY_CLIENT_SECRET', '')
+            self.ru_name = getattr(self.settings, 'EBAY_RU_NAME', '')
+            self.token_file_name = "ebay_tokens.json"
+            self.auth_url = "https://auth.ebay.com/oauth2/authorize"
+            self.token_url = "https://api.ebay.com/identity/v1/oauth2/token"
         
         # Get the absolute path to the tokens directory
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         tokens_dir = os.path.join(base_dir, "services", "ebay", "tokens")
+        self.TOKEN_FILE = os.path.join(tokens_dir, self.token_file_name)
         
         # Initialize token storage
-        self.token_storage = TokenStorage(storage_dir="/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system/app/services/ebay/tokens/")
+        self.token_storage = TokenStorage(
+            storage_dir=tokens_dir, 
+            token_file_name=self.token_file_name
+        )
         
         # Load refresh token from env or storage
-        self.refresh_token = self.settings.EBAY_REFRESH_TOKEN or self.token_storage.load_token_info().get('refresh_token')
-        
-        # Check if refresh token is about to expire
-        valid, days_left, _, _ = self.token_storage.get_token_expiry_info()
-        if valid and days_left < 60:
-            logger.warning(f"eBay refresh token will expire in {days_left} days. Consider generating a new one.")
-
-        # Scopes required for your application
+        if self.sandbox:
+            # Safely get the sandbox refresh token from settings or empty string
+            sandbox_refresh_token = getattr(self.settings, 'EBAY_SANDBOX_REFRESH_TOKEN', '')
+            self.refresh_token = sandbox_refresh_token or self.token_storage.load_token_info().get('refresh_token', '')
+        else:
+            # Safely get the production refresh token from settings or empty string
+            prod_refresh_token = getattr(self.settings, 'EBAY_REFRESH_TOKEN', '')
+            self.refresh_token = prod_refresh_token or self.token_storage.load_token_info().get('refresh_token', '')
+            
+        # Scopes required for your application - same for both sandbox and production
         self.scopes = [
-            # "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
             "https://api.ebay.com/oauth/api_scope/sell.inventory",
-            # "https://api.ebay.com/oauth/api_scope/sell.marketing",
+            # "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
             # "https://api.ebay.com/oauth/api_scope/sell.account",
-            # "https://api.ebay.com/oauth/api_scope/commerce.catalog.readonly"
-        ]
-        
-        print(self.scopes)
+            # "https://api.ebay.com/oauth/api_scope"  # Basic scope
+    ]
         
         # Load existing tokens if available
         self.tokens = self._load_tokens()
@@ -215,7 +233,7 @@ class EbayAuthManager:
             # Start with settings-based refresh token
             tokens = {
                 "access_token": None,
-                "refresh_token": self.settings.EBAY_REFRESH_TOKEN,
+                "refresh_token": self.refresh_token,  # This was set in __init__ based on sandbox mode
                 "access_token_expires_at": None,
                 "refresh_token_expires_at": None
             }
@@ -233,7 +251,7 @@ class EbayAuthManager:
             logger.error(f"Error loading tokens: {str(e)}")
             return {
                 "access_token": None,
-                "refresh_token": self.settings.EBAY_REFRESH_TOKEN,
+                "refresh_token": self.refresh_token,  # This was set in __init__ based on sandbox mode
                 "access_token_expires_at": None,
                 "refresh_token_expires_at": None
             }
@@ -251,20 +269,15 @@ class EbayAuthManager:
                     "access_token_expires_at": self.tokens["access_token_expires_at"]
                 }
                 json.dump(token_data, f, indent=2)
+                logger.info(f"Tokens saved to {self.TOKEN_FILE}")
         except Exception as e:
             logger.error(f"Error saving tokens: {str(e)}")
     
     def get_authorization_url(self) -> str:
         """Generate the authorization URL for manual approval"""
-        scopes = [
-            "https://api.ebay.com/oauth/api_scope/sell.inventory",
-            # "https://api.ebay.com/oauth/api_scope/sell.marketing",
-            # "https://api.ebay.com/oauth/api_scope/sell.account",
-            # "https://api.ebay.com/oauth/api_scope/sell.fulfillment"
-        ]
-        scopes_str = "%20".join(scopes)
+        scopes_str = "%20".join(self.scopes)
         return (
-            f"https://auth.ebay.com/oauth2/authorize"
+            f"{self.auth_url}"
             f"?client_id={self.client_id}"
             f"&redirect_uri={self.ru_name}"
             f"&response_type=code"
@@ -305,7 +318,7 @@ class EbayAuthManager:
         
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(token_url, headers=headers, data=data)
+                response = await client.post(self.token_url, headers=headers, data=data)
                 
                 if response.status_code != 200:
                     logger.error(f"eBay token error: {response.text}")
@@ -327,41 +340,32 @@ class EbayAuthManager:
             raise EbayAPIError(f"Network error getting refresh token: {str(e)}")
     
     async def get_access_token(self) -> str:
-        """
-        Get a valid access token, refreshing if necessary.
-        
-        Returns:
-            str: The access token
-            
-        Raises:
-            EbayAPIError: If getting the access token fails
-        """
-        # Check if we have a valid access token
+        """Get a valid access token, refreshing if necessary."""
         now = datetime.now()
         
-        if (
-            self.tokens["access_token"] 
-            and self.tokens["access_token_expires_at"]
-            and datetime.fromisoformat(self.tokens["access_token_expires_at"]) > now + timedelta(minutes=5)
-        ):
+        # Load token info directly from storage to ensure we have the latest
+        token_info = self.token_storage.load_token_info()
+        refresh_token = token_info.get('refresh_token')
+        
+        # Check if we have a valid access token
+        access_token = token_info.get('access_token')
+        access_token_expires_at = token_info.get('access_token_expires_at')
+        
+        if (access_token and 
+            access_token_expires_at and
+            datetime.fromisoformat(access_token_expires_at) > now + timedelta(minutes=5)):
             # Token is still valid (with 5-minute buffer)
-            return self.tokens["access_token"]
+            return access_token
         
         # Need to get a new access token using the refresh token
-        if not self.tokens["refresh_token"]:
+        if not refresh_token:
             raise EbayAPIError("No refresh token available. Please authorize the application.")
         
-        # Check if refresh token is about to expire
-        if (
-            self.tokens["refresh_token_expires_at"]
-            and datetime.fromisoformat(self.tokens["refresh_token_expires_at"]) < now + timedelta(days=60)
-        ):
-            # Refresh token expires within 60 days - log a warning
-            days_left = (datetime.fromisoformat(self.tokens["refresh_token_expires_at"]) - now).days
-            logger.warning(f"eBay refresh token expires in {days_left} days. Please generate a new one soon.")
-        
         # Get a new access token
-        token_url = "https://api.ebay.com/identity/v1/oauth2/token"
+        if self.sandbox:
+            token_url = "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
+        else:
+            token_url = "https://api.ebay.com/identity/v1/oauth2/token"
         
         # Prepare the authorization header
         auth_header = base64.b64encode(
@@ -373,16 +377,11 @@ class EbayAuthManager:
             "Authorization": f"Basic {auth_header}"
         }
         
-        # Prepare scopes
-        scopes_str = " ".join(self.scopes)
-        
-        print(scopes_str)
-        
+        # Prepare data with ALL required scopes
         data = {
             "grant_type": "refresh_token",
-            "refresh_token": self.tokens["refresh_token"],
-            "scope": "https://api.ebay.com/oauth/api_scope/sell.inventory"
-            # "scope": scopes_str
+            "refresh_token": refresh_token,
+            "scope": " ".join(self.scopes)
         }
         
         try:
@@ -399,13 +398,10 @@ class EbayAuthManager:
                 access_token_expires_at = now + timedelta(seconds=token_data["expires_in"])
                 
                 # Update token storage
-                self.tokens["access_token"] = token_data["access_token"]
-                self.tokens["access_token_expires_at"] = access_token_expires_at.isoformat()
-                
-                self._save_tokens()
+                token_data["access_token_expires_at"] = access_token_expires_at.isoformat()
+                self.token_storage.save_token_info(token_data)
                 
                 return token_data["access_token"]
-                
         except httpx.RequestError as e:
             logger.error(f"Network error refreshing access token: {str(e)}")
             raise EbayAPIError(f"Network error refreshing access token: {str(e)}")

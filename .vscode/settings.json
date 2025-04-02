@@ -1,3 +1,7 @@
 {
-    "workbench.colorTheme": "Python Stereo Darker"
+    "workbench.colorTheme": "Python Stereo Darker",
+    "workbench.colorCustomizations": {
+        "tab.activeBorder": "#ffffab",
+        "tab.unfocusedActiveBorder": "#000000"
+    }
 }

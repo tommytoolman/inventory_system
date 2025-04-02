@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 
 from app.services.ebay.trading import EbayTradingAPI
 from app.core.exceptions import EbayAPIError
+from app.models.product import Product, ProductStatus, ProductCondition
+from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +188,140 @@ class EbayImporter:
                 # Prepare data for database (convert Python objects to JSON for PostgreSQL)
                 # and remove timezone information from datetime fields
                 db_ready_data = self._prepare_for_db(mapped_data)
+                
+                # Generate SKU for this eBay item
+                sku = f"EBAY-{item_id}"
+                
+                # Check if product exists
+                product_stmt = text("SELECT id FROM products WHERE sku = :sku")
+                product_result = await conn.execute(product_stmt, {"sku": sku})
+                product_id = product_result.scalar()
+                
+                # If product doesn't exist, create it
+                if not product_id:
+                    # Extract product data
+                    title = mapped_data.get('title', '')
+                    
+                    # Extract brand/model from title
+                    brand = title.split(' ')[0] if title else 'Unknown'
+                    model = ' '.join(title.split(' ')[1:]) if len(title.split(' ')) > 1 else title
+                    
+                    # Set appropriate product status based on listing type
+                    status = ProductStatus.ACTIVE  # Default for all products
+                    if listing_type.lower() == 'sold':
+                        status = ProductStatus.SOLD
+                    elif listing_type.lower() == 'unsold':
+                        # For unsold items, use ACTIVE (so they can be sold elsewhere)
+                        status = ProductStatus.ACTIVE  # Use ACTIVE instead of INACTIVE
+                    
+                    # Map condition
+                    condition = ProductCondition.GOOD  # Default
+                    condition_name = mapped_data.get('condition_display_name', '').lower()
+                    if condition_name:
+                        if 'new' in condition_name:
+                            condition = ProductCondition.NEW
+                        elif 'mint' in condition_name or 'excellent' in condition_name:
+                            condition = ProductCondition.EXCELLENT
+                        elif 'very good' in condition_name:
+                            condition = ProductCondition.VERY_GOOD
+                        elif 'good' in condition_name:
+                            condition = ProductCondition.GOOD
+                        elif 'fair' in condition_name:
+                            condition = ProductCondition.FAIR
+                        elif 'poor' in condition_name:
+                            condition = ProductCondition.POOR
+                    
+                    # Extract images
+                    picture_urls = mapped_data.get('picture_urls')
+                    if isinstance(picture_urls, str):
+                        try:
+                            picture_urls = json.loads(picture_urls)
+                        except:
+                            picture_urls = []
+                    
+                    primary_image = picture_urls[0] if picture_urls and len(picture_urls) > 0 else None
+                    additional_images = picture_urls[1:] if picture_urls and len(picture_urls) > 1 else []
+                    
+                    # Create product record
+                    now = datetime.now(timezone.utc).replace(tzinfo=None)
+                    product_stmt = text("""
+                        INSERT INTO products (
+                            sku, brand, model, description, condition, 
+                            category, base_price, status, primary_image, 
+                            additional_images, created_at, updated_at
+                        ) VALUES (
+                            :sku, :brand, :model, :description, :condition,
+                            :category, :price, :status, :primary_image,
+                            :additional_images, :now, :now
+                        ) RETURNING id
+                    """)
+                    
+                    product_result = await conn.execute(product_stmt, {
+                        "sku": sku,
+                        "brand": brand,
+                        "model": model,
+                        "description": mapped_data.get('listing_data', {}).get('Description', ''),
+                        "condition": condition.value,
+                        "category": mapped_data.get('ebay_category_name', ''),
+                        "price": mapped_data.get('price', 0.0),
+                        "status": status.value,
+                        "primary_image": primary_image,
+                        "additional_images": json.dumps(additional_images),
+                        "now": now
+                    })
+                    
+                    product_id = product_result.scalar()
+                    logger.info(f"Created new product for eBay item {item_id}")
+                
+                # Now let's handle platform_common - but only if we have a product
+                platform_id = None
+                if product_id:
+                    # Check if platform_common exists
+                    platform_stmt = text("""
+                        SELECT id FROM platform_common 
+                        WHERE external_id = :item_id AND platform_name = 'ebay'
+                    """)
+                    platform_result = await conn.execute(platform_stmt, {"item_id": item_id})
+                    platform_id = platform_result.scalar()
+                    
+                    # If platform_common doesn't exist, create it
+                    if not platform_id:
+                        # Map listing status for platform_common (keep the eBay-specific status)
+                        listing_status = ListingStatus.ACTIVE
+                        if listing_type.lower() == 'sold':
+                            listing_status = ListingStatus.SOLD
+                        elif listing_type.lower() == 'unsold':
+                            listing_status = ListingStatus.INACTIVE  # This enum should have INACTIVE
+                        
+                        # Create platform_common record
+                        now = datetime.now(timezone.utc).replace(tzinfo=None)
+                        platform_stmt = text("""
+                            INSERT INTO platform_common (
+                                product_id, platform_name, external_id, status,
+                                sync_status, last_sync, listing_url, created_at, updated_at
+                            ) VALUES (
+                                :product_id, 'ebay', :item_id, :status,
+                                :sync_status, :now, :listing_url, :now, :now
+                            ) RETURNING id
+                        """)
+                        
+                        listing_url = mapped_data.get('listing_url') or f"https://www.ebay.com/itm/{item_id}"
+                        
+                        platform_result = await conn.execute(platform_stmt, {
+                            "product_id": product_id,
+                            "item_id": item_id,
+                            "status": listing_status.value,
+                            "sync_status": SyncStatus.SUCCESS.value,
+                            "now": now,
+                            "listing_url": listing_url
+                        })
+                        
+                        platform_id = platform_result.scalar()
+                        logger.info(f"Created new platform_common for eBay item {item_id}")
+                
+                # Add platform_id to db_ready_data if available
+                if platform_id:
+                    db_ready_data['platform_id'] = platform_id
                 
                 # Check if listing exists
                 stmt = text("SELECT id FROM ebay_listings WHERE ebay_item_id = :item_id")
@@ -707,10 +843,11 @@ class EbayImporter:
                 # Drop table if exists
                 await conn.execute(text("DROP TABLE IF EXISTS ebay_listings"))
                 
-                # Create new table
+                # Create new table with platform_id column
                 create_table_sql = """
                 CREATE TABLE ebay_listings (
                     id SERIAL PRIMARY KEY,
+                    platform_id INTEGER,
                     ebay_item_id VARCHAR UNIQUE,
                     listing_status VARCHAR,
                     title VARCHAR,
@@ -742,7 +879,8 @@ class EbayImporter:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    listing_data JSONB
+                    listing_data JSONB,
+                    FOREIGN KEY (platform_id) REFERENCES platform_common(id) ON DELETE SET NULL
                 )
                 """
                 await conn.execute(text(create_table_sql))
@@ -751,6 +889,7 @@ class EbayImporter:
                 await conn.execute(text("CREATE INDEX idx_ebay_listings_ebay_item_id ON ebay_listings(ebay_item_id)"))
                 await conn.execute(text("CREATE INDEX idx_ebay_listings_listing_status ON ebay_listings(listing_status)"))
                 await conn.execute(text("CREATE INDEX idx_ebay_listings_ebay_category_id ON ebay_listings(ebay_category_id)"))
+                await conn.execute(text("CREATE INDEX idx_ebay_listings_platform_id ON ebay_listings(platform_id)"))
                 
                 logger.info("Successfully recreated ebay_listings table")
                 return True
@@ -758,3 +897,13 @@ class EbayImporter:
         except Exception as e:
             logger.exception(f"Error recreating ebay_listings table: {str(e)}")
             return False
+        
+    def _convert_to_naive_datetime(self, dt):
+        """Convert a timezone-aware datetime to a naive datetime for PostgreSQL"""
+        if dt is None:
+            return None
+        
+        # If datetime has timezone info, convert to UTC and remove timezone
+        if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+            return dt.replace(tzinfo=None)
+        return dt

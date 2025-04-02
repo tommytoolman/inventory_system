@@ -24,6 +24,7 @@ class ListingStatus(str, Enum):
     """Listing status values used in both models and schemas"""
     DRAFT = "draft"
     ACTIVE = "active"
+    INACTIVE = "unsold"
     ENDED = "ended"
     SOLD = "sold"
     REMOVED = "removed"

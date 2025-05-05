@@ -2,7 +2,7 @@
 
 # type: ignore[misc]
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from contextlib import asynccontextmanager
 from app.core.config import get_settings
 

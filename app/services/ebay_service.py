@@ -1,6 +1,12 @@
 """
 Key features of the EbayService:
 
+Purpose: Manages the lifecycle and high-level operations for eBay listings within your application.
+
+Role: Acts as the primary service layer for eBay-specific business logic, bridging your local database state with the eBay platform state via its client.
+
+Functionality:
+
 1. Draft Creation:
     - Creates local database records
     - Prepares data for eBay API
@@ -18,10 +24,13 @@ Key features of the EbayService:
 
 
 Error Handling:
+- Proper exception handling
+- Transaction management
+- Status tracking
 
-Proper exception handling
-Transaction management
-Status tracking
+It interacts with local models (EbayListing, PlatformCommon, Product) and orchestrates calls to an EbayClient (presumably defined elsewhere, 
+likely app/services/ebay/client.py) to interact with the actual eBay API. It handles preparing data in the format eBay expects.
+
 """
 
 # app/services/ebay_service.py - Updated
@@ -29,12 +38,13 @@ Status tracking
 from typing import Optional, Dict, List, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from datetime import datetime, timezone
 
-from app.models.ebay import EbayListing, EbayListingStatus
+from app.models.ebay import EbayListing
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.schemas.platform.ebay import EbayListingCreate
 from app.core.config import Settings
+from app.core.enums import EbayListingStatus
 from app.core.exceptions import EbayAPIError, ListingNotFoundError
 from app.services.ebay.client import EbayClient
 
@@ -83,7 +93,7 @@ class EbayService:
                 ebay_listing.ebay_item_id = offer_result.get('offerId')
                 ebay_listing.listing_status = EbayListingStatus.DRAFT
                 platform_common.sync_status = SyncStatus.SUCCESS
-                platform_common.last_sync = datetime.utcnow()
+                platform_common.last_sync = datetime.now(timezone.utc)()
                 
                 await self.db.flush()
                 await self.db.commit()
@@ -117,7 +127,7 @@ class EbayService:
                 listing.platform_listing.status = ListingStatus.ACTIVE
                 listing.platform_listing.sync_status = SyncStatus.SUCCESS
                 listing.platform_listing.external_id = result['listingId']
-                listing.last_synced_at = datetime.utcnow()
+                listing.last_synced_at = datetime.now(timezone.utc)()
                 
                 await self.db.commit()
                 return True
@@ -149,8 +159,8 @@ class EbayService:
             
             if success:
                 # Update record timestamps
-                listing.last_synced_at = datetime.utcnow()
-                listing.platform_listing.last_sync = datetime.utcnow()
+                listing.last_synced_at = datetime.now(timezone.utc)()
+                listing.platform_listing.last_sync = datetime.now(timezone.utc)()
                 listing.platform_listing.sync_status = SyncStatus.SUCCESS
                 await self.db.commit()
                 

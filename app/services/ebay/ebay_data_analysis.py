@@ -3,7 +3,7 @@ import asyncio
 import json
 import os, sys
 import inspect
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import text, inspect as sa_inspect
 from sqlalchemy.ext.asyncio import create_async_engine
 from tabulate import tabulate

@@ -1,16 +1,29 @@
+"""
+Purpose: Defines the core abstractions for platform integrations related to stock management.
+Contents:
+SyncStatus Enum: Defines possible states for synchronization (SYNCED, PENDING, ERROR, OUT_OF_SYNC).
+PlatformInterface (Abstract Base Class): This is a crucial part of the design. 
+It defines a contract that any specific platform integration must adhere to. 
+Any class implementing this interface must provide concrete implementations for update_stock, get_current_stock, and sync_status methods. 
+This promotes consistency across different platform integrations.
+"""
+
+import asyncio
+
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 from enum import Enum
-from datetime import datetime
-import asyncio
+from datetime import datetime, timezone
 from pydantic import BaseModel
 
+from app.core.enums import SyncStatus
 
-class SyncStatus(Enum):
-    SYNCED = "synced"
-    PENDING = "pending"
-    ERROR = "error"
-    OUT_OF_SYNC = "out_of_sync"
+# Commented out on 2025-04-30 as we moved to core.enums and imported
+# class SyncStatus(Enum):
+#     SYNCED = "synced"
+#     PENDING = "pending"
+#     ERROR = "error"
+#     OUT_OF_SYNC = "out_of_sync"
 
 
 class PlatformInterface(ABC):

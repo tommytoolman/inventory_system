@@ -10,7 +10,7 @@ from collections import defaultdict
 
 # Add the parent directory to Python path to import app modules
 sys.path.append(str(Path(__file__).parent.parent))
-from app.config import Settings
+from app.core.config import Settings
 
 database_url = Settings().DATABASE_URL
 
@@ -153,8 +153,8 @@ if __name__ == "__main__":
     analysis = analyze_schema(database_url)
     report = generate_schema_report(analysis)
     print(report)
-    # save_schema_analysis(analysis, report)
-    # print("Schema analysis saved to schema_report.txt and schema_data.json")
+    save_schema_analysis(analysis, report)
+    print("Schema analysis saved to schema_report.txt and schema_data.json")
 
     project_root = Path(__file__).parent.parent
     table_refs = find_table_references(project_root)

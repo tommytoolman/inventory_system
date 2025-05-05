@@ -53,10 +53,10 @@ import time
 import json
 import dropbox
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from dropbox import DropboxOAuth2FlowNoRedirect
-from dropbox.exceptions import ApiError
+# from dropbox.exceptions import ApiError
 from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv()

@@ -4,7 +4,7 @@ import base64
 import logging
 import httpx  # Using httpx instead of requests for async support
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, Tuple
 from fastapi import HTTPException
 

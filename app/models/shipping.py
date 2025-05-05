@@ -3,24 +3,18 @@ Shipping-related database models.
 """
 
 import enum
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, ForeignKey, JSON, Text, func
+
+from datetime import datetime, timezone
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, ForeignKey, JSON, Text, text, TIMESTAMP
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
 from app.models.order import Order
+from app.core.enums import ShipmentStatus
 
-class ShipmentStatus(enum.Enum):
-    """Shipment status enum"""
-    CREATED = "created"
-    LABEL_CREATED = "label_created"
-    PICKED_UP = "picked_up"
-    IN_TRANSIT = "in_transit"
-    DELIVERED = "delivered"
-    EXCEPTION = "exception"
-    CANCELLED = "cancelled"
+UTC_NOW = text("now() AT TIME ZONE 'utc'")
 
 class Shipment(Base):
     """Shipment database model"""
@@ -34,10 +28,20 @@ class Shipment(Base):
     shipment_tracking_number = Column(String, index=True)
     
     # Status tracking
-    status = Column(Enum(ShipmentStatus), default=ShipmentStatus.CREATED)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+    status = Column(Enum(ShipmentStatus), default=ShipmentStatus.CREATED, index=True)
+    # created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    # updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    created_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
+        nullable=False
+    )
+    updated_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
+        onupdate=text("timezone('utc', now())"),      # Use standard PG function via text() for ON UPDATE
+        nullable=False
+    )
     # Shipment details
     origin_address = Column(JSON)  # Store as JSON for flexibility
     destination_address = Column(JSON)
@@ -70,7 +74,7 @@ class Shipment(Base):
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
     order = relationship("Order", back_populates="shipments")
   
-    sale_id = Column(Integer, ForeignKey("sales.id"), nullable=True)
+    sale_id = Column(Integer, ForeignKey("sales.id"), nullable=True, index=True)
     sale = relationship("Sale", back_populates="shipments")
     
     # Remove order_id and replace with platform_listing_id
@@ -86,17 +90,31 @@ class ShippingProfile(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    is_default = Column(Boolean, default=False)
+    is_default = Column(Boolean, default=False, nullable=True) # Explicitly nullable if desired, default implies nullable usually
     package_type = Column(String, nullable=True)
     weight = Column(Float, nullable=True)
     dimensions = Column(JSONB, nullable=True)  # Using JSONB for dimensions (length, width, height)
     carriers = Column(JSONB, nullable=True)    # Stores array of carrier codes
     options = Column(JSONB, nullable=True)     # Stores insurance, signature, etc.
     rates = Column(JSONB, nullable=True)       # Stores regional rates
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    
-    # Relationship to products
+    # created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    # updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)   
+
+    # Corrected Timestamp columns using text() for server-side defaults
+    # Assuming you want TIMESTAMP WITHOUT TIME ZONE based on the original error in testing
+    created_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
+        nullable=False
+    )
+    updated_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
+        onupdate=text("timezone('utc', now())"),      # Use standard PG function via text() for ON UPDATE
+        nullable=False
+    )
+
+    # Relationship to products (Ensure Product model has corresponding relationship)
     products = relationship("Product", back_populates="shipping_profile")
     
     # Properties to maintain backward compatibility

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import async_session
 from app.services.product_service import ProductService

@@ -1,6 +1,6 @@
 # app/services/csv_handler.py
 """
-Handlers for processing CSV imports in the inventory management system.
+Handlers for processing CSV imports (mosly from V&R) in the inventory management system.
 
 This module provides functionality for importing and validating CSV files,
 specifically handling the VintageAndRare format while maintaining flexibility

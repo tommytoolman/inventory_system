@@ -13,73 +13,6 @@
       ],
       "foreign_keys": []
     },
-    "ebay_listings": {
-      "columns": {
-        "id": {
-          "type": "INTEGER",
-          "nullable": false,
-          "default": "nextval('ebay_listings_id_seq'::regclass)"
-        },
-        "platform_id": {
-          "type": "INTEGER",
-          "nullable": true,
-          "default": null
-        },
-        "ebay_category_id": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "ebay_condition_id": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "item_specifics": {
-          "type": "JSONB",
-          "nullable": true,
-          "default": null
-        },
-        "shipping_policy_id": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "return_policy_id": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "payment_policy_id": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "listing_duration": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        }
-      },
-      "primary_keys": [
-        "id"
-      ],
-      "foreign_keys": [
-        {
-          "name": "ebay_listings_platform_id_fkey",
-          "constrained_columns": [
-            "platform_id"
-          ],
-          "referred_schema": null,
-          "referred_table": "platform_common",
-          "referred_columns": [
-            "id"
-          ],
-          "options": {},
-          "comment": null
-        }
-      ]
-    },
     "reverb_listings": {
       "columns": {
         "id": {
@@ -89,6 +22,16 @@
         },
         "platform_id": {
           "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "reverb_listing_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "reverb_slug": {
+          "type": "VARCHAR",
           "nullable": true,
           "default": null
         },
@@ -102,6 +45,36 @@
           "nullable": true,
           "default": null
         },
+        "inventory_quantity": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": "1"
+        },
+        "has_inventory": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "true"
+        },
+        "offers_enabled": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "true"
+        },
+        "is_auction": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "false"
+        },
+        "list_price": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "listing_currency": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
         "shipping_profile_id": {
           "type": "VARCHAR",
           "nullable": true,
@@ -112,15 +85,55 @@
           "nullable": true,
           "default": null
         },
-        "handmade": {
-          "type": "BOOLEAN",
+        "reverb_state": {
+          "type": "VARCHAR",
           "nullable": true,
           "default": null
         },
-        "offers_enabled": {
-          "type": "BOOLEAN",
+        "view_count": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": "0"
+        },
+        "watch_count": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": "0"
+        },
+        "reverb_created_at": {
+          "type": "TIMESTAMP",
           "nullable": true,
           "default": null
+        },
+        "reverb_published_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "now()"
+        },
+        "last_synced_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "extended_attributes": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": "'{}'::jsonb"
+        },
+        "handmade": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "false"
         }
       },
       "primary_keys": [
@@ -129,73 +142,6 @@
       "foreign_keys": [
         {
           "name": "reverb_listings_platform_id_fkey",
-          "constrained_columns": [
-            "platform_id"
-          ],
-          "referred_schema": null,
-          "referred_table": "platform_common",
-          "referred_columns": [
-            "id"
-          ],
-          "options": {},
-          "comment": null
-        }
-      ]
-    },
-    "vr_listings": {
-      "columns": {
-        "id": {
-          "type": "INTEGER",
-          "nullable": false,
-          "default": "nextval('vr_listings_id_seq'::regclass)"
-        },
-        "platform_id": {
-          "type": "INTEGER",
-          "nullable": true,
-          "default": null
-        },
-        "in_collective": {
-          "type": "BOOLEAN",
-          "nullable": true,
-          "default": null
-        },
-        "in_inventory": {
-          "type": "BOOLEAN",
-          "nullable": true,
-          "default": null
-        },
-        "in_reseller": {
-          "type": "BOOLEAN",
-          "nullable": true,
-          "default": null
-        },
-        "collective_discount": {
-          "type": "DOUBLE PRECISION",
-          "nullable": true,
-          "default": null
-        },
-        "price_notax": {
-          "type": "DOUBLE PRECISION",
-          "nullable": true,
-          "default": null
-        },
-        "show_vat": {
-          "type": "BOOLEAN",
-          "nullable": true,
-          "default": null
-        },
-        "processing_time": {
-          "type": "INTEGER",
-          "nullable": true,
-          "default": null
-        }
-      },
-      "primary_keys": [
-        "id"
-      ],
-      "foreign_keys": [
-        {
-          "name": "vr_listings_platform_id_fkey",
           "constrained_columns": [
             "platform_id"
           ],
@@ -266,60 +212,97 @@
         }
       ]
     },
-    "csv_import_logs": {
+    "ebay_listings_old": {
       "columns": {
         "id": {
           "type": "INTEGER",
-          "nullable": false,
-          "default": "nextval('csv_import_logs_id_seq'::regclass)"
-        },
-        "timestamp": {
-          "type": "TIMESTAMP",
           "nullable": true,
           "default": null
         },
-        "filename": {
+        "platform_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "ebay_item_id": {
           "type": "VARCHAR",
           "nullable": true,
           "default": null
         },
-        "platform": {
+        "ebay_category_id": {
           "type": "VARCHAR",
           "nullable": true,
           "default": null
         },
-        "total_rows": {
+        "ebay_second_category_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "format": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "price": {
+          "type": "NUMERIC",
+          "nullable": true,
+          "default": null
+        },
+        "quantity": {
           "type": "INTEGER",
           "nullable": true,
           "default": null
         },
-        "successful_rows": {
-          "type": "INTEGER",
+        "payment_policy_id": {
+          "type": "VARCHAR",
           "nullable": true,
           "default": null
         },
-        "failed_rows": {
-          "type": "INTEGER",
+        "return_policy_id": {
+          "type": "VARCHAR",
           "nullable": true,
           "default": null
         },
-        "error_log": {
+        "shipping_policy_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "item_specifics": {
           "type": "JSONB",
           "nullable": true,
           "default": null
-        }
-      },
-      "primary_keys": [
-        "id"
-      ],
-      "foreign_keys": []
-    },
-    "old_platform_listings": {
-      "columns": {
-        "id": {
-          "type": "INTEGER",
-          "nullable": false,
-          "default": "nextval('platform_listings_id_seq'::regclass)"
+        },
+        "package_weight": {
+          "type": "NUMERIC",
+          "nullable": true,
+          "default": null
+        },
+        "package_dimensions": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "listing_duration": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "allow_offers": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": null
+        },
+        "min_offer_amount": {
+          "type": "NUMERIC",
+          "nullable": true,
+          "default": null
+        },
+        "listing_status": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
         },
         "created_at": {
           "type": "TIMESTAMP",
@@ -331,38 +314,92 @@
           "nullable": true,
           "default": null
         },
-        "platform_name": {
-          "type": "VARCHAR",
+        "last_synced_at": {
+          "type": "TIMESTAMP",
           "nullable": true,
           "default": null
-        },
-        "external_id": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "product_id": {
+        }
+      },
+      "primary_keys": [],
+      "foreign_keys": []
+    },
+    "category_mappings": {
+      "columns": {
+        "id": {
           "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('category_mappings_id_seq'::regclass)"
+        },
+        "source_platform": {
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        "source_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        "source_name": {
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null
+        },
+        "target_platform": {
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        "target_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        "target_subcategory_id": {
+          "type": "VARCHAR(36)",
           "nullable": true,
           "default": null
         },
-        "listing_url": {
+        "target_tertiary_id": {
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updated_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": []
+    },
+    "orders": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('orders_id_seq'::regclass)"
+        },
+        "order_reference": {
           "type": "VARCHAR",
           "nullable": true,
           "default": null
         },
-        "sync_status": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "last_sync": {
+        "created_at": {
           "type": "TIMESTAMP",
           "nullable": true,
           "default": null
         },
-        "platform_specific_data": {
-          "type": "JSONB",
+        "platform_listing_id": {
+          "type": "INTEGER",
           "nullable": true,
           "default": null
         }
@@ -372,12 +409,12 @@
       ],
       "foreign_keys": [
         {
-          "name": "platform_listings_product_id_fkey",
+          "name": "orders_platform_listing_id_fkey",
           "constrained_columns": [
-            "product_id"
+            "platform_listing_id"
           ],
           "referred_schema": null,
-          "referred_table": "products",
+          "referred_table": "platform_common",
           "referred_columns": [
             "id"
           ],
@@ -400,21 +437,6 @@
         },
         "updated_at": {
           "type": "TIMESTAMP",
-          "nullable": true,
-          "default": null
-        },
-        "brand_name": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "category_name": {
-          "type": "VARCHAR",
-          "nullable": true,
-          "default": null
-        },
-        "product_model": {
-          "type": "VARCHAR",
           "nullable": true,
           "default": null
         },
@@ -577,12 +599,776 @@
           "type": "JSONB",
           "nullable": true,
           "default": null
+        },
+        "shipping_profile_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "package_type": {
+          "type": "VARCHAR(50)",
+          "nullable": true,
+          "default": null
+        },
+        "length": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "width": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "height": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "weight": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "require_signature": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "false"
+        },
+        "insurance": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "false"
+        },
+        "shipping_rates": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "package_dimensions": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "package_weight": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        }
+      },
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "products_shipping_profile_id_fkey",
+          "constrained_columns": [
+            "shipping_profile_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "shipping_profiles",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {},
+          "comment": null
+        }
+      ]
+    },
+    "shipping_profiles": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('shipping_profiles_id_seq'::regclass)"
+        },
+        "name": {
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        "description": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "is_default": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "false"
+        },
+        "dimensions": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "weight": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "carriers": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "options": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "rates": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "now()"
+        },
+        "package_type": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
         }
       },
       "primary_keys": [
         "id"
       ],
       "foreign_keys": []
+    },
+    "csv_import_logs": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('csv_import_logs_id_seq'::regclass)"
+        },
+        "timestamp": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "filename": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "platform": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "total_rows": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "successful_rows": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "failed_rows": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "error_log": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        }
+      },
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": []
+    },
+    "vr_listings": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('vr_listings_id_seq'::regclass)"
+        },
+        "platform_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "in_collective": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "false"
+        },
+        "in_inventory": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "true"
+        },
+        "in_reseller": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "false"
+        },
+        "collective_discount": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "price_notax": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "show_vat": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "true"
+        },
+        "processing_time": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "vr_listing_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "inventory_quantity": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": "1"
+        },
+        "vr_state": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updated_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "last_synced_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "extended_attributes": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "vr_listings_platform_id_fkey",
+          "constrained_columns": [
+            "platform_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "platform_common",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {},
+          "comment": null
+        }
+      ]
+    },
+    "sales": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('sales_id_seq'::regclass)"
+        },
+        "created_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "product_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "platform_listing_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "platform_name": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "sale_date": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "sale_price": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "original_list_price": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "platform_fees": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "shipping_cost": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "net_amount": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "days_to_sell": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "payment_method": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "shipping_method": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "buyer_location": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "platform_data": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        }
+      },
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "sales_platform_listing_id_fkey",
+          "constrained_columns": [
+            "platform_listing_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "platform_common",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {},
+          "comment": null
+        },
+        {
+          "name": "sales_product_id_fkey",
+          "constrained_columns": [
+            "product_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "products",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {},
+          "comment": null
+        }
+      ]
+    },
+    "shipments": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('shipments_id_seq'::regclass)"
+        },
+        "carrier": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "carrier_account": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "shipment_tracking_number": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "status": {
+          "type": "VARCHAR(13)",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "updated_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "origin_address": {
+          "type": "JSON",
+          "nullable": true,
+          "default": null
+        },
+        "destination_address": {
+          "type": "JSON",
+          "nullable": true,
+          "default": null
+        },
+        "package_weight": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "package_length": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "package_width": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "package_height": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "package_description": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "is_international": {
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": null
+        },
+        "reference_number": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "customs_value": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "customs_currency": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "carrier_response": {
+          "type": "JSON",
+          "nullable": true,
+          "default": null
+        },
+        "label_data": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "label_format": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "order_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "sale_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "platform_listing_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        }
+      },
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "shipments_order_id_fkey",
+          "constrained_columns": [
+            "order_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {},
+          "comment": null
+        },
+        {
+          "name": "shipments_platform_listing_id_fkey",
+          "constrained_columns": [
+            "platform_listing_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "platform_common",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {},
+          "comment": null
+        },
+        {
+          "name": "shipments_sale_id_fkey",
+          "constrained_columns": [
+            "sale_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "sales",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {},
+          "comment": null
+        }
+      ]
+    },
+    "ebay_listings": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('ebay_listings_id_seq'::regclass)"
+        },
+        "platform_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "ebay_item_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "listing_status": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "title": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "format": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "price": {
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null
+        },
+        "quantity": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "quantity_available": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        "quantity_sold": {
+          "type": "INTEGER",
+          "nullable": true,
+          "default": "0"
+        },
+        "ebay_category_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "ebay_category_name": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "ebay_second_category_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "start_time": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "end_time": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "listing_url": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "ebay_condition_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "condition_display_name": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "gallery_url": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "picture_urls": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "item_specifics": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "payment_policy_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "return_policy_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "shipping_policy_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "transaction_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "order_line_item_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "buyer_user_id": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "paid_time": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null
+        },
+        "payment_status": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "shipping_status": {
+          "type": "VARCHAR",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updated_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "last_synced_at": {
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "listing_data": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        }
+      },
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "ebay_listings_platform_id_fkey",
+          "constrained_columns": [
+            "platform_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "platform_common",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {
+            "ondelete": "SET NULL"
+          },
+          "comment": null
+        }
+      ]
     },
     "platform_common": {
       "columns": {
@@ -660,39 +1446,91 @@
           "comment": null
         }
       ]
+    },
+    "product_merges": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('product_merges_id_seq'::regclass)"
+        },
+        "kept_product_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        "merged_product_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        "merged_product_data": {
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        "merged_at": {
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": "now()"
+        },
+        "merged_by": {
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null
+        },
+        "reason": {
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": "'Product matching'::character varying"
+        }
+      },
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "product_merges_kept_product_id_fkey",
+          "constrained_columns": [
+            "kept_product_id"
+          ],
+          "referred_schema": null,
+          "referred_table": "products",
+          "referred_columns": [
+            "id"
+          ],
+          "options": {},
+          "comment": null
+        }
+      ]
     }
   },
   "potential_duplicates": {
     "id": [
-      "ebay_listings",
       "reverb_listings",
-      "vr_listings",
       "website_listings",
-      "csv_import_logs",
-      "old_platform_listings",
+      "ebay_listings_old",
+      "category_mappings",
+      "orders",
       "products",
-      "platform_common"
+      "shipping_profiles",
+      "csv_import_logs",
+      "vr_listings",
+      "sales",
+      "shipments",
+      "ebay_listings",
+      "platform_common",
+      "product_merges"
     ],
     "platform_id": [
-      "ebay_listings",
       "reverb_listings",
+      "website_listings",
+      "ebay_listings_old",
       "vr_listings",
-      "website_listings"
-    ],
-    "ebay_category_id": [
       "ebay_listings"
     ],
-    "ebay_condition_id": [
-      "ebay_listings"
-    ],
-    "shipping_policy_id": [
-      "ebay_listings"
-    ],
-    "return_policy_id": [
-      "ebay_listings"
-    ],
-    "payment_policy_id": [
-      "ebay_listings"
+    "reverb_listing_id": [
+      "reverb_listings"
     ],
     "reverb_category_uuid": [
       "reverb_listings"
@@ -700,68 +1538,138 @@
     "condition_rating": [
       "reverb_listings"
     ],
-    "shipping_profile_id": [
+    "inventory_quantity": [
+      "reverb_listings",
+      "vr_listings"
+    ],
+    "list_price": [
       "reverb_listings"
+    ],
+    "shipping_profile_id": [
+      "reverb_listings",
+      "products"
     ],
     "shop_policies_id": [
       "reverb_listings"
     ],
-    "price_notax": [
+    "reverb_created_at": [
+      "reverb_listings"
+    ],
+    "created_at": [
+      "reverb_listings",
+      "ebay_listings_old",
+      "category_mappings",
+      "orders",
+      "products",
+      "shipping_profiles",
       "vr_listings",
-      "products"
+      "sales",
+      "shipments",
+      "ebay_listings",
+      "platform_common"
+    ],
+    "last_synced_at": [
+      "reverb_listings",
+      "ebay_listings_old",
+      "vr_listings",
+      "ebay_listings"
+    ],
+    "seo_title": [
+      "website_listings"
     ],
     "seo_description": [
       "website_listings"
     ],
-    "platform": [
-      "csv_import_logs"
+    "ebay_item_id": [
+      "ebay_listings_old",
+      "ebay_listings"
     ],
-    "platform_name": [
-      "old_platform_listings",
-      "platform_common"
+    "ebay_category_id": [
+      "ebay_listings_old",
+      "ebay_listings"
     ],
-    "external_id": [
-      "old_platform_listings",
-      "platform_common"
+    "ebay_second_category_id": [
+      "ebay_listings_old",
+      "ebay_listings"
     ],
-    "product_id": [
-      "old_platform_listings",
-      "platform_common"
-    ],
-    "sync_status": [
-      "old_platform_listings",
-      "platform_common"
-    ],
-    "platform_specific_data": [
-      "old_platform_listings",
-      "platform_common"
-    ],
-    "brand_name": [
-      "products"
-    ],
-    "category_name": [
-      "products"
-    ],
-    "product_model": [
-      "products"
-    ],
-    "description": [
-      "products"
+    "format": [
+      "ebay_listings_old",
+      "ebay_listings"
     ],
     "price": [
+      "ebay_listings_old",
+      "products",
+      "ebay_listings"
+    ],
+    "quantity": [
+      "ebay_listings_old",
+      "ebay_listings"
+    ],
+    "payment_policy_id": [
+      "ebay_listings_old",
+      "ebay_listings"
+    ],
+    "return_policy_id": [
+      "ebay_listings_old",
+      "ebay_listings"
+    ],
+    "shipping_policy_id": [
+      "ebay_listings_old",
+      "ebay_listings"
+    ],
+    "package_weight": [
+      "ebay_listings_old",
+      "products",
+      "shipments"
+    ],
+    "package_dimensions": [
+      "ebay_listings_old",
       "products"
+    ],
+    "listing_status": [
+      "ebay_listings_old",
+      "ebay_listings"
+    ],
+    "source_platform": [
+      "category_mappings"
+    ],
+    "source_id": [
+      "category_mappings"
+    ],
+    "source_name": [
+      "category_mappings"
+    ],
+    "target_platform": [
+      "category_mappings"
+    ],
+    "target_id": [
+      "category_mappings"
+    ],
+    "target_subcategory_id": [
+      "category_mappings"
+    ],
+    "target_tertiary_id": [
+      "category_mappings"
+    ],
+    "platform_listing_id": [
+      "orders",
+      "sales",
+      "shipments"
+    ],
+    "description": [
+      "products",
+      "shipping_profiles"
+    ],
+    "price_notax": [
+      "products",
+      "vr_listings"
     ],
     "video_url": [
       "products"
     ],
     "platform_data": [
-      "products"
-    ],
-    "brand": [
-      "products"
-    ],
-    "model": [
-      "products"
+      "products",
+      "sales"
     ],
     "category": [
       "products"
@@ -777,7 +1685,146 @@
     ],
     "status": [
       "products",
+      "shipments",
       "platform_common"
+    ],
+    "length": [
+      "products"
+    ],
+    "width": [
+      "products"
+    ],
+    "height": [
+      "products"
+    ],
+    "weight": [
+      "products",
+      "shipping_profiles"
+    ],
+    "shipping_rates": [
+      "products"
+    ],
+    "name": [
+      "shipping_profiles"
+    ],
+    "dimensions": [
+      "shipping_profiles"
+    ],
+    "carriers": [
+      "shipping_profiles"
+    ],
+    "rates": [
+      "shipping_profiles"
+    ],
+    "filename": [
+      "csv_import_logs"
+    ],
+    "platform": [
+      "csv_import_logs"
+    ],
+    "vr_listing_id": [
+      "vr_listings"
+    ],
+    "product_id": [
+      "sales",
+      "platform_common"
+    ],
+    "platform_name": [
+      "sales",
+      "platform_common"
+    ],
+    "sale_price": [
+      "sales"
+    ],
+    "original_list_price": [
+      "sales"
+    ],
+    "platform_fees": [
+      "sales"
+    ],
+    "carrier": [
+      "shipments"
+    ],
+    "carrier_account": [
+      "shipments"
+    ],
+    "package_length": [
+      "shipments"
+    ],
+    "package_width": [
+      "shipments"
+    ],
+    "package_height": [
+      "shipments"
+    ],
+    "package_description": [
+      "shipments"
+    ],
+    "carrier_response": [
+      "shipments"
+    ],
+    "label_format": [
+      "shipments"
+    ],
+    "order_id": [
+      "shipments"
+    ],
+    "sale_id": [
+      "shipments"
+    ],
+    "title": [
+      "ebay_listings"
+    ],
+    "quantity_available": [
+      "ebay_listings"
+    ],
+    "quantity_sold": [
+      "ebay_listings"
+    ],
+    "ebay_category_name": [
+      "ebay_listings"
+    ],
+    "ebay_condition_id": [
+      "ebay_listings"
+    ],
+    "condition_display_name": [
+      "ebay_listings"
+    ],
+    "transaction_id": [
+      "ebay_listings"
+    ],
+    "order_line_item_id": [
+      "ebay_listings"
+    ],
+    "buyer_user_id": [
+      "ebay_listings"
+    ],
+    "paid_time": [
+      "ebay_listings"
+    ],
+    "payment_status": [
+      "ebay_listings"
+    ],
+    "shipping_status": [
+      "ebay_listings"
+    ],
+    "external_id": [
+      "platform_common"
+    ],
+    "last_sync": [
+      "platform_common"
+    ],
+    "sync_status": [
+      "platform_common"
+    ],
+    "platform_specific_data": [
+      "platform_common"
+    ],
+    "kept_product_id": [
+      "product_merges"
+    ],
+    "merged_product_id": [
+      "product_merges"
     ]
   }
 }

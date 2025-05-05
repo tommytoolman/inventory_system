@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from app.integrations.stock_manager import StockManager
 from app.integrations.events import StockUpdateEvent
 from app.integrations.base import SyncStatus

@@ -3,7 +3,7 @@ from app.integrations.events import StockUpdateEvent
 from app.integrations.stock_manager import SyncStatus
 
 from typing import Optional, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class MockPlatform(PlatformInterface):

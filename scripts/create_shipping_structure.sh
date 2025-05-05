@@ -831,7 +831,7 @@ Used for:
 
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 class ShippingRate(BaseModel):
     \"\"\"
@@ -1758,7 +1758,7 @@ Used for:
 
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 class ShippingRate(BaseModel):
     \"\"\"
@@ -1853,7 +1853,7 @@ Used for:
 
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 class TrackingStatus(str, Enum):

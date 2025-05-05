@@ -1,7 +1,21 @@
+"""
+Purpose: Acts as the central orchestrator for synchronizing stock levels across all registered platforms.
+Contents:
+Manages a dictionary (self.platforms) of concrete PlatformInterface implementations (e.g., an eBay implementation, a Reverb implementation).
+Uses an asyncio.Queue (self.update_queue) to buffer StockUpdateEvents.
+Integrates the MetricsCollector to track queue and platform performance.
+register_platform: Allows adding specific platform handlers.
+_process_update: The core logic. When an event comes from the queue (or is processed directly), this method iterates through all other registered platforms and 
+calls their respective update_stock methods (using MetricsContext for timing/status recording).
+start_sync_monitor: An essential background task (while True loop) that continuously fetches events from the queue and processes them via _process_update. 
+This is how the manager actively pushes updates.
+queue_product: A method to enqueue a product sync task (comment suggests potential redundancy).
+get_metrics: Exposes the collected metrics.
+"""
 import asyncio
 import logging
 from typing import Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from app.integrations.base import PlatformInterface, SyncStatus
 from app.integrations.events import StockUpdateEvent
 from app.integrations.metrics import MetricsCollector, MetricsContext  # New import
@@ -66,7 +80,6 @@ class StockManager:
                 timestamp=datetime.now()
             )
 
-            # Add to queue
             await self.update_queue.put(event)
 
             # Record metrics

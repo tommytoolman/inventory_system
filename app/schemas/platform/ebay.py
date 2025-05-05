@@ -1,9 +1,9 @@
 from typing import Optional, Dict, Any
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from datetime import datetime, timezone
 
-from app.models.ebay import EbayListingFormat, EbayListingStatus
+from app.core.enums import EbayListingFormat, EbayListingStatus
 from app.schemas.platform.common import PlatformListingBase
 
 class EbayListingBase(BaseModel):
@@ -39,7 +39,7 @@ class EbayListingRead(EbayListingBase):
     updated_at: datetime
     last_synced_at: Optional[datetime]
 
-class EbayListingStatus(BaseModel):
+class EbayListingStatusInfo(BaseModel):
     listing_id: int
     status: str
     last_synced_at: Optional[datetime]

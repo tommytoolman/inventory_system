@@ -5,7 +5,7 @@ import httpx
 import json
 import asyncio
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 
 from app.services.ebay.auth import EbayAuthManager
@@ -817,7 +817,7 @@ class EbayTradingAPI:
         # Open the output file
         with open(output_file, 'w') as f:
             f.write("=== EBAY LISTING STRUCTURES ANALYSIS ===\n\n")
-            f.write(f"Analysis timestamp: {datetime.utcnow().isoformat()}\n\n")
+            f.write(f"Analysis timestamp: {datetime.now(timezone.utc)().isoformat()}\n\n")
             
             # Write summary
             f.write("=== SUMMARY ===\n")

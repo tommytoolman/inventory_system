@@ -1,7 +1,7 @@
 # app/services/ebay/inventory.py
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, update
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import EbayAPIError
 from app.models.platform_common import PlatformCommon
 from app.models.ebay import EbayListing
-from app.schemas.platform.ebay import EbayListingStatus  # Adjust imports based on your schemas
+from app.schemas.platform.ebay import EbayListingStatusInfo  # Adjust imports based on your schemas
 from app.services.ebay.client import EbayClient
 from app.services.ebay.trading import EbayTradingAPI
 
@@ -266,7 +266,7 @@ class EbayInventorySync:
         condition_id = listing.get('ConditionID')
         
         # Create new ebay_listing record
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)()
         new_listing = EbayListing(
             # We're not setting platform_id here - that would be set when
             # integrating with your platform_common table
@@ -347,7 +347,7 @@ class EbayInventorySync:
         condition_id = listing.get('ConditionID', existing_listing.ebay_condition_id)
         
         # Update the existing listing
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)()
         existing_listing.price = price
         existing_listing.quantity = quantity
         existing_listing.format = format_value

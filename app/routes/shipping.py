@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from app.database import get_session
 from app.services.shipping.carriers.dhl import DHLCarrier
@@ -85,3 +85,36 @@ async def track_shipment_endpoint(
     
     # Return tracking information
     return result
+
+@router.get("/profiles", response_model=List[Dict[str, Any]])
+@router.get("/profiles", response_model=List[Dict[str, Any]])
+async def list_shipping_profiles(
+    db: AsyncSession = Depends(get_session)
+):
+    """Get all available shipping profiles."""
+    from sqlalchemy import select
+    from app.models.shipping import ShippingProfile
+    
+    # Query all shipping profiles
+    query = select(ShippingProfile).order_by(ShippingProfile.name)
+    result = await db.execute(query)
+    profiles = result.scalars().all()
+    
+    # Convert to dict for response (this part is critical!)
+    response = []
+    for profile in profiles:
+        # Access attributes directly to force dictionary creation
+        response.append({
+            "id": profile.id,
+            "name": getattr(profile, "name", None),  # Get actual string value
+            "description": getattr(profile, "description", None),
+            "package_type": getattr(profile, "package_type", None),
+            "weight": getattr(profile, "weight", None),
+            "dimensions": getattr(profile, "dimensions", None),
+            "carriers": getattr(profile, "carriers", None),
+            "options": getattr(profile, "options", None),
+            "rates": getattr(profile, "rates", None)
+        })
+    
+    return response
+

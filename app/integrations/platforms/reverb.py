@@ -1,8 +1,15 @@
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.integrations.base import SyncStatus
 from app.integrations.stock_manager import PlatformInterface
+
+"""
+Defines the ReverbPlatform class, also correctly inheriting from PlatformInterface.
+Status: Similar to ebay.py, the methods are stubs. The comments (# Implement eBay-specific...) seem to be a copy-paste artifact and should say Reverb. 
+The actual logic for calling the Reverb API (e.g., to update listing inventory) is missing.
+Observation: Same as eBay – the structural integration is correct, but the API interaction logic needs implementation.
+"""
 
 class ReverbPlatform(PlatformInterface):
     async def update_stock(self, product_id: int, quantity: int) -> bool:

@@ -1,4 +1,10 @@
-# app/cli/check_mappings.py
+"""
+A diagnostic script using raw SQL to query database counts (products, platform_common, platform listings) and check 
+the integrity of foreign key relationships between platform listings (ebay, reverb, vr), platform_common, and products. 
+Very useful for sanity-checking data after imports or merges. 
+It intelligently checks if the expected platform_id column exists in ebay_listings.
+"""
+
 import asyncio
 import click
 from sqlalchemy import text

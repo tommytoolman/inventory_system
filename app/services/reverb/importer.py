@@ -23,7 +23,21 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 class ReverbImporter:
-    """Service for importing Reverb listings into the local database"""
+    """
+    Purpose: Service to handle fetching data from Reverb (via ReverbClient) and saving it to the local database.
+    Functionality:
+        - import_all_listings: Fetches active listings, gets full details for each listing concurrently in batches, and 
+            calls _create_database_records_batch to save the data.
+        - import_sold_listings: Fetches sold orders (with an option to use a JSON cache file in data/reverb_orders/), 
+            extracts listing-like information from order data using _extract_listing_from_order, handles orders that 
+            might not have a corresponding listing (generating NOLIST... placeholder IDs and managing a counter file), 
+            and uses _create_sold_records_batch to save/update records.
+        - Database Interaction: Uses async ORM (self.db, session.begin, self.db.add_all, self.db.flush) for creating Product, 
+            PlatformCommon, and ReverbListing records. Correctly checks for existing SKUs before attempting inserts.
+        - Data Handling: Includes various private helper methods (_extract_brand, _map_condition, _parse_timestamp, 
+            _prepare_extended_attributes, etc.) to map and clean data from the Reverb API format to the local database model structure. 
+            Uses iso8601 for parsing dates.
+   """
     
     def __init__(self, db: AsyncSession):
         self.db = db

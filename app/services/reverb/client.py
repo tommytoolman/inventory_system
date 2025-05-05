@@ -4,7 +4,7 @@ import httpx
 import math
 import asyncio
 from typing import Dict, List, Optional, Any, Union
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.exceptions import ReverbAPIError
 from app.core.config import get_settings
@@ -13,14 +13,18 @@ logger = logging.getLogger(__name__)
 
 class ReverbClient:
     """
-    Client for interacting with Reverb's REST API.
-    Handles authentication and provides methods for common operations.
+    Purpose: Defines ReverbClient, an asynchronous client for interacting with the Reverb REST API (v3).
     
-    Documentation: https://www.reverb-api.com/docs/
+    Functionality: Handles authentication using the API key from settings and provides async methods (httpx) for common operations e.g.
+                - Fetching categories (get_categories) and conditions (get_listing_conditions).
+                - Listing management: creating (Notesing), updating (update_listing), getting details (get_listing, get_listing_details), publishing (publish_listing), ending (end_listing), 
+                    finding by SKU (find_listing_by_sku).
+                - Retrieving user-specific data: getting listings (get_my_listings, get_all_listings, get_all_listings_detailed with pagination), drafts (get_my_drafts), counts (get_my_counts), and importantly, sold orders (get_all_sold_orders with retries/error handling).
+                - Image handling (currently placeholder/URL-based, noting direct file upload isn't implemented).
+                - Includes robust base request logic (_make_request) with error handling (ReverbAPIError).
     
-    Enhanced methods for the ReverbClient to better handle API responses with our new schema.
-    This doesn't replace the entire client - just adds/updates methods that need to be modified.
-    
+    Documentation: https://www.reverb-api.com/docs/   
+
     """
     
     BASE_URL = "https://api.reverb.com/api"
@@ -241,61 +245,6 @@ class ReverbClient:
             f"/my/listings/{listing_id}/state/end", 
             data={"reason": reason}
         )
-    
-    # async def get_my_listings(self, page: int = 1, per_page: int = 50) -> Dict:
-    #     """
-    #     Get the authenticated user's listings with pagination
-        
-    #     Args:
-    #         page: Page number (starting from 1)
-    #         per_page: Number of listings per page (max 1000)
-            
-    #     Returns:
-    #         Dict: Listings data with pagination info
-            
-    #     Raises:
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     return await self._make_request(
-    #         "GET", 
-    #         "/my/listings", 
-    #         params={"page": page, "per_page": per_page}
-    #     )
-    
-    # async def get_all_my_listings(self) -> List[Dict]:
-    #     """
-    #     Get all of the authenticated user's listings (handles pagination)
-        
-    #     Returns:
-    #         List[Dict]: All listings
-            
-    #     Raises:
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     # Get first page to determine total pages
-    #     first_page = await self.get_my_listings(page=1, per_page=50)
-    #     total_items = first_page['total']
-    #     total_pages = math.ceil(total_items / 50)
-        
-    #     # If only one page, return those listings
-    #     if total_pages <= 1:
-    #         return first_page['listings']
-        
-    #     # Otherwise, fetch all pages concurrently
-    #     async def fetch_page(page_num):
-    #         page_data = await self.get_my_listings(page=page_num, per_page=50)
-    #         return page_data['listings']
-        
-    #     # Create tasks for remaining pages (we already have page 1)
-    #     tasks = [fetch_page(page) for page in range(2, total_pages + 1)]
-    #     other_pages_results = await asyncio.gather(*tasks)
-        
-    #     # Combine all listings (first page + all other pages)
-    #     all_listings = first_page['listings']
-    #     for page_listings in other_pages_results:
-    #         all_listings.extend(page_listings)
-        
-    #     return all_listings
     
     async def get_my_drafts(self) -> Dict:
         """

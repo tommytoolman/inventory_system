@@ -1,21 +1,21 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
-from ebay import EbayListingCreateDTO, EbayListingStatusDTO
-from reverb import ReverbListingCreateDTO, ReverbListingStatusDTO
-from vr import VRListingCreateDTO, VRListingStatusDTO
-from website import WebsiteListingCreateDTO, WebsiteListingStatusDTO
+from .ebay import EbayListingCreate, EbayListingStatusInfo
+from .reverb import ReverbListingCreateDTO, ReverbListingStatusDTO
+from .vr import VRListingCreateDTO, VRListingStatusDTO
+from .website import WebsiteListingCreateDTO, WebsiteListingStatusDTO
 
 # File: app/schemas/platform/combined.py
 class MultiPlatformListingCreateDTO(BaseModel):
-    ebay: Optional[EbayListingCreateDTO]
+    ebay: Optional[EbayListingCreate]
     reverb: Optional[ReverbListingCreateDTO]
     vr: Optional[VRListingCreateDTO]
     website: Optional[WebsiteListingCreateDTO]
 
 class PlatformSyncStatusDTO(BaseModel):
-    ebay_status: EbayListingStatusDTO
+    ebay_status: EbayListingStatusInfo
     reverb_status: ReverbListingStatusDTO
     vr_status: VRListingStatusDTO
     website_status: WebsiteListingStatusDTO

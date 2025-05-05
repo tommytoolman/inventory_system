@@ -1,13 +1,17 @@
 # tests/test_db.py
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, delete
+
+from app.core.enums import ProductStatus
 from app.database import get_session
-from app.models.product import (
-    Product, PlatformListing, EbayListing, 
-    ReverbListing, VRListing, WebsiteListing,
-    ProductStatus
-)
+from app.models.product import Product
+from app.models.platform_common import PlatformListing
+from app.models.ebay import EbayListing
+from app.models.reverb import ReverbListing
+from app.models.vr import VRListing
+from app.models.website import WebsiteListing
+
 
 async def cleanup_test_data():
     """Remove any existing test data in the correct order"""

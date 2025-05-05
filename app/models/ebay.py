@@ -1,8 +1,8 @@
 # ebay.py
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Numeric, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Numeric, JSON, text, TIMESTAMP
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from .platform_common import ListingStatus
 from typing import Optional, Dict, Any
@@ -10,17 +10,21 @@ from pydantic import BaseModel
 
 from ..database import Base
 
-class EbayListingFormat(str, Enum):
-    BUY_IT_NOW = "Buy it Now"
-    AUCTION = "Auction"
-    AUCTION_BIN = "Auction with Buy it Now"
+UTC_NOW = text("now() AT TIME ZONE 'utc'")
 
-class EbayListingStatus(str, Enum):
-    DRAFT = "draft"
-    ACTIVE = "active"
-    ENDED = "ended"
-    SCHEDULED = "scheduled"
-    PENDING = "pending"
+
+# Moved to app.core.enums
+
+# class EbayListingFormat(str, Enum):
+#     BUY_IT_NOW = "Buy it Now"
+#     AUCTION = "Auction"
+#     AUCTION_BIN = "Auction with Buy it Now"
+# class EbayListing Status(str, Enum):
+#     DRAFT = "draft"
+#     ACTIVE = "active"
+#     ENDED = "ended"
+#     SCHEDULED = "scheduled"
+#     PENDING = "pending"
 
 class EbayListing(Base):
     __tablename__ = "ebay_listings"
@@ -72,68 +76,40 @@ class EbayListing(Base):
     payment_status = Column(String, nullable=True)
     shipping_status = Column(String, nullable=True)
     
-    # Timestamps for our system
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_synced_at = Column(DateTime, default=datetime.utcnow)
+    # # Timestamps for our system
+    # created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    # updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    # last_synced_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+
+    created_at = Column(
+        TIMESTAMP(timezone=False), # Or True if you prefer TIMESTAMP WITH TIME ZONE
+        server_default=text("timezone('utc', now())"),
+        nullable=False
+    )
+    updated_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"),
+        onupdate=text("timezone('utc', now())"),
+        nullable=False
+    )
+    # last_synced_at: Apply the same pattern assuming it should update whenever the record
+    # is updated or created. If it has a different meaning (e.g., only set manually
+    # after a sync operation), you might adjust nullable or remove onupdate/server_default.
+    last_synced_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Sets initial value
+        onupdate=text("timezone('utc', now())"),     # Updates on modification
+        nullable=False # Assuming it should always have a value after creation/update
+    )
     
-    platform_id = Column(Integer, ForeignKey("platform_common.id"), nullable=True)
-    platform_listing = relationship("PlatformCommon", back_populates="ebay_listing")
-    
+
+    platform_id = Column(Integer, ForeignKey("platform_common.id"), nullable=True, index=True)
+
     # Complete data storage
     listing_data = Column(JSONB)  # Store the complete listing data for reference
 
-# class EbayListingOld(Base):
-#     __tablename__ = "ebay_listings_old"
+    platform_listing = relationship("PlatformCommon", back_populates="ebay_listing")
 
-#     id = Column(Integer, primary_key=True)
-#     platform_id = Column(Integer, ForeignKey("platform_common.id"))
-#     ebay_item_id = Column(String)
-#     ebay_category_id = Column(String)
-#     ebay_second_category_id = Column(String)
-#     format = Column(String, default=EbayListingFormat.BUY_IT_NOW)
-#     price = Column(Numeric, nullable=False)
-#     quantity = Column(Integer, default=1)
-#     payment_policy_id = Column(String)
-#     return_policy_id = Column(String)
-#     shipping_policy_id = Column(String)
-#     item_specifics = Column(JSONB, default={})
-#     package_weight = Column(Numeric)
-#     package_dimensions = Column(JSONB)
-#     listing_duration = Column(String)
-#     allow_offers = Column(Boolean, default=False)
-#     min_offer_amount = Column(Numeric)
-#     listing_status = Column(String, default=EbayListingStatus.DRAFT)
-#     created_at = Column(DateTime, default=datetime.utcnow)
-#     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-#     last_synced_at = Column(DateTime)
-#     ebay_condition_id = Column(String)
 
-#     # Relationships
-#     platform_listing = relationship("PlatformCommon", back_populates="ebay_listing")
 
-# Pydantic models for validation
-class PlatformCommonCreate(BaseModel):
-    product_id: int
-    platform_name: str
-    external_id: Optional[str] = None
-    status: Optional[str] = ListingStatus.DRAFT
-    listing_url: Optional[str] = None
-    platform_specific_data: Dict[str, Any] = {}
 
-class EbayListingCreate(BaseModel):
-    platform_id: int
-    ebay_category_id: Optional[str] = None
-    ebay_second_category_id: Optional[str] = None
-    format: str = EbayListingFormat.BUY_IT_NOW
-    price: float
-    quantity: int = 1
-    payment_policy_id: Optional[str] = None
-    return_policy_id: Optional[str] = None
-    shipping_policy_id: Optional[str] = None
-    item_specifics: Dict[str, Any] = {}
-    package_weight: Optional[float] = None
-    package_dimensions: Optional[Dict[str, Any]] = None
-    listing_duration: Optional[str] = None
-    allow_offers: bool = False
-    min_offer_amount: Optional[float] = None

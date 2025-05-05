@@ -1,7 +1,7 @@
 # app/main.py
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.staticfiles import StaticFiles
@@ -57,6 +57,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Error loading Dropbox cache: {str(e)}")
     
+    print("Starting periodic Dropbox refresh task...")
+    asyncio.create_task(periodic_dropbox_refresh(app))
+    
     yield  # This is where the app runs
     # Shutdown: No specific cleanup needed in this case
 
@@ -76,11 +79,6 @@ app.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 app.include_router(reverb_router)
 app.include_router(webhook_router)
 app.include_router(shipping.router)
-
-# @app.on_event("startup")
-# async def startup_event():
-#     # Initialize stock manager
-#     app.state.stock_manager = await setup_stock_manager()
 
 # Root redirect
 @app.get("/")
@@ -116,37 +114,37 @@ async def test_db(session: AsyncSession = Depends(get_session)):
             return {"status": "database error", "detail": str(e)}
         
 # In main.py or app setup
-@app.on_event("startup")
-async def start_background_tasks():
-    asyncio.create_task(periodic_dropbox_refresh(app))
+# @app.on_event("startup")
+# async def start_background_tasks():
+#     asyncio.create_task(periodic_dropbox_refresh(app))
 
 # In app/main.py
-@app.on_event("startup")
-async def start_background_tasks():
-    # Existing code...
+# @app.on_event("startup")
+# async def start_background_tasks():
+#     # Existing code...
     
-    # Try to load Dropbox cache
-    try:
-        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+#     # Try to load Dropbox cache
+#     try:
+#         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
         
-        print("Loading Dropbox cache at startup...")
-        client = AsyncDropboxClient()
+#         print("Loading Dropbox cache at startup...")
+#         client = AsyncDropboxClient()
         
-        # Load cache components
-        folder_structure = client.load_folder_structure_from_cache()
-        temp_links = client.load_temp_links_from_cache()
+#         # Load cache components
+#         folder_structure = client.load_folder_structure_from_cache()
+#         temp_links = client.load_temp_links_from_cache()
         
-        if folder_structure and temp_links:
-            # Create a dropbox_map in app state
-            app.state.dropbox_map = {
-                'folder_structure': folder_structure,
-                'all_entries': [],
-                'temp_links': temp_links
-            }
-            app.state.dropbox_last_updated = datetime.now()
-            print(f"Loaded Dropbox cache with {len(temp_links)} temporary links")
-    except Exception as e:
-        print(f"Error loading Dropbox cache: {str(e)}")
+#         if folder_structure and temp_links:
+#             # Create a dropbox_map in app state
+#             app.state.dropbox_map = {
+#                 'folder_structure': folder_structure,
+#                 'all_entries': [],
+#                 'temp_links': temp_links
+#             }
+#             app.state.dropbox_last_updated = datetime.now()
+#             print(f"Loaded Dropbox cache with {len(temp_links)} temporary links")
+#     except Exception as e:
+#         print(f"Error loading Dropbox cache: {str(e)}")
 
 async def periodic_dropbox_refresh(app):
     """Run the Dropbox refresh periodically"""

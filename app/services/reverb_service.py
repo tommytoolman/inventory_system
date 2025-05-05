@@ -1,10 +1,10 @@
 """
-ReverbService - Enterprise-grade integration with Reverb marketplace
+Purpose: Manages high-level operations and integration logic for Reverb listings via enterprise-grade integration with Reverb marketplace
 
-This service layer integrates the Reverb API with our inventory management system,
+Role: Primary service layer for Reverb-specific logic. This service layer integrates the Reverb API with our inventory management system,
 providing high-level business operations and synchronization between platforms.
 
-Key features:
+Key Functionality:
 1. Draft Creation - Create listings in draft state
 2. Publishing - Move drafts to live listings
 3. Inventory Sync - Keep stock levels in sync across platforms
@@ -27,7 +27,7 @@ Usage:
 from typing import Optional, Dict, List, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from app.models.reverb import ReverbListing
@@ -116,7 +116,7 @@ class ReverbService:
                 
                 # Update status
                 platform_common.sync_status = SyncStatus.SUCCESS.value
-                platform_common.last_sync = datetime.utcnow()
+                platform_common.last_sync = datetime.now(timezone.utc)
                 
                 await self.db.commit()
             else:
@@ -163,7 +163,7 @@ class ReverbService:
             if response:
                 listing.platform_listing.status = ListingStatus.ACTIVE.value
                 listing.platform_listing.sync_status = SyncStatus.SUCCESS.value
-                listing.platform_listing.last_sync = datetime.utcnow()
+                listing.platform_listing.last_sync = datetime.now(timezone.utc)()
                 
                 await self.db.commit()
                 return True
@@ -213,7 +213,7 @@ class ReverbService:
             # Update local status
             if response:
                 listing.platform_listing.sync_status = SyncStatus.SUCCESS.value
-                listing.platform_listing.last_sync = datetime.utcnow()
+                listing.platform_listing.last_sync = datetime.now(timezone.utc)()
                 
                 await self.db.commit()
                 return True
@@ -268,7 +268,7 @@ class ReverbService:
                 
                 listing.platform_listing.status = our_status
                 listing.platform_listing.sync_status = SyncStatus.SUCCESS.value
-                listing.platform_listing.last_sync = datetime.utcnow()
+                listing.platform_listing.last_sync = datetime.now(timezone.utc)()
                 
                 # Update offers enabled
                 listing.offers_enabled = response.get('offers_enabled', True)
@@ -354,7 +354,7 @@ class ReverbService:
             if response:
                 listing.platform_listing.status = ListingStatus.ENDED.value
                 listing.platform_listing.sync_status = SyncStatus.SUCCESS.value
-                listing.platform_listing.last_sync = datetime.utcnow()
+                listing.platform_listing.last_sync = datetime.now(timezone.utc)()
                 
                 await self.db.commit()
                 return True

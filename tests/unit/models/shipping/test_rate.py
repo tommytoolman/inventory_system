@@ -1,5 +1,5 @@
 
-Rate Model Tests
+# Rate Model Tests
 
-Unit tests for the ShippingRate model.
+# Unit tests for the ShippingRate model.
 

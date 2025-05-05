@@ -1,7 +1,7 @@
 # File: app/schemas/platform/base.py
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 class PlatformListingBaseDTO(BaseModel):
     product_id: int

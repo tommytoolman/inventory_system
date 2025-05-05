@@ -1,5 +1,9 @@
 """
-This is a class which will:
+Purpose: The central service for managing the core Product entity.
+
+Role: Foundational service managing the core data object that other platform services relate to.
+
+This is a class which provides standard CRUD operations :
 - Create the product
 - Create the platform_common entry
 - Create the eBay listing in draft mode
@@ -12,19 +16,23 @@ Key features of this service:
 - Maintains sync status for platform integrations
 - Provides basic product status management
 
+plus status updates (update_product_status) and SKU existence checks. It uses helper functions from app.core.utils (like model_to_schema, paginate_query). 
+It returns data using Pydantic schemas (ProductRead). Defines relevant custom exceptions. 
+Note: It contains commented-out code (_create_ebay_listing) suggesting a previous design where creating a product might have directly 
+reated platform listings; this logic seems to have moved (likely correctly) to more specific services like EbayService.
+
 """
 
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, exists, or_, and_
-from datetime import datetime
+from datetime import datetime, timezone
 
-from app.core.enums import ProductStatus, ListingStatus, SyncStatus
+from app.core.enums import ProductStatus, ListingStatus, SyncStatus, EbayListingStatus
 from app.core.exceptions import ProductCreationError, ProductNotFoundError
 from app.core.utils import model_to_schema, models_to_schemas, paginate_query
 from app.models.product import Product
 from app.models.platform_common import PlatformCommon
-from app.models.ebay import EbayListing, EbayListingStatus
 from app.schemas.product import ProductCreate, ProductRead, ProductUpdate
 from app.schemas.platform.ebay import EbayListingCreate
 
@@ -95,7 +103,7 @@ class ProductService:
         """
         query = select(Product).where(Product.id == product_id)
         result = await self.db.execute(query)
-        product = result.scalar_one_or_none()
+        product = await result.scalar_one_or_none()
         
         if not product:
             raise ProductNotFoundError(f"Product with ID {product_id} not found")
@@ -182,7 +190,7 @@ class ProductService:
         # Get the product
         query = select(Product).where(Product.id == product_id)
         result = await self.db.execute(query)
-        product = result.scalar_one_or_none()
+        product = await result.scalar_one_or_none()
         
         if not product:
             raise ProductNotFoundError(f"Product with ID {product_id} not found")
@@ -194,7 +202,7 @@ class ProductService:
                 setattr(product, key, value)
         
         # Update timestamp
-        product.updated_at = datetime.utcnow()
+        product.updated_at = datetime.now(timezone.utc)()
         
         # Commit changes
         await self.db.commit()
@@ -217,7 +225,7 @@ class ProductService:
         """
         query = select(Product).where(Product.id == product_id)
         result = await self.db.execute(query)
-        product = result.scalar_one_or_none()
+        product = await result.scalar_one_or_none()
         
         if not product:
             raise ProductNotFoundError(f"Product with ID {product_id} not found")
@@ -252,7 +260,7 @@ class ProductService:
     #     await self.db.flush()
 
     #     # Create eBay listing
-    #     from app.models.ebay import EbayListing, EbayListingStatus
+    #     from app.models.ebay import EbayListing, EbayListingStatusInfo
         
     #     ebay_listing = EbayListing(
     #         platform_id=platform_common.id,
@@ -372,7 +380,7 @@ class ProductService:
         product = await self.get_product(product_id)
         if product:
             product.status = status
-            product.updated_at = datetime.utcnow()
+            product.updated_at = datetime.now(timezone.utc)()
             await self.db.commit()
         return product
 

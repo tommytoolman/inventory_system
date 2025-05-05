@@ -1,4 +1,8 @@
-# app/cli/create_tables.py
+"""
+A standard utility script that uses SQLAlchemy's Base.metadata.create_all to generate the database schema based on all imported models. 
+Essential for initial setup or testing environments.
+"""
+
 import asyncio
 import click
 from sqlalchemy.ext.asyncio import create_async_engine

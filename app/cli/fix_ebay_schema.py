@@ -1,4 +1,10 @@
-# app/cli/fix_ebay_schema.py
+"""
+A specialized script likely created during development to address schema inconsistencies specifically for eBay listings. 
+It can add the platform_id column and attempts to backfill platform_common records and link them. 
+Potential Cleanup: This script might be obsolete given database schema is now managed consistently via Alembic migrations. 
+You might be able to remove it, assuming the migrations handle the current schema state correctly.
+"""
+
 import asyncio
 import logging
 import click

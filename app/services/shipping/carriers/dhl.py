@@ -19,7 +19,7 @@ DHL API Docs:
 import base64
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List, Union
 
 import requests

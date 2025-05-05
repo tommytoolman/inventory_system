@@ -1,8 +1,16 @@
-# app/services/category_mapping_service.py
+"""
+Purpose: Manages the translation of category identifiers between your internal system and external platforms (eBay, Reverb, V&R). 
+This is essential because platforms don't always use the same category IDs or names.
+
+Functionality: Provides methods to get_mapping (by IDs), get_mapping_by_name (using fuzzy matching for flexibility), 
+create_mapping, and get a get_default_mapping. It interacts directly with the CategoryMapping database model.
+
+Role: A focused utility service providing crucial data mapping needed by other services when creating or updating listings on external platforms.
+"""
 from typing import Optional, Dict, List, Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.category_mapping import CategoryMapping
 

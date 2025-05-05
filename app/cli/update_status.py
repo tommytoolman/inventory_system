@@ -1,4 +1,9 @@
-# app/cli/update_status.py
+"""
+A simple utility script to manually change the status (ACTIVE, SOLD, etc.) of a listing in the platform_common table, 
+identified by platform name and external ID. 
+It also sets a manual_override flag (ensure this field exists in your PlatformCommon model if this script is used).
+"""
+
 import asyncio
 import click
 from sqlalchemy import text

@@ -1,7 +1,8 @@
 import json
 
-from app.services.dropbox import dropbox_service
-from dropbox_service import DropboxClient
+from app.services.dropbox.dropbox_service import DropboxClient
+from app.services.dropbox.dropbox_async_service import DropboxAsyncClient
+
 
 def main():
     # Replace with your access token

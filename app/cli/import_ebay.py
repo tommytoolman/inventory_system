@@ -1,8 +1,11 @@
-# app/cli/import_ebay.py
+"""
+CLI script to trigger the eBay import process by calling EbayImporter (presumably defined in app/services/). 
+Handles table recreation.
+"""
 import asyncio
 import logging
 import click
-from datetime import datetime
+from datetime import datetime, timezone,timezone
 
 from app.services.ebay.importer import EbayImporter
 

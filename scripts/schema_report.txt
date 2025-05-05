@@ -10,55 +10,33 @@ Columns:
 Primary Keys:
 - version_num
 
-### ebay_listings
-
-Columns:
-- id (INTEGER) NOT NULL DEFAULT nextval('ebay_listings_id_seq'::regclass)
-- platform_id (INTEGER) NULL 
-- ebay_category_id (VARCHAR) NULL 
-- ebay_condition_id (VARCHAR) NULL 
-- item_specifics (JSONB) NULL 
-- shipping_policy_id (VARCHAR) NULL 
-- return_policy_id (VARCHAR) NULL 
-- payment_policy_id (VARCHAR) NULL 
-- listing_duration (VARCHAR) NULL 
-
-Primary Keys:
-- id
-
-Foreign Keys:
-- platform_id → platform_common(id)
-
 ### reverb_listings
 
 Columns:
 - id (INTEGER) NOT NULL DEFAULT nextval('reverb_listings_id_seq'::regclass)
 - platform_id (INTEGER) NULL 
+- reverb_listing_id (VARCHAR) NULL 
+- reverb_slug (VARCHAR) NULL 
 - reverb_category_uuid (VARCHAR) NULL 
 - condition_rating (DOUBLE PRECISION) NULL 
+- inventory_quantity (INTEGER) NULL DEFAULT 1
+- has_inventory (BOOLEAN) NULL DEFAULT true
+- offers_enabled (BOOLEAN) NULL DEFAULT true
+- is_auction (BOOLEAN) NULL DEFAULT false
+- list_price (DOUBLE PRECISION) NULL 
+- listing_currency (VARCHAR) NULL 
 - shipping_profile_id (VARCHAR) NULL 
 - shop_policies_id (VARCHAR) NULL 
-- handmade (BOOLEAN) NULL 
-- offers_enabled (BOOLEAN) NULL 
-
-Primary Keys:
-- id
-
-Foreign Keys:
-- platform_id → platform_common(id)
-
-### vr_listings
-
-Columns:
-- id (INTEGER) NOT NULL DEFAULT nextval('vr_listings_id_seq'::regclass)
-- platform_id (INTEGER) NULL 
-- in_collective (BOOLEAN) NULL 
-- in_inventory (BOOLEAN) NULL 
-- in_reseller (BOOLEAN) NULL 
-- collective_discount (DOUBLE PRECISION) NULL 
-- price_notax (DOUBLE PRECISION) NULL 
-- show_vat (BOOLEAN) NULL 
-- processing_time (INTEGER) NULL 
+- reverb_state (VARCHAR) NULL 
+- view_count (INTEGER) NULL DEFAULT 0
+- watch_count (INTEGER) NULL DEFAULT 0
+- reverb_created_at (TIMESTAMP) NULL 
+- reverb_published_at (TIMESTAMP) NULL 
+- created_at (TIMESTAMP) NULL DEFAULT now()
+- updated_at (TIMESTAMP) NULL DEFAULT now()
+- last_synced_at (TIMESTAMP) NULL 
+- extended_attributes (JSONB) NULL DEFAULT '{}'::jsonb
+- handmade (BOOLEAN) NULL DEFAULT false
 
 Primary Keys:
 - id
@@ -83,40 +61,61 @@ Primary Keys:
 Foreign Keys:
 - platform_id → platform_common(id)
 
-### csv_import_logs
+### ebay_listings_old
 
 Columns:
-- id (INTEGER) NOT NULL DEFAULT nextval('csv_import_logs_id_seq'::regclass)
-- timestamp (TIMESTAMP) NULL 
-- filename (VARCHAR) NULL 
-- platform (VARCHAR) NULL 
-- total_rows (INTEGER) NULL 
-- successful_rows (INTEGER) NULL 
-- failed_rows (INTEGER) NULL 
-- error_log (JSONB) NULL 
+- id (INTEGER) NULL 
+- platform_id (INTEGER) NULL 
+- ebay_item_id (VARCHAR) NULL 
+- ebay_category_id (VARCHAR) NULL 
+- ebay_second_category_id (VARCHAR) NULL 
+- format (VARCHAR) NULL 
+- price (NUMERIC) NULL 
+- quantity (INTEGER) NULL 
+- payment_policy_id (VARCHAR) NULL 
+- return_policy_id (VARCHAR) NULL 
+- shipping_policy_id (VARCHAR) NULL 
+- item_specifics (JSONB) NULL 
+- package_weight (NUMERIC) NULL 
+- package_dimensions (JSONB) NULL 
+- listing_duration (VARCHAR) NULL 
+- allow_offers (BOOLEAN) NULL 
+- min_offer_amount (NUMERIC) NULL 
+- listing_status (VARCHAR) NULL 
+- created_at (TIMESTAMP) NULL 
+- updated_at (TIMESTAMP) NULL 
+- last_synced_at (TIMESTAMP) NULL 
+
+### category_mappings
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('category_mappings_id_seq'::regclass)
+- source_platform (VARCHAR(20)) NOT NULL 
+- source_id (VARCHAR(36)) NOT NULL 
+- source_name (VARCHAR(255)) NOT NULL 
+- target_platform (VARCHAR(20)) NOT NULL 
+- target_id (VARCHAR(36)) NOT NULL 
+- target_subcategory_id (VARCHAR(36)) NULL 
+- target_tertiary_id (VARCHAR(36)) NULL 
+- created_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
+- updated_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
 
 Primary Keys:
 - id
 
-### old_platform_listings
+### orders
 
 Columns:
-- id (INTEGER) NOT NULL DEFAULT nextval('platform_listings_id_seq'::regclass)
+- id (INTEGER) NOT NULL DEFAULT nextval('orders_id_seq'::regclass)
+- order_reference (VARCHAR) NULL 
 - created_at (TIMESTAMP) NULL 
-- updated_at (TIMESTAMP) NULL 
-- platform_name (VARCHAR) NULL 
-- external_id (VARCHAR) NULL 
-- product_id (INTEGER) NULL 
-- listing_url (VARCHAR) NULL 
-- sync_status (VARCHAR) NULL 
-- last_sync (TIMESTAMP) NULL 
-- platform_specific_data (JSONB) NULL 
+- platform_listing_id (INTEGER) NULL 
 
 Primary Keys:
 - id
 
 Foreign Keys:
-- product_id → products(id)
+- platform_listing_id → platform_common(id)
 
 ### products
 
@@ -124,9 +123,6 @@ Columns:
 - id (INTEGER) NOT NULL DEFAULT nextval('products_id_seq'::regclass)
 - created_at (TIMESTAMP) NULL 
 - updated_at (TIMESTAMP) NULL 
-- brand_name (VARCHAR) NULL 
-- category_name (VARCHAR) NULL 
-- product_model (VARCHAR) NULL 
 - year (INTEGER) NULL 
 - decade (INTEGER) NULL 
 - finish (VARCHAR) NULL 
@@ -159,9 +155,190 @@ Columns:
 - status (VARCHAR(8)) NULL 
 - primary_image (VARCHAR) NULL 
 - additional_images (JSONB) NULL 
+- shipping_profile_id (INTEGER) NULL 
+- package_type (VARCHAR(50)) NULL 
+- length (DOUBLE PRECISION) NULL 
+- width (DOUBLE PRECISION) NULL 
+- height (DOUBLE PRECISION) NULL 
+- weight (DOUBLE PRECISION) NULL 
+- require_signature (BOOLEAN) NULL DEFAULT false
+- insurance (BOOLEAN) NULL DEFAULT false
+- shipping_rates (JSONB) NULL 
+- package_dimensions (JSONB) NULL 
+- package_weight (DOUBLE PRECISION) NULL 
 
 Primary Keys:
 - id
+
+Foreign Keys:
+- shipping_profile_id → shipping_profiles(id)
+
+### shipping_profiles
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('shipping_profiles_id_seq'::regclass)
+- name (VARCHAR(100)) NOT NULL 
+- description (TEXT) NULL 
+- is_default (BOOLEAN) NULL DEFAULT false
+- dimensions (JSONB) NULL 
+- weight (DOUBLE PRECISION) NULL 
+- carriers (JSONB) NULL 
+- options (JSONB) NULL 
+- rates (JSONB) NULL 
+- created_at (TIMESTAMP) NULL DEFAULT now()
+- updated_at (TIMESTAMP) NULL DEFAULT now()
+- package_type (VARCHAR) NULL 
+
+Primary Keys:
+- id
+
+### csv_import_logs
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('csv_import_logs_id_seq'::regclass)
+- timestamp (TIMESTAMP) NULL 
+- filename (VARCHAR) NULL 
+- platform (VARCHAR) NULL 
+- total_rows (INTEGER) NULL 
+- successful_rows (INTEGER) NULL 
+- failed_rows (INTEGER) NULL 
+- error_log (JSONB) NULL 
+
+Primary Keys:
+- id
+
+### vr_listings
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('vr_listings_id_seq'::regclass)
+- platform_id (INTEGER) NULL 
+- in_collective (BOOLEAN) NULL DEFAULT false
+- in_inventory (BOOLEAN) NULL DEFAULT true
+- in_reseller (BOOLEAN) NULL DEFAULT false
+- collective_discount (DOUBLE PRECISION) NULL 
+- price_notax (DOUBLE PRECISION) NULL 
+- show_vat (BOOLEAN) NULL DEFAULT true
+- processing_time (INTEGER) NULL 
+- vr_listing_id (VARCHAR) NULL 
+- inventory_quantity (INTEGER) NULL DEFAULT 1
+- vr_state (VARCHAR) NULL 
+- created_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
+- updated_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
+- last_synced_at (TIMESTAMP) NULL 
+- extended_attributes (JSONB) NULL DEFAULT '{}'::jsonb
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- platform_id → platform_common(id)
+
+### sales
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('sales_id_seq'::regclass)
+- created_at (TIMESTAMP) NULL 
+- product_id (INTEGER) NULL 
+- platform_listing_id (INTEGER) NULL 
+- platform_name (VARCHAR) NULL 
+- sale_date (TIMESTAMP) NULL 
+- sale_price (DOUBLE PRECISION) NULL 
+- original_list_price (DOUBLE PRECISION) NULL 
+- platform_fees (DOUBLE PRECISION) NULL 
+- shipping_cost (DOUBLE PRECISION) NULL 
+- net_amount (DOUBLE PRECISION) NULL 
+- days_to_sell (INTEGER) NULL 
+- payment_method (VARCHAR) NULL 
+- shipping_method (VARCHAR) NULL 
+- buyer_location (VARCHAR) NULL 
+- platform_data (JSONB) NULL 
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- platform_listing_id → platform_common(id)
+- product_id → products(id)
+
+### shipments
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('shipments_id_seq'::regclass)
+- carrier (VARCHAR) NULL 
+- carrier_account (VARCHAR) NULL 
+- shipment_tracking_number (VARCHAR) NULL 
+- status (VARCHAR(13)) NULL 
+- created_at (TIMESTAMP) NULL 
+- updated_at (TIMESTAMP) NULL 
+- origin_address (JSON) NULL 
+- destination_address (JSON) NULL 
+- package_weight (DOUBLE PRECISION) NULL 
+- package_length (DOUBLE PRECISION) NULL 
+- package_width (DOUBLE PRECISION) NULL 
+- package_height (DOUBLE PRECISION) NULL 
+- package_description (VARCHAR) NULL 
+- is_international (BOOLEAN) NULL 
+- reference_number (VARCHAR) NULL 
+- customs_value (DOUBLE PRECISION) NULL 
+- customs_currency (VARCHAR) NULL 
+- carrier_response (JSON) NULL 
+- label_data (TEXT) NULL 
+- label_format (VARCHAR) NULL 
+- order_id (INTEGER) NULL 
+- sale_id (INTEGER) NULL 
+- platform_listing_id (INTEGER) NULL 
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- order_id → orders(id)
+- platform_listing_id → platform_common(id)
+- sale_id → sales(id)
+
+### ebay_listings
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('ebay_listings_id_seq'::regclass)
+- platform_id (INTEGER) NULL 
+- ebay_item_id (VARCHAR) NULL 
+- listing_status (VARCHAR) NULL 
+- title (VARCHAR) NULL 
+- format (VARCHAR) NULL 
+- price (DOUBLE PRECISION) NULL 
+- quantity (INTEGER) NULL 
+- quantity_available (INTEGER) NULL 
+- quantity_sold (INTEGER) NULL DEFAULT 0
+- ebay_category_id (VARCHAR) NULL 
+- ebay_category_name (VARCHAR) NULL 
+- ebay_second_category_id (VARCHAR) NULL 
+- start_time (TIMESTAMP) NULL 
+- end_time (TIMESTAMP) NULL 
+- listing_url (VARCHAR) NULL 
+- ebay_condition_id (VARCHAR) NULL 
+- condition_display_name (VARCHAR) NULL 
+- gallery_url (VARCHAR) NULL 
+- picture_urls (JSONB) NULL 
+- item_specifics (JSONB) NULL 
+- payment_policy_id (VARCHAR) NULL 
+- return_policy_id (VARCHAR) NULL 
+- shipping_policy_id (VARCHAR) NULL 
+- transaction_id (VARCHAR) NULL 
+- order_line_item_id (VARCHAR) NULL 
+- buyer_user_id (VARCHAR) NULL 
+- paid_time (TIMESTAMP) NULL 
+- payment_status (VARCHAR) NULL 
+- shipping_status (VARCHAR) NULL 
+- created_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
+- updated_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
+- last_synced_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
+- listing_data (JSONB) NULL 
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- platform_id → platform_common(id)
 
 ### platform_common
 
@@ -184,38 +361,50 @@ Primary Keys:
 Foreign Keys:
 - product_id → products(id)
 
+### product_merges
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('product_merges_id_seq'::regclass)
+- kept_product_id (INTEGER) NOT NULL 
+- merged_product_id (INTEGER) NOT NULL 
+- merged_product_data (JSONB) NULL 
+- merged_at (TIMESTAMP) NOT NULL DEFAULT now()
+- merged_by (VARCHAR(255)) NULL 
+- reason (VARCHAR(255)) NULL DEFAULT 'Product matching'::character varying
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- kept_product_id → products(id)
+
 ## Potential Column Duplications
 
 - id appears in:
-  - ebay_listings
   - reverb_listings
-  - vr_listings
   - website_listings
-  - csv_import_logs
-  - old_platform_listings
+  - ebay_listings_old
+  - category_mappings
+  - orders
   - products
+  - shipping_profiles
+  - csv_import_logs
+  - vr_listings
+  - sales
+  - shipments
+  - ebay_listings
   - platform_common
+  - product_merges
 
 - platform_id appears in:
-  - ebay_listings
   - reverb_listings
-  - vr_listings
   - website_listings
-
-- ebay_category_id appears in:
+  - ebay_listings_old
+  - vr_listings
   - ebay_listings
 
-- ebay_condition_id appears in:
-  - ebay_listings
-
-- shipping_policy_id appears in:
-  - ebay_listings
-
-- return_policy_id appears in:
-  - ebay_listings
-
-- payment_policy_id appears in:
-  - ebay_listings
+- reverb_listing_id appears in:
+  - reverb_listings
 
 - reverb_category_uuid appears in:
   - reverb_listings
@@ -223,68 +412,138 @@ Foreign Keys:
 - condition_rating appears in:
   - reverb_listings
 
+- inventory_quantity appears in:
+  - reverb_listings
+  - vr_listings
+
+- list_price appears in:
+  - reverb_listings
+
 - shipping_profile_id appears in:
   - reverb_listings
+  - products
 
 - shop_policies_id appears in:
   - reverb_listings
 
-- price_notax appears in:
-  - vr_listings
+- reverb_created_at appears in:
+  - reverb_listings
+
+- created_at appears in:
+  - reverb_listings
+  - ebay_listings_old
+  - category_mappings
+  - orders
   - products
+  - shipping_profiles
+  - vr_listings
+  - sales
+  - shipments
+  - ebay_listings
+  - platform_common
+
+- last_synced_at appears in:
+  - reverb_listings
+  - ebay_listings_old
+  - vr_listings
+  - ebay_listings
+
+- seo_title appears in:
+  - website_listings
 
 - seo_description appears in:
   - website_listings
 
-- platform appears in:
-  - csv_import_logs
+- ebay_item_id appears in:
+  - ebay_listings_old
+  - ebay_listings
 
-- platform_name appears in:
-  - old_platform_listings
-  - platform_common
+- ebay_category_id appears in:
+  - ebay_listings_old
+  - ebay_listings
 
-- external_id appears in:
-  - old_platform_listings
-  - platform_common
+- ebay_second_category_id appears in:
+  - ebay_listings_old
+  - ebay_listings
 
-- product_id appears in:
-  - old_platform_listings
-  - platform_common
+- format appears in:
+  - ebay_listings_old
+  - ebay_listings
 
-- sync_status appears in:
-  - old_platform_listings
-  - platform_common
+- price appears in:
+  - ebay_listings_old
+  - products
+  - ebay_listings
 
-- platform_specific_data appears in:
-  - old_platform_listings
-  - platform_common
+- quantity appears in:
+  - ebay_listings_old
+  - ebay_listings
 
-- brand_name appears in:
+- payment_policy_id appears in:
+  - ebay_listings_old
+  - ebay_listings
+
+- return_policy_id appears in:
+  - ebay_listings_old
+  - ebay_listings
+
+- shipping_policy_id appears in:
+  - ebay_listings_old
+  - ebay_listings
+
+- package_weight appears in:
+  - ebay_listings_old
+  - products
+  - shipments
+
+- package_dimensions appears in:
+  - ebay_listings_old
   - products
 
-- category_name appears in:
-  - products
+- listing_status appears in:
+  - ebay_listings_old
+  - ebay_listings
 
-- product_model appears in:
-  - products
+- source_platform appears in:
+  - category_mappings
+
+- source_id appears in:
+  - category_mappings
+
+- source_name appears in:
+  - category_mappings
+
+- target_platform appears in:
+  - category_mappings
+
+- target_id appears in:
+  - category_mappings
+
+- target_subcategory_id appears in:
+  - category_mappings
+
+- target_tertiary_id appears in:
+  - category_mappings
+
+- platform_listing_id appears in:
+  - orders
+  - sales
+  - shipments
 
 - description appears in:
   - products
+  - shipping_profiles
 
-- price appears in:
+- price_notax appears in:
   - products
+  - vr_listings
 
 - video_url appears in:
   - products
 
 - platform_data appears in:
   - products
-
-- brand appears in:
-  - products
-
-- model appears in:
-  - products
+  - sales
 
 - category appears in:
   - products
@@ -300,4 +559,143 @@ Foreign Keys:
 
 - status appears in:
   - products
+  - shipments
   - platform_common
+
+- length appears in:
+  - products
+
+- width appears in:
+  - products
+
+- height appears in:
+  - products
+
+- weight appears in:
+  - products
+  - shipping_profiles
+
+- shipping_rates appears in:
+  - products
+
+- name appears in:
+  - shipping_profiles
+
+- dimensions appears in:
+  - shipping_profiles
+
+- carriers appears in:
+  - shipping_profiles
+
+- rates appears in:
+  - shipping_profiles
+
+- filename appears in:
+  - csv_import_logs
+
+- platform appears in:
+  - csv_import_logs
+
+- vr_listing_id appears in:
+  - vr_listings
+
+- product_id appears in:
+  - sales
+  - platform_common
+
+- platform_name appears in:
+  - sales
+  - platform_common
+
+- sale_price appears in:
+  - sales
+
+- original_list_price appears in:
+  - sales
+
+- platform_fees appears in:
+  - sales
+
+- carrier appears in:
+  - shipments
+
+- carrier_account appears in:
+  - shipments
+
+- package_length appears in:
+  - shipments
+
+- package_width appears in:
+  - shipments
+
+- package_height appears in:
+  - shipments
+
+- package_description appears in:
+  - shipments
+
+- carrier_response appears in:
+  - shipments
+
+- label_format appears in:
+  - shipments
+
+- order_id appears in:
+  - shipments
+
+- sale_id appears in:
+  - shipments
+
+- title appears in:
+  - ebay_listings
+
+- quantity_available appears in:
+  - ebay_listings
+
+- quantity_sold appears in:
+  - ebay_listings
+
+- ebay_category_name appears in:
+  - ebay_listings
+
+- ebay_condition_id appears in:
+  - ebay_listings
+
+- condition_display_name appears in:
+  - ebay_listings
+
+- transaction_id appears in:
+  - ebay_listings
+
+- order_line_item_id appears in:
+  - ebay_listings
+
+- buyer_user_id appears in:
+  - ebay_listings
+
+- paid_time appears in:
+  - ebay_listings
+
+- payment_status appears in:
+  - ebay_listings
+
+- shipping_status appears in:
+  - ebay_listings
+
+- external_id appears in:
+  - platform_common
+
+- last_sync appears in:
+  - platform_common
+
+- sync_status appears in:
+  - platform_common
+
+- platform_specific_data appears in:
+  - platform_common
+
+- kept_product_id appears in:
+  - product_merges
+
+- merged_product_id appears in:
+  - product_merges

@@ -1,9 +1,8 @@
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.enums import ListingStatus, SyncStatus
-from app.models.platform_common import ListingStatus, SyncStatus
 
 class PlatformListingBase(BaseModel):
     """Base schema for all platform listings"""

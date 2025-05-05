@@ -1,24 +1,39 @@
 # app/models/sale.py
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, text, TIMESTAMP
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
-from datetime import datetime
+from datetime import datetime, timezone
 from ..database import Base
+
+UTC_NOW = text("now() AT TIME ZONE 'utc'")
 
 class Sale(Base):
     __tablename__ = "sales"
 
     id = Column(Integer, primary_key=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    
+    created_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
+        nullable=False
+    )
     
     # Relations
-    product_id = Column(Integer, ForeignKey("products.id"))
-    platform_listing_id = Column(Integer, ForeignKey("platform_common.id"))
+    product_id = Column(Integer, ForeignKey("products.id"), index=True, nullable=False)
+    platform_listing_id = Column(Integer, ForeignKey("platform_common.id"), index=True, nullable=False)
     
     # Sale details
     platform_name = Column(String)  # ebay, reverb, vintageandrare
-    sale_date = Column(DateTime, default=datetime.utcnow)
+    # sale_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    sale_date = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
+        onupdate=text("timezone('utc', now())"),      # Use standard PG function via text() for ON UPDATE
+        nullable=False
+    )
+    
     sale_price = Column(Float)
     original_list_price = Column(Float)
     platform_fees = Column(Float)

@@ -9,7 +9,7 @@ Create Date: [current date and time]
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
-from datetime import datetime
+from datetime import datetime, timezone
 
 # revision identifiers, used by Alembic.
 revision: str = '2e74a3eb842a'

@@ -1,4 +1,10 @@
-# app/cli/import_data.py
+"""
+Imports data from a specific Vintage & Rare CSV file format using pandas. 
+It creates Product and PlatformListing records. 
+Potential Cleanup: This seems specific to a one-off CSV import task. 
+If the main import_vr.py (which scrapes directly) is the primary method now, this script might be redundant or only kept for historical reference/example. 
+It also notably uses synchronous SQLAlchemy.
+"""
 import click
 import pandas as pd
 from sqlalchemy import create_engine
@@ -6,11 +12,11 @@ from sqlalchemy.orm import Session
 import sys
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from app.models.product import Product, PlatformListing, CSVImportLog
 from app.database import Base
-from app.config import get_settings
+from app.core.config import get_settings
 
 # Set up logging
 logging.basicConfig(
@@ -108,7 +114,7 @@ def import_vintage_data(csv_file, dry_run):
                             external_id=f"VR-{product.id}",  # Generate consistent external ID
                             product_id=product.id,
                             sync_status='imported',
-                            last_sync=datetime.utcnow()
+                            last_sync=datetime.now(timezone.utc)()
                         )
                         session.add(platform_listing)
                         platform_listings_created += 1

@@ -1,7 +1,7 @@
 """
 Base schemas with common functionality.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, create_model
 from typing import Type, TypeVar, Dict, Any, Optional
 

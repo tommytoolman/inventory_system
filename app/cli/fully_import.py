@@ -1,4 +1,9 @@
-# app/cli/full_import.py
+"""
+An orchestrator script that runs other CLI scripts (create_tables, the platform importers, match_products) in sequence using subprocess.run. 
+Useful for automating the entire initial data population process. 
+Cleanup: It currently has hardcoded credentials for import_vr. 
+These should be removed and passed via environment variables or a secure configuration method.
+"""
 import asyncio
 import click
 import subprocess
@@ -24,7 +29,7 @@ def full_import(clean):
         ["python", "-m", "app.cli.import_reverb"],
         
         # Import Vintage & Rare (add your username/password)
-        ["python", "-m", "app.cli.import_vr", "--username", "Musicground", "--password", "musicground1"],
+        ["python", "-m", "app.cli.import_vr"],
         
         # Run product matching
         ["python", "-m", "app.cli.match_products", "--threshold", "0.75", "--commit"]

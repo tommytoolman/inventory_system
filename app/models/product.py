@@ -6,12 +6,12 @@ It provides the database structure for storing product information and tracking 
 products are listed across different e-commerce platforms.
 """
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, ForeignKey, text, TIMESTAMP
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB, ENUM
 from pydantic import BaseModel, Field, validator
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 from ..database import Base
 
@@ -19,13 +19,28 @@ from app.core.enums import ProductStatus, ProductCondition
 from app.models.shipping import ShippingProfile
 from sqlalchemy.dialects.postgresql import JSONB
 
+UTC_NOW = text("now() AT TIME ZONE 'utc'")
+
 class Product(Base):
     __tablename__ = "products"
 
     # Primary Key and Timestamps
     id = Column(Integer, primary_key=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    # updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
+    
+    created_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
+        nullable=False
+    )
+    
+    updated_at = Column(
+        TIMESTAMP(timezone=False),
+        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
+        onupdate=text("timezone('utc', now())"),      # Use standard PG function via text() for ON UPDATE
+        nullable=False
+    )
     
     # Core Product Information
     sku = Column(String, unique=True)
@@ -35,7 +50,7 @@ class Product(Base):
     decade = Column(Integer)
     finish = Column(String)
     category = Column(String)
-    condition = Column(String, nullable=False)
+    condition = Column(ENUM(ProductCondition, name='productcondition', create_type=True), nullable=False)
     description = Column(String)
     
     # Pricing Fields
@@ -47,9 +62,7 @@ class Product(Base):
     offer_discount = Column(Float)
     
     # Status and Flags
-    status = Column(ENUM(ProductStatus, name='productstatus', create_type=False), 
-                    default=ProductStatus.DRAFT.value)
-    # status = Column(String, default=ProductStatus.DRAFT)
+    status = Column(ENUM(ProductStatus, name='productstatus', create_type=True), default=ProductStatus.DRAFT.value, index=True)
     is_sold = Column(Boolean, default=False)
     in_collective = Column(Boolean, default=False)
     in_inventory = Column(Boolean, default=True)
@@ -68,22 +81,20 @@ class Product(Base):
     
     # Additional Fields
     processing_time = Column(Integer)
-    platform_data = Column(JSONB, default=dict)
+    # platform_data = Column(JSONB, default=dict) # Mark for removal. Think this is now redundant.
     
     # Shipping
-    # shipping_profile_id = Column(Integer, ForeignKey('shipping_profiles.id'), nullable=True)
-    # custom_package_type = Column(String, nullable=True)
-    # custom_length = Column(Float, nullable=True)
-    # custom_width = Column(Float, nullable=True)
-    # custom_height = Column(Float, nullable=True)
-    # custom_weight = Column(Float, nullable=True)
-
+    shipping_profile_id = Column(Integer, ForeignKey('shipping_profiles.id'), nullable=True)
     package_type = Column(String, nullable=True)
     package_weight = Column(Float, nullable=True)
     package_dimensions = Column(JSONB, nullable=True)  # Using JSONB for dimensions
-    
-    # Relationships
+
+
+    #####################################################
+    ################## Relationships ####################
+    #####################################################
+
     platform_listings = relationship("PlatformCommon", back_populates="product")
     sales = relationship("Sale", back_populates="product")
     shipping_profile = relationship("ShippingProfile", back_populates="products")
-    shipping_profile_id = Column(Integer, ForeignKey('shipping_profiles.id'), nullable=True)
+    

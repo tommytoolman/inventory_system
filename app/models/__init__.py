@@ -5,6 +5,12 @@ from .reverb import ReverbListing
 from .vr import VRListing
 from .website import WebsiteListing
 from .sale import Sale
+from .category_mapping import CategoryMapping 
+from .product_mapping import ProductMapping   
+from .order import Order
+from .shipping import Shipment, ShippingProfile 
+# from .product_merges import ProductMerge # We don't currently have a model for this.
+# from .user import User  # Want to add this before we go live 
 
 # This ensures all models are registered with SQLAlchemy
 __all__ = [
@@ -18,7 +24,12 @@ __all__ = [
     'ReverbListing',
     'VRListing',
     'WebsiteListing',
-    'Sale'
-    'Shipping'
-    # 'User'
+    'Sale',
+    'CategoryMapping',
+    'ProductMapping',
+    'Order',
+    'Shipment', 
+    'ShippingProfile',
+    'ProductMerge',
+    # 'User',  
 ]

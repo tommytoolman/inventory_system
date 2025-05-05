@@ -3,7 +3,8 @@
 import os
 from functools import lru_cache
 from typing import ClassVar, Dict, List, Optional, Any
-from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
+from pydantic_settings import BaseSettings 
 
 class Settings(BaseSettings):
     """
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    WEBHOOK_SECRET: str = "your-secret-here"
+    WEBHOOK_SECRET: str = ""
     
     # eBay API
     EBAY_API_KEY: str = ""
@@ -62,12 +63,18 @@ class Settings(BaseSettings):
     
     # Website API
     WEBSITE_API_KEY: str = ""
-    WEBSITE_API_URL: str = "https://your-website.com/api"
+    WEBSITE_API_URL: str = ""
     WEBSITE_USERNAME: str = ""
     WEBSITE_PASSWORD: str = ""
-    WEBSITE_WEBHOOK_SECRET: str = "your-secret-here"
+    WEBSITE_WEBHOOK_SECRET: str = ""
     WEBSSITE_URL_OLD: str = ""
     WEBSITE_URL: str = ""
+    
+    # Shopify API (Optional)
+    SHOPIFY_SHOP_URL: Optional[str] = None
+    SHOPIFY_API_KEY: Optional[str] = None # Or Admin API Access Token
+    SHOPIFY_PASSWORD: Optional[str] = None # Specific to Private/Custom Apps
+    
     
     DROPBOX_APP_KEY: str = ""
     DROPBOX_APP_SECRET: str = ""
@@ -109,9 +116,10 @@ class Settings(BaseSettings):
     FDX_USERNAME: str = ""
     FDX_PWD: str = ""
     
-    class Config:
-        env_file = ".env"
+    model_config = ConfigDict(
+        env_file = ".env",
         case_sensitive = True
+    )
 
 @lru_cache()
 def get_settings():
@@ -122,5 +130,6 @@ def get_webhook_secret():
     """Get the webhook secret for authentication"""
     return get_settings().WEBSITE_WEBHOOK_SECRET
 
-def get_settings():
-    return Settings()
+# Think this is redudant
+# def get_settings():
+#     return Settings()

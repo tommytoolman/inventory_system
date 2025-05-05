@@ -8,7 +8,16 @@ from urllib.parse import urlparse
 import shutil
 
 class MediaHandler:
-    """Handles downloading and managing temporary image files"""
+    """
+    Handles downloading and managing temporary image files
+    
+    - Currently downloads an image from any provided URL (including a potential Dropbox URL) to a local temporary file. 
+    - inspect_form.py then tells Selenium to upload that local temporary file.
+    - Workflow should still function correctly even if the image URLs originate from Dropbox (added since this was written), 
+        as long as the Dropbox URLs are direct links to the image data that requests.get can download. 
+    - The primary change is the source of the image URLs (from central DB/Dropbox service), 
+        not necessarily the mechanics within media_handler.py itself.
+    """
     
     def __init__(self):
         self.temp_dir = Path(tempfile.mkdtemp())

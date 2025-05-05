@@ -1,5 +1,14 @@
+"""
+Purpose: Provides tools for monitoring the performance and reliability of platform interactions.
+Contents:
+Data structures (MetricPoint, PlatformMetrics) to hold metric data (like update times, error counts) per platform.
+MetricsCollector: A central class to record metrics (update duration, queue length, errors, sync success/failure) 
+and calculate statistics (averages, P95, success rates) over a defined time window. Uses asyncio.Lock for safe concurrent updates.
+MetricsContext: An async context manager (async with ...) to easily measure the duration of operations and record success/failure, 
+simplifying metric collection within the update logic.
+"""
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta, timezone
 from typing import Dict, List, Optional
 from collections import defaultdict
 

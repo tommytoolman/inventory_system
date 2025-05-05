@@ -2,7 +2,7 @@
 import asyncio
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import create_async_engine
-from app.config import get_settings
+from app.core.config import get_settings
 from app.models.reverb import ReverbListing
 
 async def verify_schema():

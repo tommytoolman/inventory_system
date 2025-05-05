@@ -1,25 +1,17 @@
-"""
-VintageAndRare Inventory Manager
-
-This module provides functionality for interacting with the VintageAndRare website,
-particularly for downloading inventory data as CSV and loading it directly into memory.
-
-Classes:
-    VRInventoryManager: Handles authentication and data export from VintageAndRare
-"""
-
 import os
 import re
 import io
 import tempfile
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, Union, Tuple
 
 class VRInventoryManager:
     """
+    Purpose: Specifically designed to handle downloading the inventory CSV from V&R using requests.
+    
     Handles interaction with the VintageAndRare website for inventory management.
     
     This class provides methods to:

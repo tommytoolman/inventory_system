@@ -31,9 +31,32 @@ class ListingStatus(str, Enum):
     DELETED = "deleted"
 
 class SyncStatus(str, Enum):
-    """Sync status values used in both models and schemas"""
+    """Consolidated sync status values used across the application."""
+    PENDING = "pending"          # Sync action initiated or scheduled
+    IN_PROGRESS = "in_progress"  # Sync action currently running
+    SYNCED = "synced"            # Local data matches the platform (equivalent to SUCCESS)
+    OUT_OF_SYNC = "out_of_sync"  # Local data is known not to match the platform
+    ERROR = "error"              # An error occurred during the sync attempt (e.g., API error)
+    # FAILED = "failed"          # Removed for now, assuming ERROR/OUT_OF_SYNC cover needs
+    
+class EbayListingStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ENDED = "ended"
+    SCHEDULED = "scheduled"
     PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    SUCCESS = "success"
-    ERROR = "error"
-    FAILED = "failed"
+    
+class EbayListingFormat(str, Enum):
+    BUY_IT_NOW = "Buy it Now"
+    AUCTION = "Auction"
+    AUCTION_BIN = "Auction with Buy it Now"
+    
+class ShipmentStatus(str,Enum):
+    """Shipment status enum"""
+    CREATED = "created"
+    LABEL_CREATED = "label_created"
+    PICKED_UP = "picked_up"
+    IN_TRANSIT = "in_transit"
+    DELIVERED = "delivered"
+    EXCEPTION = "exception"
+    CANCELLED = "cancelled"

@@ -4,7 +4,7 @@ import json
 import asyncio
 import aiofiles
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any, Union
 
 # FastAPI imports
@@ -261,6 +261,12 @@ async def list_products(
             "has_next": page < total_pages
         }
     )
+
+# Alias list_products to list_inventory_route for compatibility with tests
+list_inventory_route = list_products
+
+# Explicitly export the alias
+__all__ = ["list_inventory_route", "router"]
 
 @router.get("/product/{product_id}", response_class=HTMLResponse)
 async def product_detail(
@@ -1019,7 +1025,7 @@ async def sync_vintageandrare_submit(
                     platform_name="vintageandrare",
                     status=ListingStatus.DRAFT.value,
                     sync_status=SyncStatus.PENDING.value,
-                    last_sync=datetime.utcnow()
+                    last_sync=datetime.now(timezone.utc)()
                 )
                 db.add(platform_common)
                 await db.flush()
@@ -1038,9 +1044,9 @@ async def sync_vintageandrare_submit(
                     processing_time=product.processing_time,
                     inventory_quantity=1,
                     vr_state="draft",
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow(),
-                    last_synced_at=datetime.utcnow()
+                    created_at=datetime.now(timezone.utc)(),
+                    updated_at=datetime.now(timezone.utc)(),
+                    last_synced_at=datetime.now(timezone.utc)()
                 )
                 db.add(vr_listing)
                 await db.flush()
@@ -1083,13 +1089,13 @@ async def sync_vintageandrare_submit(
                 if vr_response.get("external_id"):
                     platform_common.external_id = vr_response["external_id"]
                 platform_common.sync_status = SyncStatus.SUCCESS.value
-                platform_common.last_sync = datetime.utcnow()
+                platform_common.last_sync = datetime.now(timezone.utc)()
                 
                 results["success"] += 1
                 results["messages"].append(f"Created draft for {product.brand} {product.model}")
             else:
                 platform_common.sync_status = SyncStatus.FAILED.value
-                platform_common.last_sync = datetime.utcnow()
+                platform_common.last_sync = datetime.now(timezone.utc)()
                 
                 results["errors"] += 1
                 results["messages"].append(f"Error creating draft for {product.brand} {product.model}: {vr_response.get('message', 'Unknown error')}")
@@ -1213,7 +1219,7 @@ async def sync_ebay_submit(
                     platform_name="ebay",
                     status=ListingStatus.DRAFT.value,
                     sync_status=SyncStatus.PENDING.value,
-                    last_sync=datetime.utcnow()
+                    last_sync=datetime.now(timezone.utc)()
                 )
                 db.add(platform_common)
                 await db.flush()
@@ -1276,7 +1282,7 @@ async def sync_ebay_submit(
                 
             except Exception as e:
                 platform_common.sync_status = SyncStatus.FAILED.value
-                platform_common.last_sync = datetime.utcnow()
+                platform_common.last_sync = datetime.now(timezone.utc)()
                 
                 results["errors"] += 1
                 results["messages"].append(f"Error creating eBay draft for {product.brand} {product.model}: {str(e)}")
@@ -2257,7 +2263,6 @@ async def get_shipping_profiles(
         }
         for profile in result
     ]
-
 
 async def perform_dropbox_scan(app, access_token=None):
     """Background task to scan Dropbox with token refresh support"""

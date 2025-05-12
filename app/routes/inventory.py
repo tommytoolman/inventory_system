@@ -2385,4 +2385,3 @@ async def perform_dropbox_scan(app, access_token=None):
     finally:
         app.state.dropbox_scan_in_progress = False
         print("Background scan task finished")
-

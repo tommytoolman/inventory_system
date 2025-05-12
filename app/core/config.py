@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     EBAY_CLIENT_SECRET: str = ""
     EBAY_RU_NAME: str = ""
     EBAY_REFRESH_TOKEN: str = ""
+    EBAY_TOKEN_USER: str = ""
+    EBAY_REFRESH_TOKEN_EXPIRY: str = ""
     EBAY_ENCODED_AUTH_CODE: str = ""
     EBAY_SANDBOX_CLIENT_ID: str = ""
     EBAY_SANDBOX_CLIENT_SECRET: str = ""
@@ -37,7 +39,9 @@ class Settings(BaseSettings):
     EBAY_SANDBOX_RU_NAME: str = ""
     EBAY_SANDBOX_ENCODED_AUTH_CODE: str = ""
     EBAY_SANDBOX_REFRESH_TOKEN: str = ""
-    
+    EBAY_SANDBOX_TOKEN_USER: str = ""
+    EBAY_SANDBOX_REFRESH_TOKEN_EXPIRY: str = ""
+
     EBAY_USERNAME: str = ""
     EBAY_PASSWORD: str = ""
     EBAY_DEV_USERNAME: str = ""
@@ -45,7 +49,6 @@ class Settings(BaseSettings):
     EBAY_SANDBOX_USERNAME: str = ""
     EBAY_SANDBOX_PASSWORD: str = ""
     EBAY_DEV_PASSWORD: str = ""
-
     
     # Reverb API
     REVERB_API_KEY: str = ""
@@ -54,6 +57,9 @@ class Settings(BaseSettings):
     REVERB_PASSWORD: str = ""
     REVERB_SANDBOX_USERNAME: str = ""
     REVERB_SANDBOX_PASSWORD: str = ""
+    REVERB_SANDBOX_API_KEY: str = ""
+    
+    REVERB_USE_SANDBOX: bool = True
     
     # VintageAndRare
     VINTAGEANDRARE_API_KEY: str = ""

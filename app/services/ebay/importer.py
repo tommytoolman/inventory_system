@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, AsyncConne
 from sqlalchemy import text
 from dotenv import load_dotenv
 
-from app.services.ebay.trading import EbayTradingAPI
+from app.services.ebay.trading import EbayTradingLegacyAPI
 from app.core.exceptions import EbayAPIError
 from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
@@ -31,7 +31,7 @@ class EbayImporter:
             db: Database session or URL string
                 If None, will use DATABASE_URL from environment
         """
-        self.trading_api = EbayTradingAPI(sandbox=False)
+        self.trading_api = EbayTradingLegacyAPI(sandbox=False)
         self.expected_user_id = "londonvintagegts"  # Your eBay seller ID
         
         # Handle different types of db parameter

@@ -1,6 +1,7 @@
 import json
 import logging
 import httpx
+import time
 import math
 import asyncio
 from typing import Dict, List, Optional, Any, Union
@@ -27,27 +28,30 @@ class ReverbClient:
 
     """
     
-    BASE_URL = "https://api.reverb.com/api"
+    PRODUCTION_BASE_URL = "https://api.reverb.com/api"
+    SANDBOX_BASE_URL = "https://sandbox.reverb.com/api"
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, use_sandbox: bool = False):
         """
-        Initialize the Reverb client with an API key
+        Initialize the Reverb client
         
         Args:
-            api_key: Reverb API key (personal access token)
+            api_key: Reverb API key
+            use_sandbox: Whether to use the sandbox environment
         """
-        self.settings = get_settings()
         self.api_key = api_key
-        
+        self.use_sandbox = use_sandbox
+        self.BASE_URL = self.SANDBOX_BASE_URL if use_sandbox else self.PRODUCTION_BASE_URL
+        logger.info(f"Initializing ReverbClient with {'sandbox' if use_sandbox else 'production'} environment")
     
     def _get_headers(self) -> Dict[str, str]:
-        """Get headers for API requests with API key authentication"""
+        """Get headers for API requests"""
         return {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/hal+json",
-            "Accept": "application/hal+json",
-            "Accept-Version": "3.0",
-            "X-Display-Currency": "GBP"
+            "Content-Type": "application/json",
+            "Accept": "application/json", 
+            "X-Display-Currency": "GBP",   # Tell the API to display prices in GBP
+            "Accept-Version": "3.0"        # Use the latest API version
         }
     
     async def _make_request(
@@ -66,15 +70,31 @@ class ReverbClient:
             endpoint: API endpoint (without base URL)
             data: Request payload for POST/PUT requests
             params: Query parameters
-            
+        
         Returns:
             Dict: Response data
-            
+        
         Raises:
             ReverbAPIError: If the API request fails
         """
         url = f"{self.BASE_URL}/{endpoint.lstrip('/')}"
         headers = self._get_headers()
+        
+        # Log the request details for debugging (but hide the auth token)
+        masked_headers = headers.copy()
+        if "Authorization" in masked_headers:
+            masked_headers["Authorization"] = "Bearer [REDACTED]"
+            
+        logger.debug(f"Making {method} request to {url}")
+        logger.debug(f"Headers: {masked_headers}")
+        
+        logger.debug(f"Request URL: {url}")
+        logger.debug(f"Request Headers: {masked_headers}")
+        
+        if params:
+            logger.debug(f"Params: {params}")
+        if data:
+            logger.debug(f"Data: {json.dumps(data)[:500]}...")  # Log only first 500 chars of data
         
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -86,7 +106,7 @@ class ReverbClient:
                     params=params
                 )
                 
-                if response.status_code not in (200, 201, 204):
+                if response.status_code not in (200, 201, 202, 204):
                     logger.error(f"Reverb API error: {response.text}")
                     raise ReverbAPIError(f"Request failed: {response.text}")
                 
@@ -107,6 +127,21 @@ class ReverbClient:
     
     # Category operations
     
+    async def get(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
+        """
+        Make a GET request to the specified endpoint
+        
+        Args:
+            endpoint: API endpoint (without base URL)
+            
+        Returns:
+            Dict: Response data
+            
+        Raises:
+            ReverbAPIError: If the API request fails
+        """
+        return await self._make_request("GET", endpoint, params=params)
+        
     async def get_categories(self) -> Dict:
         """
         Get all flat categories from Reverb
@@ -181,12 +216,13 @@ class ReverbClient:
         """
         return await self._make_request("PUT", f"/listings/{listing_id}", data=listing_data)
     
-    async def get_listing(self, listing_id: str) -> Dict:
+    async def get_listing(self, listing_id: str, params: Optional[Dict] = None) -> Dict:
         """
         Get a specific listing's details
         
         Args:
             listing_id: Reverb listing ID
+            params: Optional query parameters including currency
             
         Returns:
             Dict: Listing data
@@ -194,7 +230,7 @@ class ReverbClient:
         Raises:
             ReverbAPIError: If the API request fails
         """
-        return await self._make_request("GET", f"/listings/{listing_id}")
+        return await self._make_request("GET", f"/listings/{listing_id}", params=params)
     
     async def find_listing_by_sku(self, sku: str) -> Dict:
         """

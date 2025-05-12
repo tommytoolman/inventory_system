@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "generated_at": "2025-05-09T10:59:43.252816",
+    "original_inventory_file": "data/production_inventory_20250509_094142.json",
+    "total_processed": 1,
+    "total_created": 1,
+    "total_failed": 0
+  },
+  "created_items": [
+    {
+      "item_id": "110587207100",
+      "title": "SANDBOX - Fender Custom Shop Esquire Blonde 1997",
+      "prod_item_id": "255841183028"
+    }
+  ],
+  "failed_items": []
+}

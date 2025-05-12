@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "generated_at": "2025-05-09T11:00:25.031487",
+    "original_inventory_file": "data/production_inventory_20250509_094142.json",
+    "total_processed": 1,
+    "total_created": 1,
+    "total_failed": 0
+  },
+  "created_items": [
+    {
+      "item_id": "110587207102",
+      "title": "SANDBOX - Vox 1960s AC30 LEATHER STRAP HANDLES",
+      "prod_item_id": "256528140545"
+    }
+  ],
+  "failed_items": []
+}

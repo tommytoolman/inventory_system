@@ -1,3 +1,4 @@
+# app.schemas.platform.ebay
 from typing import Optional, Dict, Any
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict

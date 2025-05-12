@@ -1,10 +1,13 @@
 # app/services/ebay/trading.py
+import os
+import base64
 import logging
 import xmltodict
 import httpx
 import json
 import asyncio
 import requests
+import warnings
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 
@@ -13,296 +16,1854 @@ from app.core.exceptions import EbayAPIError
 
 logger = logging.getLogger(__name__)
 
-class EbayTradingAPI:
+# class EbayTradingAPI:
+#     """
+#     DEPRECATED: Please use EbayTradingLegacyAPI instead.
+#     This class will be removed in a future version.
+#     """  
+#     def __init__(self, sandbox: bool = False, site_id: str = '3'):
+#         self.auth_manager = EbayAuthManager(sandbox=sandbox)
+#         self.sandbox = sandbox
+#         self.site_id = site_id  # Default to UK (3)
+#         self.marketplace_id = "EBAY_GB"  # Default for UK
+#         self.compatibility_level = '1155'
+
+#         if sandbox:
+#             self.endpoint = "https://api.sandbox.ebay.com/sell/inventory/v1"
+#         else:
+#             self.endpoint = "https://api.ebay.com/sell/inventory/v1"
+
+#     async def _get_auth_token(self) -> str:
+#         """Get OAuth token for API requests"""
+#         return await self.auth_manager.get_access_token()
+
+#     async def _make_request(self, call_name: str, xml_request: str, api_type: str = 'trading') -> Dict:
+#         """Make a request to eBay API asynchronously"""
+        
+#         auth_token = await self._get_auth_token()
+        
+#         headers = {
+#             'X-EBAY-API-CALL-NAME': call_name,
+#             'X-EBAY-API-SITEID': self.site_id,
+#             'X-EBAY-API-COMPATIBILITY-LEVEL': self.compatibility_level,
+#             'Content-Type': 'text/xml'
+#         }
+#         # Set the correct endpoint based on API type
+#         if api_type == 'trading':
+#             endpoint = 'https://api.ebay.com/ws/api.dll'
+#             headers["X-EBAY-API-IAF-TOKEN"] = auth_token
+#         elif api_type == 'shopping':
+#             endpoint = 'https://open.api.ebay.com/shopping'
+#             headers["X-EBAY-API-IAF-TOKEN"] = auth_token
+#         else:
+#             raise ValueError(f"Unsupported API type: {api_type}")
+
+#         try:
+#             # Use asyncio to run the request in a thread pool
+#             loop = asyncio.get_event_loop()
+#             response = await loop.run_in_executor(
+#                 None, 
+#                 lambda: requests.post(endpoint, headers=headers, data=xml_request)
+#             )
+
+#             if response.status_code != 200:
+#                 print(f"Error in API call {call_name}: {response.text}")
+#                 return {}
+
+#             # Parse XML response to dict - also run in thread pool to avoid blocking
+#             response_text = response.text
+#             response_dict = await loop.run_in_executor(
+#                 None,
+#                 lambda: xmltodict.parse(response_text)
+#             )
+
+#             return response_dict
+#         except Exception as e:
+#             print(f"Error in API call {call_name}: {str(e)}")
+#             return {}
+
+#     async def get_active_listings(self, page_num: int = 1, items_per_page: int = 200, include_details: bool = False) -> Dict[str, Any]:
+#         """
+#         Get active eBay listings for a specific page
+
+#         Args:
+#             page_num: Page number (1-based)
+#             items_per_page: Items per page (max 200)
+#             include_details: Whether to include detailed item information
+
+#         Returns:
+#             Dict containing active listings data
+#         """
+
+#         auth_token = await self._get_auth_token()
+        
+#         xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+#         <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+#             <RequesterCredentials>
+#                 <eBayAuthToken>{auth_token}</eBayAuthToken>
+#             </RequesterCredentials>
+#             <ActiveList>
+#                 <Include>true</Include>
+#                 <Pagination>
+#                     <EntriesPerPage>{items_per_page}</EntriesPerPage>
+#                     <PageNumber>{page_num}</PageNumber>
+#                 </Pagination>
+#             </ActiveList>
+#             <DetailLevel>ReturnAll</DetailLevel>
+#         </GetMyeBaySellingRequest>"""
+
+#         try:
+#             response_dict = await self._make_request('GetMyeBaySelling', xml_request)
+
+#             if 'GetMyeBaySellingResponse' not in response_dict:
+#                 logger.error("Invalid response from GetMyeBaySelling")
+#                 return {}
+
+#             # Return the ActiveList section
+#             return response_dict.get('GetMyeBaySellingResponse', {}).get('ActiveList', {})
+#         except Exception as e:
+#             logger.error(f"Error getting active listings: {str(e)}")
+#             return {}
+
+#     async def get_item_details(self, item_id: str) -> Dict[str, Any]:
+#         """
+#         Get detailed information for a specific eBay item
+
+#         Args:
+#             item_id: The eBay item ID
+
+#         Returns:
+#             Dict: Detailed item information
+#         """
+
+#         auth_token = await self._get_auth_token()
+        
+#         xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+#         <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+#             <RequesterCredentials>
+#                 <eBayAuthToken>{auth_token}</eBayAuthToken>
+#             </RequesterCredentials>
+#             <ItemID>{item_id}</ItemID>
+#             <DetailLevel>ReturnAll</DetailLevel>
+#             <IncludeItemSpecifics>true</IncludeItemSpecifics>
+#             <IncludeDescription>true</IncludeDescription>
+#         </GetItemRequest>"""
+    
+#         try:
+#             response_dict = await self._make_request('GetItem', xml_request)
+            
+#             if 'GetItemResponse' not in response_dict:
+#                 logger.error(f"Invalid response from GetItem for item {item_id}")
+#                 return {}
+            
+#             return response_dict.get('GetItemResponse', {}).get('Item', {})
+#         except Exception as e:
+#             logger.error(f"Error getting item details for item {item_id}: {str(e)}")
+#             return {}
+
+#     async def get_all_active_listings(self, include_details: bool = False) -> List[Dict[str, Any]]:
+#         """
+#         Get all active eBay listings with pagination
+
+#         Args:
+#             include_details: Whether to include detailed item information
+
+#         Returns:
+#             List of all active listing items with optional details
+#         """
+#         # Get first page to determine total number of pages
+#         first_page = await self.get_active_listings(page_num=1)
+
+#         # Check if we have pagination data
+#         pagination_result = first_page.get('PaginationResult', {})
+#         if not pagination_result:
+#             logger.error("No pagination information in eBay response")
+#             return []
+
+#         total_pages = int(pagination_result.get('TotalNumberOfPages', '1'))
+#         total_entries = int(pagination_result.get('TotalNumberOfEntries', '0'))
+
+#         logger.info(f"Found {total_entries} eBay listings across {total_pages} pages")
+
+#         # Extract items from first page
+#         all_items = []
+#         items = first_page.get('ItemArray', {}).get('Item', [])
+
+#         # Handle case where there's only one item (not returned as a list)
+#         if items and not isinstance(items, list):
+#             items = [items]
+
+#         if items:
+#             all_items.extend(items)
+#             logger.info(f"Added {len(items)} items from page 1, total: {len(all_items)}")
+
+#         # Fetch remaining pages if there are more than one
+#         if total_pages > 1:
+#             # Create tasks for all pages except the first one
+#             tasks = []
+#             for page in range(2, total_pages + 1):
+#                 task = asyncio.create_task(self.get_active_listings(page_num=page))
+#                 tasks.append((page, task))
+
+#             # Wait for all tasks to complete
+#             for page, task in tasks:
+#                 try:
+#                     result = await task
+#                     items = result.get('ItemArray', {}).get('Item', [])
+#                     if items:
+#                         # Handle case where there's only one item
+#                         if not isinstance(items, list):
+#                             items = [items]
+#                         all_items.extend(items)
+#                         logger.info(f"Added {len(items)} items from page {page}, total: {len(all_items)}")
+#                 except Exception as e:
+#                     logger.error(f"Error fetching page {page}: {str(e)}")
+ 
+#         # If detailed information is requested, fetch it for all items concurrently in batches
+#         if include_details and all_items:
+#             enriched_items = []
+
+#             # Process in smaller batches to avoid overwhelming the API
+#             batch_size = 50  # Adjust this based on your API rate limits
+#             for i in range(0, len(all_items), batch_size):
+#                 batch = all_items[i:i+batch_size]
+#                 batch_tasks = []
+
+#                 # Create tasks for each item in the batch
+#                 for item in batch:
+#                     item_id = item.get('ItemID')
+#                     task = asyncio.create_task(self.get_item_details(item_id))
+#                     batch_tasks.append((item, item_id, task))
+#                 # Fields to exclude from the details object to avoid duplication
+#                 duplicate_fields = [
+#                     'Description',  # Already extracted to top level
+#                     'ItemID',       # Already available at top level
+#                     'Title',        # Already available at top level
+#                     'StartPrice',   # Similar to CurrentPrice in basic listing
+#                     'Quantity',     # Already available at top level
+#                     'QuantityAvailable', # Already available at top level
+#                     'SKU',          # Already available at top level
+#                     'PictureDetails', # If you're extracting PictureURLs to the top level
+#                     'PrimaryCategory', # If you're extracting PrimaryCategoryID/Name to top level
+#                     'SellingStatus', # Already available at top level
+#                     'ListingDuration', # Already extracted to top level
+#                     'ListingType', # Already extracted to top level
+#                     'ListingDetails', # If this contains mostly duplicate info
+#                     'BuyItNowPrice',
+#                     'ShippingDetails',
+#                     'SellerProfiles',
+#                     'Location',
+#                     'Country',
+#                     'ConditionID',
+#                     'ConditionDisplayName',
+#                     'ItemSpecifics',
+#                     'TimeLeft',      # Already available at top level
+#                 ]
+
+#                 # Wait for all tasks in this batch to complete
+#                 for item, item_id, task in batch_tasks:
+#                     try:
+#                         details = await task
+
+#                         # Start with the basic listing info
+#                         enriched_item = item.copy()
+
+#                         # Add a details section with the complete GetItem response
+#                         # enriched_item['details'] = details
+
+#                         # Add some commonly used fields directly to the main object
+#                         enriched_item.update({
+#                             'PrimaryCategoryID': details.get('PrimaryCategory', {}).get('CategoryID'),
+#                             'PrimaryCategoryName': details.get('PrimaryCategory', {}).get('CategoryName'),
+#                             'Description': details.get('Description'),
+#                             'PictureURLs': details.get('PictureDetails', {}).get('PictureURL', []),
+#                             'PaymentMethods': details.get('PaymentMethods', []),
+#                             'Location': details.get('Location'),
+#                             'Country': details.get('Country'),
+#                             'ConditionID': details.get('ConditionID'),
+#                             'ConditionDisplayName': details.get('ConditionDisplayName'),
+#                             'ItemSpecifics': details.get('ItemSpecifics', {})
+#                         })
+
+#                         # Create a clean details object without duplicate fields
+#                         filtered_details = {k: v for k, v in details.items() if k not in duplicate_fields}
+
+#                         # Add the filtered details section
+#                         enriched_item['details'] = filtered_details
+
+#                         enriched_items.append(enriched_item)
+#                         batch_idx = i + batch_tasks.index((item, item_id, task))
+#                         print(batch_idx, item_id, enriched_item['PrimaryCategoryID'], enriched_item['PrimaryCategoryName'])
+
+#                     except Exception as e:
+#                         logger.error(f"Error getting details for item {item_id}: {str(e)}")
+
+#                 # Small delay between batches to avoid rate limiting
+#                 if i + batch_size < len(all_items):
+#                     await asyncio.sleep(0.5)
+
+#             return enriched_items
+#         else:
+#             # Return basic listing information without details
+#             return all_items
+
+#     async def get_selling_listings(self, page_num: int = 1, items_per_page: int = 200, include_active: bool = True,
+#                                   include_sold: bool = True,
+#                                   include_unsold: bool = True) -> Dict[str, Any]:
+#         """
+#         Get eBay selling listings (active, sold, unsold) for a specific page
+
+#         Args:
+#             page_num: Page number (1-based)
+#             items_per_page: Items per page (max 200)
+#             include_active: Whether to include active listings
+#             include_sold: Whether to include sold listings
+#             include_unsold: Whether to include unsold listings
+
+#         Returns:
+#             Dict containing listings data
+#         """
+
+#         auth_token = await self._get_auth_token()
+
+#         xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+#         <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+#             <RequesterCredentials>
+#                 <eBayAuthToken>{auth_token}</eBayAuthToken>
+#             </RequesterCredentials>
+#         """
+
+#         if include_active:
+#             xml_request += f"""
+#             <ActiveList>
+#                 <Include>true</Include>
+#                 <Pagination>
+#                     <EntriesPerPage>{items_per_page}</EntriesPerPage>
+#                     <PageNumber>{page_num}</PageNumber>
+#                 </Pagination>
+#             </ActiveList>
+#             """
+
+#         if include_sold:
+#             xml_request += f"""
+#             <SoldList>
+#                 <Include>true</Include>
+#                 <Pagination>
+#                     <EntriesPerPage>{items_per_page}</EntriesPerPage>
+#                     <PageNumber>{page_num}</PageNumber>
+#                 </Pagination>
+#                 <DurationInDays>60</DurationInDays>  <!-- Look for transactions in the last 60 days -->
+#                 <OrderStatusFilter>All</OrderStatusFilter>  <!-- Include all order statuses -->
+#             </SoldList>
+#             <CompletedList>  <!-- Also try the CompletedList -->
+#                 <Include>true</Include>
+#                 <Pagination>
+#                     <EntriesPerPage>{items_per_page}</EntriesPerPage>
+#                     <PageNumber>{page_num}</PageNumber>
+#                 </Pagination>
+#                 <DurationInDays>60</DurationInDays>
+#             </CompletedList>
+#             """
+
+#         if include_unsold:
+#             xml_request += f"""
+#             <UnsoldList>
+#                 <Include>true</Include>
+#                 <Pagination>
+#                     <EntriesPerPage>{items_per_page}</EntriesPerPage>
+#                     <PageNumber>{page_num}</PageNumber>
+#                 </Pagination>
+#             </UnsoldList>
+#             """
+
+#         xml_request += """
+#             <DetailLevel>ReturnAll</DetailLevel>
+#         </GetMyeBaySellingRequest>"""
+
+#         try:
+#             response_dict = await self._make_request('GetMyeBaySelling', xml_request)
+
+#             # print(type(response_dict))
+            
+#             # print('GetMyeBaySellingResponse' in response_dict)
+#             if 'GetMyeBaySellingResponse' not in response_dict:
+#                 logger.error("Invalid response from GetMyeBaySelling")
+#                 return {}
+
+             
+#             # Log the full response structure for debugging (just keys)
+#             result = response_dict.get('GetMyeBaySellingResponse', {})
+#             logger.info(f"GetMyeBaySellingResponse keys: {list(result.keys())}")
+
+#             if result:
+#                 return result
+
+#             if 'Errors' in result:
+#                 print(result['Errors'])
+
+#             # If SoldList is present, log its structure
+#             if 'SoldList' in result:
+#                 sold_list = result.get('SoldList', {})
+#                 logger.info(f"SoldList keys: {list(sold_list.keys())}")
+
+#                 # Check if we have OrderTransactionArray instead of ItemArray
+#                 if 'OrderTransactionArray' in sold_list:
+#                     logger.info("Found OrderTransactionArray in SoldList")
+#                     # Convert OrderTransactionArray to a format similar to ItemArray
+#                     order_transactions = sold_list.get('OrderTransactionArray', {}).get('OrderTransaction', [])
+#                     if order_transactions and not isinstance(order_transactions, list):
+#                         order_transactions = [order_transactions]
+
+#                     item_array = []
+#                     for transaction in order_transactions:
+#                         # Extract the item from the transaction and add it to our array
+#                         if 'Item' in transaction:
+#                             item = transaction['Item']
+#                             # Add transaction data to the item
+#                             item['Transaction'] = {k: v for k, v in transaction.items() if k != 'Item'}
+#                             item_array.append(item)
+
+#                     # Replace the SoldList structure with one that matches ActiveList
+#                     result['SoldList']['ItemArray'] = {'Item': item_array}
+
+#             return result
+#         except Exception as e:
+#             logger.error(f"Error getting selling listings: {str(e)}")
+#             return {}
+
+#     async def get_all_selling_listings(self, include_active: bool = True,
+#                                       include_sold: bool = True,
+#                                       include_unsold: bool = True,
+#                                       include_details: bool = True) -> Dict[str, List[Dict[str, Any]]]:
+#         """
+#         Get all eBay selling listings with pagination and optional detailed information
+        
+#         Args:
+#             include_active: Whether to include active listings
+#             include_sold: Whether to include sold listings
+#             include_unsold: Whether to include unsold listings
+#             include_details: Whether to include detailed item information
+            
+#         Returns:
+#             Dict with keys 'active', 'sold', 'unsold' containing lists of items
+#         """
+#         result = {
+#             'active': [],
+#             'sold': [],
+#             'unsold': []
+#         }
+        
+#         # Get first page to determine total pages for each list type
+#         first_page = await self.get_selling_listings(
+#             page_num=1, 
+#             include_active=include_active,
+#             include_sold=include_sold,
+#             include_unsold=include_unsold
+#         )
+        
+#         # Process active listings if requested
+#         if include_active and 'ActiveList' in first_page:
+#             active_list = first_page.get('ActiveList', {})
+#             result['active'] = await self._process_listing_pages(active_list, 'ActiveList', include_details)
+            
+#         # Process sold listings if requested
+#         if include_sold and 'SoldList' in first_page:
+#             sold_list = first_page.get('SoldList', {})
+#             # Also include details for sold listings
+#             result['sold'] = await self._process_listing_pages(sold_list, 'SoldList', include_details)
+            
+#         # Process unsold listings if requested
+#         if include_unsold and 'UnsoldList' in first_page:
+#             unsold_list = first_page.get('UnsoldList', {})
+#             # Also include details for unsold listings
+#             result['unsold'] = await self._process_listing_pages(unsold_list, 'UnsoldList', include_details)
+        
+#         return result
+
+#     async def _process_listing_pages(self, list_data: Dict[str, Any], list_type: str, include_details: bool = False, test_mode: bool = False) -> List[Dict[str, Any]]:
+#         """
+#         Process listing pages for a specific list type (active, sold, unsold)
+
+#         Args:
+#             list_data: Data for the first page of listings
+#             list_type: Type of listing ('ActiveList', 'SoldList', 'UnsoldList')
+#             include_details: Whether to include detailed item information
+#             test_mode: If True, limit to first page and few items for testing
+
+#         Returns:
+#             List of all items across all pages
+#         """
+#         # Check if we have pagination data
+#         pagination_result = list_data.get('PaginationResult', {})
+#         if not pagination_result:
+#             logger.error(f"No pagination information in eBay response for {list_type}")
+#             return []
+
+#         total_pages = int(pagination_result.get('TotalNumberOfPages', '1'))
+#         total_entries = int(pagination_result.get('TotalNumberOfEntries', '0'))
+
+#         # In test mode, we only process the first page
+#         if test_mode:
+#             logger.info(f"Test mode: Only processing page 1 of {total_pages} for {list_type}")
+#             total_pages = 1
+
+#         logger.info(f"Found {total_entries} eBay {list_type} listings across {total_pages} pages")
+
+#         all_items = []
+
+#         # Special handling for SoldList which uses OrderTransactionArray structure
+#         if list_type == 'SoldList' and 'OrderTransactionArray' in list_data:
+#             logger.info("Processing OrderTransactionArray for SoldList")
+#             order_transactions = list_data.get('OrderTransactionArray', {}).get('OrderTransaction', [])
+            
+#             if order_transactions:
+#                 if not isinstance(order_transactions, list):
+#                     order_transactions = [order_transactions]
+                
+#                 for transaction in order_transactions:
+#                     # The sold transaction structure has an extra layer
+#                     # The actual transaction is inside a 'Transaction' key
+#                     if 'Transaction' in transaction:
+#                         transaction_data = transaction['Transaction']
+                        
+#                         # Now look for Item inside this transaction_data
+#                         if 'Item' in transaction_data:
+#                             # Extract the Item data
+#                             item = transaction_data['Item'].copy()
+                            
+#                             # Ensure ItemID is available
+#                             if 'ItemID' in item:
+#                                 # Add transaction details to the item
+#                                 item['Transaction'] = {k: v for k, v in transaction_data.items() if k != 'Item'}
+#                                 item['_listing_type'] = 'sold'
+#                                 all_items.append(item)
+#                             else:
+#                                 logger.warning(f"Skipping transaction with missing ItemID in Item data")
+#                         else:
+#                             logger.warning(f"Skipping transaction with no Item data in Transaction")
+#                     else:
+#                         logger.warning(f"Skipping transaction with no Transaction data: {list(transaction.keys())}")
+                
+#                 logger.info(f"Added {len(all_items)} items from {list_type} page 1")
+            
+#             # Process remaining pages if any
+#             if total_pages > 1:
+#                 for page in range(2, total_pages + 1):
+#                     logger.info(f"Fetching {list_type} page {page}/{total_pages}")
+                    
+#                     result = await self.get_selling_listings(
+#                         page_num=page,
+#                         include_active=(list_type == 'ActiveList'),
+#                         include_sold=(list_type == 'SoldList'),
+#                         include_unsold=(list_type == 'UnsoldList')
+#                     )
+                    
+#                     if list_type in result:
+#                         sold_list = result.get(list_type, {})
+#                         if 'OrderTransactionArray' in sold_list:
+#                             order_transactions = sold_list.get('OrderTransactionArray', {}).get('OrderTransaction', [])
+                            
+#                             if order_transactions:
+#                                 if not isinstance(order_transactions, list):
+#                                     order_transactions = [order_transactions]
+                                
+#                                 page_items = []
+#                                 for transaction in order_transactions:
+#                                     if 'Transaction' in transaction:
+#                                         transaction_data = transaction['Transaction']
+                                        
+#                                         if 'Item' in transaction_data:
+#                                             item = transaction_data['Item'].copy()
+#                                             if 'ItemID' in item:
+#                                                 item['Transaction'] = {k: v for k, v in transaction_data.items() if k != 'Item'}
+#                                                 item['_listing_type'] = 'sold'
+#                                                 page_items.append(item)
+                                
+#                                 all_items.extend(page_items)
+#                                 logger.info(f"Added {len(page_items)} items from {list_type} page {page}, total: {len(all_items)}")
+#         else:
+#             # Standard processing for non-SoldList (ActiveList or UnsoldList)
+#             items = list_data.get('ItemArray', {}).get('Item', [])
+
+#             # Handle case where there's only one item (not returned as a list)
+#             if items and not isinstance(items, list):
+#                 items = [items]
+
+#             if items:
+#                 # Add listing type to each item
+#                 for item in items:
+#                     if list_type == 'ActiveList':
+#                         item['_listing_type'] = 'active'
+#                     elif list_type == 'UnsoldList':
+#                         item['_listing_type'] = 'unsold'
+
+#                 all_items.extend(items)
+#                 logger.info(f"Added {len(items)} items from {list_type} page 1, total: {len(all_items)}")
+            
+#             # Fetch remaining pages if there are more than one
+#             if total_pages > 1:
+#                 for page in range(2, total_pages + 1):
+#                     logger.info(f"Fetching {list_type} page {page}/{total_pages}")
+                    
+#                     result = await self.get_selling_listings(
+#                         page_num=page,
+#                         include_active=(list_type == 'ActiveList'),
+#                         include_sold=(list_type == 'SoldList'),
+#                         include_unsold=(list_type == 'UnsoldList')
+#                     )
+                    
+#                     if list_type in result:
+#                         next_list_data = result.get(list_type, {})
+#                         items = next_list_data.get('ItemArray', {}).get('Item', [])
+                        
+#                         if items:
+#                             if not isinstance(items, list):
+#                                 items = [items]
+                            
+#                             # Add listing type to each item
+#                             for item in items:
+#                                 if list_type == 'ActiveList':
+#                                     item['_listing_type'] = 'active'
+#                                 elif list_type == 'UnsoldList':
+#                                     item['_listing_type'] = 'unsold'
+                            
+#                             all_items.extend(items)
+#                             logger.info(f"Added {len(items)} items from {list_type} page {page}, total: {len(all_items)}")
+        
+#         # If detailed information is requested, fetch it for all items
+#         if include_details and all_items:
+#             enriched_items = []
+
+#             # Define duplicate fields to exclude from details section
+#             duplicate_fields = [
+#                 'Description',  # Already extracted to top level
+#                 'ItemID',       # Already available at top level
+#                 'Title',        # Already available at top level
+#                 'StartPrice',   # Similar to CurrentPrice in basic listing
+#                 'Quantity',     # Already available at top level
+#                 'QuantityAvailable', # Already available at top level
+#                 'SKU',          # Already available at top level
+#                 'PictureDetails', # If you're extracting PictureURLs to the top level
+#                 'PrimaryCategory', # If you're extracting PrimaryCategoryID/Name to top level
+#                 'SellingStatus', # Already available at top level
+#                 'ListingDuration', # Already extracted to top level
+#                 'ListingType', # Already extracted to top level
+#                 'ListingDetails', # If this contains mostly duplicate info
+#                 'BuyItNowPrice',
+#                 'ShippingDetails',
+#                 'SellerProfiles',
+#                 'Location',
+#                 'Country',
+#                 'ConditionID',
+#                 'ConditionDisplayName',
+#                 'ItemSpecifics',
+#                 'TimeLeft',      # Already available at top level
+#             ]
+            
+#             # Process in smaller batches to avoid overwhelming the API
+#             batch_size = 120  # Adjust based on your API rate limits
+#             for i in range(0, len(all_items), batch_size):
+#                 batch = all_items[i:i+batch_size]
+#                 batch_tasks = []
+
+#                 # Create tasks for each item in the batch
+#                 for item in batch:
+#                     item_id = item.get('ItemID')
+#                     if item_id:
+#                         task = asyncio.create_task(self.get_item_details(item_id))
+#                         batch_tasks.append((item, item_id, task))
+                
+#                 # Wait for all tasks in this batch to complete
+#                 for item, item_id, task in batch_tasks:
+#                     try:
+#                         details = await task
+                        
+#                         # Start with the basic listing info
+#                         enriched_item = item.copy()
+                        
+#                         # Add a details section with the complete GetItem response
+#                         # enriched_item['details'] = details
+                        
+#                         # Add some commonly used fields directly to the main object
+#                         if details:
+#                             enriched_item.update({
+#                                 'PrimaryCategoryID': details.get('PrimaryCategory', {}).get('CategoryID'),
+#                                 'PrimaryCategoryName': details.get('PrimaryCategory', {}).get('CategoryName'),
+#                                 'Description': details.get('Description'),
+#                                 'PictureURLs': details.get('PictureDetails', {}).get('PictureURL', []),
+#                                 'PaymentMethods': details.get('PaymentMethods', []),
+#                                 'Location': details.get('Location'),
+#                                 'Country': details.get('Country'),
+#                                 'ConditionID': details.get('ConditionID'),
+#                                 'ConditionDisplayName': details.get('ConditionDisplayName')
+#                             })
+                            
+#                             # Add ItemSpecifics if available
+#                             if 'ItemSpecifics' in details:
+#                                 enriched_item['ItemSpecifics'] = details.get('ItemSpecifics')
+                            
+#                             # Create a clean details object without duplicate fields
+#                             filtered_details = {k: v for k, v in details.items() if k not in duplicate_fields}
+                            
+#                             # Add the filtered details section
+#                             enriched_item['details'] = filtered_details
+                        
+#                         enriched_items.append(enriched_item)
+#                         batch_idx = i + batch_tasks.index((item, item_id, task))
+#                         logger.info(f"Enriched item {batch_idx+1}/{len(all_items)}: {item_id}")
+                        
+#                     except Exception as e:
+#                         logger.error(f"Error getting details for item {item_id}: {str(e)}")
+#                         # Still include the basic item
+#                         enriched_items.append(item)
+                
+#                 # Small delay between batches to avoid rate limiting
+#                 if i + batch_size < len(all_items):
+#                     await asyncio.sleep(0.5)
+            
+#             return enriched_items
+        
+#         # Return all items without trying to process them in the database
+#         return all_items
+
+#     async def analyze_listing_structures(self) -> Dict[str, Any]:
+#         """
+#         Analyze and print the structure of different eBay listing types
+        
+#         Returns:
+#             Dict containing structure analysis
+#         """
+#         # Get a sample of each type of listing
+#         listings = await self.get_all_selling_listings(
+#             include_active=True,
+#             include_sold=True,
+#             include_unsold=True,
+#             include_details=True  # Get details for active listings
+#         )
+        
+#         analysis = {}
+        
+#         # Helper function to extract field structure
+#         def extract_structure(data, prefix=''):
+#             if isinstance(data, dict):
+#                 result = {}
+#                 for key, value in data.items():
+#                     path = f"{prefix}.{key}" if prefix else key
+#                     if isinstance(value, (dict, list)):
+#                         result[key] = extract_structure(value, path)
+#                     else:
+#                         result[key] = type(value).__name__
+#                 return result
+#             elif isinstance(data, list) and data:
+#                 # Take the first item as a sample
+#                 sample = data[0]
+#                 if isinstance(sample, (dict, list)):
+#                     return [extract_structure(sample, f"{prefix}[0]")]
+#                 else:
+#                     return [type(sample).__name__]
+#             else:
+#                 return type(data).__name__
+        
+#         # Analyze each listing type
+#         # for listing_type in ['active', 'sold', 'unsold']:
+#         for listing_type in ['sold', 'unsold']:
+#             if listings[listing_type]:
+#                 # Get a sample listing
+#                 sample = listings[listing_type][0]
+                
+#                 # Extract and store structure
+#                 analysis[listing_type] = {
+#                     'field_count': len(sample) if isinstance(sample, dict) else 0,
+#                     'structure': extract_structure(sample)
+#                 }
+                
+#                 # Print structure for inspection
+#                 print(f"\n=== {listing_type.upper()} LISTING STRUCTURE ===")
+#                 print(f"Total fields: {analysis[listing_type]['field_count']}")
+#                 print("Fields:")
+                
+#                 def print_structure(structure, level=0):
+#                     if isinstance(structure, dict):
+#                         for key, value in structure.items():
+#                             if isinstance(value, (dict, list)):
+#                                 print("  " * level + f"{key}:")
+#                                 print_structure(value, level + 1)
+#                             else:
+#                                 print("  " * level + f"{key}: {value}")
+#                     elif isinstance(structure, list) and structure:
+#                         print("  " * level + f"[{type(structure[0]).__name__}]")
+#                         if isinstance(structure[0], (dict, list)):
+#                             print_structure(structure[0], level + 1)
+                
+#                 print_structure(analysis[listing_type]['structure'])
+                
+#                 # Print a JSON sample for the first item
+#                 print(f"\nSample {listing_type.upper()} listing (first item):")
+#                 print(json.dumps(sample, indent=2, default=str)[:5000] + "...(truncated)")
+        
+#         return analysis
+
+#     async def save_listing_structures(self, output_file: str = "ebay_listing_structures.txt") -> None:
+#         """
+#         Analyze eBay listing structures and save to a text file
+        
+#         Args:
+#             output_file: Path to the output file
+#         """
+#         import json
+#         import os
+        
+#         # Get a sample of each type of listing
+#         listings = await self.get_all_selling_listings(
+#             include_active=True,
+#             include_sold=True,
+#             include_unsold=True,
+#             include_details=True  # Get details for active listings
+#         )
+        
+#         # Open the output file
+#         with open(output_file, 'w') as f:
+#             f.write("=== EBAY LISTING STRUCTURES ANALYSIS ===\n\n")
+#             f.write(f"Analysis timestamp: {datetime.now(timezone.utc)().isoformat()}\n\n")
+            
+#             # Write summary
+#             f.write("=== SUMMARY ===\n")
+#             f.write(f"Total active listings: {len(listings['active'])}\n")
+#             f.write(f"Total sold listings: {len(listings['sold'])}\n")
+#             f.write(f"Total unsold listings: {len(listings['unsold'])}\n\n")
+            
+#             # Helper function to extract field structure
+#             def extract_structure(data, prefix=''):
+#                 if isinstance(data, dict):
+#                     result = {}
+#                     for key, value in data.items():
+#                         path = f"{prefix}.{key}" if prefix else key
+#                         if isinstance(value, (dict, list)):
+#                             result[key] = extract_structure(value, path)
+#                         else:
+#                             result[key] = type(value).__name__
+#                     return result
+#                 elif isinstance(data, list) and data:
+#                     # Take the first item as a sample
+#                     sample = data[0]
+#                     if isinstance(sample, (dict, list)):
+#                         return [extract_structure(sample, f"{prefix}[0]")]
+#                     else:
+#                         return [type(sample).__name__]
+#                 else:
+#                     return type(data).__name__
+            
+#             # Helper function to print structure to file
+#             def write_structure(f, structure, level=0):
+#                 if isinstance(structure, dict):
+#                     for key, value in structure.items():
+#                         if isinstance(value, (dict, list)):
+#                             f.write("  " * level + f"{key}:\n")
+#                             write_structure(f, value, level + 1)
+#                         else:
+#                             f.write("  " * level + f"{key}: {value}\n")
+#                 elif isinstance(structure, list) and structure:
+#                     f.write("  " * level + f"[{type(structure[0]).__name__}]\n")
+#                     if isinstance(structure[0], (dict, list)):
+#                         write_structure(f, structure[0], level + 1)
+            
+#             # Analyze each listing type
+#             for listing_type in ['active', 'sold', 'unsold']:
+#                 if listings[listing_type]:
+#                     f.write(f"\n\n=== {listing_type.upper()} LISTING STRUCTURE ===\n")
+                    
+#                     # Get a sample listing
+#                     sample = listings[listing_type][0]
+                    
+#                     # Write total field count
+#                     f.write(f"Total fields: {len(sample) if isinstance(sample, dict) else 0}\n")
+#                     f.write("Fields:\n")
+                    
+#                     # Write field structure
+#                     structure = extract_structure(sample)
+#                     write_structure(f, structure)
+                    
+#                     # Write a sample listing
+#                     f.write(f"\nSample {listing_type.upper()} listing (first item):\n")
+#                     formatted_json = json.dumps(sample, indent=2, default=str)
+#                     f.write(formatted_json)
+                    
+#                     # If this is the active listing with details, also analyze the details structure separately
+#                     if listing_type == 'active' and 'details' in sample:
+#                         f.write("\n\n=== ACTIVE LISTING DETAILS ONLY ===\n")
+#                         details = sample['details']
+#                         f.write(f"Total detail fields: {len(details) if isinstance(details, dict) else 0}\n")
+#                         f.write("Detail fields:\n")
+#                         details_structure = extract_structure(details)
+#                         write_structure(f, details_structure)
+
+#         print(f"Listing structures saved to {os.path.abspath(output_file)}")
+
+
+
+# class EbayTradingAPIOld_deprecated:
+#     """
+#     Client for eBay's Trading API (XML-based)
+#     Used for operations not yet available in the REST APIs
+#     """
+    
+#     def __init__(self, sandbox: bool = False, site_id: str = '3'):
+#         """
+#         Initialize eBay Trading API client
+        
+#         Args:
+#             sandbox: Whether to use sandbox environment
+#             site_id: eBay site ID (3 = UK)
+#         """
+#         self.sandbox = sandbox
+#         self.site_id = site_id
+#         self.compatibility_level = '1155'
+        
+#         # Set endpoint based on environment
+#         if sandbox:
+#             self.endpoint = 'https://api.sandbox.ebay.com/ws/api.dll'
+#         else:
+#             self.endpoint = 'https://api.ebay.com/ws/api.dll'
+        
+#         self.auth_manager = EbayAuthManager(sandbox=sandbox)
+    
+#     async def _get_auth_token(self) -> str:
+#         """Get OAuth token for API requests"""
+#         return await self.auth_manager.get_access_token()
+    
+#     async def get_all_active_listings(self) -> List[Dict[str, Any]]:
+#         """
+#         Get all active eBay listings with pagination
+        
+#         Returns:
+#             List of all active listing items
+#         """
+#         # Get first page to determine total number of pages
+#         first_page = await self.get_active_listings(page_num=1)
+        
+#         # Check if we have pagination data
+#         pagination_result = first_page.get('PaginationResult', {})
+#         if not pagination_result:
+#             logger.error("No pagination information in eBay response")
+#             return []
+        
+#         total_pages = int(pagination_result.get('TotalNumberOfPages', '1'))
+#         total_entries = int(pagination_result.get('TotalNumberOfEntries', '0'))
+        
+#         logger.info(f"Found {total_entries} eBay listings across {total_pages} pages")
+        
+#         # Extract items from first page
+#         all_items = []
+#         items = first_page.get('ItemArray', {}).get('Item', [])
+        
+#         # Handle case where there's only one item (not returned as a list)
+#         if items and not isinstance(items, list):
+#             items = [items]
+        
+#         if items:
+#             all_items.extend(items)
+        
+#         # Fetch remaining pages if there are more than one
+#         if total_pages > 1:
+#             for page in range(2, total_pages + 1):
+#                 logger.info(f"Fetching eBay listings page {page} of {total_pages}")
+#                 result = await self.get_active_listings(page_num=page)
+                
+#                 items = result.get('ItemArray', {}).get('Item', [])
+#                 if items:
+#                     # Handle case where there's only one item
+#                     if not isinstance(items, list):
+#                         items = [items]
+#                     all_items.extend(items)
+        
+#         return all_items
+
+#     async def get_active_listings(self, page_num: int = 1, items_per_page: int = 200) -> Dict[str, Any]:
+#         """
+#         Get active eBay listings for a specific page
+        
+#         Args:
+#             page_num: Page number (1-based)
+#             items_per_page: Items per page (max 200)
+            
+#         Returns:
+#             Dict containing active listings data
+#         """
+#         auth_token = await self._get_auth_token()
+        
+#         xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+#         <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+#             <RequesterCredentials>
+#                 <eBayAuthToken>{auth_token}</eBayAuthToken>
+#             </RequesterCredentials>
+#             <ActiveList>
+#                 <Include>true</Include>
+#                 <Pagination>
+#                     <EntriesPerPage>{items_per_page}</EntriesPerPage>
+#                     <PageNumber>{page_num}</PageNumber>
+#                 </Pagination>
+#             </ActiveList>
+#             <DetailLevel>ReturnAll</DetailLevel>
+#         </GetMyeBaySellingRequest>"""
+
+#         try:
+#             response_dict = await self.execute_call('GetMyeBaySelling', xml_request)
+            
+#             if 'GetMyeBaySellingResponse' not in response_dict:
+#                 logger.error("Invalid response from GetMyeBaySelling")
+#                 return {}
+            
+#             return response_dict.get('GetMyeBaySellingResponse', {}).get('ActiveList', {})
+#         except Exception as e:
+#             logger.error(f"Error getting active listings: {str(e)}")
+#             return {}
+
+
+class EbayTradingLegacyAPI:
+    """Class for eBay Trading API (XML-based) operations"""
+    
     def __init__(self, sandbox: bool = False, site_id: str = '3'):
         self.auth_manager = EbayAuthManager(sandbox=sandbox)
         self.sandbox = sandbox
         self.site_id = site_id  # Default to UK (3)
-        self.marketplace_id = "EBAY_GB"  # Default for UK
         self.compatibility_level = '1155'
-
+        
         if sandbox:
-            self.endpoint = "https://api.sandbox.ebay.com/sell/inventory/v1"
+            self.endpoint = "https://api.sandbox.ebay.com/ws/api.dll"
         else:
-            self.endpoint = "https://api.ebay.com/sell/inventory/v1"
-
+            self.endpoint = "https://api.ebay.com/ws/api.dll"
+            
     async def _get_auth_token(self) -> str:
         """Get OAuth token for API requests"""
         return await self.auth_manager.get_access_token()
-
-    async def _make_request(self, call_name: str, xml_request: str, api_type: str = 'trading') -> Dict:
-        """Make a request to eBay API asynchronously"""
         
+    async def _make_request(self, call_name: str, xml_request: str) -> Dict:
+        """Make a request to eBay Trading API"""
         auth_token = await self._get_auth_token()
         
         headers = {
             'X-EBAY-API-CALL-NAME': call_name,
             'X-EBAY-API-SITEID': self.site_id,
             'X-EBAY-API-COMPATIBILITY-LEVEL': self.compatibility_level,
+            'X-EBAY-API-IAF-TOKEN': auth_token,
             'Content-Type': 'text/xml'
         }
-        # Set the correct endpoint based on API type
-        if api_type == 'trading':
-            endpoint = 'https://api.ebay.com/ws/api.dll'
-            headers["X-EBAY-API-IAF-TOKEN"] = auth_token
-        elif api_type == 'shopping':
-            endpoint = 'https://open.api.ebay.com/shopping'
-            headers["X-EBAY-API-IAF-TOKEN"] = auth_token
-        else:
-            raise ValueError(f"Unsupported API type: {api_type}")
 
         try:
-            # Use asyncio to run the request in a thread pool
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None, 
-                lambda: requests.post(endpoint, headers=headers, data=xml_request)
-            )
-
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.endpoint,
+                    headers=headers,
+                    content=xml_request,
+                    timeout=30.0
+                )
+                
             if response.status_code != 200:
-                print(f"Error in API call {call_name}: {response.text}")
+                logger.error(f"Error in API call {call_name}: {response.text}")
                 return {}
-
-            # Parse XML response to dict - also run in thread pool to avoid blocking
-            response_text = response.text
-            response_dict = await loop.run_in_executor(
-                None,
-                lambda: xmltodict.parse(response_text)
-            )
-
+                
+            # Parse XML response to dict
+            response_dict = xmltodict.parse(response.text)
             return response_dict
+            
         except Exception as e:
-            print(f"Error in API call {call_name}: {str(e)}")
-            return {}
-
-    async def get_active_listings(self, page_num: int = 1, items_per_page: int = 200, include_details: bool = False) -> Dict[str, Any]:
-        """
-        Get active eBay listings for a specific page
-
-        Args:
-            page_num: Page number (1-based)
-            items_per_page: Items per page (max 200)
-            include_details: Whether to include detailed item information
-
-        Returns:
-            Dict containing active listings data
-        """
-
-        auth_token = await self._get_auth_token()
-        
-        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
-        <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-            <RequesterCredentials>
-                <eBayAuthToken>{auth_token}</eBayAuthToken>
-            </RequesterCredentials>
-            <ActiveList>
-                <Include>true</Include>
-                <Pagination>
-                    <EntriesPerPage>{items_per_page}</EntriesPerPage>
-                    <PageNumber>{page_num}</PageNumber>
-                </Pagination>
-            </ActiveList>
-            <DetailLevel>ReturnAll</DetailLevel>
-        </GetMyeBaySellingRequest>"""
-
-        try:
-            response_dict = await self._make_request('GetMyeBaySelling', xml_request)
-
-            if 'GetMyeBaySellingResponse' not in response_dict:
-                logger.error("Invalid response from GetMyeBaySelling")
-                return {}
-
-            # Return the ActiveList section
-            return response_dict.get('GetMyeBaySellingResponse', {}).get('ActiveList', {})
-        except Exception as e:
-            logger.error(f"Error getting active listings: {str(e)}")
-            return {}
-
+            logger.error(f"Error in API call {call_name}: {str(e)}")
+            raise EbayAPIError(f"Trading API error: {str(e)}")
+            
     async def get_item_details(self, item_id: str) -> Dict[str, Any]:
-        """
-        Get detailed information for a specific eBay item
-
-        Args:
-            item_id: The eBay item ID
-
-        Returns:
-            Dict: Detailed item information
-        """
-
-        auth_token = await self._get_auth_token()
-        
+        """Get detailed information for a specific eBay item"""
         xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
         <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
             <RequesterCredentials>
-                <eBayAuthToken>{auth_token}</eBayAuthToken>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
             </RequesterCredentials>
             <ItemID>{item_id}</ItemID>
             <DetailLevel>ReturnAll</DetailLevel>
             <IncludeItemSpecifics>true</IncludeItemSpecifics>
             <IncludeDescription>true</IncludeDescription>
         </GetItemRequest>"""
-    
-        try:
-            response_dict = await self._make_request('GetItem', xml_request)
-            
-            if 'GetItemResponse' not in response_dict:
-                logger.error(f"Invalid response from GetItem for item {item_id}")
-                return {}
-            
-            return response_dict.get('GetItemResponse', {}).get('Item', {})
-        except Exception as e:
-            logger.error(f"Error getting item details for item {item_id}: {str(e)}")
+
+        response_dict = await self._make_request('GetItem', xml_request)
+        
+        if 'GetItemResponse' not in response_dict:
             return {}
 
-    async def get_all_active_listings(self, include_details: bool = False) -> List[Dict[str, Any]]:
+        return response_dict.get('GetItemResponse', {}).get('Item', {})
+        
+    async def get_active_inventory(self, page_number=1, entries_per_page=100):
+        """Get all active inventory listings"""
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <ActiveList>
+                <Include>true</Include>
+                <Pagination>
+                    <EntriesPerPage>{entries_per_page}</EntriesPerPage>
+                    <PageNumber>{page_number}</PageNumber>
+                </Pagination>
+            </ActiveList>
+            <DetailLevel>ReturnAll</DetailLevel>
+        </GetMyeBaySellingRequest>"""
+
+        response_dict = await self._make_request('GetMyeBaySelling', xml_request)
+        return response_dict.get('GetMyeBaySellingResponse', {}).get('ActiveList', {})
+        
+    async def get_valid_end_reasons(self, item_id: str = None) -> List[Dict[str, str]]:
         """
-        Get all active eBay listings with pagination
+        Get valid ending reason codes for an item
+        
+        Args:
+            item_id: Optional item ID to get specific ending reasons
+            
+        Returns:
+            List of dictionaries with ending reason codes and descriptions
+        """
+        if item_id:
+            # Get ending reasons for a specific item
+            xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+            <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+                <RequesterCredentials>
+                    <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+                </RequesterCredentials>
+                <ItemID>{item_id}</ItemID>
+                <DetailLevel>ReturnAll</DetailLevel>
+                <OutputSelector>EndingReason</OutputSelector>
+                <OutputSelector>EndItemResponseDetails</OutputSelector>
+            </GetItemRequest>"""
+
+            try:
+                response_dict = await self._make_request('GetItem', xml_request)
+                
+                # Parse the response to extract ending reasons
+                if 'GetItemResponse' in response_dict:
+                    item_response = response_dict['GetItemResponse']
+                    
+                    # Check for item-specific ending reasons
+                    if 'EndItemResponseDetails' in item_response:
+                        end_details = item_response['EndItemResponseDetails']
+                        
+                        # If EndItemResponseDetails contains EndingReasonDetails
+                        if 'EndingReasonDetails' in end_details:
+                            ending_reasons = end_details['EndingReasonDetails']
+                            
+                            # Convert to list if it's a single item
+                            if not isinstance(ending_reasons, list):
+                                ending_reasons = [ending_reasons]
+                                
+                            reasons = []
+                            for reason in ending_reasons:
+                                reasons.append({
+                                    'code': reason.get('EndingReason', ''),
+                                    'description': reason.get('Description', '')
+                                })
+                            
+                            if reasons:
+                                logger.info(f"Retrieved {len(reasons)} ending reasons for item {item_id}")
+                                return reasons
+                    
+                    # Try alternate location in the response
+                    if 'Item' in item_response and 'EndingDetails' in item_response['Item']:
+                        ending_details = item_response['Item']['EndingDetails']
+                        if 'EndingReason' in ending_details:
+                            return [{'code': ending_details['EndingReason'], 'description': 'Item ending reason'}]
+                            
+            except Exception as e:
+                logger.warning(f"Failed to get ending reasons for item {item_id}: {str(e)}")
+        
+        # For eBay UK site (site_id = 3), these are the standard ending reasons
+        logger.info("Using standard ending reasons for UK site")
+        return [
+            {'code': 'NotAvailable', 'description': 'Item is no longer available'},
+            {'code': 'LostOrBroken', 'description': 'Item is lost or broken'},
+            {'code': 'Incorrect', 'description': 'Listing contains errors'},
+            {'code': 'SoldOffEbay', 'description': 'Item sold elsewhere'}
+        ]
+            
+    async def end_listing(self, item_id: str, reason_code: str = "NotAvailable") -> Dict:
+        """End an active eBay listing"""
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <EndItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <ItemID>{item_id}</ItemID>
+            <EndingReason>{reason_code}</EndingReason>
+        </EndItemRequest>"""
+        
+        response = await self._make_request('EndItem', xml_request)
+        return response
+
+    async def get_total_active_listings_count(self) -> int:
+        """Get the total count of active listings without fetching all data"""
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <ActiveList>
+                <Include>true</Include>
+                <Pagination>
+                    <EntriesPerPage>1</EntriesPerPage>
+                    <PageNumber>1</PageNumber>
+                </Pagination>
+            </ActiveList>
+            <OutputSelector>ActiveList.PaginationResult</OutputSelector>
+        </GetMyeBaySellingRequest>"""
+        
+        response_dict = await self._make_request('GetMyeBaySelling', xml_request)
+        
+        if 'GetMyeBaySellingResponse' not in response_dict:
+            return 0
+            
+        pagination = response_dict.get('GetMyeBaySellingResponse', {}).get('ActiveList', {}).get('PaginationResult', {})
+        return int(pagination.get('TotalNumberOfEntries', '0'))
+
+    async def relist_item(self, item_id: str) -> Dict[str, Any]:
+        """
+        Relist an item that has been ended
+        
+        Args:
+            item_id: Original item ID to relist
+            
+        Returns:
+            Dict with new item ID and other details
+        """
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <RelistItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <Item>
+                <ItemID>{item_id}</ItemID>
+            </Item>
+        </RelistItemRequest>"""
+        
+        response_dict = await self._make_request('RelistItem', xml_request)
+        return response_dict.get('RelistItemResponse', {})
+
+    async def create_similar_listing(self, original_item_id: str, append_to_title: str = "- Relisted") -> Dict[str, Any]:
+        """
+        Create a new listing based on an existing/ended item
+        
+        Args:
+            original_item_id: Original item ID to copy details from
+            append_to_title: Text to append to the original title (default: "- Relisted")
+            
+        Returns:
+            Dict with new item ID and other details
+        """
+        logger.info(f"Creating similar listing based on item {original_item_id}")
+        
+        # Get the original item details
+        original_item = await self.get_item_details(original_item_id)
+        if not original_item:
+            logger.error(f"Could not retrieve details for item {original_item_id}")
+            raise EbayAPIError(f"Item details not found for {original_item_id}")
+        
+        # Extract critical fields with fallbacks
+        title = original_item.get('Title', '')
+        if append_to_title and title:
+            title = f"{title} {append_to_title}"
+            
+        description = original_item.get('Description', '')
+        category_id = original_item.get('PrimaryCategory', {}).get('CategoryID', '')
+        start_price = original_item.get('StartPrice', {}).get('#text', '0.0')
+        currency = original_item.get('StartPrice', {}).get('@currencyID', 'GBP')
+        condition_id = original_item.get('ConditionID', '3000')  # 3000 is Used in Very Good condition
+        quantity = original_item.get('Quantity', '1')
+        
+        # Get item specifics (important for eBay listing quality)
+        item_specifics = []
+        if 'ItemSpecifics' in original_item and 'NameValueList' in original_item['ItemSpecifics']:
+            name_value_lists = original_item['ItemSpecifics']['NameValueList']
+            if not isinstance(name_value_lists, list):
+                name_value_lists = [name_value_lists]
+            
+            for nvl in name_value_lists:
+                name = nvl.get('Name', '')
+                value = nvl.get('Value', '')
+                if name and value:
+                    if isinstance(value, list):
+                        value_xml = ""
+                        for v in value:
+                            value_xml += f"<Value>{v}</Value>\n"
+                        item_specifics.append(f"<NameValueList><Name>{name}</Name>{value_xml}</NameValueList>")
+                    else:
+                        item_specifics.append(f"<NameValueList><Name>{name}</Name><Value>{value}</Value></NameValueList>")
+        
+        item_specifics_xml = "\n".join(item_specifics)
+        
+        # Get pictures
+        picture_urls = []
+        if 'PictureDetails' in original_item and 'PictureURL' in original_item['PictureDetails']:
+            urls = original_item['PictureDetails']['PictureURL']
+            if isinstance(urls, str):
+                picture_urls = [urls]
+            else:
+                picture_urls = urls
+        
+        # Format pictures for XML
+        picture_xml = ""
+        for url in picture_urls:
+            picture_xml += f"<PictureURL>{url}</PictureURL>\n"
+        
+        # Get shipping details
+        shipping_service = "UK_OtherCourier24"  # Default to generic courier
+        shipping_cost = "25.00"  # Default cost
+        
+        if 'ShippingDetails' in original_item:
+            shipping_details = original_item.get('ShippingDetails', {})
+            if 'ShippingServiceOptions' in shipping_details:
+                options = shipping_details['ShippingServiceOptions']
+                if isinstance(options, list) and len(options) > 0:
+                    shipping_service = options[0].get('ShippingService', shipping_service)
+                    cost = options[0].get('ShippingServiceCost', {})
+                    if '#text' in cost:
+                        shipping_cost = cost['#text']
+                elif isinstance(options, dict):
+                    shipping_service = options.get('ShippingService', shipping_service)
+                    cost = options.get('ShippingServiceCost', {})
+                    if '#text' in cost:
+                        shipping_cost = cost['#text']
+        
+        # Get return policy
+        returns_accepted = "ReturnsAccepted"
+        refund_option = "MoneyBack"
+        returns_within = "Days_30"
+        shipping_cost_paid_by = "Buyer"
+        
+        if 'ReturnPolicy' in original_item:
+            policy = original_item['ReturnPolicy']
+            returns_accepted = policy.get('ReturnsAcceptedOption', returns_accepted)
+            refund_option = policy.get('RefundOption', refund_option)
+            returns_within = policy.get('ReturnsWithinOption', returns_within)
+            shipping_cost_paid_by = policy.get('ShippingCostPaidByOption', shipping_cost_paid_by)
+        
+        # Create XML for the request
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <AddItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <Item>
+                <Title>{title}</Title>
+                <Description><![CDATA[{description}]]></Description>
+                <PrimaryCategory>
+                    <CategoryID>{category_id}</CategoryID>
+                </PrimaryCategory>
+                <StartPrice>{start_price}</StartPrice>
+                <Currency>{currency}</Currency>
+                <Country>{original_item.get('Country', 'GB')}</Country>
+                <DispatchTimeMax>3</DispatchTimeMax>
+                <ListingDuration>GTC</ListingDuration>
+                <ListingType>FixedPriceItem</ListingType>
+                <ItemSpecifics>
+                    {item_specifics_xml}
+                </ItemSpecifics>
+                <PictureDetails>
+                    {picture_xml}
+                </PictureDetails>
+                <Quantity>{quantity}</Quantity>
+                <ConditionID>{condition_id}</ConditionID>
+                <Location>{original_item.get('Location', 'London, UK')}</Location>
+                <ReturnPolicy>
+                    <ReturnsAcceptedOption>{returns_accepted}</ReturnsAcceptedOption>
+                    <RefundOption>{refund_option}</RefundOption>
+                    <ReturnsWithinOption>{returns_within}</ReturnsWithinOption>
+                    <ShippingCostPaidByOption>{shipping_cost_paid_by}</ShippingCostPaidByOption>
+                </ReturnPolicy>
+                <ShippingDetails>
+                    <ShippingType>Flat</ShippingType>
+                    <ShippingServiceOptions>
+                        <ShippingServicePriority>1</ShippingServicePriority>
+                        <ShippingService>{shipping_service}</ShippingService>
+                        <ShippingServiceCost>{shipping_cost}</ShippingServiceCost>
+                    </ShippingServiceOptions>
+                </ShippingDetails>
+                <PaymentMethods>PayPal</PaymentMethods>
+                <PayPalEmailAddress>{self._get_paypal_email()}</PayPalEmailAddress>
+                <Site>UK</Site>
+            </Item>
+        </AddItemRequest>"""
+        
+        response_dict = await self._make_request('AddItem', xml_request)
+        
+        # Process the response
+        if 'AddItemResponse' in response_dict:
+            response = response_dict['AddItemResponse']
+            if response.get('Ack') in ('Success', 'Warning'):
+                new_item_id = response.get('ItemID')
+                logger.info(f"Successfully created similar listing with ID {new_item_id}")
+                
+                # Handle warnings if present
+                if response.get('Ack') == 'Warning' and 'Errors' in response:
+                    warnings = response['Errors']
+                    if not isinstance(warnings, list):
+                        warnings = [warnings]
+                    
+                    for warning in warnings:
+                        if warning.get('SeverityCode') == 'Warning':
+                            logger.warning(f"Warning creating listing: {warning.get('LongMessage')}")
+                
+                return {
+                    'success': True,
+                    'item_id': new_item_id,
+                    'listing_url': f"https://www.ebay.co.uk/itm/{new_item_id}",
+                    'fees': response.get('Fees', {}),
+                    'start_time': response.get('StartTime'),
+                    'end_time': response.get('EndTime')
+                }
+            else:
+                # Handle errors
+                errors = response.get('Errors', [])
+                if not isinstance(errors, list):
+                    errors = [errors]
+                    
+                error_messages = []
+                for error in errors:
+                    error_messages.append(error.get('LongMessage', 'Unknown error'))
+                    
+                error_str = "; ".join(error_messages)
+                logger.error(f"Failed to create similar listing: {error_str}")
+                raise EbayAPIError(f"Failed to create similar listing: {error_str}")
+        else:
+            logger.error("Invalid response from AddItem request")
+            raise EbayAPIError("Invalid response from eBay when creating listing")
+
+    async def get_unsold_inventory(self, page_number: int = 1, entries_per_page: int = 100) -> Dict:
+        """
+        Get all unsold listings from eBay
 
         Args:
-            include_details: Whether to include detailed item information
+            page_number: Page number to retrieve
+            entries_per_page: Number of entries per page
 
         Returns:
-            List of all active listing items with optional details
+            Dict: Response data with unsold items
         """
-        # Get first page to determine total number of pages
-        first_page = await self.get_active_listings(page_num=1)
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <UnsoldList>
+                <Include>true</Include>
+                <Pagination>
+                    <EntriesPerPage>{entries_per_page}</EntriesPerPage>
+                    <PageNumber>{page_number}</PageNumber>
+                </Pagination>
+            </UnsoldList>
+        </GetMyeBaySellingRequest>"""
 
-        # Check if we have pagination data
-        pagination_result = first_page.get('PaginationResult', {})
-        if not pagination_result:
-            logger.error("No pagination information in eBay response")
+        response = await self._make_request("GetMyeBaySelling", xml_request)
+
+        if not response or "GetMyeBaySellingResponse" not in response:
+            logger.error("No response data from eBay")
+            return {}
+
+        if "UnsoldList" not in response["GetMyeBaySellingResponse"]:
+            logger.info("No unsold items found")
+            return {}
+
+        return response["GetMyeBaySellingResponse"]["UnsoldList"]
+
+    async def get_sold_inventory(self, page_number: int = 1, entries_per_page: int = 100) -> Dict:
+        """
+        Get sold items from eBay
+
+        Args:
+            page_number: Page number to retrieve
+            entries_per_page: Number of entries per page
+
+        Returns:
+            Dict: Response data with sold items
+        """
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <SoldList>
+                <Include>true</Include>
+                <Pagination>
+                    <EntriesPerPage>{entries_per_page}</EntriesPerPage>
+                    <PageNumber>{page_number}</PageNumber>
+                </Pagination>
+            </SoldList>
+        </GetMyeBaySellingRequest>"""
+
+        response = await self._make_request("GetMyeBaySelling", xml_request)
+
+        if not response or "GetMyeBaySellingResponse" not in response:
+            logger.error("No response data from eBay")
+            return {}
+
+        if "SoldList" not in response["GetMyeBaySellingResponse"]:
+            logger.info("No sold items found")
+            return {}
+
+        return response["GetMyeBaySellingResponse"]["SoldList"]
+
+    async def upload_pictures(self, image_paths: List[str]) -> List[str]:
+        """
+        Upload pictures to eBay Picture Service
+
+        Args:
+            image_paths: List of local file paths to upload
+
+        Returns:
+            List[str]: List of URLs to the uploaded images
+        """
+        picture_urls = []
+        
+        for path in image_paths:
+            try:
+                # Convert image to base64
+                with open(path, "rb") as f:
+                    image_data = base64.b64encode(f.read()).decode("utf-8")
+                
+                # Create upload request
+                xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+                <UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+                    <RequesterCredentials>
+                        <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+                    </RequesterCredentials>
+                    <PictureName>{os.path.basename(path)}</PictureName>
+                    <PictureData>{image_data}</PictureData>
+                </UploadSiteHostedPicturesRequest>"""
+                
+                # Make request
+                response = await self._make_request("UploadSiteHostedPictures", xml_request)
+                
+                if response and "UploadSiteHostedPicturesResponse" in response:
+                    response_data = response["UploadSiteHostedPicturesResponse"]
+                    if response_data.get("Ack") in ["Success", "Warning"]:
+                        url = response_data.get("SiteHostedPictureDetails", {}).get("FullURL")
+                        if url:
+                            picture_urls.append(url)
+                
+            except Exception as e:
+                logger.error(f"Error uploading image {path}: {str(e)}")
+        
+        return picture_urls
+
+    async def get_shipping_options(self, country_code: str = "GB") -> List[Dict]:
+        """
+        Get available shipping services for the given country
+
+        Args:
+            country_code: Two-letter country code (default: GB)
+
+        Returns:
+            List[Dict]: List of available shipping services
+        """
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <GeteBayDetailsRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <DetailName>ShippingServiceDetails</DetailName>
+        </GeteBayDetailsRequest>"""
+
+        response = await self._make_request("GeteBayDetails", xml_request)
+
+        if not response or "GeteBayDetailsResponse" not in response:
+            logger.error("No response data from eBay")
             return []
 
-        total_pages = int(pagination_result.get('TotalNumberOfPages', '1'))
-        total_entries = int(pagination_result.get('TotalNumberOfEntries', '0'))
+        details = response["GeteBayDetailsResponse"].get("ShippingServiceDetails", [])
+        if not isinstance(details, list):
+            details = [details]
 
-        logger.info(f"Found {total_entries} eBay listings across {total_pages} pages")
+        # Filter shipping services for the specified country
+        filtered_services = []
+        for service in details:
+            valid_for = service.get("ValidForSellingFlow", "false")
+            ship_to_locations = service.get("ShippingServiceAvailability", {}).get("ShipToLocation", [])
+            
+            if not isinstance(ship_to_locations, list):
+                ship_to_locations = [ship_to_locations]
+                
+            # Include service if it's valid for selling and available for the country
+            if valid_for == "true" and (country_code in ship_to_locations or "Worldwide" in ship_to_locations):
+                filtered_services.append({
+                    "id": service.get("ShippingService", ""),
+                    "name": service.get("Description", ""),
+                    "international": service.get("InternationalService", "false") == "true",
+                    "carrier": service.get("ShippingCarrier", "")
+                })
 
-        # Extract items from first page
-        all_items = []
-        items = first_page.get('ItemArray', {}).get('Item', [])
+        return filtered_services
 
-        # Handle case where there's only one item (not returned as a list)
-        if items and not isinstance(items, list):
-            items = [items]
+    async def get_user_profile(self, user_id: str = None) -> Dict:
+        """
+        Get eBay user profile information
 
-        if items:
-            all_items.extend(items)
-            logger.info(f"Added {len(items)} items from page 1, total: {len(all_items)}")
+        Args:
+            user_id: eBay user ID (if None, gets the authenticated user's profile)
 
-        # Fetch remaining pages if there are more than one
-        if total_pages > 1:
-            # Create tasks for all pages except the first one
-            tasks = []
-            for page in range(2, total_pages + 1):
-                task = asyncio.create_task(self.get_active_listings(page_num=page))
-                tasks.append((page, task))
+        Returns:
+            Dict: User profile data
+        """
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <DetailLevel>ReturnAll</DetailLevel>
+            {"<UserID>" + user_id + "</UserID>" if user_id else ""}
+        </GetUserRequest>"""
 
-            # Wait for all tasks to complete
-            for page, task in tasks:
-                try:
-                    result = await task
-                    items = result.get('ItemArray', {}).get('Item', [])
-                    if items:
-                        # Handle case where there's only one item
-                        if not isinstance(items, list):
-                            items = [items]
-                        all_items.extend(items)
-                        logger.info(f"Added {len(items)} items from page {page}, total: {len(all_items)}")
-                except Exception as e:
-                    logger.error(f"Error fetching page {page}: {str(e)}")
- 
-        # If detailed information is requested, fetch it for all items concurrently in batches
-        if include_details and all_items:
-            enriched_items = []
+        response = await self._make_request("GetUser", xml_request)
 
-            # Process in smaller batches to avoid overwhelming the API
-            batch_size = 50  # Adjust this based on your API rate limits
-            for i in range(0, len(all_items), batch_size):
-                batch = all_items[i:i+batch_size]
-                batch_tasks = []
+        if not response or "GetUserResponse" not in response:
+            logger.error("No response data from eBay")
+            return {}
 
-                # Create tasks for each item in the batch
-                for item in batch:
-                    item_id = item.get('ItemID')
-                    task = asyncio.create_task(self.get_item_details(item_id))
-                    batch_tasks.append((item, item_id, task))
-                # Fields to exclude from the details object to avoid duplication
-                duplicate_fields = [
-                    'Description',  # Already extracted to top level
-                    'ItemID',       # Already available at top level
-                    'Title',        # Already available at top level
-                    'StartPrice',   # Similar to CurrentPrice in basic listing
-                    'Quantity',     # Already available at top level
-                    'QuantityAvailable', # Already available at top level
-                    'SKU',          # Already available at top level
-                    'PictureDetails', # If you're extracting PictureURLs to the top level
-                    'PrimaryCategory', # If you're extracting PrimaryCategoryID/Name to top level
-                    'SellingStatus', # Already available at top level
-                    'ListingDuration', # Already extracted to top level
-                    'ListingType', # Already extracted to top level
-                    'ListingDetails', # If this contains mostly duplicate info
-                    'BuyItNowPrice',
-                    'ShippingDetails',
-                    'SellerProfiles',
-                    'Location',
-                    'Country',
-                    'ConditionID',
-                    'ConditionDisplayName',
-                    'ItemSpecifics',
-                    'TimeLeft',      # Already available at top level
-                ]
+        user_data = response["GetUserResponse"].get("User", {})
+        return user_data
 
-                # Wait for all tasks in this batch to complete
-                for item, item_id, task in batch_tasks:
-                    try:
-                        details = await task
+    async def get_user_info(self) -> Dict[str, Any]:
+        """
+        Get information about the authenticated user
+        
+        Returns:
+            Dict: User information
+        """
+        xml_request = """<?xml version="1.0" encoding="utf-8"?>
+        <GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <DetailLevel>ReturnAll</DetailLevel>
+        </GetUserRequest>"""
+        
+        try:
+            response_dict = await self.execute_call('GetUser', xml_request)
+            
+            if 'GetUserResponse' not in response_dict:
+                return {
+                    'success': False,
+                    'message': "Invalid response from eBay GetUser API"
+                }
+            
+            return {
+                'success': True,
+                'user_data': response_dict.get('GetUserResponse', {}).get('User', {})
+            }
+        except Exception as e:
+            logger.error(f"Error getting user info: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Error getting user info: {str(e)}"
+            }
 
-                        # Start with the basic listing info
-                        enriched_item = item.copy()
+    async def execute_call(self, call_name: str, xml_request: str) -> Dict:
+            """
+            Execute a Trading API call
+            
+            Args:
+                call_name: The API call name
+                xml_request: The XML request body
+                
+            Returns:
+                Dict: Response converted from XML to dict
+            """
+            auth_token = await self._get_auth_token()
+            
+            headers = {
+                'X-EBAY-API-CALL-NAME': call_name,
+                'X-EBAY-API-SITEID': self.site_id,
+                'X-EBAY-API-COMPATIBILITY-LEVEL': self.compatibility_level,
+                'X-EBAY-API-IAF-TOKEN': auth_token,
+                'Content-Type': 'text/xml'
+            }
+            
+            # This is the Trading API endpoint - NOT the Inventory API endpoint
+            endpoint = 'https://api.ebay.com/ws/api.dll'
+            
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        endpoint,
+                        headers=headers,
+                        content=xml_request
+                    )
+                    
+                    if response.status_code != 200:
+                        logger.error(f"eBay Trading API error: {response.text}")
+                        raise EbayAPIError(f"Trading API call {call_name} failed: {response.text}")
+                    
+                    # Convert XML to dict
+                    return xmltodict.parse(response.text)
+                    
+            except httpx.RequestError as e:
+                logger.error(f"Network error in Trading API call: {str(e)}")
+                raise EbayAPIError(f"Network error in Trading API call: {str(e)}")
 
-                        # Add a details section with the complete GetItem response
-                        # enriched_item['details'] = details
+    async def add_fixed_price_item(self, item_data: Dict) -> Dict:
+        """
+        Add a fixed price item to eBay
 
-                        # Add some commonly used fields directly to the main object
-                        enriched_item.update({
-                            'PrimaryCategoryID': details.get('PrimaryCategory', {}).get('CategoryID'),
-                            'PrimaryCategoryName': details.get('PrimaryCategory', {}).get('CategoryName'),
-                            'Description': details.get('Description'),
-                            'PictureURLs': details.get('PictureDetails', {}).get('PictureURL', []),
-                            'PaymentMethods': details.get('PaymentMethods', []),
-                            'Location': details.get('Location'),
-                            'Country': details.get('Country'),
-                            'ConditionID': details.get('ConditionID'),
-                            'ConditionDisplayName': details.get('ConditionDisplayName'),
-                            'ItemSpecifics': details.get('ItemSpecifics', {})
-                        })
+        Args:
+            item_data: Dictionary containing all item details
 
-                        # Create a clean details object without duplicate fields
-                        filtered_details = {k: v for k, v in details.items() if k not in duplicate_fields}
-
-                        # Add the filtered details section
-                        enriched_item['details'] = filtered_details
-
-                        enriched_items.append(enriched_item)
-                        batch_idx = i + batch_tasks.index((item, item_id, task))
-                        print(batch_idx, item_id, enriched_item['PrimaryCategoryID'], enriched_item['PrimaryCategoryName'])
-
-                    except Exception as e:
-                        logger.error(f"Error getting details for item {item_id}: {str(e)}")
-
-                # Small delay between batches to avoid rate limiting
-                if i + batch_size < len(all_items):
-                    await asyncio.sleep(0.5)
-
-            return enriched_items
+        Returns:
+            Dict: Response data with new item ID
+        """
+        # Construct XML from item_data
+        xml_parts = ["<?xml version=\"1.0\" encoding=\"utf-8\"?>"]
+        xml_parts.append("<AddFixedPriceItemRequest xmlns=\"urn:ebay:apis:eBLBaseComponents\">")
+        xml_parts.append(f"<RequesterCredentials><eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken></RequesterCredentials>")
+        
+        # Add Item element and its children
+        xml_parts.append("<Item>")
+        
+        # Required fields
+        xml_parts.append(f"<Title>{item_data.get('Title', '')}</Title>")
+        xml_parts.append(f"<Description><![CDATA[{item_data.get('Description', '')}]]></Description>")
+        
+        # Category
+        xml_parts.append("<PrimaryCategory>")
+        xml_parts.append(f"<CategoryID>{item_data.get('CategoryID', '')}</CategoryID>")
+        xml_parts.append("</PrimaryCategory>")
+        
+        # Price and currency
+        xml_parts.append(f"<StartPrice currencyID=\"{item_data.get('CurrencyID', 'GBP')}\">{item_data.get('Price', '0.0')}</StartPrice>")
+        
+        # Add Currency element (required by eBay)
+        # This is the fix: ensure Currency tag is always included
+        currency = item_data.get('Currency', item_data.get('CurrencyID', 'GBP'))
+        xml_parts.append(f"<Currency>{currency}</Currency>")
+        
+        # Quantity
+        xml_parts.append(f"<Quantity>{item_data.get('Quantity', '1')}</Quantity>")
+        
+        # Listing details
+        xml_parts.append(f"<ListingDuration>{item_data.get('ListingDuration', 'GTC')}</ListingDuration>")  # Good Till Cancelled
+        xml_parts.append("<ListingType>FixedPriceItem</ListingType>")
+        
+        # Condition
+        if "ConditionID" in item_data:
+            xml_parts.append(f"<ConditionID>{item_data.get('ConditionID')}</ConditionID>")
+        
+        # Item specifics
+        if "ItemSpecifics" in item_data and item_data["ItemSpecifics"]:
+            xml_parts.append("<ItemSpecifics>")
+            for name, value in item_data["ItemSpecifics"].items():
+                xml_parts.append("<NameValueList>")
+                xml_parts.append(f"<Name>{name}</Name>")
+                if isinstance(value, list):
+                    for v in value:
+                        xml_parts.append(f"<Value>{v}</Value>")
+                else:
+                    xml_parts.append(f"<Value>{value}</Value>")
+                xml_parts.append("</NameValueList>")
+            xml_parts.append("</ItemSpecifics>")
+        
+        # Pictures
+        if "PictureURLs" in item_data and item_data["PictureURLs"]:
+            xml_parts.append("<PictureDetails>")
+            for url in item_data["PictureURLs"]:
+                xml_parts.append(f"<PictureURL>{url}</PictureURL>")
+            xml_parts.append("</PictureDetails>")
+        
+        # Shipping details
+        if "ShippingDetails" in item_data and item_data["ShippingDetails"]:
+            xml_parts.append("<ShippingDetails>")
+            xml_parts.append("<ShippingType>Flat</ShippingType>")
+            
+            shipping_details = item_data["ShippingDetails"]
+            for service in shipping_details:
+                xml_parts.append("<ShippingServiceOptions>")
+                xml_parts.append(f"<ShippingServicePriority>{service.get('Priority', '1')}</ShippingServicePriority>")
+                xml_parts.append(f"<ShippingService>{service.get('Service')}</ShippingService>")
+                xml_parts.append(f"<ShippingServiceCost currencyID=\"{service.get('CurrencyID', 'GBP')}\">{service.get('Cost', '0.0')}</ShippingServiceCost>")
+                xml_parts.append("</ShippingServiceOptions>")
+            
+            xml_parts.append("</ShippingDetails>")
+        
+        # Payment methods
+        if "PaymentMethods" in item_data:
+            payment_methods = item_data["PaymentMethods"]
+            if isinstance(payment_methods, list):
+                for method in payment_methods:
+                    xml_parts.append(f"<PaymentMethods>{method}</PaymentMethods>")
+            else:
+                xml_parts.append(f"<PaymentMethods>{payment_methods}</PaymentMethods>")
         else:
-            # Return basic listing information without details
-            return all_items
+            xml_parts.append("<PaymentMethods>PayPal</PaymentMethods>")
+        
+        # PayPal email
+        paypal_email = item_data.get('PayPalEmailAddress', self._get_paypal_email())
+        xml_parts.append(f"<PayPalEmailAddress>{paypal_email}</PayPalEmailAddress>")
+        
+        # Return policy
+        if "ReturnPolicy" in item_data:
+            policy = item_data["ReturnPolicy"]
+            xml_parts.append("<ReturnPolicy>")
+            xml_parts.append(f"<ReturnsAcceptedOption>{policy.get('ReturnsAccepted', 'ReturnsAccepted')}</ReturnsAcceptedOption>")
+            xml_parts.append(f"<RefundOption>{policy.get('Refund', 'MoneyBack')}</RefundOption>")
+            xml_parts.append(f"<ReturnsWithinOption>{policy.get('ReturnsWithin', 'Days_30')}</ReturnsWithinOption>")
+            xml_parts.append(f"<ShippingCostPaidByOption>{policy.get('ShippingCostPaidBy', 'Buyer')}</ShippingCostPaidByOption>")
+            xml_parts.append("</ReturnPolicy>")
+        
+        # Location and country
+        xml_parts.append(f"<Location>{item_data.get('Location', 'London, UK')}</Location>")
+        xml_parts.append(f"<Country>{item_data.get('Country', 'GB')}</Country>")
+        
+        # Dispatch time
+        if "DispatchTimeMax" in item_data:
+            xml_parts.append(f"<DispatchTimeMax>{item_data.get('DispatchTimeMax')}</DispatchTimeMax>")
+        
+        # Close Item element and request
+        xml_parts.append("</Item>")
+        xml_parts.append("</AddFixedPriceItemRequest>")
+        
+        # Build the final XML request
+        xml_request = "\n".join(xml_parts)
+        
+        # For debugging
+        # logger.debug(f"AddFixedPriceItem XML request: {xml_request}")
+        
+        response = await self._make_request("AddFixedPriceItem", xml_request)
+        
+        if not response or "AddFixedPriceItemResponse" not in response:
+            logger.error("No response data from eBay")
+            return {"success": False, "errors": ["No response received from eBay"]}
+            
+        result = response["AddFixedPriceItemResponse"]
+        
+        if result.get("Ack") in ["Success", "Warning"]:
+            item_id = result.get("ItemID")
+            if item_id:
+                return {
+                    "success": True,
+                    "item_id": item_id,
+                    "fees": result.get("Fees", {}),
+                    "listing_url": f"https://{'sandbox.' if self.sandbox else ''}ebay.com/itm/{item_id}"
+                }
+        
+        # If we get here, there was an error
+        errors = result.get("Errors", [])
+        if not isinstance(errors, list):
+            errors = [errors]
+            
+        error_messages = []
+        for error in errors:
+            error_messages.append(error.get("LongMessage", "Unknown error"))
+            
+        return {
+            "success": False,
+            "errors": error_messages
+        }
+
+    def _get_paypal_email(self) -> str:
+        """Get PayPal email address based on environment"""
+        # In production use real email, in sandbox use sandbox email
+        return "payments@londonvintage.co.uk" if not self.sandbox else "sandbox@example.com"
 
     async def get_selling_listings(self, page_num: int = 1, items_per_page: int = 200, include_active: bool = True,
-                                  include_sold: bool = True,
-                                  include_unsold: bool = True) -> Dict[str, Any]:
+                                include_sold: bool = True, include_unsold: bool = True) -> Dict[str, Any]:
         """
         Get eBay selling listings (active, sold, unsold) for a specific page
 
@@ -316,7 +1877,6 @@ class EbayTradingAPI:
         Returns:
             Dict containing listings data
         """
-
         auth_token = await self._get_auth_token()
 
         xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -375,33 +1935,20 @@ class EbayTradingAPI:
 
         try:
             response_dict = await self._make_request('GetMyeBaySelling', xml_request)
-
-            # print(type(response_dict))
             
-            # print('GetMyeBaySellingResponse' in response_dict)
             if 'GetMyeBaySellingResponse' not in response_dict:
                 logger.error("Invalid response from GetMyeBaySelling")
                 return {}
-
-             
-            # Log the full response structure for debugging (just keys)
+            
+            # Get the result
             result = response_dict.get('GetMyeBaySellingResponse', {})
-            logger.info(f"GetMyeBaySellingResponse keys: {list(result.keys())}")
-
-            if result:
-                return result
-
-            if 'Errors' in result:
-                print(result['Errors'])
-
-            # If SoldList is present, log its structure
+            
+            # If SoldList is present, process OrderTransactionArray
             if 'SoldList' in result:
                 sold_list = result.get('SoldList', {})
-                logger.info(f"SoldList keys: {list(sold_list.keys())}")
-
+                
                 # Check if we have OrderTransactionArray instead of ItemArray
                 if 'OrderTransactionArray' in sold_list:
-                    logger.info("Found OrderTransactionArray in SoldList")
                     # Convert OrderTransactionArray to a format similar to ItemArray
                     order_transactions = sold_list.get('OrderTransactionArray', {}).get('OrderTransaction', [])
                     if order_transactions and not isinstance(order_transactions, list):
@@ -425,9 +1972,10 @@ class EbayTradingAPI:
             return {}
 
     async def get_all_selling_listings(self, include_active: bool = True,
-                                      include_sold: bool = True,
-                                      include_unsold: bool = True,
-                                      include_details: bool = True) -> Dict[str, List[Dict[str, Any]]]:
+                                    include_sold: bool = True,
+                                    include_unsold: bool = True,
+                                    include_details: bool = False,
+                                    test_mode: bool = False) -> Dict[str, List[Dict[str, Any]]]:
         """
         Get all eBay selling listings with pagination and optional detailed information
         
@@ -436,6 +1984,7 @@ class EbayTradingAPI:
             include_sold: Whether to include sold listings
             include_unsold: Whether to include unsold listings
             include_details: Whether to include detailed item information
+            test_mode: If True, limit to first page and few items for testing
             
         Returns:
             Dict with keys 'active', 'sold', 'unsold' containing lists of items
@@ -457,19 +2006,17 @@ class EbayTradingAPI:
         # Process active listings if requested
         if include_active and 'ActiveList' in first_page:
             active_list = first_page.get('ActiveList', {})
-            result['active'] = await self._process_listing_pages(active_list, 'ActiveList', include_details)
+            result['active'] = await self._process_listing_pages(active_list, 'ActiveList', include_details, test_mode)
             
         # Process sold listings if requested
         if include_sold and 'SoldList' in first_page:
             sold_list = first_page.get('SoldList', {})
-            # Also include details for sold listings
-            result['sold'] = await self._process_listing_pages(sold_list, 'SoldList', include_details)
+            result['sold'] = await self._process_listing_pages(sold_list, 'SoldList', include_details, test_mode)
             
         # Process unsold listings if requested
         if include_unsold and 'UnsoldList' in first_page:
             unsold_list = first_page.get('UnsoldList', {})
-            # Also include details for unsold listings
-            result['unsold'] = await self._process_listing_pages(unsold_list, 'UnsoldList', include_details)
+            result['unsold'] = await self._process_listing_pages(unsold_list, 'UnsoldList', include_details, test_mode)
         
         return result
 
@@ -505,75 +2052,46 @@ class EbayTradingAPI:
         all_items = []
 
         # Special handling for SoldList which uses OrderTransactionArray structure
-        if list_type == 'SoldList' and 'OrderTransactionArray' in list_data:
-            logger.info("Processing OrderTransactionArray for SoldList")
-            order_transactions = list_data.get('OrderTransactionArray', {}).get('OrderTransaction', [])
+        if list_type == 'SoldList' and 'ItemArray' in list_data:
+            items = list_data.get('ItemArray', {}).get('Item', [])
             
-            if order_transactions:
-                if not isinstance(order_transactions, list):
-                    order_transactions = [order_transactions]
+            if items:
+                if not isinstance(items, list):
+                    items = [items]
                 
-                for transaction in order_transactions:
-                    # The sold transaction structure has an extra layer
-                    # The actual transaction is inside a 'Transaction' key
-                    if 'Transaction' in transaction:
-                        transaction_data = transaction['Transaction']
-                        
-                        # Now look for Item inside this transaction_data
-                        if 'Item' in transaction_data:
-                            # Extract the Item data
-                            item = transaction_data['Item'].copy()
-                            
-                            # Ensure ItemID is available
-                            if 'ItemID' in item:
-                                # Add transaction details to the item
-                                item['Transaction'] = {k: v for k, v in transaction_data.items() if k != 'Item'}
-                                item['_listing_type'] = 'sold'
-                                all_items.append(item)
-                            else:
-                                logger.warning(f"Skipping transaction with missing ItemID in Item data")
-                        else:
-                            logger.warning(f"Skipping transaction with no Item data in Transaction")
-                    else:
-                        logger.warning(f"Skipping transaction with no Transaction data: {list(transaction.keys())}")
+                # Add listing type to each item
+                for item in items:
+                    item['_listing_type'] = 'sold'
                 
-                logger.info(f"Added {len(all_items)} items from {list_type} page 1")
+                all_items.extend(items)
+                logger.info(f"Added {len(items)} items from {list_type} page 1, total: {len(all_items)}")
             
-            # Process remaining pages if any
+            # Fetch remaining pages if there are more than one
             if total_pages > 1:
                 for page in range(2, total_pages + 1):
                     logger.info(f"Fetching {list_type} page {page}/{total_pages}")
                     
                     result = await self.get_selling_listings(
                         page_num=page,
-                        include_active=(list_type == 'ActiveList'),
+                        include_active=False,
                         include_sold=(list_type == 'SoldList'),
-                        include_unsold=(list_type == 'UnsoldList')
+                        include_unsold=False
                     )
                     
                     if list_type in result:
-                        sold_list = result.get(list_type, {})
-                        if 'OrderTransactionArray' in sold_list:
-                            order_transactions = sold_list.get('OrderTransactionArray', {}).get('OrderTransaction', [])
+                        next_list_data = result.get(list_type, {})
+                        items = next_list_data.get('ItemArray', {}).get('Item', [])
+                        
+                        if items:
+                            if not isinstance(items, list):
+                                items = [items]
                             
-                            if order_transactions:
-                                if not isinstance(order_transactions, list):
-                                    order_transactions = [order_transactions]
-                                
-                                page_items = []
-                                for transaction in order_transactions:
-                                    if 'Transaction' in transaction:
-                                        transaction_data = transaction['Transaction']
-                                        
-                                        if 'Item' in transaction_data:
-                                            item = transaction_data['Item'].copy()
-                                            if 'ItemID' in item:
-                                                item['Transaction'] = {k: v for k, v in transaction_data.items() if k != 'Item'}
-                                                item['_listing_type'] = 'sold'
-                                                page_items.append(item)
-                                
-                                all_items.extend(page_items)
-                                logger.info(f"Added {len(page_items)} items from {list_type} page {page}, total: {len(all_items)}")
+                            # Add listing type to each item
+                            for item in items:
+                                item['_listing_type'] = 'sold'
+                            
+                            all_items.extend(items)
+                            logger.info(f"Added {len(items)} items from {list_type} page {page}, total: {len(all_items)}")
         else:
             # Standard processing for non-SoldList (ActiveList or UnsoldList)
             items = list_data.get('ItemArray', {}).get('Item', [])
@@ -589,6 +2107,8 @@ class EbayTradingAPI:
                         item['_listing_type'] = 'active'
                     elif list_type == 'UnsoldList':
                         item['_listing_type'] = 'unsold'
+                    elif list_type == 'SoldList':
+                        item['_listing_type'] = 'sold'
 
                 all_items.extend(items)
                 logger.info(f"Added {len(items)} items from {list_type} page 1, total: {len(all_items)}")
@@ -598,11 +2118,15 @@ class EbayTradingAPI:
                 for page in range(2, total_pages + 1):
                     logger.info(f"Fetching {list_type} page {page}/{total_pages}")
                     
+                    include_active = (list_type == 'ActiveList')
+                    include_sold = (list_type == 'SoldList')
+                    include_unsold = (list_type == 'UnsoldList')
+                    
                     result = await self.get_selling_listings(
                         page_num=page,
-                        include_active=(list_type == 'ActiveList'),
-                        include_sold=(list_type == 'SoldList'),
-                        include_unsold=(list_type == 'UnsoldList')
+                        include_active=include_active,
+                        include_sold=include_sold,
+                        include_unsold=include_unsold
                     )
                     
                     if list_type in result:
@@ -619,6 +2143,8 @@ class EbayTradingAPI:
                                     item['_listing_type'] = 'active'
                                 elif list_type == 'UnsoldList':
                                     item['_listing_type'] = 'unsold'
+                                elif list_type == 'SoldList':
+                                    item['_listing_type'] = 'sold'
                             
                             all_items.extend(items)
                             logger.info(f"Added {len(items)} items from {list_type} page {page}, total: {len(all_items)}")
@@ -626,39 +2152,13 @@ class EbayTradingAPI:
         # If detailed information is requested, fetch it for all items
         if include_details and all_items:
             enriched_items = []
-
-            # Define duplicate fields to exclude from details section
-            duplicate_fields = [
-                'Description',  # Already extracted to top level
-                'ItemID',       # Already available at top level
-                'Title',        # Already available at top level
-                'StartPrice',   # Similar to CurrentPrice in basic listing
-                'Quantity',     # Already available at top level
-                'QuantityAvailable', # Already available at top level
-                'SKU',          # Already available at top level
-                'PictureDetails', # If you're extracting PictureURLs to the top level
-                'PrimaryCategory', # If you're extracting PrimaryCategoryID/Name to top level
-                'SellingStatus', # Already available at top level
-                'ListingDuration', # Already extracted to top level
-                'ListingType', # Already extracted to top level
-                'ListingDetails', # If this contains mostly duplicate info
-                'BuyItNowPrice',
-                'ShippingDetails',
-                'SellerProfiles',
-                'Location',
-                'Country',
-                'ConditionID',
-                'ConditionDisplayName',
-                'ItemSpecifics',
-                'TimeLeft',      # Already available at top level
-            ]
             
             # Process in smaller batches to avoid overwhelming the API
-            batch_size = 120  # Adjust based on your API rate limits
+            batch_size = 50  # Adjust based on your API rate limits
             for i in range(0, len(all_items), batch_size):
                 batch = all_items[i:i+batch_size]
                 batch_tasks = []
-
+                
                 # Create tasks for each item in the batch
                 for item in batch:
                     item_id = item.get('ItemID')
@@ -671,39 +2171,21 @@ class EbayTradingAPI:
                     try:
                         details = await task
                         
-                        # Start with the basic listing info
+                        # Merge details with the base item
                         enriched_item = item.copy()
                         
-                        # Add a details section with the complete GetItem response
-                        # enriched_item['details'] = details
-                        
-                        # Add some commonly used fields directly to the main object
+                        # Add key details directly to the main object
                         if details:
                             enriched_item.update({
                                 'PrimaryCategoryID': details.get('PrimaryCategory', {}).get('CategoryID'),
                                 'PrimaryCategoryName': details.get('PrimaryCategory', {}).get('CategoryName'),
                                 'Description': details.get('Description'),
                                 'PictureURLs': details.get('PictureDetails', {}).get('PictureURL', []),
-                                'PaymentMethods': details.get('PaymentMethods', []),
-                                'Location': details.get('Location'),
-                                'Country': details.get('Country'),
-                                'ConditionID': details.get('ConditionID'),
-                                'ConditionDisplayName': details.get('ConditionDisplayName')
+                                'ItemSpecifics': details.get('ItemSpecifics', {})
                             })
-                            
-                            # Add ItemSpecifics if available
-                            if 'ItemSpecifics' in details:
-                                enriched_item['ItemSpecifics'] = details.get('ItemSpecifics')
-                            
-                            # Create a clean details object without duplicate fields
-                            filtered_details = {k: v for k, v in details.items() if k not in duplicate_fields}
-                            
-                            # Add the filtered details section
-                            enriched_item['details'] = filtered_details
                         
                         enriched_items.append(enriched_item)
-                        batch_idx = i + batch_tasks.index((item, item_id, task))
-                        logger.info(f"Enriched item {batch_idx+1}/{len(all_items)}: {item_id}")
+                        logger.info(f"Added details for item {item_id}")
                         
                     except Exception as e:
                         logger.error(f"Error getting details for item {item_id}: {str(e)}")
@@ -716,370 +2198,357 @@ class EbayTradingAPI:
             
             return enriched_items
         
-        # Return all items without trying to process them in the database
         return all_items
 
-    async def analyze_listing_structures(self) -> Dict[str, Any]:
+    async def save_inventory_to_json(self, include_active: bool = True, 
+                                    include_sold: bool = False, 
+                                    include_unsold: bool = False,
+                                    include_details: bool = True,
+                                    output_path: str = "data/ebay_inventory.json") -> Dict[str, Any]:
         """
-        Analyze and print the structure of different eBay listing types
-        
-        Returns:
-            Dict containing structure analysis
-        """
-        # Get a sample of each type of listing
-        listings = await self.get_all_selling_listings(
-            include_active=True,
-            include_sold=True,
-            include_unsold=True,
-            include_details=True  # Get details for active listings
-        )
-        
-        analysis = {}
-        
-        # Helper function to extract field structure
-        def extract_structure(data, prefix=''):
-            if isinstance(data, dict):
-                result = {}
-                for key, value in data.items():
-                    path = f"{prefix}.{key}" if prefix else key
-                    if isinstance(value, (dict, list)):
-                        result[key] = extract_structure(value, path)
-                    else:
-                        result[key] = type(value).__name__
-                return result
-            elif isinstance(data, list) and data:
-                # Take the first item as a sample
-                sample = data[0]
-                if isinstance(sample, (dict, list)):
-                    return [extract_structure(sample, f"{prefix}[0]")]
-                else:
-                    return [type(sample).__name__]
-            else:
-                return type(data).__name__
-        
-        # Analyze each listing type
-        # for listing_type in ['active', 'sold', 'unsold']:
-        for listing_type in ['sold', 'unsold']:
-            if listings[listing_type]:
-                # Get a sample listing
-                sample = listings[listing_type][0]
-                
-                # Extract and store structure
-                analysis[listing_type] = {
-                    'field_count': len(sample) if isinstance(sample, dict) else 0,
-                    'structure': extract_structure(sample)
-                }
-                
-                # Print structure for inspection
-                print(f"\n=== {listing_type.upper()} LISTING STRUCTURE ===")
-                print(f"Total fields: {analysis[listing_type]['field_count']}")
-                print("Fields:")
-                
-                def print_structure(structure, level=0):
-                    if isinstance(structure, dict):
-                        for key, value in structure.items():
-                            if isinstance(value, (dict, list)):
-                                print("  " * level + f"{key}:")
-                                print_structure(value, level + 1)
-                            else:
-                                print("  " * level + f"{key}: {value}")
-                    elif isinstance(structure, list) and structure:
-                        print("  " * level + f"[{type(structure[0]).__name__}]")
-                        if isinstance(structure[0], (dict, list)):
-                            print_structure(structure[0], level + 1)
-                
-                print_structure(analysis[listing_type]['structure'])
-                
-                # Print a JSON sample for the first item
-                print(f"\nSample {listing_type.upper()} listing (first item):")
-                print(json.dumps(sample, indent=2, default=str)[:5000] + "...(truncated)")
-        
-        return analysis
-
-    async def save_listing_structures(self, output_file: str = "ebay_listing_structures.txt") -> None:
-        """
-        Analyze eBay listing structures and save to a text file
+        Retrieve all eBay listings and save them to a local JSON file
         
         Args:
-            output_file: Path to the output file
+            include_active: Whether to include active listings
+            include_sold: Whether to include sold listings
+            include_unsold: Whether to include unsold listings
+            include_details: Whether to include detailed item information
+            output_path: File path where the JSON will be saved
+            
+        Returns:
+            Dict with summary statistics and file path
+        """
+        import json
+        import os
+        from datetime import datetime
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Get all listings
+        logger.info(f"Retrieving eBay inventory (active={include_active}, sold={include_sold}, unsold={include_unsold})...")
+        
+        listings = await self.get_all_selling_listings(
+            include_active=include_active,
+            include_sold=include_sold,
+            include_unsold=include_unsold,
+            include_details=include_details
+        )
+        
+        # Add metadata
+        inventory_data = {
+            "metadata": {
+                "generated_at": datetime.now().isoformat(),
+                "environment": "sandbox" if self.sandbox else "production",
+                "active_count": len(listings.get('active', [])),
+                "sold_count": len(listings.get('sold', [])),
+                "unsold_count": len(listings.get('unsold', [])),
+                "include_details": include_details
+            },
+            "listings": listings
+        }
+        
+        # Save to JSON file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(inventory_data, f, indent=2, default=str)
+        
+        logger.info(f"Saved {sum(len(listings.get(key, [])) for key in listings.keys())} listings to {output_path}")
+        return {
+            "file_path": os.path.abspath(output_path),
+            "active_count": len(listings.get('active', [])),
+            "sold_count": len(listings.get('sold', [])),
+            "unsold_count": len(listings.get('unsold', [])),
+            "total_count": sum(len(listings.get(key, [])) for key in listings.keys())
+        }
+
+    async def load_inventory_from_json(self, input_path: str = "data/ebay_inventory.json") -> Dict[str, Any]:
+        """
+        Load eBay listings from a previously saved JSON file
+        
+        Args:
+            input_path: File path where the JSON is stored
+            
+        Returns:
+            Dict with listings data and metadata
         """
         import json
         import os
         
-        # Get a sample of each type of listing
-        listings = await self.get_all_selling_listings(
-            include_active=True,
-            include_sold=True,
-            include_unsold=True,
-            include_details=True  # Get details for active listings
-        )
-        
-        # Open the output file
-        with open(output_file, 'w') as f:
-            f.write("=== EBAY LISTING STRUCTURES ANALYSIS ===\n\n")
-            f.write(f"Analysis timestamp: {datetime.now(timezone.utc)().isoformat()}\n\n")
-            
-            # Write summary
-            f.write("=== SUMMARY ===\n")
-            f.write(f"Total active listings: {len(listings['active'])}\n")
-            f.write(f"Total sold listings: {len(listings['sold'])}\n")
-            f.write(f"Total unsold listings: {len(listings['unsold'])}\n\n")
-            
-            # Helper function to extract field structure
-            def extract_structure(data, prefix=''):
-                if isinstance(data, dict):
-                    result = {}
-                    for key, value in data.items():
-                        path = f"{prefix}.{key}" if prefix else key
-                        if isinstance(value, (dict, list)):
-                            result[key] = extract_structure(value, path)
-                        else:
-                            result[key] = type(value).__name__
-                    return result
-                elif isinstance(data, list) and data:
-                    # Take the first item as a sample
-                    sample = data[0]
-                    if isinstance(sample, (dict, list)):
-                        return [extract_structure(sample, f"{prefix}[0]")]
-                    else:
-                        return [type(sample).__name__]
-                else:
-                    return type(data).__name__
-            
-            # Helper function to print structure to file
-            def write_structure(f, structure, level=0):
-                if isinstance(structure, dict):
-                    for key, value in structure.items():
-                        if isinstance(value, (dict, list)):
-                            f.write("  " * level + f"{key}:\n")
-                            write_structure(f, value, level + 1)
-                        else:
-                            f.write("  " * level + f"{key}: {value}\n")
-                elif isinstance(structure, list) and structure:
-                    f.write("  " * level + f"[{type(structure[0]).__name__}]\n")
-                    if isinstance(structure[0], (dict, list)):
-                        write_structure(f, structure[0], level + 1)
-            
-            # Analyze each listing type
-            for listing_type in ['active', 'sold', 'unsold']:
-                if listings[listing_type]:
-                    f.write(f"\n\n=== {listing_type.upper()} LISTING STRUCTURE ===\n")
-                    
-                    # Get a sample listing
-                    sample = listings[listing_type][0]
-                    
-                    # Write total field count
-                    f.write(f"Total fields: {len(sample) if isinstance(sample, dict) else 0}\n")
-                    f.write("Fields:\n")
-                    
-                    # Write field structure
-                    structure = extract_structure(sample)
-                    write_structure(f, structure)
-                    
-                    # Write a sample listing
-                    f.write(f"\nSample {listing_type.upper()} listing (first item):\n")
-                    formatted_json = json.dumps(sample, indent=2, default=str)
-                    f.write(formatted_json)
-                    
-                    # If this is the active listing with details, also analyze the details structure separately
-                    if listing_type == 'active' and 'details' in sample:
-                        f.write("\n\n=== ACTIVE LISTING DETAILS ONLY ===\n")
-                        details = sample['details']
-                        f.write(f"Total detail fields: {len(details) if isinstance(details, dict) else 0}\n")
-                        f.write("Detail fields:\n")
-                        details_structure = extract_structure(details)
-                        write_structure(f, details_structure)
-
-        print(f"Listing structures saved to {os.path.abspath(output_file)}")
-
-    async def execute_call(self, call_name: str, xml_request: str) -> Dict:
-            """
-            Execute a Trading API call
-            
-            Args:
-                call_name: The API call name
-                xml_request: The XML request body
-                
-            Returns:
-                Dict: Response converted from XML to dict
-            """
-            auth_token = await self._get_auth_token()
-            
-            headers = {
-                'X-EBAY-API-CALL-NAME': call_name,
-                'X-EBAY-API-SITEID': self.site_id,
-                'X-EBAY-API-COMPATIBILITY-LEVEL': self.compatibility_level,
-                'X-EBAY-API-IAF-TOKEN': auth_token,
-                'Content-Type': 'text/xml'
+        if not os.path.exists(input_path):
+            logger.error(f"Inventory file not found: {input_path}")
+            return {
+                "success": False,
+                "error": f"File not found: {input_path}"
             }
-            
-            # This is the Trading API endpoint - NOT the Inventory API endpoint
-            endpoint = 'https://api.ebay.com/ws/api.dll'
-            
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        endpoint,
-                        headers=headers,
-                        content=xml_request
-                    )
-                    
-                    if response.status_code != 200:
-                        logger.error(f"eBay Trading API error: {response.text}")
-                        raise EbayAPIError(f"Trading API call {call_name} failed: {response.text}")
-                    
-                    # Convert XML to dict
-                    return xmltodict.parse(response.text)
-                    
-            except httpx.RequestError as e:
-                logger.error(f"Network error in Trading API call: {str(e)}")
-                raise EbayAPIError(f"Network error in Trading API call: {str(e)}")
-
-    async def get_user_info(self) -> Dict[str, Any]:
-        """
-        Get information about the authenticated user
-        
-        Returns:
-            Dict: User information
-        """
-        xml_request = """<?xml version="1.0" encoding="utf-8"?>
-        <GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-            <DetailLevel>ReturnAll</DetailLevel>
-        </GetUserRequest>"""
         
         try:
-            response_dict = await self.execute_call('GetUser', xml_request)
+            with open(input_path, 'r', encoding='utf-8') as f:
+                inventory_data = json.load(f)
             
-            if 'GetUserResponse' not in response_dict:
-                return {
-                    'success': False,
-                    'message': "Invalid response from eBay GetUser API"
-                }
+            # Get counts
+            active_count = len(inventory_data.get('listings', {}).get('active', []))
+            sold_count = len(inventory_data.get('listings', {}).get('sold', []))
+            unsold_count = len(inventory_data.get('listings', {}).get('unsold', []))
+            total_count = active_count + sold_count + unsold_count
+            
+            logger.info(f"Loaded {total_count} listings from {input_path}")
+            logger.info(f"  Active: {active_count}, Sold: {sold_count}, Unsold: {unsold_count}")
             
             return {
-                'success': True,
-                'user_data': response_dict.get('GetUserResponse', {}).get('User', {})
+                "success": True,
+                "data": inventory_data,
+                "active_count": active_count,
+                "sold_count": sold_count,
+                "unsold_count": unsold_count,
+                "total_count": total_count,
+                "metadata": inventory_data.get('metadata', {})
             }
         except Exception as e:
-            logger.error(f"Error getting user info: {str(e)}")
+            logger.error(f"Error loading inventory from {input_path}: {str(e)}")
             return {
-                'success': False,
-                'message': f"Error getting user info: {str(e)}"
+                "success": False,
+                "error": str(e)
             }
 
-class EbayTradingAPIOld:
-    """
-    Client for eBay's Trading API (XML-based)
-    Used for operations not yet available in the REST APIs
-    """
-    
-    def __init__(self, sandbox: bool = False, site_id: str = '3'):
+    async def get_all_active_listings(self, include_details: bool = False) -> List[Dict[str, Any]]:
         """
-        Initialize eBay Trading API client
+        Get all active eBay listings with pagination
         
         Args:
-            sandbox: Whether to use sandbox environment
-            site_id: eBay site ID (3 = UK)
+            include_details: Whether to include detailed item information
+            
+        Returns:
+            List of all active listing items
         """
-        self.sandbox = sandbox
-        self.site_id = site_id
-        self.compatibility_level = '1155'
+        # Use the existing get_all_selling_listings method
+        result = await self.get_all_selling_listings(
+            include_active=True,
+            include_sold=False,
+            include_unsold=False,
+            include_details=include_details
+        )
         
-        # Set endpoint based on environment
-        if sandbox:
-            self.endpoint = 'https://api.sandbox.ebay.com/ws/api.dll'
-        else:
-            self.endpoint = 'https://api.ebay.com/ws/api.dll'
+        # Return just the active listings
+        return result.get('active', [])
+            
+    async def create_item_and_store_id(self, item_data, ids_file="data/ebay_item_ids.json"):
+        """Create an item and store its ID locally"""
+        import json
+        import os
+        from datetime import datetime
         
+        # Create a copy of the item data with escaped text fields
+        safe_item_data = item_data.copy()
+        
+        # Escape text fields
+        if "Title" in safe_item_data:
+            safe_item_data["Title"] = self._escape_xml_chars(safe_item_data["Title"])
+        if "Description" in safe_item_data:
+            safe_item_data["Description"] = safe_item_data["Description"]  # HTML descriptions are in CDATA blocks, so don't escape
+        
+        # Escape item specifics
+        if "ItemSpecifics" in safe_item_data and isinstance(safe_item_data["ItemSpecifics"], dict):
+            escaped_specifics = {}
+            for name, value in safe_item_data["ItemSpecifics"].items():
+                escaped_name = self._escape_xml_chars(name)
+                if isinstance(value, list):
+                    escaped_value = [self._escape_xml_chars(v) for v in value]
+                else:
+                    escaped_value = self._escape_xml_chars(value)
+                escaped_specifics[escaped_name] = escaped_value
+            safe_item_data["ItemSpecifics"] = escaped_specifics
+        
+        # Create the item
+        result = await self.add_fixed_price_item(safe_item_data)
+        
+        # Create the item - this line was the first main line before special characters fix
+        # result = await self.add_fixed_price_item(item_data)
+        
+        if not result.get("success", False):
+            logger.error(f"Failed to create item: {result.get('errors', ['Unknown error'])}")
+            return None
+        
+        item_id = result.get("item_id")
+        
+        # Create storage directory if it doesn't exist
+        os.makedirs(os.path.dirname(ids_file), exist_ok=True)
+        
+        # Load existing IDs if file exists
+        stored_ids = []
+        if os.path.exists(ids_file):
+            try:
+                with open(ids_file, 'r') as f:
+                    stored_data = json.load(f)
+                    stored_ids = stored_data.get("item_ids", [])
+            except Exception as e:
+                logger.warning(f"Error reading stored IDs: {e}")
+        
+        # Add the new ID with metadata
+        item_entry = {
+            "item_id": item_id,
+            "title": item_data.get("Title", "Unknown"),
+            "created_at": datetime.now().isoformat(),
+            "listing_url": result.get("listing_url"),
+            "sandbox": self.sandbox
+        }
+        stored_ids.append(item_entry)
+        
+        # Save back to file
+        with open(ids_file, 'w') as f:
+            json.dump({"item_ids": stored_ids}, f, indent=2)
+        
+        logger.info(f"Item ID {item_id} stored in {ids_file}")
+        return item_id
+
+    def _escape_xml_chars(self, text):
+        """
+        Escape special characters in text to make it XML-safe
+        
+        Args:
+            text: The text to escape
+            
+        Returns:
+            The escaped text
+        """
+        if text is None:
+            return ""
+            
+        # Define replacements
+        replacements = [
+            ('&', '&amp;'),  # Must be first to avoid double-escaping
+            ('<', '&lt;'),
+            ('>', '&gt;'),
+            ('"', '&quot;'),
+            ("'", '&apos;')
+        ]
+        
+        # Apply replacements
+        result = text
+        for old, new in replacements:
+            result = result.replace(old, new)
+            
+        return result
+
+    async def get_stored_inventory(self, ids_file="data/ebay_item_ids.json", include_details=False):
+        """
+        Retrieve listings directly using stored IDs instead of inventory API
+        """
+        
+        if not os.path.exists(ids_file):
+            logger.warning(f"ID storage file not found: {ids_file}")
+            return []
+        
+        try:
+            # Load stored IDs
+            with open(ids_file, 'r') as f:
+                stored_data = json.load(f)
+                stored_entries = stored_data.get("item_ids", [])
+            
+            # Filter for sandbox vs production based on current API mode
+            filtered_entries = [entry for entry in stored_entries 
+                            if entry.get("sandbox", False) == self.sandbox]
+            
+            logger.info(f"Found {len(filtered_entries)} stored item IDs for "
+                    f"{'sandbox' if self.sandbox else 'production'}")
+            
+            # Retrieve each item directly
+            items = []
+            for entry in filtered_entries:
+                item_id = entry.get("item_id")
+                if not item_id:
+                    continue
+                    
+                try:
+                    item = await self.get_item_details(item_id)
+                    if item:
+                        # Check if the item is still active
+                        status = item.get("SellingStatus", {}).get("ListingStatus")
+                        if status == "Active":
+                            if include_details:
+                                # Item already has details since we retrieved with get_item_details
+                                items.append(item)
+                            else:
+                                # Strip down to basic info if details not requested
+                                basic_item = {
+                                    "ItemID": item_id,
+                                    "Title": item.get("Title"),
+                                    "SellingStatus": item.get("SellingStatus"),
+                                    "_listing_type": "active"
+                                }
+                                items.append(basic_item)
+                        else:
+                            logger.info(f"Item {item_id} is no longer active (status: {status})")
+                    else:
+                        logger.warning(f"Could not retrieve item {item_id}")
+                except Exception as e:
+                    logger.error(f"Error retrieving item {item_id}: {str(e)}")
+            
+            return items
+        except Exception as e:
+            logger.error(f"Error loading stored IDs: {str(e)}")
+            return []
+
+class EbayInventoryAPI:
+    """Class for eBay Inventory API (REST) operations"""
+    
+    def __init__(self, sandbox: bool = False):
         self.auth_manager = EbayAuthManager(sandbox=sandbox)
+        self.sandbox = sandbox
+        self.marketplace_id = "EBAY_GB"  # Default for UK
+        
+        if sandbox:
+            self.endpoint = "https://api.sandbox.ebay.com/sell/inventory/v1"
+        else:
+            self.endpoint = "https://api.ebay.com/sell/inventory/v1"
     
     async def _get_auth_token(self) -> str:
         """Get OAuth token for API requests"""
         return await self.auth_manager.get_access_token()
-    
-    async def get_all_active_listings(self) -> List[Dict[str, Any]]:
-        """
-        Get all active eBay listings with pagination
         
-        Returns:
-            List of all active listing items
-        """
-        # Get first page to determine total number of pages
-        first_page = await self.get_active_listings(page_num=1)
-        
-        # Check if we have pagination data
-        pagination_result = first_page.get('PaginationResult', {})
-        if not pagination_result:
-            logger.error("No pagination information in eBay response")
-            return []
-        
-        total_pages = int(pagination_result.get('TotalNumberOfPages', '1'))
-        total_entries = int(pagination_result.get('TotalNumberOfEntries', '0'))
-        
-        logger.info(f"Found {total_entries} eBay listings across {total_pages} pages")
-        
-        # Extract items from first page
-        all_items = []
-        items = first_page.get('ItemArray', {}).get('Item', [])
-        
-        # Handle case where there's only one item (not returned as a list)
-        if items and not isinstance(items, list):
-            items = [items]
-        
-        if items:
-            all_items.extend(items)
-        
-        # Fetch remaining pages if there are more than one
-        if total_pages > 1:
-            for page in range(2, total_pages + 1):
-                logger.info(f"Fetching eBay listings page {page} of {total_pages}")
-                result = await self.get_active_listings(page_num=page)
-                
-                items = result.get('ItemArray', {}).get('Item', [])
-                if items:
-                    # Handle case where there's only one item
-                    if not isinstance(items, list):
-                        items = [items]
-                    all_items.extend(items)
-        
-        return all_items
-
-    async def get_active_listings(self, page_num: int = 1, items_per_page: int = 200) -> Dict[str, Any]:
-        """
-        Get active eBay listings for a specific page
-        
-        Args:
-            page_num: Page number (1-based)
-            items_per_page: Items per page (max 200)
-            
-        Returns:
-            Dict containing active listings data
-        """
+    async def _make_request(self, method: str, path: str, data: Dict = None, params: Dict = None) -> Dict:
+        """Make a request to eBay Inventory API"""
+        url = f"{self.endpoint}/{path}"
         auth_token = await self._get_auth_token()
         
-        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
-        <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-            <RequesterCredentials>
-                <eBayAuthToken>{auth_token}</eBayAuthToken>
-            </RequesterCredentials>
-            <ActiveList>
-                <Include>true</Include>
-                <Pagination>
-                    <EntriesPerPage>{items_per_page}</EntriesPerPage>
-                    <PageNumber>{page_num}</PageNumber>
-                </Pagination>
-            </ActiveList>
-            <DetailLevel>ReturnAll</DetailLevel>
-        </GetMyeBaySellingRequest>"""
-
+        headers = {
+            'Authorization': f'Bearer {auth_token}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+        
+        if self.marketplace_id:
+            headers['X-EBAY-C-MARKETPLACE-ID'] = self.marketplace_id
+            
         try:
-            response_dict = await self.execute_call('GetMyeBaySelling', xml_request)
-            
-            if 'GetMyeBaySellingResponse' not in response_dict:
-                logger.error("Invalid response from GetMyeBaySelling")
+            async with httpx.AsyncClient() as client:
+                if method.upper() == 'GET':
+                    response = await client.get(url, headers=headers, params=params)
+                elif method.upper() == 'POST':
+                    response = await client.post(url, headers=headers, json=data)
+                elif method.upper() == 'PUT':
+                    response = await client.put(url, headers=headers, json=data)
+                elif method.upper() == 'DELETE':
+                    response = await client.delete(url, headers=headers)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                    
+            if response.status_code not in (200, 201, 204):
+                logger.error(f"Error in API call {method} {path}: {response.text}")
                 return {}
+                
+            if response.status_code == 204:  # No content
+                return {}
+                
+            return response.json()
             
-            return response_dict.get('GetMyeBaySellingResponse', {}).get('ActiveList', {})
         except Exception as e:
-            logger.error(f"Error getting active listings: {str(e)}")
-            return {}
+            logger.error(f"Error in API call {method} {path}: {str(e)}")
+            raise EbayAPIError(f"Inventory API error: {str(e)}")
+            
+    async def get_inventory_items(self, limit=100, offset=0) -> Dict:
+        """Get inventory items"""
+        params = {
+            'limit': limit,
+            'offset': offset
+        }
+        return await self._make_request('GET', 'inventory_item', params=params)

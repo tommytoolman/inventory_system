@@ -18,9 +18,19 @@ class EbayClient:
     INVENTORY_API = "https://api.ebay.com/sell/inventory/v1"
     FULFILLMENT_API = "https://api.ebay.com/sell/fulfillment/v1"
     
-    def __init__(self):
+    def __init__(self, sandbox: bool = False):
         """Initialize with auth manager"""
-        self.auth_manager = EbayAuthManager()
+        self.auth_manager = EbayAuthManager(sandbox=sandbox)
+        self.sandbox = sandbox
+        self.marketplace_id = "EBAY_GB"  # Default for UK
+        
+        # Set API endpoints
+        if sandbox:
+            self.INVENTORY_API = "https://api.sandbox.ebay.com/sell/inventory/v1"
+            self.FULFILLMENT_API = "https://api.sandbox.ebay.com/sell/fulfillment/v1"
+        else:
+            self.INVENTORY_API = "https://api.ebay.com/sell/inventory/v1"
+            self.FULFILLMENT_API = "https://api.ebay.com/sell/fulfillment/v1"
     
     async def _get_headers(self) -> Dict[str, str]:
         """Get headers with auth token for API requests"""

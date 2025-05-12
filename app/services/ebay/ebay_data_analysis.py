@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 sys.path.append(os.path.abspath("/Users/wommy/Documents/GitHub/PROJECTS/HANKS/inventory_system"))
 
-from app.services.ebay.trading import EbayTradingAPI
+from app.services.ebay.trading import EbayTradingLegacyAPI
 from app.models.ebay import EbayListing
 
 # Load environment variables
@@ -22,7 +22,7 @@ async def analyze_ebay_data():
     print("== eBay Data Structure Analysis ==\n")
     
     # Initialize trading API and database connection
-    trading_api = EbayTradingAPI(sandbox=False)
+    trading_api = EbayTradingLegacyAPI(sandbox=False)
     db_url = os.environ.get('DATABASE_URL')
     engine = create_async_engine(db_url)
     

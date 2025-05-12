@@ -15,7 +15,7 @@ class ProductCondition(str, Enum):
     """Product condition values used in both models and schemas"""
     NEW = "NEW"
     EXCELLENT = "EXCELLENT"
-    VERY_GOOD = "VERYGOOD"
+    VERY_GOOD = "VERY_GOOD"
     GOOD = "GOOD"
     FAIR = "FAIR"
     POOR = "POOR"

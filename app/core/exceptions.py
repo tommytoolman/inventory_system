@@ -49,3 +49,7 @@ class ReverbServiceError(PlatformServiceError):
 class ReverbAPIError(ReverbServiceError):
     """Raised when Reverb API calls fail."""
     pass
+
+class DatabaseError(Exception):
+    """Exception raised for database-related errors."""
+    pass

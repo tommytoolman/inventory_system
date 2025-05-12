@@ -1,0 +1,10 @@
+{
+  "access_token": "test-access-token",
+  "expires_in": 7200,
+  "refresh_token": "test-refresh-token",
+  "refresh_token_expires_in": 47304000,
+  "token_type": "User Access Token",
+  "refresh_token_expires_at": "2026-09-20T05:35:09.534014",
+  "refresh_token_created_at": "2025-03-21T17:35:09.534014",
+  "access_token_expires_at": "2025-05-07T16:04:57.953011"
+}

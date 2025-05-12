@@ -149,7 +149,6 @@ class TokenStorage:
         else:
             print("No token info found")
 
-
 class EbayAuthManager:
     """
     Manages eBay API authentication tokens.

@@ -1,3 +1,4 @@
+# apps.integrations.platforms.ebay
 """
 Defines the EbayPlatform class, correctly inheriting from PlatformInterface.
 Status: The required methods (update_stock, get_current_stock, sync_status) are present but are currently stubs. 

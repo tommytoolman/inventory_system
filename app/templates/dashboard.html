@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}RIFF - Dashboard{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    {% if error %}
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6" role="alert">
+        <p>{{ error }}</p>
+    </div>
+    {% endif %}
+    
+    <!-- Header -->
+    <div class="text-center mb-10">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Realtime Inventory Forms Feed System</h1>
+        <p class="text-gray-600">Centralized inventory management across multiple platforms</p>
+    </div>
+    
+    <!-- Platform Status Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <!-- eBay Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">eBay</h2>
+                <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if ebay_connected else 'bg-red-500' }}"></div>
+            </div>
+            <div class="mb-1">
+                <span class="text-2xl font-bold">{{ ebay_count|default(0) }}</span>
+                <span class="text-gray-500 text-sm">active</span>
+            </div>
+            <div class="mb-1 flex justify-between text-sm">
+                <span>Sold:</span>
+                <span class="font-medium">{{ ebay_sold_count|default(0) }}</span>
+            </div>
+            <div class="mb-2 flex justify-between text-sm">
+                <span>Other:</span>
+                <span class="font-medium">{{ ebay_other_count|default(0) }}</span>
+            </div>
+            <a href="/inventory?platform=ebay" class="text-blue-600 hover:text-blue-800 text-sm">View listings →</a>
+        </div>
+        
+        <!-- Reverb Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">Reverb</h2>
+                <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if reverb_connected else 'bg-red-500' }}"></div>
+            </div>
+            <div class="mb-1">
+                <span class="text-2xl font-bold">{{ reverb_count|default(0) }}</span>
+                <span class="text-gray-500 text-sm">active</span>
+            </div>
+            <div class="mb-1 flex justify-between text-sm">
+                <span>Sold:</span>
+                <span class="font-medium">{{ reverb_sold_count|default(0) }}</span>
+            </div>
+            <div class="mb-2 flex justify-between text-sm">
+                <span>Other:</span>
+                <span class="font-medium">{{ reverb_other_count|default(0) }}</span>
+            </div>
+            <a href="/inventory?platform=reverb" class="text-blue-600 hover:text-blue-800 text-sm">View listings →</a>
+        </div>
+        
+        <!-- V&R Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">Vintage & Rare</h2>
+                <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if vr_connected else 'bg-red-500' }}"></div>
+            </div>
+            <div class="mb-1">
+                <span class="text-2xl font-bold">{{ vr_count|default(0) }}</span>
+                <span class="text-gray-500 text-sm">active</span>
+            </div>
+            <div class="mb-1 flex justify-between text-sm">
+                <span>Sold:</span>
+                <span class="font-medium">{{ vr_sold_count|default(0) }}</span>
+            </div>
+            <div class="mb-2 flex justify-between text-sm">
+                <span>Other:</span>
+                <span class="font-medium">{{ vr_other_count|default(0) }}</span>
+            </div>
+            <a href="/inventory?platform=reverb" class="text-blue-600 hover:text-blue-800 text-sm">View listings →</a>
+        </div>
+        
+        <!-- Shopify Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">Shopify</h2>
+                <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if website_connected else 'bg-red-500' }}"></div>
+            </div>
+            <div class="mb-1">
+                <span class="text-2xl font-bold">{{ website_count|default(0) }}</span>
+                <span class="text-gray-500 text-sm">active</span>
+            </div>
+            <div class="mb-1 flex justify-between text-sm">
+                <span>Sold:</span>
+                <span class="font-medium">{{ website_sold_count|default(0) }}</span>
+            </div>
+            <div class="mb-2 flex justify-between text-sm">
+                <span>Other:</span>
+                <span class="font-medium">{{ website_other_count|default(0) }}</span>
+            </div>
+            <a href="/inventory?platform=reverb" class="text-blue-600 hover:text-blue-800 text-sm">View listings →</a>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Quick Actions</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <a href="/inventory/add" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-3 px-4 text-center">Add New Product</a>
+            <a href="/inventory" class="bg-gray-200 hover:bg-gray-300 rounded-lg py-3 px-4 text-center">View All Products</a>
+            <a href="/inventory/sync/ebay" class="bg-gray-200 hover:bg-gray-300 rounded-lg py-3 px-4 text-center">Sync eBay</a>
+            <a href="/inventory/sync/vintageandrare" class="bg-gray-200 hover:bg-gray-300 rounded-lg py-3 px-4 text-center">Sync V&R</a>
+        </div>
+    </div>
+
+    <div class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Inventory Synchronization</h2>
+        
+        <!-- Sync Status -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h3 class="text-lg font-medium mb-4">Sync Status</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {% for platform in ['ebay', 'reverb', 'vr', 'website'] %}
+                    {% set platform_name = 'Vintage & Rare' if platform == 'vr' else platform|title %}
+                    {% set last_sync = platform_last_sync[platform] if platform_last_sync and platform in platform_last_sync else None %}
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="font-medium">{{ platform_name }}</span>
+                            <p class="text-sm text-gray-500">
+                                {% if last_sync %}
+                                    Last sync: {{ last_sync }}
+                                {% else %}
+                                    Never synced
+                                {% endif %}
+                            </p>
+                        </div>
+                        <span id="{{ platform }}-sync-status" class="text-sm {{ 'text-green-500' if platform_sync_status and platform_sync_status[platform] == 'SUCCESS' else 'text-gray-500' }}">
+                            {{ platform_sync_status[platform] if platform_sync_status and platform in platform_sync_status else 'IDLE' }}
+                        </span>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Sync Actions -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-medium mb-4">Sync Actions</h3>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <button id="sync-ebay" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('ebay')">
+                    Sync eBay
+                </button>
+                <button id="sync-reverb" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('reverb')">
+                    Sync Reverb
+                </button>
+                <button id="sync-vr" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('vr')">
+                    Sync Vintage & Rare
+                </button>
+                <button id="sync-website" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('website')">
+                    Sync Website
+                </button>
+                <button id="sync-all" class="bg-green-600 hover:bg-green-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('all')">
+                    Sync All Platforms
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="bg-white rounded-lg shadow p-6 mb-10">
+        <h2 class="text-xl font-semibold mb-4">Recent Activity</h2>
+        {% if recent_activity %}
+            <div class="divide-y">
+                {% for activity in recent_activity %}
+                <div class="py-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="mr-2">{{ activity.icon|safe }}</span>
+                            <span>{{ activity.message }}</span>
+                        </div>
+                        <span class="text-sm text-gray-500">{{ activity.time }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-gray-500 text-center py-4">No recent activity to display</p>
+        {% endif %}
+    </div>
+    
+    <!-- System Status -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold mb-4">System Status</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <h3 class="font-medium text-gray-700 mb-2">Background Tasks</h3>
+                <div class="flex items-center">
+                    <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if system_status.background_tasks_healthy else 'bg-red-500' }} mr-2"></div>
+                    <span>{{ 'Active' if system_status.background_tasks_healthy else 'Attention Required' }}</span>
+                </div>
+            </div>
+            <div>
+                <h3 class="font-medium text-gray-700 mb-2">Last Synchronization</h3>
+                <p>{{ system_status.last_sync|default('Never') }}</p>
+            </div>
+            <div>
+                <h3 class="font-medium text-gray-700 mb-2">Total Products</h3>
+                <p>{{ system_status.total_products }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function triggerSync(platform) {
+        // Disable button and show loading state
+        const button = document.getElementById(`sync-${platform}`);
+        const originalText = button.innerText;
+        button.disabled = true;
+        button.innerHTML = `<span class="inline-block animate-spin mr-2">↻</span> Syncing...`;
+        
+        // Update status indicator
+        const statusElem = document.getElementById(`${platform}-sync-status`);
+        if (statusElem) {
+            statusElem.innerText = 'SYNCING';
+            statusElem.className = 'text-sm text-blue-500';
+        }
+        
+        // Make API call to trigger sync
+        fetch(`/api/sync/${platform}`, {
+            method: 'POST',
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log(`Sync ${platform} response:`, data);
+            
+            // Re-enable button
+            button.disabled = false;
+            button.innerText = originalText;
+            
+            // Update status
+            if (statusElem) {
+                if (data.status === 'success') {
+                    statusElem.innerText = 'SUCCESS';
+                    statusElem.className = 'text-sm text-green-500';
+                } else {
+                    statusElem.innerText = 'FAILED';
+                    statusElem.className = 'text-sm text-red-500';
+                }
+            }
+            
+            // Refresh page after short delay to update counts
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        })
+        .catch(error => {
+            console.error(`Error syncing ${platform}:`, error);
+            
+            // Re-enable button
+            button.disabled = false;
+            button.innerText = originalText;
+            
+            // Update status
+            if (statusElem) {
+                statusElem.innerText = 'ERROR';
+                statusElem.className = 'text-sm text-red-500';
+            }
+        });
+    }
+</script>
+
+{% endblock %}

@@ -19,7 +19,7 @@ from app.integrations.setup import setup_stock_manager
 from app.integrations.stock_manager import StockManager
 from app.integrations.platforms.ebay import EbayPlatform
 from app.integrations.platforms.reverb import ReverbPlatform
-from app.routes import shipping
+from app.routes import shipping, dashboard
 from app.routes.platforms.reverb import router as reverb_router
 from app.routes.webhooks import router as webhook_router
 from contextlib import asynccontextmanager
@@ -75,6 +75,7 @@ templates = Jinja2Templates(directory="app/templates")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Include routers
+app.include_router(dashboard.router, prefix="", tags=["dashboard"])
 app.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 app.include_router(reverb_router)
 app.include_router(webhook_router)

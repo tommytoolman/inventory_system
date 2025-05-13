@@ -24,7 +24,7 @@ from app.schemas.platform.reverb import (
 )
 from app.services.reverb_service import ReverbService
 from app.dependencies import get_db
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.exceptions import ReverbAPIError, ListingNotFoundError
 
 router = APIRouter(prefix="/platforms/reverb", tags=["reverb"])

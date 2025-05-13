@@ -8,6 +8,7 @@ from app.database import async_session
 from app.core.templates import templates
 from app.models.platform_common import PlatformCommon
 from app.models.product import Product
+from app.models.activity_log import ActivityLog
 
 router = APIRouter()
 
@@ -172,37 +173,56 @@ async def dashboard(request: Request):
                     
                 platform_connections[f"{platform}_connected"] = is_connected
             
-            # Get recent activity from database (last 5 changes), if table exists
+            # Get recent activity from database (last 5 changes)
             recent_activity = []
             try:
-                # If you have an activity_log table
-                activity_query = text("""
-                    SELECT action, entity_type, entity_id, created_at 
-                    FROM activity_log
-                    ORDER BY created_at DESC
-                    LIMIT 5
-                """)
+                # Use the ActivityLog model directly instead of raw SQL
+                activity_query = select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(5)
                 activity_result = await db.execute(activity_query)
-                activity_rows = activity_result.fetchall()
+                activity_logs = activity_result.scalars().all()
                 
-                for row in activity_rows:
+                for log in activity_logs:
                     icon = "📝"  # Default icon
-                    if row.action == "create":
+                    if log.action == "create":
                         icon = "➕"
-                    elif row.action == "update":
+                    elif log.action == "update":
                         icon = "🔄"
-                    elif row.action == "delete":
+                    elif log.action == "delete":
                         icon = "❌"
-                    elif row.action == "sync":
+                    elif log.action == "sync":
                         icon = "🔄"
+                    elif log.action == "sync_start":
+                        icon = "🔄"
+                    elif log.action == "sync_error":
+                        icon = "⚠️"
+                    elif log.action == "sale":
+                        icon = "💰"
+                        
+                    # Format the message based on the activity type
+                    if log.action == "sync":
+                        message = f"Synced {log.entity_id.upper()}"
+                        if log.details and "processed" in log.details:
+                            message += f" ({log.details['processed']} items)"
+                    elif log.action == "sync_start":
+                        message = f"Started sync for {log.entity_id.upper()}"
+                    elif log.action == "sync_error":
+                        message = f"Error syncing {log.entity_id.upper()}"
+                        if log.details and "error" in log.details:
+                            message += f": {log.details['error'][:30]}..."
+                    else:
+                        message = f"{log.action.capitalize()} {log.entity_type} #{log.entity_id}"
+                        if log.platform:
+                            message += f" on {log.platform.upper()}"
                     
                     recent_activity.append({
                         "icon": icon,
-                        "message": f"{row.action.capitalize()} {row.entity_type} #{row.entity_id}",
-                        "time": row.created_at.strftime("%Y-%m-%d %H:%M")
+                        "message": message,
+                        "time": log.created_at.strftime("%Y-%m-%d %H:%M")
                     })
+                    
             except Exception as e:
-                # If activity_log doesn't exist or other error
+                # This will handle both the case where the table doesn't exist
+                # or any other error
                 print(f"Error fetching activity log: {e}")
             
             # System status

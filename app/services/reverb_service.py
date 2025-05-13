@@ -645,7 +645,7 @@ class ReverbService:
             condition_map = {
                 'mint': ProductCondition.EXCELLENT,
                 'excellent': ProductCondition.EXCELLENT,
-                'very good': ProductCondition.VERY_GOOD,
+                'very good': ProductCondition.VERYGOOD,
                 'good': ProductCondition.GOOD,
                 'fair': ProductCondition.FAIR,
                 'poor': ProductCondition.POOR

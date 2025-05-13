@@ -1309,7 +1309,7 @@ def map_condition_to_ebay(condition: str) -> str:
     condition_mapping = {
         "NEW": "1000",       # New
         "EXCELLENT": "1500", # New other (see details)
-        "VERY_GOOD": "2000", # Manufacturer refurbished
+        "VERYGOOD": "2000", # Manufacturer refurbished
         "GOOD": "2500",      # Seller refurbished
         "FAIR": "3000",      # Used
         "POOR": "7000"       # For parts or not working

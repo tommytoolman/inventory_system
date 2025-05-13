@@ -143,7 +143,7 @@ async def test_map_condition(db_session):
     
     # Test with condition object - partial match
     data = {"condition": {"display_name": "Very Good Plus"}}
-    assert importer._map_condition(data) == "VERY_GOOD"  # Updated to match the actual enum value
+    assert importer._map_condition(data) == "VERYGOOD"  # Updated to match the actual enum value
     
     # Test with condition object - different case
     data = {"condition": {"display_name": "excellent"}}

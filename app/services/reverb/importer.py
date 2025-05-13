@@ -488,7 +488,7 @@ class ReverbImporter:
         condition_map = {
             "mint": ProductCondition.EXCELLENT.value,
             "excellent": ProductCondition.EXCELLENT.value,
-            "very good": ProductCondition.VERY_GOOD.value,
+            "very good": ProductCondition.VERYGOOD.value,
             "good": ProductCondition.GOOD.value,
             "fair": ProductCondition.FAIR.value,
             "poor": ProductCondition.POOR.value,

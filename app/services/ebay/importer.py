@@ -223,7 +223,7 @@ class EbayImporter:
                         elif 'mint' in condition_name or 'excellent' in condition_name:
                             condition = ProductCondition.EXCELLENT
                         elif 'very good' in condition_name:
-                            condition = ProductCondition.VERY_GOOD
+                            condition = ProductCondition.VERYGOOD
                         elif 'good' in condition_name:
                             condition = ProductCondition.GOOD
                         elif 'fair' in condition_name:

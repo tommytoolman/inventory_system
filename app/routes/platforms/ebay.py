@@ -1,4 +1,5 @@
-# Example route showing service integration
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,9 +9,11 @@ from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.dependencies import get_db
 
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["ebay"])
 
-@router.post("/products/with-ebay")
+logger = logging.getLogger(__name__)
+
+@router.post("/sync/ebay")
 async def create_product_with_ebay(
     product_data: ProductCreate,
     ebay_data: EbayListingCreate,

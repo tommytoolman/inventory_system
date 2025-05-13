@@ -1708,7 +1708,7 @@ async def test_export_to_vintageandrare(mocker):
             year_of_manufacture=1959,
             country_of_origin="USA",
             color="Cherry Sunburst",
-            condition=ProductCondition.VERY_GOOD
+            condition=ProductCondition.VERYGOOD
         )
     ]
     

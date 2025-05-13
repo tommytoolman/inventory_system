@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from fastapi.responses import RedirectResponse
 from .database import get_session
-from app.routes import inventory
+from app.routes import inventory, websockets as websocket_router
 from app.core.config import get_settings
 
 from app import models
@@ -24,8 +24,6 @@ from app.routes.platforms.reverb import router as reverb_router
 from app.routes.platforms.vr import router as vr_router
 from app.routes.webhooks import router as webhook_router
 from contextlib import asynccontextmanager
-
-
 
 
 @asynccontextmanager
@@ -83,6 +81,7 @@ app.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 app.include_router(reverb_router)
 app.include_router(vr_router)
 app.include_router(webhook_router)
+app.include_router(websocket_router.router)
 app.include_router(shipping.router)
 
 # Root redirect

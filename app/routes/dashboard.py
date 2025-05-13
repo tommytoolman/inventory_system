@@ -17,8 +17,9 @@ async def dashboard(request: Request):
     """
     Render the dashboard/splash page with key metrics
     """
-    # Get platform counts
+
     platform_counts = {}
+    platform_sync_times = {}
     platforms = ["ebay", "reverb", "vr", "website"]
     
     # Create a new session using async_session()
@@ -55,6 +56,19 @@ async def dashboard(request: Request):
                     platform_counts[f"{platform}_count"] = active_count
                     platform_counts[f"{platform}_sold_count"] = sold_count
                     platform_counts[f"{platform}_other_count"] = other_count
+                    
+                    # ADD SYNC TIME LOGIC HERE
+                    sync_query = select(PlatformCommon.last_sync).where(
+                        PlatformCommon.platform_name == platform,
+                        PlatformCommon.last_sync.isnot(None)
+                    ).order_by(PlatformCommon.last_sync.desc()).limit(1)
+                    
+                    sync_result = await db.execute(sync_query)
+                    last_sync = sync_result.scalar_one_or_none()
+                    
+                    if last_sync:
+                        platform_sync_times[f"{platform}_last_sync"] = last_sync
+                    # END SYNC TIME LOGIC
                     
                     # Check if we need to fall back to platform-specific tables
                     if active_count == 0 and sold_count == 0 and other_count == 0:
@@ -183,36 +197,50 @@ async def dashboard(request: Request):
                 
                 for log in activity_logs:
                     icon = "📝"  # Default icon
-                    if log.action == "create":
-                        icon = "➕"
-                    elif log.action == "update":
-                        icon = "🔄"
-                    elif log.action == "delete":
-                        icon = "❌"
-                    elif log.action == "sync":
-                        icon = "🔄"
-                    elif log.action == "sync_start":
-                        icon = "🔄"
-                    elif log.action == "sync_error":
-                        icon = "⚠️"
-                    elif log.action == "sale":
-                        icon = "💰"
-                        
-                    # Format the message based on the activity type
-                    if log.action == "sync":
-                        message = f"Synced {log.entity_id.upper()}"
-                        if log.details and "processed" in log.details:
-                            message += f" ({log.details['processed']} items)"
-                    elif log.action == "sync_start":
-                        message = f"Started sync for {log.entity_id.upper()}"
-                    elif log.action == "sync_error":
-                        message = f"Error syncing {log.entity_id.upper()}"
-                        if log.details and "error" in log.details:
-                            message += f": {log.details['error'][:30]}..."
+                    
+                    # First check if icon is stored in details (for new entries)
+                    if log.details and 'icon' in log.details:
+                        icon = log.details['icon']
                     else:
-                        message = f"{log.action.capitalize()} {log.entity_type} #{log.entity_id}"
-                        if log.platform:
-                            message += f" on {log.platform.upper()}"
+                        # Fallback logic for entries without stored icons
+                        if log.action == "create":
+                            icon = "➕"
+                        elif log.action == "update":
+                            icon = "🔄"
+                        elif log.action == "delete":
+                            icon = "❌"
+                        elif log.action == "sync":
+                            # Check if success status is in details
+                            if log.details and log.details.get("status") == "success":
+                                icon = "✅"  # Use green checkmark for successful syncs
+                            else:
+                                icon = "🔄"  # Default sync icon
+                        elif log.action == "sync_start":
+                            icon = "🔄"
+                        elif log.action == "sync_error":
+                            icon = "⚠️"
+                        elif log.action == "sale":
+                            icon = "💰"
+                    
+                    # First check if message is stored in details (for new entries)
+                    if log.details and 'message' in log.details:
+                        message = log.details['message']
+                    else:
+                        # Fallback message generation
+                        if log.action == "sync":
+                            message = f"Synced {log.entity_id.upper()}"
+                            if log.details and "processed" in log.details:
+                                message += f" ({log.details['processed']} items)"
+                        elif log.action == "sync_start":
+                            message = f"Started sync for {log.entity_id.upper()}"
+                        elif log.action == "sync_error":
+                            message = f"Error syncing {log.entity_id.upper()}"
+                            if log.details and "error" in log.details:
+                                message += f": {log.details['error'][:30]}..."
+                        else:
+                            message = f"{log.action.capitalize()} {log.entity_type} #{log.entity_id}"
+                            if log.platform:
+                                message += f" on {log.platform.upper()}"
                     
                     recent_activity.append({
                         "icon": icon,
@@ -244,6 +272,7 @@ async def dashboard(request: Request):
                     "request": request,
                     **platform_counts,
                     **platform_connections,
+                    **platform_sync_times,
                     "system_status": system_status,
                     "recent_activity": recent_activity,
                     "total_products": total_products

@@ -9,9 +9,13 @@ This module provides endpoints for managing Reverb listings, including:
 - Getting category information
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 from app.schemas.platform.reverb import (
     ReverbListingCreateDTO,
@@ -23,12 +27,143 @@ from app.schemas.platform.reverb import (
     ReverbConditionDTO
 )
 from app.services.reverb_service import ReverbService
+from app.services.websockets.manager import manager
+from app.services.activity_logger import ActivityLogger
 from app.dependencies import get_db
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ReverbAPIError, ListingNotFoundError
 
-router = APIRouter(prefix="/platforms/reverb", tags=["reverb"])
+router = APIRouter(prefix="/api", tags=["reverb"])
 
+logger = logging.getLogger(__name__)
+
+@router.post("/sync/reverb")
+async def sync_reverb(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
+):
+    """Run Reverb read sync - download latest inventory and update local database"""
+    background_tasks.add_task(
+        run_reverb_sync_background,
+        settings.REVERB_API_KEY,  # Assuming you have this in settings
+        db,
+        settings
+    )
+    return {"status": "success", "message": "Reverb sync started"}
+
+# Add this background task function
+async def run_reverb_sync_background(api_key: str, db: AsyncSession, settings: Settings):
+    """Run Reverb sync in background with WebSocket updates"""
+    logger.info("Starting Reverb import process through background task")
+    
+    # Add activity logger
+    activity_logger = ActivityLogger(db)
+    
+    try:
+        # Log sync start
+        await activity_logger.log_activity(
+            action="sync_start",
+            entity_type="platform",
+            entity_id="reverb",
+            platform="reverb",
+            details={"status": "started"}
+        )
+        
+        # Send start notification
+        await manager.broadcast({
+            "type": "sync_started",
+            "platform": "reverb",
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Initialize Reverb service
+        reverb_service = ReverbService(db, settings)
+        # You'll need to implement a sync method in ReverbService similar to V&R
+        result = await reverb_service.run_import_process(api_key)
+        
+        if result.get('status') == 'success':
+            # Update last_sync timestamp for Reverb platform entries
+            update_query = text("""
+                UPDATE platform_common 
+                SET last_sync = timezone('utc', now()),
+                    sync_status = 'SYNCED'
+                WHERE platform_name = 'reverb'
+            """)
+            await db.execute(update_query)
+            
+            # Log successful sync
+            await activity_logger.log_activity(
+                action="sync",
+                entity_type="platform", 
+                entity_id="reverb",
+                platform="reverb",
+                details={
+                    "status": "success",
+                    "processed": result.get('processed', 0),
+                    "created": result.get('created', 0),
+                    "updated": result.get('updated', 0),
+                    "errors": result.get('errors', 0),
+                    "icon": "✅",
+                    "message": f"Synced Reverb ({result.get('processed', 0)} items)"
+                }
+            )
+            
+            # Send success notification
+            await manager.broadcast({
+                "type": "sync_completed",
+                "platform": "reverb",
+                "status": "success",
+                "data": result,
+                "timestamp": datetime.now().isoformat()
+            })
+            logger.info(f"Reverb import process result: {result}")
+        else:
+            # Log failed sync
+            await activity_logger.log_activity(
+                action="sync_error",
+                entity_type="platform",
+                entity_id="reverb", 
+                platform="reverb",
+                details={"error": result.get('message', 'Unknown error')}
+            )
+            
+            # Send error notification
+            await manager.broadcast({
+                "type": "sync_completed",
+                "platform": "reverb",
+                "status": "error",
+                "message": result.get('message', 'Unknown error'),
+                "timestamp": datetime.now().isoformat()
+            })
+            logger.error(f"Reverb sync error in result: {result.get('message', 'Unknown error')}")
+        
+        # Commit the activity logging
+        await db.commit()
+            
+    except Exception as e:
+        await db.rollback()
+        error_message = str(e)
+        logger.exception(f"Reverb sync background task failed: {error_message}")
+        
+        # Log exception
+        await activity_logger.log_activity(
+            action="sync_error",
+            entity_type="platform",
+            entity_id="reverb",
+            platform="reverb", 
+            details={"error": error_message}
+        )
+        await db.commit()
+        
+        # Send error notification
+        await manager.broadcast({
+            "type": "sync_completed",
+            "platform": "reverb",
+            "status": "error",
+            "message": error_message,
+            "timestamp": datetime.now().isoformat()
+        })
 
 @router.post("/listings", response_model=ReverbListingReadDTO)
 async def create_reverb_listing(
@@ -62,7 +197,6 @@ async def create_reverb_listing(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-
 @router.post("/listings/{listing_id}/publish", response_model=bool)
 async def publish_reverb_listing(
     listing_id: int,
@@ -90,7 +224,6 @@ async def publish_reverb_listing(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
 
 @router.post("/listings/{listing_id}/end", response_model=bool)
 async def end_reverb_listing(
@@ -125,7 +258,6 @@ async def end_reverb_listing(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-
 @router.put("/listings/{listing_id}/inventory", response_model=bool)
 async def update_reverb_inventory(
     listing_id: int,
@@ -159,7 +291,6 @@ async def update_reverb_inventory(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-
 @router.get("/listings/{listing_id}/sync", response_model=bool)
 async def sync_reverb_listing(
     listing_id: int,
@@ -190,7 +321,6 @@ async def sync_reverb_listing(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-
 @router.get("/categories", response_model=Dict[str, str])
 async def get_reverb_categories(
     db: AsyncSession = Depends(get_db),
@@ -214,7 +344,6 @@ async def get_reverb_categories(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-
 @router.get("/conditions", response_model=Dict[str, str])
 async def get_reverb_conditions(
     db: AsyncSession = Depends(get_db),
@@ -237,7 +366,6 @@ async def get_reverb_conditions(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
 
 @router.get("/listings/find", response_model=Optional[Dict[str, Any]])
 async def find_reverb_listing_by_sku(

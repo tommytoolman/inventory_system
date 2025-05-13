@@ -1,622 +1,23 @@
 # app.services.reverb_service.py
-# """
-# Purpose: Manages high-level operations and integration logic for Reverb listings via enterprise-grade integration with Reverb marketplace
+import json
+import logging
 
-# Role: Primary service layer for Reverb-specific logic. This service layer integrates the Reverb API with our inventory management system,
-# providing high-level business operations and synchronization between platforms.
-
-# Key Functionality:
-# 1. Draft Creation - Create listings in draft state
-# 2. Publishing - Move drafts to live listings
-# 3. Inventory Sync - Keep stock levels in sync across platforms
-# 4. Mapping - Convert between our data models and Reverb's API formats
-# 5. Error Handling - Robust error handling with proper transaction management
-
-# Usage:
-#     reverb_service = ReverbService(db_session, settings)
-    
-#     # Create a draft listing
-#     draft = await reverb_service.create_draft_listing(platform_id, listing_data)
-    
-#     # Publish a draft
-#     success = await reverb_service.publish_listing(listing_id)
-    
-#     # Update inventory
-#     success = await reverb_service.update_inventory(listing_id, new_quantity)
-# """
-
-# import logging
-
-# from typing import Optional, Dict, List, Any, Tuple
-# from sqlalchemy.ext.asyncio import AsyncSession
-# from sqlalchemy import select
-# from datetime import datetime, timezone
-
-
-# from app.models.reverb import ReverbListing
-# from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
-# from app.models.product import Product
-# from app.schemas.platform.reverb import ReverbListingCreateDTO
-# from app.core.config import Settings
-# from app.core.exceptions import ReverbAPIError, ListingNotFoundError, SyncError
-# from app.services.reverb.client import ReverbClient
-
-# logger = logging.getLogger(__name__)
-
-# class ReverbService:
-    # """
-    # Service for interacting with Reverb marketplace.
-    
-    # This class manages the integration between our inventory system and
-    # the Reverb platform, handling data transformation, error handling,
-    # and synchronization.
-    # """
-    
-    # # Mapping between our condition values and Reverb's UUIDs
-    # # These UUIDs should be fetched dynamically, but we provide defaults
-    # CONDITION_MAPPING = {
-    #     "NEW": "7c3f45de-2ae0-4c81-8400-fdb6b1d74890",       # Brand New
-    #     "EXCELLENT": "df268ad1-c462-4ba6-b6db-e007e23922ea", # Excellent
-    #     "VERYGOOD": "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d",  # Very Good
-    #     "GOOD": "f7a3f48c-972a-44c6-b01a-0cd27488d3f6",      # Good
-    #     "FAIR": "98777886-76d0-44c8-865e-bb40e669e934",      # Fair
-    #     "POOR": "6a9dfcad-600b-46c8-9e08-ce6e5057921e"       # Poor
-    # }
-    
-    # def __init__(self, db: AsyncSession, settings: Settings):
-    #     """
-    #     Initialize the Reverb service
-        
-    #     Args:
-    #         db: Database session
-    #         settings: Application settings
-    #     """
-    #     self.db = db
-    #     self.settings = settings
-        
-    #     # Check if sandbox API key is available and use it if specified
-    #     if hasattr(settings, 'REVERB_SANDBOX_MODE') and settings.REVERB_SANDBOX_MODE:
-    #         # Use sandbox environment with sandbox API key
-    #         api_key = getattr(settings, 'REVERB_SANDBOX_API_KEY', settings.REVERB_API_KEY)
-    #         self.client = ReverbClient(api_key=api_key, use_sandbox=True)
-    #         logger.info("Using Reverb sandbox environment")
-    #     else:
-    #         # Use production environment
-    #         self.client = ReverbClient(api_key=settings.REVERB_API_KEY, use_sandbox=False)
-    #         logger.info("Using Reverb production environment")
-        
-    # async def create_draft_listing(
-    #     self,
-    #     platform_id: int,
-    #     listing_data: Dict[str, Any]
-    # ) -> ReverbListing:
-    #     """
-    #     Creates a draft listing on Reverb.
-    #     Does not publish - just prepares the listing data.
-        
-    #     Args:
-    #         platform_id: ID of the platform_common record
-    #         listing_data: Data for the listing
-            
-    #     Returns:
-    #         ReverbListing: The created listing record
-            
-    #     Raises:
-    #         ListingNotFoundError: If platform listing not found
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         # Get platform common record and associated product
-    #         platform_common = await self._get_platform_common(platform_id)
-    #         if not platform_common:
-    #             raise ListingNotFoundError(f"Platform listing {platform_id} not found")
-            
-    #         product = platform_common.product
-            
-    #         # Create local Reverb listing record
-    #         reverb_listing = await self._create_listing_record(platform_common, listing_data)
-            
-    #         # Prepare listing data for Reverb API
-    #         api_listing_data = self._prepare_listing_data(reverb_listing, product)
-            
-    #         # Create listing on Reverb (as draft by default)
-    #         response = await self.client.create_listing(api_listing_data)
-            
-    #         # Update local record with Reverb ID and metadata
-    #         if 'id' in response:
-    #             # Extract Reverb's listing ID
-    #             reverb_listing.reverb_listing_id = str(response['id'])
-                
-    #             # Update status
-    #             platform_common.sync_status = SyncStatus.SYNCED.value
-    #             platform_common.last_sync = datetime.now(timezone.utc)
-                
-    #             await self.db.commit()
-    #         else:
-    #             logger.error(f"Unexpected response from Reverb API: {response}")
-    #             raise ReverbAPIError("Failed to extract listing ID from Reverb response")
-            
-    #         return reverb_listing
-            
-    #     except Exception as e:
-    #         await self.db.rollback()
-    #         if isinstance(e, (ListingNotFoundError, ReverbAPIError)):
-    #             raise
-    #         logger.error(f"Error creating Reverb draft: {str(e)}")
-    #         raise ReverbAPIError(f"Failed to create Reverb draft: {str(e)}")
-    
-    # async def publish_listing(self, reverb_listing_id: int) -> bool:
-    #     """
-    #     Publish a draft listing to make it live on Reverb
-        
-    #     Args:
-    #         reverb_listing_id: Database ID of the ReverbListing
-            
-    #     Returns:
-    #         bool: True if successful
-            
-    #     Raises:
-    #         ListingNotFoundError: If listing not found
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         # Get the listing record
-    #         listing = await self._get_reverb_listing(reverb_listing_id)
-    #         if not listing:
-    #             raise ListingNotFoundError(f"Reverb listing {reverb_listing_id} not found")
-            
-    #         # Check if we have a Reverb ID
-    #         if not listing.reverb_listing_id:
-    #             raise ReverbAPIError("Cannot publish listing: missing Reverb listing ID")
-            
-    #         # Publish on Reverb
-    #         response = await self.client.publish_listing(listing.reverb_listing_id)
-            
-    #         # Update local status
-    #         if response:
-    #             listing.platform_listing.status = ListingStatus.ACTIVE.value
-    #             listing.platform_listing.sync_status = SyncStatus.SYNCED.value
-    #             listing.platform_listing.last_sync = datetime.now(timezone.utc)
-                
-    #             await self.db.commit()
-    #             return True
-            
-    #         return False
-            
-    #     except Exception as e:
-    #         await self.db.rollback()
-    #         if isinstance(e, (ListingNotFoundError, ReverbAPIError)):
-    #             raise
-    #         logger.error(f"Error publishing listing: {str(e)}")
-    #         raise ReverbAPIError(f"Failed to publish listing: {str(e)}")
-    
-    # async def update_inventory(self, reverb_listing_id: int, quantity: int) -> bool:
-    #     """
-    #     Update inventory quantity for a specific listing
-        
-    #     Args:
-    #         reverb_listing_id: Database ID of the ReverbListing
-    #         quantity: New quantity value
-            
-    #     Returns:
-    #         bool: True if successful
-            
-    #     Raises:
-    #         ListingNotFoundError: If listing not found
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         # Get the listing record
-    #         listing = await self._get_reverb_listing(reverb_listing_id)
-    #         if not listing:
-    #             raise ListingNotFoundError(f"Reverb listing {reverb_listing_id} not found")
-            
-    #         # Check if we have a Reverb ID
-    #         if not listing.reverb_listing_id:
-    #             raise ReverbAPIError("Cannot update inventory: missing Reverb listing ID")
-            
-    #         # Update inventory on Reverb
-    #         update_data = {
-    #             "has_inventory": True,
-    #             "inventory": quantity
-    #         }
-            
-    #         response = await self.client.update_listing(listing.reverb_listing_id, update_data)
-            
-    #         # Update local status
-    #         if response:
-    #             listing.platform_listing.sync_status = SyncStatus.SYNCED.value
-    #             listing.platform_listing.last_sync = datetime.now(timezone.utc)
-                
-    #             await self.db.commit()
-    #             return True
-            
-    #         return False
-            
-    #     except Exception as e:
-    #         await self.db.rollback()
-    #         if isinstance(e, (ListingNotFoundError, ReverbAPIError)):
-    #             raise
-    #         logger.error(f"Error updating inventory: {str(e)}")
-    #         raise ReverbAPIError(f"Failed to update inventory: {str(e)}")
-    
-    # async def sync_listing_from_reverb(self, reverb_listing_id: int) -> bool:
-    #     """
-    #     Sync a listing's data from Reverb to update our local copy
-        
-    #     Args:
-    #         reverb_listing_id: Database ID of the ReverbListing
-            
-    #     Returns:
-    #         bool: True if successful
-            
-    #     Raises:
-    #         ListingNotFoundError: If listing not found
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         # Get the listing record
-    #         listing = await self._get_reverb_listing(reverb_listing_id)
-    #         if not listing:
-    #             raise ListingNotFoundError(f"Reverb listing {reverb_listing_id} not found")
-            
-    #         # Check if we have a Reverb ID
-    #         if not listing.reverb_listing_id:
-    #             raise ReverbAPIError("Cannot sync listing: missing Reverb listing ID")
-            
-    #         # Get current data from Reverb
-    #         response = await self.client.get_listing(listing.reverb_listing_id)
-            
-    #         # Update local record
-    #         if 'state' in response:
-    #             # Map Reverb state to our status enum
-    #             state_mapping = {
-    #                 'draft': ListingStatus.DRAFT,
-    #                 'published': ListingStatus.ACTIVE,
-    #                 'ended': ListingStatus.ENDED
-    #             }
-                
-    #             reverb_state = response.get('state', 'draft')
-    #             our_status = state_mapping.get(reverb_state, ListingStatus.DRAFT).value
-                
-    #             listing.platform_listing.status = our_status
-    #             listing.platform_listing.sync_status = SyncStatus.SYNCED.value
-    #             listing.platform_listing.last_sync = datetime.now(timezone.utc)
-                
-    #             # Update offers enabled
-    #             listing.offers_enabled = response.get('offers_enabled', True)
-                
-    #             # Update condition
-    #             if 'condition' in response and 'uuid' in response['condition']:
-    #                 # Reverse lookup in our condition mapping
-    #                 condition_uuid = response['condition']['uuid']
-    #                 for our_condition, reverb_uuid in self.CONDITION_MAPPING.items():
-    #                     if reverb_uuid == condition_uuid:
-    #                         listing.condition_rating = our_condition
-    #                         break
-                
-    #             await self.db.commit()
-    #             return True
-            
-    #         return False
-            
-    #     except Exception as e:
-    #         await self.db.rollback()
-    #         if isinstance(e, (ListingNotFoundError, ReverbAPIError)):
-    #             raise
-    #         logger.error(f"Error syncing listing: {str(e)}")
-    #         raise ReverbAPIError(f"Failed to sync listing: {str(e)}")
-    
-    # async def find_listing_by_sku(self, sku: str) -> Optional[Dict]:
-    #     """
-    #     Find a listing on Reverb by its SKU
-        
-    #     Args:
-    #         sku: Product SKU
-            
-    #     Returns:
-    #         Optional[Dict]: Listing data if found, None otherwise
-            
-    #     Raises:
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         response = await self.client.find_listing_by_sku(sku)
-            
-    #         # Check if any listings were found
-    #         if response and 'listings' in response and response['listings']:
-    #             return response['listings'][0]
-            
-    #         return None
-            
-    #     except Exception as e:
-    #         logger.error(f"Error finding listing by SKU: {str(e)}")
-    #         if isinstance(e, ReverbAPIError):
-    #             raise
-    #         raise ReverbAPIError(f"Failed to find listing by SKU: {str(e)}")
-    
-    # async def end_listing(self, reverb_listing_id: int, reason: str = "not_sold") -> bool:
-    #     """
-    #     End a live listing on Reverb
-        
-    #     Args:
-    #         reverb_listing_id: Database ID of the ReverbListing
-    #         reason: Reason for ending (not_sold or reverb_sale)
-            
-    #     Returns:
-    #         bool: True if successful
-            
-    #     Raises:
-    #         ListingNotFoundError: If listing not found
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         # Get the listing record
-    #         listing = await self._get_reverb_listing(reverb_listing_id)
-    #         if not listing:
-    #             raise ListingNotFoundError(f"Reverb listing {reverb_listing_id} not found")
-            
-    #         # Check if we have a Reverb ID
-    #         if not listing.reverb_listing_id:
-    #             raise ReverbAPIError("Cannot end listing: missing Reverb listing ID")
-            
-    #         # End the listing on Reverb
-    #         response = await self.client.end_listing(listing.reverb_listing_id, reason)
-            
-    #         # Update local status
-    #         if response:
-    #             listing.platform_listing.status = ListingStatus.ENDED.value
-    #             listing.platform_listing.sync_status = SyncStatus.SYNCED.value
-    #             listing.platform_listing.last_sync = datetime.now(timezone.utc)
-                
-    #             await self.db.commit()
-    #             return True
-            
-    #         return False
-            
-    #     except Exception as e:
-    #         await self.db.rollback()
-    #         if isinstance(e, (ListingNotFoundError, ReverbAPIError)):
-    #             raise
-    #         logger.error(f"Error ending listing: {str(e)}")
-    #         raise ReverbAPIError(f"Failed to end listing: {str(e)}")
-    
-    # async def fetch_and_store_category_mapping(self) -> Dict[str, str]:
-    #     """
-    #     Fetch categories from Reverb and store for future use
-        
-    #     Returns:
-    #         Dict[str, str]: Mapping of category names to UUIDs
-            
-    #     Raises:
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         response = await self.client.get_categories()
-            
-    #         # Extract categories and create a mapping of names to UUIDs
-    #         category_mapping = {}
-            
-    #         if 'categories' in response:
-    #             for category in response['categories']:
-    #                 if 'name' in category and 'uuid' in category:
-    #                     category_mapping[category['name']] = category['uuid']
-            
-    #         return category_mapping
-            
-    #     except Exception as e:
-    #         logger.error(f"Error fetching categories: {str(e)}")
-    #         if isinstance(e, ReverbAPIError):
-    #             raise
-    #         raise ReverbAPIError(f"Failed to fetch categories: {str(e)}")
-    
-    # async def fetch_and_store_condition_mapping(self) -> Dict[str, str]:
-    #     """
-    #     Fetch conditions from Reverb and store for future use
-        
-    #     Returns:
-    #         Dict[str, str]: Mapping of condition display names to UUIDs
-            
-    #     Raises:
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         response = await self.client.get_listing_conditions()
-            
-    #         # Extract conditions and create a mapping of display names to UUIDs
-    #         condition_mapping = {}
-            
-    #         if 'conditions' in response:
-    #             for condition in response['conditions']:
-    #                 if 'display_name' in condition and 'uuid' in condition:
-    #                     condition_mapping[condition['display_name']] = condition['uuid']
-            
-    #         return condition_mapping
-            
-    #     except Exception as e:
-    #         logger.error(f"Error fetching conditions: {str(e)}")
-    #         if isinstance(e, ReverbAPIError):
-    #             raise
-    #         raise ReverbAPIError(f"Failed to fetch conditions: {str(e)}")
-    
-    # async def get_listing_details(self, reverb_listing_id: int) -> Dict:
-    #     """
-    #     Get detailed information about a listing from Reverb API
-        
-    #     Args:
-    #         reverb_listing_id: Database ID of the ReverbListing
-            
-    #     Returns:
-    #         Dict: Listing details from Reverb API
-            
-    #     Raises:
-    #         ListingNotFoundError: If listing not found
-    #         ReverbAPIError: If the API request fails
-    #     """
-    #     try:
-    #         listing = await self._get_reverb_listing(reverb_listing_id)
-    #         if not listing:
-    #             raise ListingNotFoundError(f"Reverb listing {reverb_listing_id} not found")
-                
-    #         if not listing.reverb_listing_id:
-    #             raise ReverbAPIError("Cannot get details: missing Reverb listing ID")
-                
-    #         # Get details from Reverb API
-    #         details = await self.client.get_listing_details(listing.reverb_listing_id)
-    #         return details
-            
-    #     except Exception as e:
-    #         if isinstance(e, (ListingNotFoundError, ReverbAPIError)):
-    #             raise
-    #         logger.error(f"Error getting listing details: {str(e)}")
-    #         raise ReverbAPIError(f"Failed to get listing details: {str(e)}")
-    
-    # # Private helper methods
-    
-    # async def _get_platform_common(self, platform_id: int) -> Optional[PlatformCommon]:
-    #     """Get platform_common record by ID with associated product"""
-    #     query = select(PlatformCommon).where(PlatformCommon.id == platform_id)
-    #     result = await self.db.execute(query)
-    #     return result.scalar_one_or_none()
-    
-    # async def _get_reverb_listing(self, listing_id: int) -> Optional[ReverbListing]:
-    #     """Get ReverbListing record by ID with associated platform_common"""
-    #     query = select(ReverbListing).where(ReverbListing.id == listing_id)
-    #     result = await self.db.execute(query)
-    #     return result.scalar_one_or_none()
-    
-    # async def _create_listing_record(
-    #     self,
-    #     platform_common: PlatformCommon,
-    #     listing_data: Dict[str, Any]
-    # ) -> ReverbListing:
-    #     """Create the local ReverbListing record"""
-    #     reverb_listing = ReverbListing(
-    #         platform_id=platform_common.id,
-    #         reverb_category_uuid=listing_data.get("category_uuid"),
-    #         condition_rating=listing_data.get("condition_rating"),
-    #         shipping_profile_id=listing_data.get("shipping_profile_id"),
-    #         shop_policies_id=listing_data.get("shop_policies_id"),
-    #         handmade=listing_data.get("handmade", False),
-    #         offers_enabled=listing_data.get("offers_enabled", True)
-    #     )
-        
-    #     self.db.add(reverb_listing)
-    #     await self.db.flush()
-    #     return reverb_listing
-    
-    # def _prepare_listing_data(self, listing: ReverbListing, product: Product) -> Dict[str, Any]:
-    #     """
-    #     Prepare listing data for Reverb API.
-        
-    #     Args:
-    #         listing: ReverbListing model
-    #         product: Product model
-            
-    #     Returns:
-    #         Dict[str, Any]: Data formatted for Reverb API
-    #     """
-    #     # Get Reverb condition UUID from our condition value
-    #     condition_uuid = self.CONDITION_MAPPING.get(
-    #         product.condition,
-    #         "df268ad1-c462-4ba6-b6db-e007e23922ea"  # Default to "Excellent"
-    #     )
-        
-    #     # Format photos array
-    #     photos = []
-    #     if product.primary_image:
-    #         photos.append(product.primary_image)
-        
-    #     if product.additional_images:
-    #         # additional_images might be a list or a JSON string
-    #         if isinstance(product.additional_images, list):
-    #             photos.extend(product.additional_images)
-    #         else:
-    #             # Try to parse as JSON if it's a string
-    #             try:
-    #                 import json
-    #                 additional = json.loads(product.additional_images)
-    #                 if isinstance(additional, list):
-    #                     photos.extend(additional)
-    #             except Exception:
-    #                 # If parsing fails, assume it's a single URL
-    #                 photos.append(product.additional_images)
-        
-    #     # Format a video object if we have a video URL
-    #     videos = []
-    #     if product.video_url:
-    #         videos.append({"link": product.video_url})
-        
-    #     # Prepare the base listing data
-    #     listing_data = {
-    #         "make": product.brand,
-    #         "model": product.model,
-    #         "categories": [
-    #             {
-    #                 "uuid": listing.reverb_category_uuid
-    #             }
-    #         ],
-    #         "condition": {
-    #             "uuid": condition_uuid
-    #         },
-    #         "photos": photos,
-    #         "videos": videos,
-    #         "description": product.description or f"{product.brand} {product.model}",
-    #         "finish": product.finish,
-    #         "price": {
-    #             "amount": str(product.base_price),
-    #             "currency": "USD"  # This could be configurable
-    #         },
-    #         "title": f"{product.brand} {product.model}",
-    #         "year": str(product.year) if product.year else "",
-    #         "sku": product.sku,
-    #         "has_inventory": True,
-    #         "inventory": 1,  # Default inventory
-    #         "offers_enabled": listing.offers_enabled,
-    #         "handmade": listing.handmade
-    #     }
-        
-    #     # Add shipping profile if available
-    #     if listing.shipping_profile_id:
-    #         listing_data["shipping_profile_id"] = listing.shipping_profile_id
-    #     else:
-    #         # Default shipping configuration
-    #         listing_data["shipping"] = {
-    #             "rates": [
-    #                 {
-    #                     "rate": {
-    #                         "amount": "10.00",
-    #                         "currency": "USD"
-    #                     },
-    #                     "region_code": "US_CON"  # Continental US
-    #                 },
-    #                 {
-    #                     "rate": {
-    #                         "amount": "20.00",
-    #                         "currency": "USD"
-    #                     },
-    #                     "region_code": "XX"  # Everywhere Else
-    #                 }
-    #             ],
-    #             "local": True  # Allow local pickup
-    #         }
-        
-    #     return listing_data
-    
-    
-from typing import Dict, List, Optional, Any, Tuple
+from datetime import datetime, timezone    
 from fastapi import HTTPException
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update
+from sqlalchemy import update, text
 
+from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.product import Product
 from app.models.reverb import ReverbListing
 from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
-import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -958,6 +359,76 @@ class ReverbService:
                 raise
             raise ReverbAPIError(f"Failed to end listing: {str(e)}")
 
+    async def run_import_process(self, api_key: str, save_only=False):
+        """Run the Reverb inventory import process."""
+        try:
+            print("Starting Reverb.run_import_process")
+            print(f"API key provided: {'Yes' if api_key else 'No'}")
+            
+            # Initialize client
+            client = ReverbClient(api_key)  # Reverb uses API key, not username/password
+            
+            # Get all listings from Reverb
+            print("Downloading listings from Reverb API...")
+            listings = await client.get_all_listings()  # This method exists in your ReverbClient
+            
+            if not listings:
+                print("Reverb listings download failed - received None or empty")
+                return {"status": "error", "message": "No Reverb listings data received"}
+            
+            print(f"Successfully downloaded inventory with {len(listings)} items")
+            print(f"Sample data: {listings[0] if listings else 'None'}")
+            
+            if save_only:
+                # Save to file for testing
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                json_path = Path(f"data/reverb_{timestamp}.json")
+                json_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                with open(json_path, 'w') as f:
+                    json.dump(listings, f, indent=2)
+                
+                print(f"Saved Reverb data to: {json_path}")
+                return {
+                    "status": "success", 
+                    "message": f"Reverb inventory saved with {len(listings)} records",
+                    "count": len(listings),
+                    "saved_to": str(json_path)
+                }
+            
+            # Process inventory updates
+            print("Processing inventory updates...")
+            # Fix: Call the correct Reverb methods
+            removed_stats = await self._mark_removed_reverb_products(listings)
+            update_stats = await self._process_reverb_listings(listings)
+
+            # Combine results
+            result = {
+                **update_stats,
+                **removed_stats,
+                "import_type": "UPDATE-BASED (No deletions)",
+                "total_processed": len(listings)
+            }
+            
+            print(f"Inventory update processing complete: {result}")
+            return {
+                "status": "success",
+                "message": f"Reverb inventory processed successfully",
+                "processed": len(listings),
+                "created": result.get("created", 0),
+                "updated": result.get("updated", 0),
+                "errors": result.get("errors", 0),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        except Exception as e:
+            import traceback
+            error_traceback = traceback.format_exc()
+            print(f"Exception in ReverbService.run_import_process: {str(e)}")
+            print(f"Traceback: {error_traceback}")
+            return {"status": "error", "message": str(e)}
+
+
     # Private helper methods
     
     async def _get_platform_common(self, platform_id: int) -> Optional[PlatformCommon]:
@@ -978,85 +449,6 @@ class ReverbService:
         result = await self.db.execute(query)
         return result.scalars().first()
     
-    # def _prepare_listing_data(self, listing: ReverbListing, product: Product) -> Dict[str, Any]:
-    #     """
-    #     Prepare listing data for Reverb API
-        
-    #     This transforms our internal product and listing data into the format
-    #     expected by the Reverb API for creating or updating listings.
-        
-    #     Args:
-    #         listing: ReverbListing model
-    #         product: Product model
-            
-    #     Returns:
-    #         Dict[str, Any]: Data formatted for Reverb API
-    #     """
-    #     # Basic listing information
-    #     listing_data = {
-    #         "title": f"{product.brand} {product.model}",
-    #         "description": product.description or f"{product.brand} {product.model}",
-    #         "make": product.brand,
-    #         "model": product.model,
-    #         "price": str(product.base_price),
-            
-    #         # Use condition name directly instead of UUID
-    #         "condition": "excellent"  # Default to excellent condition
-    #     }
-        
-    #     # Map product condition to Reverb condition - using string format instead of UUID
-    #     if product.condition:
-    #         condition_map = {
-    #             "NEW": "brand_new",
-    #             "EXCELLENT": "excellent",
-    #             "VERYGOOD": "very_good",
-    #             "GOOD": "good",
-    #             "FAIR": "fair",
-    #             "POOR": "poor"
-    #         }
-    #         if product.condition in condition_map:
-    #             listing_data["condition"] = condition_map[product.condition]
-        
-    #     # Add optional fields if they exist
-    #     if product.year:
-    #         listing_data["year"] = str(product.year)
-        
-    #     if product.finish:
-    #         listing_data["finish"] = product.finish
-        
-    #     # Add photos
-    #     if product.primary_image:
-    #         listing_data["photos"] = [product.primary_image]
-        
-    #     # Add category if specified
-    #     if listing.reverb_category_uuid:
-    #         listing_data["categories"] = [
-    #             {"uuid": listing.reverb_category_uuid}
-    #         ]
-            
-    #     # Add product type (required for publishing)
-    #     listing_data["product_type"] = "electric-guitars"  # Default to electric guitars
-            
-    #     # Add inventory settings
-    #     listing_data["inventory"] = listing.inventory_quantity
-    #     listing_data["has_inventory"] = listing.has_inventory
-    #     listing_data["offers_enabled"] = listing.offers_enabled
-        
-    #     # Add shipping details
-    #     if listing.shipping_profile_id:
-    #         listing_data["shipping_profile_id"] = listing.shipping_profile_id
-    #     else:
-    #         # Default shipping configuration
-    #         # Note: Using the simple format that works with the API
-    #         listing_data["shipping"] = {
-    #             "local": True,  # Allow local pickup
-    #             "us": True,
-    #             "us_rate": "25.00"  # Simple US shipping rate
-    #         }
-        
-    #     return listing_data
-    
-
     def _prepare_listing_data(self, listing: ReverbListing, product: Product) -> Dict[str, Any]:
         """
         Prepare listing data for Reverb API
@@ -1122,3 +514,191 @@ class ReverbService:
         }
         # Default to "Excellent" condition if not found
         return condition_map.get(condition_name, "df268ad1-c462-4ba6-b6db-e007e23922ea")
+    
+    async def _process_reverb_listings(self, listings: List[Dict]) -> Dict[str, int]:
+        """Process Reverb listings (update existing, create new)"""
+        stats = {"total": len(listings), "created": 0, "updated": 0, "errors": 0}
+        
+        try:
+            for listing in listings:
+                try:
+                    # Extract Reverb listing ID
+                    reverb_id = str(listing.get('id'))
+                    sku = f"REV-{reverb_id}"
+                    
+                    # Check if product exists
+                    stmt = text("SELECT id FROM products WHERE sku = :sku")
+                    result = await self.db.execute(stmt, {"sku": sku})
+                    existing_product_id = result.scalar_one_or_none()
+                    
+                    if existing_product_id:
+                        # Update existing product
+                        await self._update_existing_product(existing_product_id, listing)
+                        stats["updated"] += 1
+                    else:
+                        # Create new product
+                        await self._create_new_product(listing, sku)
+                        stats["created"] += 1
+                        
+                except Exception as e:
+                    logger.error(f"Error processing listing {listing.get('id')}: {e}")
+                    stats["errors"] += 1
+            
+            await self.db.commit()
+            return stats
+            
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error in _process_reverb_listings: {e}")
+            raise
+
+    async def _mark_removed_reverb_products(self, listings: List[Dict]) -> Dict[str, int]:
+        """Mark products that are no longer on Reverb as removed"""
+        stats = {"marked_removed": 0}
+        
+        # Get Reverb listing IDs from current data
+        current_ids = {f"REV-{listing.get('id')}" for listing in listings if listing.get('id')}
+        
+        # Find products in DB but not in current listings
+        stmt = text("SELECT sku, id FROM products WHERE sku LIKE 'REV-%' AND sku != ALL(:current_skus)")
+        result = await self.db.execute(stmt, {"current_skus": tuple(current_ids)})
+        removed_products = result.fetchall()
+        
+        # Mark as removed
+        for sku, product_id in removed_products:
+            platform_update = text("""
+                UPDATE platform_common 
+                SET status = 'REMOVED', 
+                    sync_status = 'SYNCED',
+                    last_sync = timezone('utc', now()),
+                    updated_at = timezone('utc', now())
+                WHERE product_id = :product_id AND platform_name = 'reverb'
+            """)
+            await self.db.execute(platform_update, {"product_id": product_id})
+            stats["marked_removed"] += 1
+        
+        logger.info(f"Marked {stats['marked_removed']} Reverb products as removed")
+        return stats
+
+    async def _update_existing_product(self, product_id: int, listing: Dict):
+        """Update an existing product with new Reverb data"""
+        # Extract data from listing
+        is_sold = listing.get('state', {}).get('slug') == 'sold'
+        new_status = ProductStatus.SOLD if is_sold else ProductStatus.ACTIVE
+        
+        # Update product
+        update_stmt = text("""
+            UPDATE products 
+            SET base_price = :price,
+                description = :description,
+                status = :status,
+                updated_at = timezone('utc', now())
+            WHERE id = :product_id
+        """)
+        
+        await self.db.execute(update_stmt, {
+            "product_id": product_id,
+            "price": float(listing.get('price', {}).get('amount', 0)) if listing.get('price') else 0,
+            "description": listing.get('description', ''),
+            "status": new_status.value
+        })
+        
+        # Update platform_common
+        platform_update = text("""
+            UPDATE platform_common 
+            SET status = :status,
+                sync_status = 'SYNCED',
+                last_sync = timezone('utc', now()),
+                updated_at = timezone('utc', now())
+            WHERE product_id = :product_id AND platform_name = 'reverb'
+        """)
+        
+        platform_status = ListingStatus.SOLD if is_sold else ListingStatus.ACTIVE
+        await self.db.execute(platform_update, {
+            "product_id": product_id,
+            "status": platform_status.value
+        })
+
+    async def _create_new_product(self, listing: Dict, sku: str):
+        """Create a new product from Reverb listing data"""
+        # Extract data from listing
+        brand = listing.get('make', 'Unknown')
+        model = listing.get('model', 'Unknown')
+        
+        # Get price
+        price = 0.0
+        if listing.get('price') and listing.get('price', {}).get('amount'):
+            price = float(listing.get('price', {}).get('amount', 0))
+        
+        # Get year
+        year = None
+        if listing.get('year'):
+            try:
+                year = int(listing.get('year'))
+            except:
+                pass
+        
+        # Determine condition
+        condition = ProductCondition.GOOD  # Default
+        if listing.get('condition', {}).get('display_name'):
+            condition_name = listing.get('condition', {}).get('display_name', '').lower()
+            condition_map = {
+                'mint': ProductCondition.EXCELLENT,
+                'excellent': ProductCondition.EXCELLENT,
+                'very good': ProductCondition.VERY_GOOD,
+                'good': ProductCondition.GOOD,
+                'fair': ProductCondition.FAIR,
+                'poor': ProductCondition.POOR
+            }
+            condition = condition_map.get(condition_name, ProductCondition.GOOD)
+        
+        # Check if sold
+        is_sold = listing.get('state', {}).get('slug') == 'sold'
+        
+        # Create product
+        product = Product(
+            sku=sku,
+            brand=brand,
+            model=model,
+            year=year,
+            description=listing.get('description', ''),
+            condition=condition,
+            category=listing.get('categories', [{}])[0].get('full_name', '') if listing.get('categories') else '',
+            base_price=price,
+            status=ProductStatus.SOLD if is_sold else ProductStatus.ACTIVE
+        )
+        self.db.add(product)
+        await self.db.flush()
+        
+        # Create platform_common entry
+        platform_common = PlatformCommon(
+            product_id=product.id,
+            platform_name="reverb",
+            external_id=str(listing.get('id')),
+            status=ListingStatus.SOLD if is_sold else ListingStatus.ACTIVE,
+            sync_status=SyncStatus.SYNCED,
+            last_sync=datetime.now(),
+            listing_url=listing.get('_links', {}).get('web', {}).get('href', '')
+        )
+        self.db.add(platform_common)
+        await self.db.flush()
+        
+        # Create ReverbListing entry (you already have this model)
+        reverb_listing = ReverbListing(
+            platform_id=platform_common.id,
+            reverb_listing_id=str(listing.get('id')),
+            reverb_slug=listing.get('slug', ''),
+            reverb_category_uuid=listing.get('categories', [{}])[0].get('uuid', '') if listing.get('categories') else '',
+            condition_rating=listing.get('condition_rating', 3.5),
+            inventory_quantity=listing.get('inventory', 1),
+            has_inventory=listing.get('has_inventory', True),
+            offers_enabled=listing.get('offers_enabled', True),
+            is_auction=listing.get('auction', False),
+            list_price=price,
+            listing_currency=listing.get('listing_currency', 'USD'),
+            reverb_state=listing.get('state', {}).get('slug', 'live'),
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            last_synced_at=datetime.now()
+        )
+        self.db.add(reverb_listing)

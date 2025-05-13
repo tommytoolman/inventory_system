@@ -120,21 +120,26 @@
             <h3 class="text-lg font-medium mb-4">Sync Status</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {% for platform in ['ebay', 'reverb', 'vr', 'website'] %}
-                    {% set platform_name = 'Vintage & Rare' if platform == 'vr' else platform|title %}
-                    {% set last_sync = platform_last_sync[platform] if platform_last_sync and platform in platform_last_sync else None %}
+                    {% set platform_name = 'Vintage & Rare' if platform == 'vr' else platform.title() %}
                     <div class="flex items-center justify-between">
                         <div>
                             <span class="font-medium">{{ platform_name }}</span>
-                            <p class="text-sm text-gray-500">
-                                {% if last_sync %}
-                                    Last sync: {{ last_sync }}
+                            <p class="text-sm text-gray-500" id="{{ platform }}-last-sync-display">
+                                {% if platform == 'ebay' and ebay_last_sync %}
+                                    Last sync: {{ ebay_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                                {% elif platform == 'reverb' and reverb_last_sync %}
+                                    Last sync: {{ reverb_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                                {% elif platform == 'vr' and vr_last_sync %}
+                                    Last sync: {{ vr_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                                {% elif platform == 'website' and website_last_sync %}
+                                    Last sync: {{ website_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
                                 {% else %}
                                     Never synced
                                 {% endif %}
                             </p>
                         </div>
-                        <span id="{{ platform }}-sync-status" class="text-sm {{ 'text-green-500' if platform_sync_status and platform_sync_status[platform] == 'SUCCESS' else 'text-gray-500' }}">
-                            {{ platform_sync_status[platform] if platform_sync_status and platform in platform_sync_status else 'IDLE' }}
+                        <span id="{{ platform }}-sync-status" class="text-sm text-gray-500">
+                            IDLE
                         </span>
                     </div>
                 {% endfor %}
@@ -211,62 +216,274 @@
 </div>
 
 <script>
-    function triggerSync(platform) {
-        // Disable button and show loading state
-        const button = document.getElementById(`sync-${platform}`);
-        const originalText = button.innerText;
-        button.disabled = true;
-        button.innerHTML = `<span class="inline-block animate-spin mr-2">↻</span> Syncing...`;
+    // function triggerSync(platform) {
+    //     // Disable button and show loading state
+    //     const button = document.getElementById(`sync-${platform}`);
+    //     const originalText = button.innerText;
+    //     button.disabled = true;
+    //     button.innerHTML = `<span class="inline-block animate-spin mr-2">↻</span> Syncing...`;
         
-        // Update status indicator
+    //     // Update status indicator
+    //     const statusElem = document.getElementById(`${platform}-sync-status`);
+    //     if (statusElem) {
+    //         statusElem.innerText = 'SYNCING';
+    //         statusElem.className = 'text-sm text-blue-500';
+    //     }
+        
+    //     // Make API call to trigger sync
+    //     fetch(`/api/sync/${platform}`, {
+    //         method: 'POST',
+    //     })
+    //     .then(response => response.json())
+    //     .then(data => {
+    //         console.log(`Sync ${platform} response:`, data);
+            
+    //         // Re-enable button
+    //         button.disabled = false;
+    //         button.innerText = originalText;
+            
+    //         // Update status
+    //         if (statusElem) {
+    //             if (data.status === 'success') {
+    //                 statusElem.innerText = 'SUCCESS';
+    //                 statusElem.className = 'text-sm text-green-500';
+    //             } else {
+    //                 statusElem.innerText = 'FAILED';
+    //                 statusElem.className = 'text-sm text-red-500';
+    //             }
+    //         }
+            
+    //         // Refresh page after short delay to update counts
+    //         setTimeout(() => {
+    //             window.location.reload();
+    //         }, 2000);
+    //     })
+    //     .catch(error => {
+    //         console.error(`Error syncing ${platform}:`, error);
+            
+    //         // Re-enable button
+    //         button.disabled = false;
+    //         button.innerText = originalText;
+            
+    //         // Update status
+    //         if (statusElem) {
+    //             statusElem.innerText = 'ERROR';
+    //             statusElem.className = 'text-sm text-red-500';
+    //         }
+    //     });
+    // }
+
+    let socket;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+
+    // Initialize WebSocket connection
+    function initWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socketUrl = `${protocol}//${window.location.host}/ws`;
+        
+        socket = new WebSocket(socketUrl);
+        
+        socket.onopen = function(event) {
+            console.log('WebSocket connected');
+            reconnectAttempts = 0;
+        };
+        
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            handleSyncUpdate(data);
+        };
+        
+        socket.onclose = function(event) {
+            console.log('WebSocket disconnected');
+            // Try to reconnect
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                setTimeout(initWebSocket, 2000); // Retry after 2 seconds
+            }
+        };
+        
+        socket.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+    }
+
+    // Update handleSyncUpdate to handle both VR and Reverb
+    function handleSyncUpdate(data) {
+        const platform = data.platform;
+        
+        if (data.type === 'sync_started') {
+            updateSyncStatus(platform, 'SYNCING');
+            updateSyncButton(platform, true);
+        } else if (data.type === 'sync_completed') {
+            if (data.status === 'success') {
+                updateSyncStatus(platform, 'SUCCESS');
+                updateLastSyncTime(platform, data.timestamp);
+                
+                // Get the platform name for display
+                const platformName = platform === 'vr' ? 'VR' : platform.toUpperCase();
+                addToRecentActivity('✅', `Synced ${platformName} (${data.data.processed} items)`, data.timestamp);
+            } else {
+                updateSyncStatus(platform, 'FAILED');
+                addToRecentActivity('⚠️', `Error syncing ${platform}: ${data.message}`, data.timestamp);
+            }
+            updateSyncButton(platform, false);
+            
+            // Return status to IDLE after success
+            setTimeout(() => {
+                updateSyncStatus(platform, 'IDLE');
+            }, 3000);
+        }
+    }
+
+    // Update sync status indicator
+    function updateSyncStatus(platform, status) {
         const statusElem = document.getElementById(`${platform}-sync-status`);
         if (statusElem) {
-            statusElem.innerText = 'SYNCING';
-            statusElem.className = 'text-sm text-blue-500';
+            statusElem.innerText = status;
+            
+            // Update color based on status
+            statusElem.className = 'text-sm';
+            if (status === 'SUCCESS') {
+                statusElem.className += ' text-green-500';
+            } else if (status === 'SYNCING') {
+                statusElem.className += ' text-blue-500';
+            } else if (status === 'FAILED') {
+                statusElem.className += ' text-red-500';
+            } else {
+                statusElem.className += ' text-gray-500';
+            }
+        }
+    }
+
+    // Update last sync time
+    function updateLastSyncTime(platform, timestamp) {
+        const date = new Date(timestamp + 'Z');  // Force UTC parsing if no timezone specified
+        
+        // Create single formatted time string (DD/MM/YYYY, HH:MM:SS) in local time
+        const readableTime = date.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            timeZone: 'Europe/London'
+        }) + ', ' + date.toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Europe/London'
+        });
+        
+        // Update the specific last sync display element
+        const syncDisplay = document.getElementById(`${platform}-last-sync-display`);
+        if (syncDisplay) {
+            syncDisplay.textContent = `Last sync: ${readableTime}`;
+            // Change color from gray to normal text to show it's updated
+            syncDisplay.className = 'text-sm text-gray-600';
         }
         
-        // Make API call to trigger sync
+        // Fallback: If direct ID doesn't work, search by content
+        if (!syncDisplay) {
+            const allSyncElements = document.querySelectorAll('.text-gray-500');
+            allSyncElements.forEach(elem => {
+                if (elem.textContent.includes('Never synced') || 
+                    elem.textContent.includes('Last sync:')) {
+                    elem.textContent = `Last sync: ${readableTime}`;
+                    elem.className = 'text-sm text-gray-600';
+                }
+            });
+        }
+        
+        // Optional: Flash the element to show it was updated
+        if (syncDisplay) {
+            syncDisplay.style.transition = 'background-color 0.5s';
+            syncDisplay.style.backgroundColor = '#f0f9ff'; // Light blue flash
+            setTimeout(() => {
+                syncDisplay.style.backgroundColor = '';
+            }, 1000);
+        }
+    }
+
+    // Update sync button state
+    function updateSyncButton(platform, isSyncing) {
+        const button = document.getElementById(`sync-${platform}`);
+        if (!button) return;
+        
+        if (isSyncing) {
+            button.disabled = true;
+            button.innerHTML = `<span class="inline-block animate-spin mr-2">↻</span> Syncing...`;
+        } else {
+            button.disabled = false;
+            button.innerText = button.dataset.originalText || `Sync ${platform.toUpperCase()}`;
+        }
+    }
+
+    // Add to recent activity
+    function addToRecentActivity(icon, message, timestamp) {
+        const activityContainer = document.querySelector('.divide-y');
+        if (!activityContainer) return;
+        
+        // Create new activity item
+        const activityItem = document.createElement('div');
+        activityItem.className = 'py-3';
+        activityItem.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <span class="mr-2">${icon}</span>
+                    <span>${message}</span>
+                </div>
+                <span class="text-sm text-gray-500">${new Date(timestamp).toLocaleString()}</span>
+            </div>
+        `;
+        
+        // Add to top of activity list
+        activityContainer.insertBefore(activityItem, activityContainer.firstChild);
+        
+        // Keep only last 5 activities
+        while (activityContainer.children.length > 5) {
+            activityContainer.removeChild(activityContainer.lastChild);
+        }
+    }
+
+    // Modified triggerSync function
+    function triggerSync(platform) {
+        // Store original button text
+        const button = document.getElementById(`sync-${platform}`);
+        if (!button.dataset.originalText) {
+            button.dataset.originalText = button.innerText;
+        }
+        
+        // Update UI immediately
+        updateSyncStatus(platform, 'SYNCING');
+        updateSyncButton(platform, true);
+        
+        // Make API call
         fetch(`/api/sync/${platform}`, {
             method: 'POST',
         })
         .then(response => response.json())
         .then(data => {
-            console.log(`Sync ${platform} response:`, data);
-            
-            // Re-enable button
-            button.disabled = false;
-            button.innerText = originalText;
-            
-            // Update status
-            if (statusElem) {
-                if (data.status === 'success') {
-                    statusElem.innerText = 'SUCCESS';
-                    statusElem.className = 'text-sm text-green-500';
-                } else {
-                    statusElem.innerText = 'FAILED';
-                    statusElem.className = 'text-sm text-red-500';
-                }
-            }
-            
-            // Refresh page after short delay to update counts
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
+            console.log(`Sync ${platform} initiated:`, data);
+            // WebSocket will handle the rest of the updates
         })
         .catch(error => {
             console.error(`Error syncing ${platform}:`, error);
-            
-            // Re-enable button
-            button.disabled = false;
-            button.innerText = originalText;
-            
-            // Update status
-            if (statusElem) {
-                statusElem.innerText = 'ERROR';
-                statusElem.className = 'text-sm text-red-500';
-            }
+            updateSyncStatus(platform, 'FAILED');
+            updateSyncButton(platform, false);
         });
     }
+
+    // Initialize WebSocket when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initWebSocket();
+        
+        // Store original button text for all sync buttons
+        document.querySelectorAll('[id^="sync-"]').forEach(button => {
+            button.dataset.originalText = button.innerText;
+        });
+    });
+
+
 </script>
 
 {% endblock %}

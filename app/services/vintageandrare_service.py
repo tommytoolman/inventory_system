@@ -123,42 +123,42 @@ class VintageAndRareService:
         # Get current V&R product SKUs from CSV
         csv_skus = {f"VR-{row['product_id']}" for _, row in df.iterrows() if pd.notna(row.get('product_id'))}
         
-        async with self.db.begin():
-            # Find products in DB but not in CSV
-            stmt = text("SELECT sku, id FROM products WHERE sku LIKE 'VR-%' AND sku != ALL(:csv_skus)")
-            result = await self.db.execute(stmt, {"csv_skus": tuple(csv_skus)})
-            removed_products = result.fetchall()
+        # async with self.db.begin(): # Remove the transaction block - let caller manage it
+        # Find products in DB but not in CSV
+        stmt = text("SELECT sku, id FROM products WHERE sku LIKE 'VR-%' AND sku != ALL(:csv_skus)")
+        result = await self.db.execute(stmt, {"csv_skus": tuple(csv_skus)})
+        removed_products = result.fetchall()
+        
+        # Update platform_common status for removed products
+        for sku, product_id in removed_products:
+            platform_update = text("""
+                UPDATE platform_common 
+                SET status = 'REMOVED', 
+                    sync_status = 'SYNCED',
+                    last_sync = timezone('utc', now()),
+                    updated_at = timezone('utc', now())
+                WHERE product_id = :product_id AND platform_name = 'vr'
+            """)
+            await self.db.execute(platform_update, {"product_id": product_id})
             
-            # Update platform_common status for removed products
-            for sku, product_id in removed_products:
-                platform_update = text("""
-                    UPDATE platform_common 
-                    SET status = 'REMOVED', 
-                        sync_status = 'SYNCED',
-                        last_sync = timezone('utc', now()),
-                        updated_at = timezone('utc', now())
-                    WHERE product_id = :product_id AND platform_name = 'vintageandrare'
-                """)
-                await self.db.execute(platform_update, {"product_id": product_id})
-                
-                # Update VR listing status if exists
-                vr_update = text("""
-                    UPDATE vr_listings 
-                    SET vr_state = 'removed',
-                        last_synced_at = timezone('utc', now()),
-                        updated_at = timezone('utc', now())
-                    WHERE platform_id IN (
-                        SELECT id FROM platform_common 
-                        WHERE product_id = :product_id AND platform_name = 'vintageandrare'
-                    )
-                """)
-                await self.db.execute(vr_update, {"product_id": product_id})
-                
-                stats["marked_removed"] += 1
-                logger.info(f"Marked {sku} as removed from V&R")
+            # Update VR listing status if exists
+            vr_update = text("""
+                UPDATE vr_listings 
+                SET vr_state = 'removed',
+                    last_synced_at = timezone('utc', now()),
+                    updated_at = timezone('utc', now())
+                WHERE platform_id IN (
+                    SELECT id FROM platform_common 
+                    WHERE product_id = :product_id AND platform_name = 'vr'
+                )
+            """)
+            await self.db.execute(vr_update, {"product_id": product_id})
+            
+            stats["marked_removed"] += 1
+            logger.info(f"Marked {sku} as removed from V&R")
         
         logger.info(f"Marked {stats['marked_removed']} products as removed from V&R")
-        return stats    
+        return stats
 
     # # OLD DESTRUCTIVE METHOD - REPLACED
     # async def _import_vr_data_to_db(self, df: pd.DataFrame) -> dict:
@@ -295,21 +295,22 @@ class VintageAndRareService:
             sku = f"VR-{item_id}"
             
             try:
-                async with self.db.begin_nested():
-                    # Check if product exists
-                    stmt = text("SELECT id FROM products WHERE sku = :sku")
-                    result = await self.db.execute(stmt, {"sku": sku})
-                    existing_product_id = result.scalar_one_or_none()
+                # Remove all async with self.db.begin_nested(): blocks and just let the parent transaction manage everything.
+                # async with self.db.begin_nested():
+                # Check if product exists
+                stmt = text("SELECT id FROM products WHERE sku = :sku")
+                result = await self.db.execute(stmt, {"sku": sku})
+                existing_product_id = result.scalar_one_or_none()
+                
+                if existing_product_id:
+                    # Update existing product
+                    await self._update_existing_product(existing_product_id, row)
+                    stats["updated"] += 1
+                else:
+                    # Create new product
+                    await self._create_new_product(row, sku)
+                    stats["created"] += 1
                     
-                    if existing_product_id:
-                        # Update existing product
-                        await self._update_existing_product(existing_product_id, row)
-                        stats["updated"] += 1
-                    else:
-                        # Create new product
-                        await self._create_new_product(row, sku)
-                        stats["created"] += 1
-                        
             except Exception as e:
                 logger.error(f"Error processing {sku}: {e}")
                 stats["errors"] += 1
@@ -351,7 +352,7 @@ class VintageAndRareService:
                 sync_status = 'SYNCED',
                 last_sync = timezone('utc', now()),
                 updated_at = timezone('utc', now())
-            WHERE product_id = :product_id AND platform_name = 'vintageandrare'
+            WHERE product_id = :product_id AND platform_name = 'vr'
         """)
         
         platform_status = ListingStatus.SOLD if is_sold else ListingStatus.ACTIVE
@@ -406,7 +407,7 @@ class VintageAndRareService:
         listing_url = str(row.get('external_link', '')) if pd.notna(row.get('external_link')) else None
         platform_common = PlatformCommon(
             product_id=product.id,
-            platform_name="vintageandrare",
+            platform_name="vr",
             external_id=str(row['product_id']),
             status=ListingStatus.SOLD if is_sold else ListingStatus.ACTIVE,
             sync_status=SyncStatus.SYNCED,
@@ -534,7 +535,7 @@ class VintageAndRareService:
     #         # Cleanup the temporary file tracked by the client
     #         if client and hasattr(client, 'cleanup_temp_files'):
     #             client.cleanup_temp_files() # Call the client's cleanup method
-
+ 
     # NEW process which calls safe methods
     async def run_import_process(self, username, password, save_only=False):
         """Run the V&R inventory import process."""
@@ -579,7 +580,16 @@ class VintageAndRareService:
             
             # Process inventory updates
             print("Processing inventory updates...")
-            result = await self.process_inventory_updates(inventory_df)
+            removed_stats = await self._mark_removed_products(inventory_df)
+            update_stats = await self._update_vr_data_to_db(inventory_df)
+
+            # Combine results
+            result = {
+                **update_stats,
+                **removed_stats,
+                "import_type": "UPDATE-BASED (No deletions)",
+                "total_processed": len(inventory_df)
+            }
             
             print(f"Inventory update processing complete: {result}")
             return {
@@ -598,3 +608,7 @@ class VintageAndRareService:
             print(f"Exception in VintageAndRareService.run_import_process: {str(e)}")
             print(f"Traceback: {error_traceback}")
             return {"status": "error", "message": str(e)}
+        
+
+
+

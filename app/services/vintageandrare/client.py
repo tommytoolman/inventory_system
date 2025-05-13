@@ -86,41 +86,43 @@ class VintageAndRareClient:
             bool: True if authentication is successful.
         """
         if self.authenticated:
+            print("Already authenticated with V&R")
             return True
         try:
             # First get the main page to set up cookies
-            logger.debug(f"Authenticating V&R user: {self.username}")
-            self.session.get(self.BASE_URL, headers=self.headers)
-
+            print(f"Authenticating V&R user: {self.username}")
+            response = self.session.get(self.BASE_URL, headers=self.headers)
+            print(f"Initial page load status: {response.status_code}")
+            
             # Prepare login data
             login_data = {
                 'username': self.username,
                 'pass': self.password,
                 'open_where': 'header'
             }
-
+            
             # Submit login form
+            print("Submitting V&R login form...")
             response = self.session.post(
                 self.LOGIN_URL,
                 data=login_data,
                 headers=self.headers,
                 allow_redirects=True
             )
-            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-
+            print(f"Login response status: {response.status_code}")
+            
             # Check if login was successful
-            # More robust check: successful login usually redirects to '/account'
             self.authenticated = 'Sign out' in response.text or '/account' in response.url
-
-            logger.info(f"V&R Authentication {'successful' if self.authenticated else 'failed'}")
+            print(f"Authentication check - 'Sign out' in response: {'Sign out' in response.text}")
+            print(f"Authentication check - '/account' in URL: {'/account' in response.url}")
+            print(f"Authentication result: {'Successful' if self.authenticated else 'Failed'}")
+            
             return self.authenticated
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"V&R Authentication HTTP error: {str(e)}")
-            self.authenticated = False
-            return False
+            
         except Exception as e:
-            logger.error(f"V&R Authentication unexpected error: {str(e)}")
+            print(f"Error during V&R authentication: {str(e)}")
+            import traceback
+            print(f"Authentication traceback: {traceback.format_exc()}")
             self.authenticated = False
             return False
 
@@ -140,77 +142,81 @@ class VintageAndRareClient:
             pandas.DataFrame: Processed inventory data, or None if any step failed.
         """
         logger.info("Attempting to download V&R inventory CSV...")
+        print("Starting V&R inventory download...")
         if not self.authenticated:
-            logger.info("Not authenticated. Attempting authentication first.")
+            print("Not authenticated. Attempting authentication first.")
             if not await self.authenticate():
-                logger.error("Authentication failed. Cannot download inventory.")
+                print("Authentication failed. Cannot download inventory.")
                 return None
-
+                
         try:
             # Download the inventory file using the authenticated session
+            print(f"Requesting inventory CSV from {self.EXPORT_URL}")
             response = self.session.get(
                 self.EXPORT_URL,
                 headers=self.headers,
                 allow_redirects=True,
                 stream=True
             )
-            response.raise_for_status() # Check for HTTP errors
-
-            # Get filename for reference or saving
-            content_disposition = response.headers.get('content-disposition', '')
-            if 'filename=' in content_disposition:
-                filename_match = re.search(r'filename=(.+?)($|;)', content_disposition)
-                filename = filename_match.group(1).strip('" ') if filename_match else f"vintageandrare_inventory_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
-            else:
-                filename = f"vintageandrare_inventory_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
-            logger.info(f"Downloaded inventory file: {filename}")
-
+            print(f"Inventory export response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"Error: Received non-200 status code: {response.status_code}")
+                print(f"Response headers: {dict(response.headers)}")
+                print(f"Response content (first 500 chars): {response.content[:500]}")
+                return None
+                
             # Stream data directly into an in-memory buffer
             csv_data = io.StringIO()
+            content_length = 0
             for chunk in response.iter_content(chunk_size=8192):
+                content_length += len(chunk)
                 # Decode safely, replacing errors
                 csv_data.write(chunk.decode('utf-8', errors='replace'))
-            csv_data.seek(0) # Rewind buffer
-
+            
+            print(f"Downloaded {content_length} bytes of CSV data")
+            csv_data.seek(0)  # Rewind buffer
+            
             # Read the CSV data into a DataFrame
+            print("Parsing CSV data into DataFrame...")
             df = pd.read_csv(csv_data)
-            logger.info(f"Successfully parsed inventory CSV into DataFrame with {len(df)} rows.")
-
+            print(f"Successfully parsed CSV data: {len(df)} rows, {len(df.columns)} columns")
+            
             # Save to file if requested
             if save_to_file:
-                file_path = None
                 try:
+                    file_path = None
                     if output_path:
                         file_path = Path(output_path)
-                        file_path.parent.mkdir(parents=True, exist_ok=True) # Ensure directory exists
                     else:
-                        # Create a temporary file using tempfile context manager is safer
+                        # Create a temporary file
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.csv', mode='w', encoding='utf-8') as temp_file_obj:
                             file_path = Path(temp_file_obj.name)
-                            # No need to track temp files manually if using context manager properly, but keeping old logic for now
                             self.temp_files.append(str(file_path))
-
+                            
+                    print(f"Saving inventory data to {file_path}")
                     df.to_csv(file_path, index=False)
-                    logger.info(f"Inventory DataFrame saved to: {file_path}")
-                except Exception as e:
-                     logger.error(f"Failed to save inventory CSV to {file_path}: {e}")
-
-
+                except Exception as save_error:
+                    print(f"Error saving inventory to file: {save_error}")
+            
             # Apply basic processing
             df = self._process_inventory_dataframe(df)
-
+            
             return df
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"HTTP error downloading V&R inventory: {str(e)}")
+            
+        except pd.errors.EmptyDataError:
+            print("Error: CSV data is empty")
             return None
         except pd.errors.ParserError as e:
-             logger.error(f"Error parsing V&R inventory CSV: {str(e)}")
-             return None
+            print(f"Error parsing CSV data: {str(e)}")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"HTTP error downloading V&R inventory: {str(e)}")
+            return None
         except Exception as e:
-            logger.error(f"Unexpected error getting V&R inventory: {str(e)}")
+            print(f"Unexpected error downloading V&R inventory: {str(e)}")
             import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            print(f"Download traceback: {traceback.format_exc()}")
             return None
 
     def _process_inventory_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:

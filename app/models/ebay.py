@@ -8,23 +8,11 @@ from .platform_common import ListingStatus
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
 
-from ..database import Base
+from app.database import Base
 
 UTC_NOW = text("now() AT TIME ZONE 'utc'")
 
-
-# Moved to app.core.enums
-
-# class EbayListingFormat(str, Enum):
-#     BUY_IT_NOW = "Buy it Now"
-#     AUCTION = "Auction"
-#     AUCTION_BIN = "Auction with Buy it Now"
-# class EbayListing Status(str, Enum):
-#     DRAFT = "draft"
-#     ACTIVE = "active"
-#     ENDED = "ended"
-#     SCHEDULED = "scheduled"
-#     PENDING = "pending"
+# Moved class EbayListingFormat(str, Enum): and class EbayListing Status(str, Enum): to app.core.enums
 
 class EbayListing(Base):
     __tablename__ = "ebay_listings"
@@ -109,7 +97,5 @@ class EbayListing(Base):
     listing_data = Column(JSONB)  # Store the complete listing data for reference
 
     platform_listing = relationship("PlatformCommon", back_populates="ebay_listing")
-
-
 
 

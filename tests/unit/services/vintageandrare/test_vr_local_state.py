@@ -978,12 +978,12 @@ async def test_create_local_products_from_remote(db_session, mocker):
             # Map condition string to enum
             condition_map = {
                 "excellent": ProductCondition.EXCELLENT,
-                "very good": ProductCondition.VERY_GOOD,
+                "very good": ProductCondition.VERYGOOD,
                 "good": ProductCondition.GOOD,
                 "fair": ProductCondition.FAIR,
                 "poor": ProductCondition.POOR
             }
-            condition = condition_map.get(row.get('condition', '').lower(), ProductCondition.VERY_GOOD)
+            condition = condition_map.get(row.get('condition', '').lower(), ProductCondition.VERYGOOD)
             
             # Create the product - removing the subcategory field
             new_product = Product(
@@ -1074,7 +1074,7 @@ async def test_update_local_products_from_remote(db_session, mocker):
             category="Acoustic Guitars",
             description="Original description that will be updated",
             base_price=799.99,
-            condition=ProductCondition.VERY_GOOD,
+            condition=ProductCondition.VERYGOOD,
             status=ProductStatus.ACTIVE
         )
         db_session.add(product_for_desc_update)
@@ -2631,7 +2631,7 @@ async def test_full_sync_process(db_session, mocker):
             category="Effects",
             description="Status will change",
             base_price=350.00,
-            condition=ProductCondition.VERY_GOOD,
+            condition=ProductCondition.VERYGOOD,
             status=ProductStatus.ACTIVE,  # Currently active
             year=1980
         )
@@ -2737,12 +2737,12 @@ async def test_full_sync_process(db_session, mocker):
                         condition_str = row.get('condition', '').lower()
                         condition_map = {
                             "excellent": ProductCondition.EXCELLENT,
-                            "very good": ProductCondition.VERY_GOOD,
+                            "very good": ProductCondition.VERYGOOD,
                             "good": ProductCondition.GOOD,
                             "fair": ProductCondition.FAIR,
                             "poor": ProductCondition.POOR
                         }
-                        condition = condition_map.get(condition_str, ProductCondition.VERY_GOOD)
+                        condition = condition_map.get(condition_str, ProductCondition.VERYGOOD)
                         
                         # Create product
                         new_product = Product(

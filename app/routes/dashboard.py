@@ -30,24 +30,24 @@ async def dashboard(request: Request):
                 try:
                     # Get active listings
                     active_query = select(func.count(PlatformCommon.id)).where(
-                        PlatformCommon.platform_name == platform.upper(),
-                        PlatformCommon.status == "ACTIVE"
+                        PlatformCommon.platform_name == platform,
+                        PlatformCommon.status == "active" # Changed from ACTIVE
                     )
                     active_result = await db.execute(active_query)
                     active_count = active_result.scalar() or 0
                     
                     # Get sold listings
                     sold_query = select(func.count(PlatformCommon.id)).where(
-                        PlatformCommon.platform_name == platform.upper(),
-                        PlatformCommon.status == "SOLD"
+                        PlatformCommon.platform_name == platform,
+                        PlatformCommon.status == "sold"
                     )
                     sold_result = await db.execute(sold_query)
                     sold_count = sold_result.scalar() or 0
                     
                     # Get other listings (like DRAFT, ARCHIVED, etc.)
                     other_query = select(func.count(PlatformCommon.id)).where(
-                        PlatformCommon.platform_name == platform.upper(),
-                        PlatformCommon.status.notin_(["ACTIVE", "SOLD"])
+                        PlatformCommon.platform_name == platform,
+                        PlatformCommon.status.notin_(["active", "sold"])
                     )
                     other_result = await db.execute(other_query)
                     other_count = other_result.scalar() or 0
@@ -77,19 +77,19 @@ async def dashboard(request: Request):
                             try:
                                 # For active listings
                                 ebay_active_query = select(func.count(text("id"))).select_from(text("ebay_listings")) \
-                                    .where(text("listing_status = 'ACTIVE'"))
+                                    .where(text("listing_status = 'active'"))
                                 ebay_active_result = await db.execute(ebay_active_query)
                                 active_count = ebay_active_result.scalar() or 0
                                 
                                 # For sold listings
                                 ebay_sold_query = select(func.count(text("id"))).select_from(text("ebay_listings")) \
-                                    .where(text("listing_status = 'SOLD'"))
+                                    .where(text("listing_status = 'sold'"))
                                 ebay_sold_result = await db.execute(ebay_sold_query)
                                 sold_count = ebay_sold_result.scalar() or 0
                                 
                                 # For other listings
                                 ebay_other_query = select(func.count(text("id"))).select_from(text("ebay_listings")) \
-                                    .where(text("listing_status NOT IN ('ACTIVE', 'SOLD')"))
+                                    .where(text("listing_status NOT IN ('active', 'sold')"))
                                 ebay_other_result = await db.execute(ebay_other_query)
                                 other_count = ebay_other_result.scalar() or 0
                                 
@@ -228,19 +228,19 @@ async def dashboard(request: Request):
                     else:
                         # Fallback message generation
                         if log.action == "sync":
-                            message = f"Synced {log.entity_id.upper()}"
+                            message = f"Synced {log.entity_id}"
                             if log.details and "processed" in log.details:
                                 message += f" ({log.details['processed']} items)"
                         elif log.action == "sync_start":
-                            message = f"Started sync for {log.entity_id.upper()}"
+                            message = f"Started sync for {log.entity_id}"
                         elif log.action == "sync_error":
-                            message = f"Error syncing {log.entity_id.upper()}"
+                            message = f"Error syncing {log.entity_id}"
                             if log.details and "error" in log.details:
                                 message += f": {log.details['error'][:30]}..."
                         else:
                             message = f"{log.action.capitalize()} {log.entity_type} #{log.entity_id}"
                             if log.platform:
-                                message += f" on {log.platform.upper()}"
+                                message += f" on {log.platform}"
                     
                     recent_activity.append({
                         "icon": icon,

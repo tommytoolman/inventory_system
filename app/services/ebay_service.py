@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, update, delete
 
 from app.models.ebay import EbayListing
-from app.models.product import Product
+from app.models.product import Product, ProductCondition, ProductStatus
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.schemas.platform.ebay import EbayListingCreate
 from app.core.config import Settings
@@ -41,8 +41,10 @@ class EbayService:
         self._sandbox_mode = settings.EBAY_SANDBOX_MODE
         
         # Initialize API clients
-        self.client = EbayClient(sandbox=self._sandbox_mode)
+        # self.client = EbayClient(sandbox=self._sandbox_mode)
+        # self.client = EbayClient(sandbox=False)
         self.trading_api = EbayTradingLegacyAPI(sandbox=self._sandbox_mode)
+        # self.trading_api = EbayTradingLegacyAPI(sandbox=False)
         
         # Default user expected for verification
         self.expected_user_id = "londonvintagegts"
@@ -117,7 +119,7 @@ class EbayService:
         """Update sync status of a platform_common record"""
         platform_common.sync_status = status.value
         platform_common.sync_message = message
-        platform_common.updated_at = datetime.now(timezone.utc)
+        platform_common.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         
         if commit:
             await self.db.commit()
@@ -130,7 +132,7 @@ class EbayService:
     ) -> None:
         """Update listing status of a platform_common record"""
         platform_common.status = status.value
-        platform_common.updated_at = datetime.now(timezone.utc)
+        platform_common.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         
         if commit:
             await self.db.commit()
@@ -172,7 +174,7 @@ class EbayService:
             }
             
             product_data = {
-                "title": product.title,
+                # "title": product.title,
                 "description": product.description,
                 "aspects": listing_data.get("item_specifics", {}),
                 "brand": product.brand,
@@ -218,14 +220,14 @@ class EbayService:
             offer_result = await self.client.create_offer(offer_data)
             
             # Update listing with eBay data
-            listing.ebay_sku = sku
+            # listing.ebay_sku = sku
             listing.ebay_offer_id = offer_result.get("offerId")
             listing.ebay_item_id = sku  # Temporary - will be updated when published
             listing.ebay_category_id = listing_data.get("category_id")
             listing.ebay_condition_id = condition
             listing.listing_status = EbayListingStatus.DRAFT
             listing.format = listing_data.get("format", "FIXED_PRICE")
-            listing.updated_at = datetime.now(timezone.utc)
+            listing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             
             # Update platform_common status
             platform_common.external_id = sku
@@ -297,8 +299,8 @@ class EbayService:
             # Update listing details
             listing.listing_status = EbayListingStatus.ACTIVE
             listing.ebay_listing_id = publish_result.get("listingId")
-            listing.published_at = datetime.now(timezone.utc)
-            listing.updated_at = datetime.now(timezone.utc)
+            listing.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            listing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             
             # Update platform_common status
             platform_common.status = ListingStatus.ACTIVE.value
@@ -375,8 +377,8 @@ class EbayService:
             
             # Update listing status
             listing.listing_status = EbayListingStatus.ENDED
-            listing.ended_at = datetime.now(timezone.utc)
-            listing.updated_at = datetime.now(timezone.utc)
+            listing.ended_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            listing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             
             # Update platform_common status
             platform_common.status = ListingStatus.ENDED.value
@@ -448,7 +450,7 @@ class EbayService:
             
             # Update listing quantity
             listing.quantity = quantity
-            listing.updated_at = datetime.now(timezone.utc)
+            listing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             
             await self._update_sync_status(
                 platform_common, 
@@ -528,6 +530,19 @@ class EbayService:
             logger.error(f"Error getting listing details: {str(e)}")
             raise EbayAPIError(f"Failed to get listing details: {str(e)}")
     
+    def _make_datetime_naive(self, dt):
+        """Convert timezone-aware datetime to naive datetime for PostgreSQL"""
+        if dt is None:
+            return None
+        if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+            # Convert to UTC and remove timezone info
+            return dt.utctimetuple()
+            # Or better: use replace(tzinfo=None) after ensuring UTC
+            if dt.tzinfo != timezone.utc:
+                dt = dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=None)
+        return dt
+    
     # -------------------------------------------------------------------------
     # API Wrapper Methods (from EbayInventoryService)
     # -------------------------------------------------------------------------
@@ -583,13 +598,12 @@ class EbayService:
     # Synchronization Methods (from EbayInventorySync)
     # -------------------------------------------------------------------------
     
-    async def sync_inventory_from_ebay(self) -> Dict[str, int]:
+    async def sync_inventory_from_ebay(self, progress_callback=None) -> Dict[str, int]:
         """
-        Synchronize all eBay inventory to database
+        Synchronize all eBay inventory to database with optional progress reporting
+        Returns: Dict with statistics about the sync operation
+        """
         
-        Returns:
-            Dict with statistics about the sync operation
-        """
         # Initialize result stats
         results = {
             "total": 0,
@@ -599,16 +613,55 @@ class EbayService:
         }
         
         try:
+            # Send initial progress
+            if progress_callback:
+                await progress_callback({
+                    "message": "Starting eBay sync...",
+                    "progress": 0,
+                    "total": 0,
+                    "processed": 0
+                })
+            
+            # Verify eBay user
+            if progress_callback:
+                await progress_callback({
+                    "message": "Verifying eBay credentials...",
+                    "progress": 10,
+                    "total": 0,
+                    "processed": 0
+                })
+                
             # Verify eBay user
             if not await self.verify_credentials():
                 logger.error("Failed to verify eBay user, canceling sync")
+                if progress_callback:
+                    await progress_callback({
+                        "error": "Failed to verify eBay credentials",
+                        "message": "Authentication failed"
+                    })
                 return results
-            
+
             # Get all active listings from eBay
+            if progress_callback:
+                await progress_callback({
+                    "message": "Fetching eBay listings...",
+                    "progress": 20,
+                    "total": 0,
+                    "processed": 0
+                })
+                
             logger.info("Fetching all active eBay listings")
             listings = await self.get_all_active_listings(include_details=True)
             results["total"] = len(listings)
             
+            if progress_callback:
+                await progress_callback({
+                    "message": f"Processing {len(listings)} eBay listings...",
+                    "progress": 30,
+                    "total": results["total"],
+                    "processed": 0
+                })
+
             logger.info(f"Processing {len(listings)} eBay listings")
             
             # Process each listing
@@ -616,8 +669,9 @@ class EbayService:
             updated_count = 0
             error_count = 0
             
-            for listing in listings:
+            for idx, listing in enumerate(listings):
                 try:
+                    # Process listing (existing logic)
                     item_id = listing.get('ItemID')
                     if not item_id:
                         logger.warning("Skipping listing with no ItemID")
@@ -636,20 +690,50 @@ class EbayService:
                         # Create new listing
                         await self._create_listing_from_api_data(listing)
                         created_count += 1
-                        
+                    
+                    # Send progress update every 10 items
+                    if (idx + 1) % 10 == 0 and progress_callback:
+                        progress = 30 + (idx + 1) / results["total"] * 60
+                        await progress_callback({
+                            "message": f"Processed {idx + 1}/{results['total']} listings...",
+                            "progress": int(progress),
+                            "total": results["total"],
+                            "processed": idx + 1
+                        })
+
                 except Exception as e:
                     logger.exception(f"Error processing listing {listing.get('ItemID')}: {str(e)}")
                     error_count += 1
             
-            # Update result counts
+            # Update final results
             results["created"] = created_count
             results["updated"] = updated_count
             results["errors"] = error_count
-            
+
+            # Always send completion notification
+            if progress_callback:
+                await progress_callback({
+                    "message": f"eBay sync complete! Created: {created_count}, Updated: {updated_count}, Errors: {error_count}",
+                    "progress": 100,
+                    "total": results["total"],
+                    "processed": results["total"],
+                    "completed": True,
+                    "stats": results
+                })
+
+            # If there were many errors, log it but don't fail the whole sync
+            if error_count > 0:
+                logger.warning(f"eBay sync completed with {error_count} errors out of {results['total']} items")
+
             return results
             
         except Exception as e:
             logger.error(f"Error in eBay inventory sync: {str(e)}")
+            if progress_callback:
+                await progress_callback({
+                    "error": str(e),
+                    "message": "eBay sync failed"
+                })
             raise
     
     async def _create_listing_from_api_data(self, listing: Dict[str, Any]) -> EbayListing:
@@ -662,31 +746,75 @@ class EbayService:
         Returns:
             Newly created EbayListing
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         item_id = listing.get('ItemID')
         
         try:
             # Extract basic listing data
             title = listing.get('Title', '')
-            price = float(listing.get('SellingStatus', {}).get('CurrentPrice', {}).get('#text', '0'))
-            quantity = int(listing.get('Quantity', '1'))
-            quantity_sold = int(listing.get('SellingStatus', {}).get('QuantitySold', '0'))
             
-            # Get or create product
-            sku = listing.get('SKU') or f"EB-{item_id}"
+            # Extract price with proper error handling
+            selling_status = listing.get('SellingStatus', {})
+            price_data = selling_status.get('CurrentPrice', {})
+            try:
+                price = float(price_data.get('#text', '0')) if price_data else 0.0
+            except (ValueError, TypeError):
+                price = 0.0
             
+            # Extract quantities with proper error handling
+            try:
+                quantity = int(listing.get('Quantity', '1'))
+            except (ValueError, TypeError):
+                quantity = 1
+                
+            try:
+                quantity_sold = int(selling_status.get('QuantitySold', '0'))
+            except (ValueError, TypeError):
+                quantity_sold = 0
+            
+            # Generate SKU (don't use listing SKU as it might not exist)
+            sku = f"EB-{item_id}"
+            
+            # Extract brand/model from title for Product creation
+            brand = title.split(' ')[0] if title else 'Unknown'
+            model = ' '.join(title.split(' ')[1:]) if len(title.split(' ')) > 1 else title
+            
+            # Check if product already exists
             query = select(Product).where(Product.sku == sku)
             result = await self.db.execute(query)
             product = result.scalar_one_or_none()
             
             if not product:
+                # Extract category for Product
+                primary_category = listing.get('PrimaryCategory', {})
+                category_name = primary_category.get('CategoryName', 'Uncategorized')
+                
+                # Map eBay condition to ProductCondition
+                condition = ProductCondition.VERYGOOD  # Default
+                ebay_condition = listing.get('ConditionDisplayName', '').lower()
+                if 'new' in ebay_condition:
+                    condition = ProductCondition.NEW
+                elif 'excellent' in ebay_condition:
+                    condition = ProductCondition.EXCELLENT
+                elif 'very good' in ebay_condition:
+                    condition = ProductCondition.VERYGOOD
+                elif 'good' in ebay_condition:
+                    condition = ProductCondition.GOOD
+                elif 'fair' in ebay_condition:
+                    condition = ProductCondition.FAIR
+                elif 'poor' in ebay_condition:
+                    condition = ProductCondition.POOR
+                
                 # Create new product
                 product = Product(
                     sku=sku,
-                    title=title,
+                    brand=brand,
+                    model=model,
+                    category=category_name,
                     description=listing.get('Description', ''),
-                    condition='USED',  # Default
-                    status='ACTIVE',
+                    condition=condition,  # Use the enum, not string
+                    status=ProductStatus.ACTIVE,  # Use enum
+                    base_price=price,
                     created_at=now,
                     updated_at=now
                 )
@@ -698,15 +826,15 @@ class EbayService:
                 product_id=product.id,
                 platform_name='ebay',
                 external_id=item_id,
-                status='ACTIVE',
-                sync_status='SYNCED',
+                status='active',  # Use lowercase as we fixed earlier
+                sync_status='success',  # Use lowercase
                 created_at=now,
                 updated_at=now
             )
             self.db.add(platform_common)
             await self.db.flush()  # Get platform_common ID
             
-            # Extract category data
+            # Extract category data for eBay listing
             primary_category = listing.get('PrimaryCategory', {})
             ebay_category_id = primary_category.get('CategoryID')
             ebay_category_name = primary_category.get('CategoryName')
@@ -718,22 +846,36 @@ class EbayService:
             condition_id = listing.get('ConditionID')
             condition_display_name = listing.get('ConditionDisplayName')
             
-            # Extract listing details
+            # Extract listing details with proper datetime handling
             listing_details = listing.get('ListingDetails', {})
             start_time_str = listing_details.get('StartTime')
             end_time_str = listing_details.get('EndTime')
             
-            start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00')) if start_time_str else now
-            end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00')) if end_time_str else None
+            # Parse datetimes and make them timezone-naive
+            start_time = now
+            end_time = None
+            
+            if start_time_str:
+                try:
+                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                    start_time = start_time.replace(tzinfo=None)  # Make timezone-naive
+                except (ValueError, TypeError):
+                    start_time = now
+                    
+            if end_time_str:
+                try:
+                    end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                    end_time = end_time.replace(tzinfo=None)  # Make timezone-naive
+                except (ValueError, TypeError):
+                    end_time = None
             
             listing_duration = listing.get('ListingDuration')
             
-            # Create eBay listing
+            # Create eBay listing (note: removed ebay_sku and title as they were causing errors)
             ebay_listing = EbayListing(
                 platform_id=platform_common.id,
                 ebay_item_id=item_id,
-                ebay_sku=sku,
-                title=title,
+                title=title,  # Add title field
                 price=price,
                 quantity=quantity,
                 quantity_sold=quantity_sold,
@@ -744,7 +886,7 @@ class EbayService:
                 ebay_condition_id=condition_id,
                 condition_display_name=condition_display_name,
                 listing_duration=listing_duration,
-                listing_status='ACTIVE',
+                listing_status='active',  # Use lowercase
                 start_time=start_time,
                 end_time=end_time,
                 item_specifics=listing.get('ItemSpecifics', {}),
@@ -757,11 +899,13 @@ class EbayService:
             # Commit all changes
             await self.db.commit()
             
+            logger.info(f"Successfully created eBay listing for item {item_id}")
             return ebay_listing
             
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Error creating listing from API data: {str(e)}")
+            logger.error(f"Error creating listing from API data for item {item_id}: {str(e)}")
+            logger.exception("Full traceback:")
             raise
     
     async def _update_listing_from_api_data(self, existing_listing: EbayListing, listing: Dict[str, Any]) -> EbayListing:
@@ -775,7 +919,7 @@ class EbayService:
         Returns:
             Updated EbayListing
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         
         try:
             # Extract basic listing data
@@ -800,7 +944,7 @@ class EbayService:
             listing_duration = listing.get('ListingDuration')
             
             # Update existing listing
-            existing_listing.title = listing.get('Title', existing_listing.title)
+            # existing_listing.title = listing.get('Title', existing_listing.title)
             existing_listing.price = price
             existing_listing.quantity = quantity
             existing_listing.quantity_sold = quantity_sold
@@ -873,13 +1017,13 @@ class EbayService:
                         continue
                     
                     # Update on eBay
-                    sku = listing.ebay_sku
+                    # sku = listing.ebay_sku
                     await self.client.update_inventory_item_quantity(sku, product_quantity)
                     
                     # Update local record
                     listing.quantity = product_quantity
-                    listing.updated_at = datetime.now(timezone.utc)
-                    listing.last_synced_at = datetime.now(timezone.utc)
+                    listing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    listing.last_synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
                     await self.db.commit()
                     
                     results["updated"] += 1

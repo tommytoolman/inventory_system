@@ -1549,3 +1549,4 @@ class EbayInventoryAPI:
             'offset': offset
         }
         return await self._make_request('GET', 'inventory_item', params=params)
+    

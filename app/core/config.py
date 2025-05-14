@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # eBay API
     EBAY_API_KEY: str = ""
     EBAY_API_SECRET: str = ""
-    EBAY_SANDBOX_MODE: bool = True
+    EBAY_SANDBOX_MODE: bool = False # Change to True if in Sandbox test mode
     
     # eBay OAuth
     EBAY_CLIENT_ID: str = ""

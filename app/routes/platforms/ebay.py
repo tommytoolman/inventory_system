@@ -1,5 +1,6 @@
 import logging
 import json
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,8 @@ from app.schemas.platform.ebay import EbayListingCreate
 from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 
+sync_in_progress = False
+
 router = APIRouter(prefix="/api", tags=["ebay"])
 
 logger = logging.getLogger(__name__)
@@ -20,9 +23,18 @@ logger = logging.getLogger(__name__)
 @router.post("/sync/ebay")
 async def sync_ebay_inventory(db: AsyncSession = Depends(get_db)):
     """Synchronize eBay inventory with the database"""
+    
+    global sync_in_progress
+    
     print("*** EBAY ROUTE CALLED - PRINT STATEMENT ***")
     logger.info("=== EBAY SYNC ROUTE CALLED ===")
     logger.info("Starting eBay inventory sync")
+    
+    if sync_in_progress:
+        print("*** SYNC ALREADY IN PROGRESS - REJECTING ***")
+        return {"status": "error", "message": "Sync already in progress"}
+    
+    sync_in_progress = True
     
     # Initialize the eBay service
     ebay_service = EbayService(db, settings=get_settings())  # Add settings if needed
@@ -78,6 +90,9 @@ async def sync_ebay_inventory(db: AsyncSession = Depends(get_db)):
         await manager.broadcast(json.dumps(error_data))
         
         raise HTTPException(status_code=500, detail=f"eBay sync error: {str(e)}")
+
+    finally:
+        sync_in_progress = False
 
 
 

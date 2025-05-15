@@ -349,6 +349,7 @@ class EbayAuthManager:
         token_info = self.token_storage.load_token_info()
         print(f"*** LOADED TOKEN INFO: {list(token_info.keys())} ***")
         refresh_token = token_info.get('refresh_token')
+        print(f"refresh_token: {refresh_token}")
         
         # Check if we have a valid access token
         access_token = token_info.get('access_token')
@@ -360,7 +361,19 @@ class EbayAuthManager:
             access_token_expires_at and
             datetime.fromisoformat(access_token_expires_at) > now + timedelta(minutes=5)):
             # Token is still valid (with 5-minute buffer)
+            print("*** USING EXISTING ACCESS TOKEN ***")
+            print(f"*** ABOUT TO RETURN TOKEN: {access_token[:10]}... ***")  # ADD THIS
+            # import time
+            # time.sleep(60)
             return access_token
+            print("*** THIS SHOULD NEVER PRINT ***")  # ADD THIS
+        
+        # And right after the return:
+        print("*** CONTINUING TO REFRESH TOKEN LOGIC ***")  # ADD THIS
+        
+        print(f"*** access_token exists: {bool(access_token)} ***")
+        print(f"*** access_token_expires_at: {access_token_expires_at} ***")
+        print(f"*** datetime check would be: {datetime.fromisoformat(access_token_expires_at) > now + timedelta(minutes=5) if access_token_expires_at else 'N/A'} ***")
         
         print("*** NEED TO REFRESH ACCESS TOKEN ***")
         

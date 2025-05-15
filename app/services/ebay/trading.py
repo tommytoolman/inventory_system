@@ -32,6 +32,7 @@ class EbayTradingLegacyAPI:
             
     async def _get_auth_token(self) -> str:
         """Get OAuth token for API requests"""
+        print("*** ENTERED _get_auth_token() METHOD ***")
         return await self.auth_manager.get_access_token()
         
     async def _make_request(self, call_name: str, xml_request: str) -> Dict:
@@ -671,7 +672,7 @@ class EbayTradingLegacyAPI:
             print(f"*** ENTERED execute_call() with call_name: {call_name} ***")
             
             auth_token = await self._get_auth_token()
-
+            print(f"*** RETURNED FROM _get_auth_token() ***")
             print(f"*** GOT AUTH TOKEN (first 10 chars): {auth_token[:10]}... ***")
 
             headers = {

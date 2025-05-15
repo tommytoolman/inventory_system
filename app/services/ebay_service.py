@@ -94,7 +94,7 @@ class EbayService:
                 return results
 
             logger.info("eBay credentials verified successfully") 
-            print("eBay credentials verified successfully") 
+            print("*** eBay credentials verified successfully ***")
             # Get all listings from eBay (active, sold, unsold)
             if progress_callback:
                 await progress_callback({
@@ -105,13 +105,16 @@ class EbayService:
                 })
                 
             logger.info("Fetching all eBay listings (active, sold, unsold)")
+            print("*** ABOUT TO FETCH ALL eBay LISTINGS ***")
             all_listings = await self.trading_api.get_all_selling_listings(
                 include_active=True,
                 include_sold=True,
                 include_unsold=True,
                 include_details=True
             )
-            
+            print("*** FINISHED FETCHING ALL eBay LISTINGS ***")
+            import time
+            time.sleep(20)
             # Count total listings
             total_listings = 0
             for listing_type in ['active', 'sold', 'unsold']:

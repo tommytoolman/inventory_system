@@ -86,6 +86,11 @@ app.include_router(webhook_router)
 app.include_router(websocket_router.router)
 app.include_router(shipping.router)
 
+print("Registered routes:")
+for route in app.routes:
+    if hasattr(route, 'path') and hasattr(route, 'methods'):
+        print(f"  {route.methods} {route.path}")
+
 # Root redirect
 @app.get("/")
 async def root():

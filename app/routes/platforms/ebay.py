@@ -20,10 +20,14 @@ logger = logging.getLogger(__name__)
 @router.post("/sync/ebay")
 async def sync_ebay_inventory(db: AsyncSession = Depends(get_db)):
     """Synchronize eBay inventory with the database"""
+    print("*** EBAY ROUTE CALLED - PRINT STATEMENT ***")
+    logger.info("=== EBAY SYNC ROUTE CALLED ===")
     logger.info("Starting eBay inventory sync")
     
     # Initialize the eBay service
     ebay_service = EbayService(db, settings=get_settings())  # Add settings if needed
+    
+    print("*** EBAY SERVICE CREATED SUCCESSFULLY ***")
     
     # Create progress callback function
     async def send_progress(progress_data: Dict[str, Any]):
@@ -37,6 +41,8 @@ async def sync_ebay_inventory(db: AsyncSession = Depends(get_db)):
             await manager.broadcast(json.dumps(notification))
         except Exception as e:
             logger.error(f"Error sending progress update: {str(e)}")
+    
+    print("*** ABOUT TO CALL sync_inventory_from_ebay ***")
     
     try:
         # Run the import process with progress callback

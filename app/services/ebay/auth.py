@@ -340,21 +340,29 @@ class EbayAuthManager:
     
     async def get_access_token(self) -> str:
         """Get a valid access token, refreshing if necessary."""
+        
+        print("*** ENTERED get_access_token() METHOD ***")
+        
         now = datetime.now()
         
         # Load token info directly from storage to ensure we have the latest
         token_info = self.token_storage.load_token_info()
+        print(f"*** LOADED TOKEN INFO: {list(token_info.keys())} ***")
         refresh_token = token_info.get('refresh_token')
         
         # Check if we have a valid access token
         access_token = token_info.get('access_token')
         access_token_expires_at = token_info.get('access_token_expires_at')
         
+        print(f"*** CHECKING EXISTING ACCESS TOKEN: {access_token[:10] if access_token else 'None'}... ***")
+        
         if (access_token and 
             access_token_expires_at and
             datetime.fromisoformat(access_token_expires_at) > now + timedelta(minutes=5)):
             # Token is still valid (with 5-minute buffer)
             return access_token
+        
+        print("*** NEED TO REFRESH ACCESS TOKEN ***")
         
         # Need to get a new access token using the refresh token
         if not refresh_token:

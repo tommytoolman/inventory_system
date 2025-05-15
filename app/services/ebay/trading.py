@@ -629,10 +629,13 @@ class EbayTradingLegacyAPI:
         Returns:
             Dict: User information
         """
+        print("*** ENTERED get_user_info() METHOD ***")
         xml_request = """<?xml version="1.0" encoding="utf-8"?>
         <GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">
             <DetailLevel>ReturnAll</DetailLevel>
         </GetUserRequest>"""
+        
+        print("*** ABOUT TO CALL execute_call() ***")
         
         try:
             response_dict = await self.execute_call('GetUser', xml_request)
@@ -665,8 +668,12 @@ class EbayTradingLegacyAPI:
             Returns:
                 Dict: Response converted from XML to dict
             """
-            auth_token = await self._get_auth_token()
+            print(f"*** ENTERED execute_call() with call_name: {call_name} ***")
             
+            auth_token = await self._get_auth_token()
+
+            print(f"*** GOT AUTH TOKEN (first 10 chars): {auth_token[:10]}... ***")
+
             headers = {
                 'X-EBAY-API-CALL-NAME': call_name,
                 'X-EBAY-API-SITEID': self.site_id,
@@ -678,6 +685,8 @@ class EbayTradingLegacyAPI:
             # This is the Trading API endpoint - NOT the Inventory API endpoint
             endpoint = 'https://api.ebay.com/ws/api.dll'
             
+            print(f"*** ABOUT TO MAKE HTTP REQUEST TO: {endpoint} ***")
+            
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
@@ -685,6 +694,8 @@ class EbayTradingLegacyAPI:
                         headers=headers,
                         content=xml_request
                     )
+                    
+                    print(f"*** HTTP RESPONSE STATUS: {response.status_code} ***")
                     
                     if response.status_code != 200:
                         logger.error(f"eBay Trading API error: {response.text}")

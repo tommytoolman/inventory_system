@@ -14,12 +14,22 @@ get_metrics: Exposes the collected metrics.
 """
 import asyncio
 import logging
-from typing import Dict
+from typing import Dict, Protocol, Optional
 from datetime import datetime, timezone
 from app.integrations.base import PlatformInterface, SyncStatus
 from app.integrations.events import StockUpdateEvent
 from app.integrations.metrics import MetricsCollector, MetricsContext  # New import
 
+class PlatformInterface(Protocol):
+    """Protocol for platform interfaces (replaces abstract base class)"""
+    async def update_stock(self, product_id: int, quantity: int) -> bool:
+        ...
+    
+    async def get_current_stock(self, product_id: int) -> Optional[int]:
+        ...
+    
+    async def sync_status(self, product_id: int) -> str:
+        ...
 
 class StockManager:
     def __init__(self):

@@ -44,7 +44,7 @@
   - [ ] Implement listing sync
   - [ ] Add inventory updates
   - [ ] Check reverb_listings schema ... some duplicates and some oddities
-- [ ] Website API Integration
+- [ ] Shopify API Integration
   - [ ] Design API interface
   - [ ] Implement sync system
   - [ ] Add error handling

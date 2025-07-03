@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:12:33.455427",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Marshall JTM45 , TVM",
+      "new_brand": "Marshall",
+      "count": 1
+    }
+  ]
+}

@@ -414,7 +414,7 @@ async def test_product_detail_found(mocker):
         MagicMock(spec=PlatformCommon, platform_name="eBay", status="ACTIVE", platform_message=None),
         MagicMock(spec=PlatformCommon, platform_name="Reverb", status="DRAFT", platform_message=None),
         MagicMock(spec=PlatformCommon, platform_name="VR", status="ERROR", platform_message="Sync failed"),
-        # Website is missing, should default to pending/not synced
+        # Shopify is missing, should default to pending/not synced
     ]
 
     # Mock DB session and execute calls

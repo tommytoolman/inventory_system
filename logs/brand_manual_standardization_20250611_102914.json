@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:29:14.283995",
+  "operation": "manual_standardization",
+  "total_updated": 5,
+  "changes": [
+    {
+      "old_brand": "hofner",
+      "new_brand": "Hofner",
+      "count": 5
+    }
+  ]
+}

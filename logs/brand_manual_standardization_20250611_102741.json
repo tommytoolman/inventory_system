@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:27:41.673351",
+  "operation": "manual_standardization",
+  "total_updated": 166,
+  "changes": [
+    {
+      "old_brand": "fender",
+      "new_brand": "Fender",
+      "count": 166
+    }
+  ]
+}

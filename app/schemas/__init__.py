@@ -37,9 +37,9 @@ from .platform.vr import (
     VRListingCreateDTO,     # Decide on DTO suffix
     VRListingStatusDTO
 )
-from .platform.website import (
-    WebsiteListingCreateDTO, # Decide on DTO suffix
-    WebsiteListingStatusDTO
+from .platform.shopify import (
+    ShopifyListingCreateDTO, # Decide on DTO suffix
+    ShopifyListingStatusDTO
 )
 
 # Combined Platform Schemas (if kept)

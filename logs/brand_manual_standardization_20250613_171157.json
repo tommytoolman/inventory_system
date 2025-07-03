@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-13T17:11:57.387878",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Alister atkin",
+      "new_brand": "Atkin",
+      "count": 1
+    }
+  ]
+}

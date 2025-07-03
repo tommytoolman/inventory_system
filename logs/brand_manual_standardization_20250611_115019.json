@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:50:19.864601",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Burns Bison",
+      "new_brand": "Burns",
+      "count": 1
+    }
+  ]
+}

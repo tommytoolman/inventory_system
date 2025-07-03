@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:51:19.828409",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "C.F. Martin",
+      "new_brand": "Martin",
+      "count": 1
+    }
+  ]
+}

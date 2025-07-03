@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-14T09:10:12.273253",
+  "operation": "manual_standardization",
+  "total_updated": 8,
+  "changes": [
+    {
+      "old_brand": "jmi",
+      "new_brand": "JMI",
+      "count": 8
+    }
+  ]
+}

@@ -67,20 +67,17 @@ class Settings(BaseSettings):
     VINTAGE_AND_RARE_PASSWORD: str = ""
     VINTAGE_AND_RARE_WEBSITE: str = ""
     
-    # Website API
-    WEBSITE_API_KEY: str = ""
-    WEBSITE_API_URL: str = ""
-    WEBSITE_USERNAME: str = ""
-    WEBSITE_PASSWORD: str = ""
-    WEBSITE_WEBHOOK_SECRET: str = ""
-    WEBSSITE_URL_OLD: str = ""
-    WEBSITE_URL: str = ""
     
     # Shopify API (Optional)
     SHOPIFY_SHOP_URL: Optional[str] = None
-    SHOPIFY_API_KEY: Optional[str] = None # Or Admin API Access Token
+    SHOPIFY_ONLINE_STORE_PUB_GID: Optional[str] = None
+    SHOPIFY_LOCATION_GID: Optional[str] = None
+    SHOPIFY_ADMIN_API_ACCESS_TOKEN: Optional[str] = None # Or Admin API Access Token
+    SHOPIFY_STOREFRONT_API_ACCESS_TOKEN: Optional[str] = None
+    SHOPIFY_API_KEY: Optional[str] = None
+    SHOPIFY_API_SECRET: Optional[str] = None
     SHOPIFY_PASSWORD: Optional[str] = None # Specific to Private/Custom Apps
-    
+    SHOPIFY_API_VERSION: Optional[str] = None
     
     DROPBOX_APP_KEY: str = ""
     DROPBOX_APP_SECRET: str = ""
@@ -88,7 +85,7 @@ class Settings(BaseSettings):
     DROPBOX_REFRESH_TOKEN: str = ""
         
     TINYMCE_API_KEY: str = "" 
-     
+    
     # File paths
     UPLOAD_DIR: str = "app/static/uploads"
     
@@ -135,7 +132,3 @@ def get_settings():
 def get_webhook_secret():
     """Get the webhook secret for authentication"""
     return get_settings().WEBSITE_WEBHOOK_SECRET
-
-# Think this is redudant
-# def get_settings():
-#     return Settings()

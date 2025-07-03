@@ -12,7 +12,7 @@ Target Platforms & Integration Methods:
 eBay: Via eBay's API.
 Reverb: Via Reverb's API.
 Vintage & Rare (V&R): Via web scraping using Selenium (implying no official API).
-Shopify Website: Via Shopify's API (noted as under development).
+Shopify: Via Shopify's API (noted as under development).
 Key Challenges: The project inherently involves managing inventory consistency across platforms with different data structures and update mechanisms, mapping product categories between these diverse platforms, and handling the mix of reliable API integrations (eBay, Reverb, Shopify) alongside less stable web scraping (V&R).
 Achievements in This Chat Session
 

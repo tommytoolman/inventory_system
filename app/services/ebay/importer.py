@@ -216,7 +216,8 @@ class EbayImporter:
                     
                     # Map condition
                     condition = ProductCondition.GOOD  # Default
-                    condition_name = mapped_data.get('condition_display_name', '').lower()
+                    condition_display_name_value = mapped_data.get('condition_display_name') # Get the value, could be None
+                    condition_name = condition_display_name_value.lower() if condition_display_name_value else ''
                     if condition_name:
                         if 'new' in condition_name:
                             condition = ProductCondition.NEW
@@ -311,7 +312,7 @@ class EbayImporter:
                             "product_id": product_id,
                             "item_id": item_id,
                             "status": listing_status.value,
-                            "sync_status": SyncStatus.SUCCESS.value,
+                            "sync_status": SyncStatus.SYNCED.value,
                             "now": now,
                             "listing_url": listing_url
                         })

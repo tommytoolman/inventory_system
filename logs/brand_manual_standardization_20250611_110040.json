@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:00:40.709865",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "guild",
+      "new_brand": "Guild",
+      "count": 1
+    }
+  ]
+}

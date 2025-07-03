@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-13T17:18:51.218965",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Carino",
+      "new_brand": "Crucianelli",
+      "count": 1
+    }
+  ]
+}

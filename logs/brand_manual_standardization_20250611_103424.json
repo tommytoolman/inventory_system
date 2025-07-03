@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:34:24.116587",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "GUILD STARFIRE",
+      "new_brand": "Guild",
+      "count": 1
+    }
+  ]
+}

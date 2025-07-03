@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:51:15.934381",
+  "operation": "manual_standardization",
+  "total_updated": 2,
+  "changes": [
+    {
+      "old_brand": "Conn Tuner",
+      "new_brand": "Conn",
+      "count": 2
+    }
+  ]
+}

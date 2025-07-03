@@ -1,6 +1,7 @@
 
 
 import os
+import re
 import sys
 import json
 import requests
@@ -9,6 +10,7 @@ import time
 from pathlib import Path
 
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -206,7 +208,7 @@ def map_category_options(driver):
         driver.save_screenshot("category_map_error.png")
         raise e
 
-def login_and_navigate(username, password, item_data=None, test_mode=True, map_categories=False):
+def login_and_navigate(username, password, item_data=None, test_mode=True, map_categories=False, db_session=None):
     # First use requests to get valid cookies
     session = requests.Session()
     
@@ -239,8 +241,31 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
     if 'account' in response.url:
         print("3. Login successful via requests!")
         
-        # Initialize Selenium
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+        # Initialize Selenium with network logging enabled
+        options = webdriver.ChromeOptions()
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--headless=new")  # Add this line
+        options.add_argument("--window-size=1920,1080")  # Add this line
+        
+        # Enable performance logging to capture network events
+        options.add_experimental_option('perfLoggingPrefs', {
+            'enableNetwork': True,
+            'enablePage': False
+        })
+        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
+        
+        # Enable DevTools for response body access
+        options.add_argument("--remote-debugging-port=9222")
+        
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()),
+            options=options
+        )
+        
+        # Enable Network domain for CDP
+        driver.execute_cdp_cmd('Network.enable', {})
         
         try:
             print("4. Setting up Selenium session...")
@@ -295,7 +320,8 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
                 category_map = map_category_options(driver)
             elif item_data:
                 print("\n12. Filling form...")
-                fill_item_form(driver, item_data, test_mode)
+                result = fill_item_form(driver, item_data, test_mode, db_session)  # Pass db_session
+                return result
             else:
                 print("\n12. Analyzing form elements...")
                 analyze_form_elements(driver)
@@ -505,8 +531,374 @@ def fill_categories(driver, main_id, sub1_id=None, sub2_id=None, sub3_id=None):
         if sub1_id:
             print(f"Warning: Subcategory {sub1_id} provided but not required or not found")
 
-# Modify the fill_item_form function to accept a test parameter
-def fill_item_form(driver, item_data, test_mode=True):
+def wait_for_manual_submission_and_capture_result(driver, db_session=None):
+    """
+    Wait for user to manually submit the form, then capture V&R's response
+    V&R reloads the same page after submission, so we detect page reload + success message
+    """
+    print("Form filled successfully!")
+    print("Please manually click the 'Publish' button when ready...")
+    print("After clicking, wait 3-5 seconds then press ENTER to capture result...")
+    
+    # Store page source before submission to detect changes
+    initial_page_source = driver.page_source
+    
+    # Simple manual trigger - more reliable than automatic detection
+    input("Press ENTER after you've submitted the form and seen V&R's response...")
+    
+    try:
+        print("Capturing current page response...")
+        
+        # Give V&R time to process and reload
+        time.sleep(2)
+        
+        # Check if page content changed (indicating submission happened)
+        current_page_source = driver.page_source
+        if current_page_source == initial_page_source:
+            print("⚠️ Warning: Page content hasn't changed - submission may not have occurred")
+        else:
+            print("✅ Page content changed - submission detected")
+        
+        # Analyze the current page for success/failure
+        result = analyze_vr_response(driver, db_session)
+        
+        # Save screenshot for debugging
+        screenshot_path = save_response_screenshot(driver)
+        if screenshot_path:
+            result["screenshot_path"] = screenshot_path
+            
+        return result
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error capturing response: {str(e)}"
+        }
+
+def extract_vr_product_id(driver):
+    """Try to extract V&R product ID from URL or page content"""
+    try:
+        # Check URL for ID pattern first
+        url = driver.current_url
+        print(f"Checking URL for product ID: {url}")
+        
+        # Look for patterns like /add_edit_item/12345
+        id_match = re.search(r'/add_edit_item/(\d+)', url)
+        if id_match:
+            product_id = id_match.group(1)
+            print(f"Found product ID in URL: {product_id}")
+            return product_id
+            
+        # Check page content for ID in hidden inputs - BE MORE SELECTIVE
+        try:
+            # Look for specific V&R hidden inputs with meaningful names
+            priority_selectors = [
+                "input[name='item_id']",
+                "input[name='instrument_id']", 
+                "input[name='product_id']"
+            ]
+            
+            for selector in priority_selectors:
+                inputs = driver.find_elements(By.CSS_SELECTOR, selector)
+                for input_elem in inputs:
+                    value = input_elem.get_attribute('value')
+                    name = input_elem.get_attribute('name')
+                    if value and value.isdigit() and int(value) > 0:
+                        print(f"Found product ID in priority input '{name}': {value}")
+                        return value
+            
+            # Check all hidden inputs but be more selective about values
+            all_hidden_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='hidden']")
+            for input_elem in all_hidden_inputs:
+                name = input_elem.get_attribute('name') or ''
+                value = input_elem.get_attribute('value') or ''
+                
+                # Look for names that might contain ID
+                if any(keyword in name.lower() for keyword in ['id', 'item', 'product', 'instrument']):
+                    if value and value.isdigit() and int(value) > 0:
+                        print(f"Found potential product ID in hidden input '{name}': {value}")
+                        return value
+                        
+            # Check for the unique_id which might be related
+            unique_id_inputs = driver.find_elements(By.CSS_SELECTOR, "input[name='unique_id']")
+            for input_elem in unique_id_inputs:
+                value = input_elem.get_attribute('value')
+                if value and len(value) > 10:  # Unique IDs are usually long
+                    print(f"Found unique_id (might be useful): {value}")
+                    # Don't return this as product_id, but log it for reference
+                    
+        except Exception as e:
+            print(f"Error checking hidden inputs: {str(e)}")
+        
+        # After the existing hidden input checks, add this:
+        # Look for success message elements that might contain ID
+        try:
+            success_elements = driver.find_elements(By.CSS_SELECTOR, "[class*='success'], [class*='message']")
+            for element in success_elements:
+                text = element.text
+                if "published" in text.lower():
+                    print(f"Success element text: {text}")
+                    # Look for any numbers in the success message
+                    numbers = re.findall(r'\d+', text)
+                    for num in numbers:
+                        if len(num) > 3:  # Likely an ID
+                            print(f"Found potential ID in success message: {num}")
+                            return num
+        except Exception as e:
+            print(f"Error checking success elements: {str(e)}")
+        
+        # Look for V&R item ID in page source with more specific patterns
+        try:
+            page_source = driver.page_source
+            
+            # Look for JavaScript variables that might contain the ID
+            js_patterns = [
+                r'item_id["\s]*[:=]["\s]*(\d+)',
+                r'instrument_id["\s]*[:=]["\s]*(\d+)',
+                r'product_id["\s]*[:=]["\s]*(\d+)',
+                r'"id"["\s]*:["\s]*(\d+)',
+                # Look for specific V&R patterns
+                r'vintageandrare\.com/instruments/(\d+)',
+                r'/instruments/edit/(\d+)',
+                r'item-(\d+)',
+                # Look for form action URLs that might contain ID
+                r'action="[^"]*add_edit_item/(\d+)',
+                r'href="[^"]*add_edit_item/(\d+)'
+            ]
+            
+            for pattern in js_patterns:
+                matches = re.findall(pattern, page_source)
+                for match in matches:
+                    if int(match) > 0:  # Any positive integer
+                        print(f"Found product ID in page source (pattern: {pattern}): {match}")
+                        return match
+                        
+        except Exception as e:
+            print(f"Error searching page source: {str(e)}")
+            
+        print("No valid product ID found")
+        return None
+        
+    except Exception as e:
+        print(f"Error extracting product ID: {str(e)}")
+        return None
+
+def analyze_vr_response_with_network(driver):
+    """Analyze V&R's response focusing on actual form submission responses"""
+    try:
+        print("Analyzing network logs for ACTUAL form submission responses...")
+        logs = driver.get_log('performance')
+        
+        # Sort logs by timestamp to get the most recent ones first
+        sorted_logs = sorted(logs, key=lambda x: x.get('timestamp', 0), reverse=True)
+        
+        # Track the specific form submission we care about
+        form_submission_request_id = None
+        
+        for log in sorted_logs:
+            try:
+                message = json.loads(log['message'])
+                
+                # First, find the actual form submission request
+                if message['message']['method'] == 'Network.requestWillBeSent':
+                    request = message['message']['params']['request']
+                    url = request.get('url', '')
+                    method = request.get('method', '')
+                    
+                    # This is THE form submission we care about
+                    if (method == 'POST' and 
+                        url == 'https://www.vintageandrare.com/instruments/add_edit_item' and
+                        'multipart/form-data' in str(request.get('headers', {}))):
+                        
+                        form_submission_request_id = message['message']['params']['requestId']
+                        print(f"✅ Found THE form submission request ID: {form_submission_request_id}")
+                        
+                        post_data = request.get('postData', '')
+                        if post_data:
+                            print(f"Form POST Data preview: {post_data[:300]}...")
+                        break
+                        
+            except (json.JSONDecodeError, KeyError) as e:
+                continue
+        
+        # Now find the response to that specific request
+        if form_submission_request_id:
+            for log in sorted_logs:
+                try:
+                    message = json.loads(log['message'])
+                    
+                    if message['message']['method'] == 'Network.responseReceived':
+                        response = message['message']['params']['response']
+                        request_id = message['message']['params']['requestId']
+                        
+                        # This is the response to our form submission
+                        if request_id == form_submission_request_id:
+                            print(f"✅ Found THE form submission response: {response.get('status')} - {response.get('url')}")
+                            
+                            # Check for redirect with item ID
+                            if response.get('status') == 302:
+                                headers = response.get('headers', {})
+                                location = headers.get('location') or headers.get('Location')
+                                if location:
+                                    print(f"Form submission redirect location: {location}")
+                                    id_match = re.search(r'/add_edit_item/(\d+)', location)
+                                    if id_match:
+                                        product_id = id_match.group(1)
+                                        print(f"✅ Found product ID in form redirect: {product_id}")
+                                        return product_id
+                            
+                            # Try to get the response body
+                            try:
+                                response_body = driver.execute_cdp_cmd('Network.getResponseBody', {'requestId': request_id})
+                                body_content = response_body.get('body', '')
+                                
+                                if body_content:
+                                    print(f"✅ FORM RESPONSE BODY: {body_content[:1000]}...")
+                                    
+                                    # Look for item ID in the actual form response
+                                    id_patterns = [
+                                        r'"item_id"[:\s]*"?(\d{5,7})"?',
+                                        r'"id"[:\s]*"?(\d{5,7})"?',
+                                        r'item_id[=:](\d{5,7})',
+                                        r'product_id[=:](\d{5,7})',
+                                        r'new_item[:\s]*(\d{5,7})',
+                                        r'created[:\s]*(\d{5,7})',
+                                        r'/add_edit_item/(\d{5,7})',
+                                        r'item[_\s]*id[_\s]*[:=][_\s]*(\d{5,7})'
+                                    ]
+                                    
+                                    for pattern in id_patterns:
+                                        matches = re.findall(pattern, body_content, re.IGNORECASE)
+                                        for match in matches:
+                                            if 100000 <= int(match) <= 999999:  # Reasonable range
+                                                print(f"✅ Found product ID in form response body: {match}")
+                                                return match
+                                                
+                                    # Also check for any 6-digit numbers in reasonable range
+                                    all_numbers = re.findall(r'\b(\d{6})\b', body_content)
+                                    for num in all_numbers:
+                                        if 120000 <= int(num) <= 130000:  # Your observed range
+                                            print(f"✅ Found likely product ID in response: {num}")
+                                            return num
+                                            
+                            except Exception as e:
+                                print(f"Error getting form response body: {str(e)}")
+                                
+                except (json.JSONDecodeError, KeyError) as e:
+                    continue
+        
+        print("No product ID found in THE form submission response")
+        
+    except Exception as e:
+        print(f"Error analyzing THE form submission: {str(e)}")
+    
+    # Fall back to standard extraction
+    print("Trying alternative ID extraction methods...")
+    return extract_vr_product_id_enhanced(driver)
+
+def extract_vr_product_id_enhanced(driver):
+    """Enhanced product ID extraction with multiple strategies"""
+    try:
+        print("Enhanced product ID extraction...")
+        
+        # Strategy 1: Check for success message with ID
+        try:
+            success_elements = driver.find_elements(By.CSS_SELECTOR, 
+                "[class*='success'], [class*='message'], [class*='alert']")
+            for element in success_elements:
+                text = element.text
+                if "published" in text.lower() or "live" in text.lower():
+                    print(f"Success message: {text}")
+                    # Look for any 6-digit numbers in success message
+                    numbers = re.findall(r'\b(\d{6,7})\b', text)
+                    for num in numbers:
+                        if 120000 <= int(num) <= 130000:
+                            print(f"✅ Found ID in success message: {num}")
+                            return num
+        except Exception as e:
+            print(f"Error checking success messages: {str(e)}")
+        
+        # Strategy 2: Check current URL after submission
+        url = driver.current_url
+        print(f"Current URL after submission: {url}")
+        id_match = re.search(r'/add_edit_item/(\d+)', url)
+        if id_match:
+            product_id = id_match.group(1)
+            if int(product_id) > 0:
+                print(f"✅ Found product ID in URL: {product_id}")
+                return product_id
+        
+        # Strategy 3: Check all hidden inputs for recent ID
+        try:
+            hidden_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='hidden']")
+            for input_elem in hidden_inputs:
+                name = input_elem.get_attribute('name') or ''
+                value = input_elem.get_attribute('value') or ''
+                
+                if ('id' in name.lower() and value.isdigit() and 
+                    120000 <= int(value) <= 130000):
+                    print(f"✅ Found product ID in hidden input '{name}': {value}")
+                    return value
+        except Exception as e:
+            print(f"Error checking hidden inputs: {str(e)}")
+        
+        # Strategy 4: Execute JavaScript to find any V&R item variables
+        try:
+            js_result = driver.execute_script("""
+                // Look for common V&R JavaScript variables
+                var possibleIds = [];
+                
+                // Check window object for item-related variables
+                for (var key in window) {
+                    if (key.toLowerCase().includes('item') || key.toLowerCase().includes('id')) {
+                        var value = window[key];
+                        if (typeof value === 'number' && value >= 120000 && value <= 130000) {
+                            possibleIds.push({key: key, value: value});
+                        }
+                    }
+                }
+                
+                return possibleIds;
+            """)
+            
+            if js_result:
+                print(f"JavaScript variables with potential IDs: {js_result}")
+                for item in js_result:
+                    return str(item['value'])
+                    
+        except Exception as e:
+            print(f"Error executing JavaScript ID search: {str(e)}")
+        
+        print("No product ID found with enhanced extraction")
+        return None
+        
+    except Exception as e:
+        print(f"Error in enhanced product ID extraction: {str(e)}")
+        return None
+
+def extract_ids_from_json(json_data, path=""):
+    """Recursively extract potential product IDs from JSON data"""
+    potential_ids = []
+    
+    if isinstance(json_data, dict):
+        for key, value in json_data.items():
+            if any(id_key in key.lower() for id_key in ['id', 'item', 'product', 'instrument']):
+                if isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0:
+                    potential_ids.append(str(value))
+                    print(f"Found ID in JSON path '{path}.{key}': {value}")
+            
+            # Recurse into nested objects
+            if isinstance(value, (dict, list)):
+                potential_ids.extend(extract_ids_from_json(value, f"{path}.{key}"))
+    
+    elif isinstance(json_data, list):
+        for i, item in enumerate(json_data):
+            if isinstance(item, (dict, list)):
+                potential_ids.extend(extract_ids_from_json(item, f"{path}[{i}]"))
+    
+    return potential_ids
+
+def fill_item_form(driver, item_data, test_mode=True, db_session=None):
     """
     Fill in the add/edit item form with the provided data
     """
@@ -525,10 +917,15 @@ def fill_item_form(driver, item_data, test_mode=True):
                 raise ValueError(f"Category ID {item_data['category_id']} not found in category map")
             fill_categories(driver, *category_path)
         elif 'category' in item_data:
-            print("Handling simple category selection...")
-            fill_categories(driver, item_data['category'], item_data.get('subcategory'))
+            print("Handling category selection with multiple levels...")
+            fill_categories(driver, 
+                        item_data.get('category'),
+                        item_data.get('subcategory'), 
+                        item_data.get('sub_subcategory'),
+                        item_data.get('sub_sub_subcategory'))
 
-    # Basic Information
+
+    # --- Basic Information ---
         
         # For Brand/Make
         if 'brand' in item_data:
@@ -554,8 +951,19 @@ def fill_item_form(driver, item_data, test_mode=True):
 
         # Handle year (which auto-populates decade)
         handle_year_decade(driver, 
-                         year=item_data.get('year'),
-                         decade=item_data.get('decade'))
+                        year=item_data.get('year'),
+                        decade=item_data.get('decade'))
+        
+        # In fill_item_form, around the year handling section:
+        if 'year' in item_data and item_data['year'] is not None:
+            print(f"Filling year: {item_data['year']}")
+            handle_year_decade(driver, year=item_data.get('year'))
+        elif 'decade' in item_data and item_data['decade'] is not None:
+            print(f"Filling decade: {item_data['decade']}")
+            handle_year_decade(driver, decade=item_data.get('decade'))
+        else:
+            print("No year or decade data provided")
+        
 
         if 'finish_color' in item_data:
             print("Filling color...")
@@ -571,31 +979,52 @@ def fill_item_form(driver, item_data, test_mode=True):
             )
             url_field.send_keys(item_data['external_url'])
 
-        # For Description (TinyMCE)
+        # For Description (TinyMCE) - UPDATED VERSION
         if 'description' in item_data:
             print("Filling description...")
             try:
-                # First switch to TinyMCE iframe
-                iframe = wait.until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#item_desc_ifr"))
-                )
-                driver.switch_to.frame(iframe)
+                description_html = item_data['description']
+                print(f"Setting TinyMCE content with HTML: {description_html[:100]}...")
                 
-                # Now we can interact with the TinyMCE body
-                tinymce_body = wait.until(
-                    EC.presence_of_element_located((By.ID, "tinymce"))
-                )
-                tinymce_body.clear()
-                tinymce_body.send_keys(item_data['description'])
-                
-                # Switch back to main content
-                driver.switch_to.default_content()
-                print("Description filled")
+                # Method 1: Use TinyMCE API to set HTML content
+                try:
+                    # First, try using TinyMCE API directly
+                    driver.execute_script(f"""
+                        var editor = tinymce.get('item_desc');
+                        if (editor) {{
+                            editor.setContent(`{description_html.replace('`', '\\`')}`);
+                            console.log('TinyMCE content set via API');
+                        }} else {{
+                            console.log('TinyMCE editor not found, trying iframe method');
+                            throw new Error('Editor not found');
+                        }}
+                    """)
+                    print("Description set via TinyMCE API")
+                    
+                except Exception as api_error:
+                    print(f"TinyMCE API method failed: {api_error}, trying iframe method...")
+                    
+                    # Method 2: Fallback to iframe method with innerHTML
+                    # First switch to TinyMCE iframe
+                    iframe = wait.until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "#item_desc_ifr"))
+                    )
+                    driver.switch_to.frame(iframe)
+                    
+                    # Set innerHTML instead of send_keys to preserve HTML formatting
+                    driver.execute_script(f"""
+                        document.getElementById('tinymce').innerHTML = `{description_html.replace('`', '\\`')}`;
+                    """)
+                    
+                    # Switch back to main content
+                    driver.switch_to.default_content()
+                    print("Description set via iframe innerHTML method")
+                    
             except Exception as e:
                 print(f"Error filling description: {str(e)}")
                 driver.save_screenshot("desc_error.png")
                 driver.switch_to.default_content()  # Always switch back
-                raise   
+                raise
 
         # Basic Pricing
         if 'price' in item_data:
@@ -627,15 +1056,18 @@ def fill_item_form(driver, item_data, test_mode=True):
                     call_price_checkbox.click()
             except Exception as e:
                 print(f"Error with call for price checkbox: {str(e)}")
-
-        if 'discounted_price' in item_data:
-            print("Filling discounted price...")
+        
+        if 'discounted_price' in item_data and item_data['discounted_price'] is not None and str(item_data['discounted_price']).strip():
+            print(f"Filling discounted price: {item_data['discounted_price']}")
             disc_field = wait.until(
                 EC.element_to_be_clickable((By.ID, "discounted_price"))
             )
-            disc_field.send_keys(item_data['discounted_price'])
-
-        # Processing Time
+            disc_field.clear()
+            disc_field.send_keys(str(item_data['discounted_price']))
+        else:
+            print("No discounted price provided - skipping discount field")
+        
+        # --- Processing Time ---
         if 'processing_time' in item_data:
             print("Filling processing time...")
             time_field = wait.until(
@@ -780,26 +1212,489 @@ def fill_item_form(driver, item_data, test_mode=True):
                 EC.element_to_be_clickable((By.ID, "youtube_upload"))
             )
             youtube_field.send_keys(item_data['youtube_url'])
-
+        
         print("Form filled successfully!")
         
+        # if test_mode:
+        #     print("Test mode: Form will not be submitted")
+        #     time.sleep(5)
+        #     print("Test complete - closing in 5 seconds...")
+        # else:
+        #     input("Review the form and press Enter to submit, or Ctrl+C to cancel...")
+        #     submit_button = wait.until(
+        #         EC.element_to_be_clickable((By.NAME, "submit_form"))
+        #     )
+        #     submit_button.click()
+        #     time.sleep(3)
+        #     print(f"Form submitted. Current URL: {driver.current_url}")
+        
         if test_mode:
-            print("Test mode: Form will not be submitted")
-            time.sleep(5)
-            print("Test complete - closing in 5 seconds...")
+            print("TEST MODE: Form filled. You can manually submit or wait for timeout.")
+            result = wait_for_manual_submission_and_capture_result(driver, db_session)  # Pass db_session
         else:
-            input("Review the form and press Enter to submit, or Ctrl+C to cancel...")
-            submit_button = wait.until(
-                EC.element_to_be_clickable((By.NAME, "submit_form"))
-            )
-            submit_button.click()
-            time.sleep(3)
-            print(f"Form submitted. Current URL: {driver.current_url}")
+            print("LIVE MODE: Auto-submitting form and capturing response...")
+            result = submit_form_and_capture_response(driver, db_session)  # Pass db_session
+        
+        return result
+        
         
     except Exception as e:
         print(f"Error filling form: {str(e)}")
         driver.save_screenshot("form_error.png")
+        print("ERROR: Keeping browser open for debugging...")
+        input("Press Enter to close the browser after reviewing the form...")
         raise e
+
+def submit_form_and_capture_response(driver, db_session=None):
+    """Submit the V&R form automatically and capture response - V&R optimized version"""
+    try:
+        print("\n" + "="*60)
+        print("🚀 STARTING V&R AUTOMATIC FORM SUBMISSION")
+        print("="*60)
+        
+        # Step 1: Save pre-submission state
+        print("\n📸 Step 1: Saving pre-submission state...")
+        driver.save_screenshot("01_before_vr_submit_search.png")
+        initial_url = driver.current_url
+        print(f"   Current URL: {initial_url}")
+        
+        # Step 2: V&R-specific submit button detection
+        print("\n🎯 Step 2: Looking for V&R 'Publish item' button...")
+        
+        submit_button = None
+        found_method = None
+        
+        # Method 1: Try the known V&R publish button by ID
+        try:
+            submit_button = driver.find_element(By.CSS_SELECTOR, "a#submit_step_1")
+            found_method = "ID: a#submit_step_1"
+            print(f"✅ Found V&R publish button by ID: '{submit_button.text}'")
+        except Exception as e:
+            print(f"   Method 1 (ID) failed: {str(e)}")
+            
+            # Method 2: Try by class
+            try:
+                submit_button = driver.find_element(By.CSS_SELECTOR, "a.save_changes")
+                found_method = "CLASS: a.save_changes"
+                print(f"✅ Found V&R publish button by class: '{submit_button.text}'")
+            except Exception as e:
+                print(f"   Method 2 (class) failed: {str(e)}")
+                
+                # Method 3: Try by text content using XPath
+                try:
+                    submit_button = driver.find_element(By.XPATH, "//a[contains(text(), 'Publish item')]")
+                    found_method = "XPATH: text='Publish item'"
+                    print(f"✅ Found V&R publish button by text: '{submit_button.text}'")
+                except Exception as e:
+                    print(f"   Method 3 (text) failed: {str(e)}")
+                    
+                    # Method 4: Try more flexible text search
+                    try:
+                        submit_button = driver.find_element(By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'publish')]")
+                        found_method = "XPATH: case-insensitive text search"
+                        print(f"✅ Found V&R publish button by flexible text: '{submit_button.text}'")
+                    except Exception as e:
+                        print(f"   Method 4 (flexible) failed: {str(e)}")
+                        submit_button = None
+        
+        # Step 3: If V&R button found, validate and click it
+        if submit_button:
+            print(f"\n🎯 Step 3: V&R publish button found!")
+            print(f"   Method: {found_method}")
+            print(f"   Text: '{submit_button.text}'")
+            print(f"   Tag: {submit_button.tag_name}")
+            print(f"   Class: {submit_button.get_attribute('class')}")
+            print(f"   ID: {submit_button.get_attribute('id')}")
+            print(f"   Href: {submit_button.get_attribute('href')}")
+            
+            # Validate the button is clickable
+            try:
+                is_displayed = submit_button.is_displayed()
+                is_enabled = submit_button.is_enabled()
+                print(f"   Displayed: {is_displayed}")
+                print(f"   Enabled: {is_enabled}")
+                
+                if not is_displayed:
+                    print("❌ V&R publish button is not visible")
+                    driver.save_screenshot("02_vr_button_not_visible.png")
+                    return {
+                        "status": "error",
+                        "message": "V&R publish button found but not visible",
+                        "vr_product_id": None
+                    }
+                
+                if not is_enabled:
+                    print("❌ V&R publish button is not enabled")
+                    driver.save_screenshot("02_vr_button_not_enabled.png")
+                    return {
+                        "status": "error", 
+                        "message": "V&R publish button found but not enabled",
+                        "vr_product_id": None
+                    }
+                
+                # Button is good to click
+                print("✅ V&R publish button is clickable")
+                
+                # Scroll to button to ensure it's in view
+                print("📍 Scrolling to V&R publish button...")
+                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", submit_button)
+                time.sleep(2)  # Wait for scroll to complete
+                
+                # Take screenshot before clicking
+                driver.save_screenshot("03_before_vr_publish_click.png")
+                print("📸 Screenshot saved: before V&R publish click")
+                
+                # Click the V&R publish button
+                print("🖱️  Clicking V&R 'Publish item' button...")
+                submit_button.click()
+                print("✅ V&R Publish button clicked successfully!")
+                
+                # Wait for V&R to process the submission
+                print("⏱️  Waiting for V&R response...")
+                time.sleep(5)  # Give V&R time to process
+                
+                # Check if URL changed
+                new_url = driver.current_url
+                print(f"📍 URL after click: {new_url}")
+                
+                if new_url != initial_url:
+                    print("✅ URL changed - submission likely successful")
+                else:
+                    print("⚠️  URL unchanged - checking page content for changes...")
+                
+                # Take screenshot after submission
+                driver.save_screenshot("04_after_vr_publish_click.png")
+                print("📸 Screenshot saved: after V&R publish click")
+                
+                # Analyze V&R's response
+                print("\n📊 Step 4: Analyzing V&R response...")
+                result = analyze_vr_response(driver, db_session)
+                result["submission_method"] = found_method
+                result["url_changed"] = new_url != initial_url
+                return result
+                
+            except Exception as click_error:
+                print(f"❌ Error during V&R button interaction: {str(click_error)}")
+                driver.save_screenshot("02_vr_button_click_error.png")
+                return {
+                    "status": "error",
+                    "message": f"Error clicking V&R publish button: {str(click_error)}",
+                    "vr_product_id": None,
+                    "exception": str(click_error)
+                }
+        
+        # Step 4: Fallback - if V&R button not found, try generic submit detection
+        print(f"\n⚠️  Step 4: V&R button not found, falling back to generic submit detection...")
+        
+        # Find all potential submit elements as fallback
+        all_buttons = driver.find_elements(By.TAG_NAME, "button")
+        all_inputs = driver.find_elements(By.TAG_NAME, "input")
+        all_links = driver.find_elements(By.TAG_NAME, "a")
+        
+        print(f"   Found: {len(all_buttons)} buttons, {len(all_inputs)} inputs, {len(all_links)} links")
+        
+        # Generic submit candidates
+        submit_candidates = []
+        
+        # Check all links for submit-like behavior
+        for i, link in enumerate(all_links):
+            try:
+                text = (link.text or "").strip().lower()
+                class_attr = (link.get_attribute('class') or "").lower()
+                id_attr = (link.get_attribute('id') or "").lower()
+                
+                score = 0
+                if any(keyword in text for keyword in ['publish', 'submit', 'save', 'create']):
+                    score += 10
+                if any(keyword in class_attr for keyword in ['submit', 'save', 'publish']):
+                    score += 8
+                if any(keyword in id_attr for keyword in ['submit', 'save', 'publish']):
+                    score += 8
+                
+                if score > 0:
+                    submit_candidates.append({
+                        'element': link,
+                        'type': 'link',
+                        'score': score,
+                        'text': text,
+                        'class': class_attr,
+                        'id': id_attr
+                    })
+                    print(f"   Link candidate {i}: score={score}, text='{text}', class='{class_attr}'")
+                    
+            except Exception as e:
+                continue
+        
+        # Check submit inputs
+        for i, input_elem in enumerate(all_inputs):
+            try:
+                type_attr = (input_elem.get_attribute('type') or "").lower()
+                if type_attr == 'submit':
+                    value_attr = (input_elem.get_attribute('value') or "").lower()
+                    name_attr = (input_elem.get_attribute('name') or "").lower()
+                    
+                    score = 15  # Base score for submit inputs
+                    if any(keyword in value_attr for keyword in ['publish', 'submit', 'save']):
+                        score += 10
+                    
+                    submit_candidates.append({
+                        'element': input_elem,
+                        'type': 'input',
+                        'score': score,
+                        'text': value_attr,
+                        'name': name_attr,
+                        'type_attr': type_attr
+                    })
+                    print(f"   Input candidate {i}: score={score}, value='{value_attr}', name='{name_attr}'")
+                    
+            except Exception as e:
+                continue
+        
+        # Try fallback candidates
+        if submit_candidates:
+            submit_candidates.sort(key=lambda x: x['score'], reverse=True)
+            print(f"\n🎯 Trying {len(submit_candidates)} fallback candidates...")
+            
+            for i, candidate in enumerate(submit_candidates[:3]):  # Try top 3
+                try:
+                    element = candidate['element']
+                    print(f"   Trying candidate {i+1}: {candidate['type']} (score: {candidate['score']})")
+                    
+                    if element.is_displayed() and element.is_enabled():
+                        driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                        time.sleep(1)
+                        
+                        driver.save_screenshot(f"05_fallback_candidate_{i+1}_before.png")
+                        element.click()
+                        time.sleep(3)
+                        
+                        new_url = driver.current_url
+                        if new_url != initial_url:
+                            print(f"✅ Fallback candidate {i+1} worked!")
+                            driver.save_screenshot(f"05_fallback_candidate_{i+1}_success.png")
+                            result = analyze_vr_response(driver, db_session)
+                            result["submission_method"] = f"Fallback {candidate['type']}"
+                            return result
+                            
+                except Exception as e:
+                    print(f"   Candidate {i+1} failed: {str(e)}")
+                    continue
+        
+        # If we get here, nothing worked
+        print("\n❌ ALL SUBMISSION METHODS FAILED")
+        driver.save_screenshot("06_all_methods_failed.png")
+        
+        return {
+            "status": "error",
+            "message": "Could not find or click any submit button (V&R or generic)",
+            "vr_product_id": None,
+            "debug_info": {
+                "vr_button_found": submit_button is not None,
+                "fallback_candidates": len(submit_candidates) if 'submit_candidates' in locals() else 0,
+                "final_url": driver.current_url
+            }
+        }
+        
+    except Exception as e:
+        print(f"\n💥 CRITICAL ERROR in V&R form submission: {str(e)}")
+        driver.save_screenshot("07_critical_submission_error.png")
+        
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        
+        return {
+            "status": "error",
+            "message": f"Critical error during V&R form submission: {str(e)}",
+            "vr_product_id": None,
+            "exception": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+def analyze_vr_response(driver, db_session=None):
+    """Analyze V&R's response page for success/failure"""
+    try:
+        current_url = driver.current_url
+        page_title = driver.title
+        page_text = driver.page_source.lower()
+        
+        print(f"Response URL: {current_url}")
+        print(f"Response Title: {page_title}")
+        
+        # V&R-specific success patterns
+        success_patterns = [
+            "your item is now published and live on vintageandrare.com",
+            "your item is now published and live",
+            "published and live",
+            "successfully created",
+            "item has been created",
+            "listing created successfully"
+        ]
+        
+        # Check for success messages first
+        for pattern in success_patterns:
+            if pattern in page_text:
+                print(f"✅ SUCCESS: Found pattern '{pattern}'")
+                
+                # Use your existing VRExportService for ID extraction
+                vr_id = None
+                if db_session:
+                    vr_id = analyze_vr_response_with_export_fallback(driver, db_session)
+                
+                return {
+                    "status": "success",
+                    "message": f"V&R listing created successfully: {pattern}",
+                    "vr_product_id": vr_id,
+                    "page_url": current_url,
+                    "page_title": page_title,
+                    "detected_pattern": pattern
+                }
+        
+        # Check for error patterns
+        error_patterns = [
+            "error",
+            "failed",
+            "invalid",
+            "required field",
+            "please try again",
+            "something went wrong"
+        ]
+        
+        for pattern in error_patterns:
+            if pattern in page_text:
+                print(f"❌ ERROR: Found error pattern '{pattern}'")
+                return {
+                    "status": "error",
+                    "message": f"V&R listing failed: {pattern}",
+                    "vr_product_id": None,
+                    "page_url": current_url,
+                    "page_title": page_title,
+                    "detected_pattern": pattern
+                }
+        
+        # If no clear success or error pattern found
+        print("⚠️ WARNING: No clear success or error pattern detected")
+        
+        # Try to extract any product ID anyway
+        vr_id = None
+        if db_session:
+            vr_id = analyze_vr_response_with_export_fallback(driver, db_session)
+        
+        return {
+            "status": "unknown",
+            "message": "Response analysis inconclusive - manual verification recommended",
+            "vr_product_id": vr_id,
+            "page_url": current_url,
+            "page_title": page_title,
+            "detected_pattern": None
+        }
+        
+    except Exception as e:
+        print(f"Exception in analyze_vr_response: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error analyzing V&R response: {str(e)}",
+            "vr_product_id": None,
+            "page_url": driver.current_url if driver else None,
+            "page_title": driver.title if driver else None,
+            "exception": str(e)
+        }
+
+def save_response_screenshot(driver):
+    """Save screenshot of V&R response page for debugging"""
+    try:
+        from pathlib import Path
+        import datetime
+        
+        # Save to app/services/vintageandrare/ folder based on your structure
+        project_root = Path(__file__).resolve().parent  # This should be app/services/vintageandrare/
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = project_root / f"vr_response_{timestamp}.png"
+        
+        driver.save_screenshot(str(screenshot_path))
+        print(f"Response screenshot saved: {screenshot_path}")
+        return str(screenshot_path)
+        
+    except Exception as e:
+        print(f"Error saving screenshot: {str(e)}")
+        return None
+
+def analyze_vr_response_with_export_fallback(driver, db_session):
+    """
+    Enhanced response analysis using your existing VRExportService as fallback
+    """
+    try:
+        # First try network analysis (in case V&R changes and starts returning IDs)
+        vr_id = analyze_vr_response_with_network(driver)
+        
+        if vr_id:
+            print(f"✅ Found ID via network analysis: {vr_id}")
+            return vr_id
+            
+        # Fallback to your existing export service
+        print("Network analysis failed, using VRExportService fallback...")
+        
+        # Run the async function
+        # import asyncio
+        # vr_id = asyncio.run(get_newly_created_item_id_via_export_service(db_session))
+        vr_id = None
+        
+        if vr_id:
+            print(f"✅ Found ID via VRExportService: {vr_id}")
+            return vr_id
+            
+        print("❌ Could not determine V&R item ID")
+        return None
+        
+    except Exception as e:
+        print(f"Error in export fallback analysis: {str(e)}")
+        return None
+
+# async def get_newly_created_item_id_via_export_service(db_session):
+#     """
+#     Use the existing VRExportService to get the most recent V&R item ID
+#     """
+#     try:
+#         print("Getting newly created item ID via VRExportService...")
+        
+#         # Import from your app structure
+#         import sys
+#         import os
+#         sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        
+#         from app.services.vintageandrare.export import VRExportService
+        
+#         export_service = VRExportService(db_session)
+#         products_data = await export_service.get_products_for_export()
+        
+#         # Get items with V&R IDs, sorted by most recent
+#         vr_items = []
+#         for product_data in products_data:
+#             vr_id = product_data.get('product id', '').strip()
+#             if vr_id and vr_id.isdigit():
+#                 vr_items.append({
+#                     'vr_id': vr_id,
+#                     'brand': product_data.get('brand name', ''),
+#                     'model': product_data.get('product model name', ''),
+#                     'year': product_data.get('product year', '')
+#                 })
+        
+#         # Sort by V&R ID (newest should have highest ID)
+#         vr_items.sort(key=lambda x: int(x['vr_id']), reverse=True)
+        
+#         if vr_items:
+#             newest_item = vr_items[0]
+#             newest_id = newest_item['vr_id']
+#             print(f"✅ Most recent V&R item ID: {newest_id}")
+#             print(f"   Brand: {newest_item['brand']}, Model: {newest_item['model']}")
+#             return newest_id
+#         else:
+#             print("No V&R items found in export")
+#             return None
+            
+#     except Exception as e:
+#         print(f"Error getting item ID via VRExportService: {str(e)}")
+#         return None
+
 
 # Modify the main section to accept all parameters
 if __name__ == "__main__":
@@ -861,8 +1756,8 @@ if __name__ == "__main__":
         parser.error("At least one shipping method (--local_pickup or --shipping) is required")
         
     if args.shipping and not any([args.europe_shipping, args.usa_shipping, 
-                                 args.uk_shipping, args.world_shipping, 
-                                 args.additional_shipping]):
+                                args.uk_shipping, args.world_shipping, 
+                                args.additional_shipping]):
         parser.error("When --shipping is enabled, at least one shipping fee must be provided")
     
 

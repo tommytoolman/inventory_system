@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:09:12.106750",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "George lowden",
+      "new_brand": "Lowden",
+      "count": 1
+    }
+  ]
+}

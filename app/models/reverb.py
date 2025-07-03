@@ -5,6 +5,8 @@ Enhanced ReverbListing Model
 This model represents a listing on the Reverb platform with improved mapping
 to Reverb's API data structure.
 """
+
+import logging
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any
@@ -15,7 +17,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
 
-UTC_NOW = text("now() AT TIME ZONE 'utc'")
+logger = logging.getLogger(__name__)
+
+
+# UTC_NOW = text("now() AT TIME ZONE 'utc'")
 
 class ReverbListing(Base):
     """

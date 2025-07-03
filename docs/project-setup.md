@@ -76,7 +76,7 @@ echo "Project structure created successfully!"
    - eBay: Full API integration using eBay Developer API
    - Reverb: REST API integration
    - VintageAndRare: Custom API integration
-   - Website API: Proprietary API integration
+   - Shopify API: Proprietary API integration
    - Sync status monitoring
    - Error handling and retry logic
 

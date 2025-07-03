@@ -1,0 +1,413 @@
+{% extends "base.html" %}
+
+{% block title %}Non-Performing Inventory Report - RIFF{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">Non-Performing Inventory Report (Reverb)</h1>
+                <p class="text-gray-600">Identify slow-moving inventory and optimization opportunities</p>
+            </div>
+            <a href="/reports" class="text-blue-600 hover:text-blue-800">← Back to Reports</a>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <!-- Executive Summary Cards -->
+    {% if summary_stats %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {% for stat in summary_stats %}
+                <div class="bg-white rounded-lg shadow p-6 border-l-4 {% if stat.age_bucket == 'Older Than 24M' %}border-red-500{% elif stat.age_bucket == 'Older Than 12M' %}border-orange-500{% elif stat.age_bucket == 'Older Than 6M' %}border-yellow-500{% else %}border-blue-500{% endif %}">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600">{{ stat.age_bucket }}</p>
+                            <div class="mt-2">
+                                <p class="text-2xl font-bold text-gray-900">{{ stat.item_count }}</p>
+                                <p class="text-sm text-gray-500">items</p>
+                            </div>
+                            <div class="mt-2">
+                                <p class="text-lg font-semibold text-green-600">£{{ "{:,.0f}".format(stat.total_value) }}</p>
+                                <p class="text-xs text-gray-500">Avg: £{{ "{:,.0f}".format(stat.avg_price) }}</p>
+                            </div>
+                            
+                            <!-- Platform Coverage Summary -->
+                            <div class="mt-3 pt-2 border-t border-gray-100">
+                                <p class="text-xs font-medium text-gray-600 mb-1">Platform Coverage:</p>
+                                <div class="flex items-center gap-x-2 text-xs">
+                                    <div class="flex items-center whitespace-nowrap">
+                                        <span class="w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                                        <span class="text-gray-600">R: {{ stat.item_count }}</span>
+                                    </div>
+                                    <div class="flex items-center whitespace-nowrap">
+                                        <span class="w-2 h-2 rounded-full bg-purple-500 mr-1"></span>
+                                        <span class="text-gray-600">S: {{ stat.shopify_count }}</span>
+                                    </div>
+                                    <div class="flex items-center whitespace-nowrap">
+                                        <span class="w-2 h-2 rounded-full bg-orange-500 mr-1"></span>
+                                        <span class="text-gray-600">E: {{ stat.ebay_count }}</span>
+                                    </div>
+                                    <div class="flex items-center whitespace-nowrap">
+                                        <span class="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                                        <span class="text-gray-600">V: {{ stat.vr_count }}</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Missing Platforms Indicator -->
+                                {% set missing_platforms = stat.item_count - stat.shopify_count - stat.ebay_count - stat.vr_count %}
+                                {% if missing_platforms > 0 %}
+                                    <div class="mt-1">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            {{ missing_platforms }} gaps
+                                        </span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="text-right">
+                            <div class="text-xs text-gray-500 space-y-1">
+                                <div>Views: {{ stat.avg_views }}/mo</div>
+                                <div>Watches: {{ stat.avg_watches }}</div>
+                                <div>Offers: {{ stat.avg_offers }}</div>
+                            </div>
+                            {% if stat.dead_stock_count > 0 %}
+                                <div class="mt-2">
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                        {{ stat.dead_stock_count }} Dead
+                                    </span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <!-- Filters and Controls -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">Filter & Sort Options</h3>
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Age Filter</label>
+                <select name="age_filter" class="w-full p-3 border border-gray-300 rounded-md">
+                    {% for filter in age_filters %}
+                        <option value="{{ filter.value }}" {% if filter.value == age_filter %}selected{% endif %}>
+                            {{ filter.label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                <select name="sort_by" class="w-full p-3 border border-gray-300 rounded-md">
+                    {% for option in sort_options %}
+                        <option value="{{ option.value }}" {% if option.value == sort_by %}selected{% endif %}>
+                            {{ option.label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Order</label>
+                <select name="sort_order" class="w-full p-3 border border-gray-300 rounded-md">
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Highest First</option>
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Lowest First</option>
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700">
+                    Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Summary Stats for Filtered Items -->
+    {% if detailed_items %}
+        <div class="bg-gray-50 rounded-lg p-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                <div>
+                    <p class="text-2xl font-bold text-gray-900">{{ total_items }}</p>
+                    <p class="text-sm text-gray-600">Items Shown</p>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-green-600">£{{ "{:,.0f}".format(total_value) }}</p>
+                    <p class="text-sm text-gray-600">Total Value</p>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-blue-600">£{{ "{:,.0f}".format(total_value / total_items) if total_items > 0 else 0 }}</p>
+                    <p class="text-sm text-gray-600">Average Value</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Items List -->
+        <div class="bg-white rounded-lg shadow mb-6">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4 sm:mb-0">
+                        Detailed Analysis - {{ age_filter }} Items
+                    </h3>
+                    
+                    <!-- Filter and Sort Controls -->
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <form method="GET" class="flex gap-2">
+                            <!-- Age Filter -->
+                            <select name="age_filter" class="px-3 py-2 border border-gray-300 rounded-md text-sm" onchange="this.form.submit()">
+                                {% for filter in age_filters %}
+                                    <option value="{{ filter.value }}" {% if filter.value == age_filter %}selected{% endif %}>
+                                        {{ filter.label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            
+                            <!-- Sort By -->
+                            <select name="sort_by" class="px-3 py-2 border border-gray-300 rounded-md text-sm" onchange="this.form.submit()">
+                                {% for option in sort_options %}
+                                    <option value="{{ option.value }}" {% if option.value == sort_by %}selected{% endif %}>
+                                        Sort by {{ option.label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            
+                            <!-- Sort Order -->
+                            <select name="sort_order" class="px-3 py-2 border border-gray-300 rounded-md text-sm" onchange="this.form.submit()">
+                                <option value="desc" {% if sort_order == "desc" %}selected{% endif %}>High to Low</option>
+                                <option value="asc" {% if sort_order == "asc" %}selected{% endif %}>Low to High</option>
+                            </select>
+                            
+                            <!-- Hidden fields to preserve other parameters -->
+                            <input type="hidden" name="age_filter" value="{{ age_filter }}">
+                            <input type="hidden" name="sort_by" value="{{ sort_by }}">
+                            <input type="hidden" name="sort_order" value="{{ sort_order }}">
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Summary for filtered items -->
+                <div class="mt-4 text-sm text-gray-600">
+                    Showing {{ total_items }} items with total value of £{{ "{:,.0f}".format(total_value) }}
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Engagement</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Performance</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for item in detailed_items %}
+                            <tr class="hover:bg-gray-50">
+                                <!-- Product Column -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        {% if item.primary_image %}
+                                            <div class="flex-shrink-0 h-12 w-12">
+                                                <img class="h-12 w-12 rounded-lg object-cover" src="{{ item.primary_image }}" alt="{{ item.brand }} {{ item.model }}">
+                                            </div>
+                                        {% else %}
+                                            <div class="flex-shrink-0 h-12 w-12 bg-gray-200 rounded-lg flex items-center justify-center">
+                                                <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                            </div>
+                                        {% endif %}
+                                        <div class="ml-4">
+                                            <div class="text-sm font-medium text-gray-900">
+                                                <a href="/inventory/product/{{ item.sku.split('-')[1] if '-' in item.sku else item.sku }}" class="hover:text-blue-600">
+                                                    {{ item.brand }} {{ item.model }}
+                                                </a>
+                                            </div>
+                                            <div class="text-sm text-gray-500">{{ item.sku }}</div>
+                                            {% if item.year %}
+                                                <div class="text-xs text-gray-400">{{ item.year }}</div>
+                                            {% endif %}
+                                            
+                                            <!-- Platform Status Indicators -->
+                                            <div class="flex items-center space-x-1 mt-1">
+                                                <span class="text-xs text-gray-400">Also on:</span>
+                                                <!-- eBay Status -->
+                                                <span class="inline-block w-2 h-2 rounded-full {% if item.listed_on_ebay %}bg-green-500{% else %}bg-red-500{% endif %}" title="{% if item.listed_on_ebay %}Listed on eBay{% else %}Not on eBay{% endif %}"></span>
+                                                <span class="text-xs text-gray-400">E</span>
+                                                
+                                                <!-- Shopify Status -->
+                                                <span class="inline-block w-2 h-2 rounded-full {% if item.listed_on_shopify %}bg-green-500{% else %}bg-red-500{% endif %}" title="{% if item.listed_on_shopify %}Listed on Shopify{% else %}Not on Shopify{% endif %}"></span>
+                                                <span class="text-xs text-gray-400">S</span>
+                                                
+                                                <!-- V&R Status -->
+                                                <span class="inline-block w-2 h-2 rounded-full {% if item.listed_on_vr %}bg-green-500{% else %}bg-red-500{% endif %}" title="{% if item.listed_on_vr %}Listed on V&R{% else %}Not on V&R{% endif %}"></span>
+                                                <span class="text-xs text-gray-400">V</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                
+                                <!-- Value Column -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm font-medium text-gray-900">£{{ "{:,.0f}".format(item.reverb_price) }}</div>
+                                    {% if item.base_price and item.base_price != item.reverb_price %}
+                                        <div class="text-xs text-gray-500">Base: £{{ "{:,.0f}".format(item.base_price) }}</div>
+                                    {% endif %}
+                                </td>
+                                
+                                <!-- Age Column -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900">{{ item.days_on_market|round|int }} days</div>
+                                    <div class="text-xs text-gray-500">{{ item.listing_date.strftime('%b %d, %Y') if item.listing_date else 'Unknown' }}</div>
+                                </td>
+                                
+                                <!-- Engagement Column -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900">
+                                        <div class="flex space-x-4">
+                                            <span title="Views">👁️ {{ item.views or 0 }}</span>
+                                            <span title="Watches">⭐ {{ item.watches or 0 }}</span>
+                                            <span title="Offers">💬 {{ item.offers or 0 }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-gray-500">{{ item.views_per_month or 0 }} views/month</div>
+                                </td>
+                                
+                                <!-- Performance Column -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {% if item.performance_flag == 'DEAD_STOCK' %}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            💀 Dead Stock
+                                        </span>
+                                    {% elif item.performance_flag == 'HIGH_INTEREST_NO_OFFERS' %}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            👀 High Interest
+                                        </span>
+                                    {% elif item.performance_flag == 'MULTIPLE_OFFERS_UNSOLD' %}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            💰 Multiple Offers
+                                        </span>
+                                    {% else %}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                            ✅ Normal
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                
+                                <!-- Actions Column -->
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <div class="flex space-x-2">
+                                        <a href="https://reverb.com/item/{{ item.reverb_listing_id }}" 
+                                           target="_blank" 
+                                           class="text-blue-600 hover:text-blue-900">View</a>
+                                        <a href="/inventory/product/{{ item.sku.split('-')[1] if '-' in item.sku else item.sku }}" 
+                                           class="text-green-600 hover:text-green-900">Edit</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="bg-white rounded-lg shadow mb-6">
+            <div class="px-6 py-12 text-center">
+                <div class="text-gray-500">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <p class="mt-2 text-sm text-gray-500">No items found for the selected criteria.</p>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Performance Insights -->
+    {% if summary_stats %}
+        <div class="bg-blue-50 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">💡 Performance Insights</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                <div class="bg-white rounded p-4">
+                    <h4 class="font-medium text-gray-900">🎯 Immediate Action Needed</h4>
+                    <p class="text-gray-600 mt-1">Items older than 12 months with zero engagement should be reviewed for pricing or removal.</p>
+                </div>
+                <div class="bg-white rounded p-4">
+                    <h4 class="font-medium text-gray-900">💰 Pricing Optimization</h4>
+                    <p class="text-gray-600 mt-1">High views with no offers suggests pricing may be too aggressive. Consider 10-15% reduction.</p>
+                </div>
+                <div class="bg-white rounded p-4">
+                    <h4 class="font-medium text-gray-900">📊 Market Demand</h4>
+                    <p class="text-gray-600 mt-1">Multiple offers but no sales indicates good demand - analyze offer patterns for optimal pricing.</p>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<style>
+/* Loading states and animations */
+.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* Hover effects for table rows */
+.hover\:bg-gray-50:hover {
+    background-color: #f9fafb;
+}
+
+/* Performance flag animations */
+.inline-flex {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive table improvements */
+@media (max-width: 640px) {
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .table-responsive td {
+        padding: 0.75rem 0.5rem;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add smooth form submission feedback
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        form.addEventListener('submit', function() {
+            document.body.classList.add('loading');
+        });
+    });
+    
+    // Add click tracking for external links
+    const externalLinks = document.querySelectorAll('a[target="_blank"]');
+    externalLinks.forEach(link => {
+        link.addEventListener('click', function() {
+            console.log('External link clicked:', this.href);
+        });
+    });
+});
+</script>
+
+{% endblock %}

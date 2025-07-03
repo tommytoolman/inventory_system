@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:33:48.720413",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "1967",
+      "new_brand": "Park",
+      "count": 1
+    }
+  ]
+}

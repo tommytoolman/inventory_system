@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:08:11.605154",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "breedlove",
+      "new_brand": "Breedlove",
+      "count": 1
+    }
+  ]
+}

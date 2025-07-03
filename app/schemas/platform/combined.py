@@ -5,20 +5,20 @@ from datetime import datetime, timezone
 from .ebay import EbayListingCreate, EbayListingStatusInfo
 from .reverb import ReverbListingCreateDTO, ReverbListingStatusDTO
 from .vr import VRListingCreateDTO, VRListingStatusDTO
-from .website import WebsiteListingCreateDTO, WebsiteListingStatusDTO
+from .shopify import ShopifyListingCreateDTO, ShopifyListingStatusDTO
 
 # File: app/schemas/platform/combined.py
 class MultiPlatformListingCreateDTO(BaseModel):
     ebay: Optional[EbayListingCreate]
     reverb: Optional[ReverbListingCreateDTO]
     vr: Optional[VRListingCreateDTO]
-    website: Optional[WebsiteListingCreateDTO]
+    Shopify: Optional[ShopifyListingCreateDTO]
 
 class PlatformSyncStatusDTO(BaseModel):
     ebay_status: EbayListingStatusInfo
     reverb_status: ReverbListingStatusDTO
     vr_status: VRListingStatusDTO
-    website_status: WebsiteListingStatusDTO
+    shopify_status: ShopifyListingStatusDTO
 
     @property
     def all_synced(self) -> bool:
@@ -26,5 +26,5 @@ class PlatformSyncStatusDTO(BaseModel):
             self.ebay_status.status == "success",
             self.reverb_status.status == "success",
             self.vr_status.status == "success",
-            self.website_status.status == "success"
+            self.shopify_status.status == "success"
         ])

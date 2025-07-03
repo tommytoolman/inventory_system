@@ -4,6 +4,11 @@ import json
 import asyncio
 import aiofiles
 import logging
+
+from decimal import Decimal
+from enum import Enum
+from pathlib import Path
+from urllib.parse import quote_plus
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any, Union
 
@@ -22,13 +27,14 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
 
-# SQLAlchemy imports
 from sqlalchemy import select, or_, distinct, func, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 # App imports
 from app.core.config import Settings, get_settings
+from app.core.enums import PlatformName, ProductCondition   
+# from app.models import User as UserModel
 from app.core.exceptions import ProductCreationError, PlatformIntegrationError
 from app.dependencies import get_db, templates
 from app.integrations.events import StockUpdateEvent
@@ -36,13 +42,17 @@ from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.shipping import ShippingProfile
 from app.models.vr import VRListing
+from app.models.shopify import ShopifyListing
 from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
 from app.services.category_mapping_service import CategoryMappingService
 from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
+from app.services.shopify_service import ShopifyService
+from app.services.vintageandrare_service import VintageAndRareService
+from app.services.vintageandrare.brand_validator import VRBrandValidator
+from app.services.vintageandrare.client import VintageAndRareClient
 from app.services.vintageandrare.export import VRExportService
-from app.services.website_service import WebsiteService
 from app.schemas.product import ProductCreate
 
 router = APIRouter()
@@ -51,7 +61,285 @@ router = APIRouter()
 UPLOAD_DIR = "app/static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+DEFAULT_VR_BRAND = "Justin" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR VRAcceptedBrand TABLE***
+# DEFAULT_EBAY_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR eBay Accepted Brands TABLE***
+# DEFAULT_REVERB_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR Reverb Accepted Brands TABLE***
+
 logger = logging.getLogger(__name__)
+
+
+_reverb_to_platforms_map_cache = None
+_ebay_to_platforms_map_cache = None
+_vr_to_platforms_map_cache = None
+
+def get_reverb_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
+    """Loads the Reverb to other platforms category mapping file."""
+    global _reverb_to_platforms_map_cache
+    if _reverb_to_platforms_map_cache is None:
+        map_path_str = "" # For logging in case of error before path is set
+        try:
+            # Path relative to this file (inventory.py in app/routes)
+            # to where you placed the new map file: app/services/vintageandrare/reverb_to_platforms_map.json
+            map_path = Path(__file__).parent.parent / "services" / "vintageandrare" / "reverb_to_platforms_map.json"
+            map_path_str = str(map_path) # For logging
+            with open(map_path, 'r') as f:
+                _reverb_to_platforms_map_cache = json.load(f)
+            logger_instance.info(f"Reverb-to-Platforms category map loaded successfully from {map_path_str}")
+        except FileNotFoundError:
+            logger_instance.error(f"CRITICAL: Reverb-to-Platforms category map file not found at {map_path_str}. V&R/eBay category mapping will fail.")
+            _reverb_to_platforms_map_cache = {} # Return empty dict to prevent repeated load attempts
+        except json.JSONDecodeError:
+            logger_instance.error(f"CRITICAL: Error decoding JSON from Reverb-to-Platforms map file at {map_path_str}.")
+            _reverb_to_platforms_map_cache = {}
+        except Exception as e:
+            logger_instance.error(f"CRITICAL: Failed to load Reverb-to-Platforms category map from {map_path_str}: {e}", exc_info=True)
+            _reverb_to_platforms_map_cache = {}
+    return _reverb_to_platforms_map_cache
+
+def get_ebay_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
+    """Placeholder for loading eBay to other platforms category mapping."""
+    # global _ebay_to_platforms_map_cache
+    # if _ebay_to_platforms_map_cache is None:
+    #     # Logic to load a map like:
+    #     # map_path = Path(__file__).parent.parent / "services" / "mappings" / "ebay_to_platforms_map.json"
+    #     # ... load logic ...
+    #     logger_instance.info("eBay-to-Platforms category map loaded (placeholder).")
+    # return _ebay_to_platforms_map_cache or {}
+    logger_instance.info("get_ebay_to_platforms_map is a placeholder and not yet implemented.")
+    return {} # Return empty dict for now
+
+def get_shopify_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
+    """Placeholder for loading &Shopify to other platforms category mapping."""
+    # global _vr_to_platforms_map_cache
+    # if _vr_to_platforms_map_cache is None:
+    #     # Logic to load a map like:
+    #     # map_path = Path(__file__).parent.parent / "services" / "mappings" / "vr_to_platforms_map.json"
+    #     # ... load logic ...
+    #     logger_instance.info("V&R-to-Platforms category map loaded (placeholder).")
+    # return _vr_to_platforms_map_cache or {}
+    logger_instance.info("get_shopify_to_platforms_map is a placeholder and not yet implemented.")
+    return {} # Return empty dict for now
+
+def get_vr_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
+    """Placeholder for loading V&R to other platforms category mapping."""
+    # global _vr_to_platforms_map_cache
+    # if _vr_to_platforms_map_cache is None:
+    #     # Logic to load a map like:
+    #     # map_path = Path(__file__).parent.parent / "services" / "mappings" / "vr_to_platforms_map.json"
+    #     # ... load logic ...
+    #     logger_instance.info("V&R-to-Platforms category map loaded (placeholder).")
+    # return _vr_to_platforms_map_cache or {}
+    logger_instance.info("get_vr_to_platforms_map is a placeholder and not yet implemented.")
+    return {} # Return empty dict for now
+
+async def _prepare_vr_payload_from_product_object(
+    product: Product, 
+    db: AsyncSession,
+    logger_instance: logging.Logger,
+    use_fallback_brand: bool = False  # NEW PARAMETER
+) -> tuple[Dict[str, Any], bool]:
+    """
+    Prepares the rich dictionary payload for V&R export from an existing Product object.
+    
+    Args:
+        use_fallback_brand: If True, uses DEFAULT_VR_BRAND instead of product.brand
+    
+    Note: Brand validation should be performed via VRBrandValidator.validate_brand() 
+    before calling this function to ensure the brand is accepted by V&R.
+    """
+    
+    brand_was_defaulted = False
+    payload = {}
+    logger_instance.debug(f"Preparing V&R payload for product SKU '{product.sku}'.")
+
+
+    # --- ITEM INFORMATION ---
+    
+    # Category (Mandatory for V&R). Ensure product.category is a string, strip whitespace for reliable key lookup
+    product_reverb_category = str(product.category).strip() if product.category else None
+    
+    if not product_reverb_category:
+        logger_instance.error(f"Product SKU '{product.sku}' has no Reverb category (product.category is None or empty). Cannot map to V&R.")
+        raise ValueError(f"Product SKU '{product.sku}' has no Reverb category set, which is needed for V&R mapping.")
+
+    # Load the new mapping file (reverb_to_platforms_map.json) using the new helper
+    reverb_map_data = get_reverb_to_platforms_map(logger_instance) 
+    
+    # Attempt to get the mapping for the product's Reverb category
+    # The keys in reverb_to_platforms_map.json are the Reverb category strings
+    platform_specific_mappings = reverb_map_data.get(product_reverb_category) 
+
+    if not platform_specific_mappings:
+        logger_instance.error(f"No entry found for Reverb category '{product_reverb_category}' (SKU: '{product.sku}') in the reverb_to_platforms_map.json file.")
+        # This is where you'll later trigger the UI for user selection if you build that feature.
+        # For now, we raise an error to indicate the mapping is missing and needs to be added to the JSON map.
+        raise ValueError(f"Category mapping missing for Reverb category '{product_reverb_category}' (SKU: '{product.sku}'). Please add this Reverb category to the reverb_to_platforms_map.json file.")
+
+    vr_category_settings = platform_specific_mappings.get("vr_categories")
+
+    if not vr_category_settings: # Check if the "vr_categories" sub-object exists in the map
+        logger_instance.error(f"'vr_categories' section not found in reverb_to_platforms_map.json for Reverb category '{product_reverb_category}' (SKU: '{product.sku}').")
+        raise ValueError(f"V&R category settings ('vr_categories' object) are missing in the map for '{product_reverb_category}' (SKU: '{product.sku}').")
+    
+    # Extract V&R category names from the map based on the structure we agreed on
+    # (e.g., {"vr_categories": {"vr_category_1_name": "...", "vr_category_2_name": "..."}})
+    payload["Category"] = vr_category_settings.get("vr_category_1_id")
+    payload["SubCategory1"] = vr_category_settings.get("vr_category_2_id")
+    payload["SubCategory2"] = vr_category_settings.get("vr_category_3_id")
+    payload["SubCategory3"] = vr_category_settings.get("vr_category_4_id") # For V&R, often up to 2 or 3 levels are used
+
+    if not payload["Category"]:
+        # i.e. mapping structure was present for the Reverb category but "vr_category_1_id" itself was missing or null within that structure.
+        logger_instance.error(f"V&R main category ('vr_category_1_id') is not defined or is null in reverb_to_platforms_map.json for Reverb category '{product_reverb_category}' (SKU: '{product.sku}'). This field is mandatory for V&R.")
+        raise ValueError(f"V&R main category (vr_category_1_id) is missing in the map details for '{product_reverb_category}' (SKU: '{product.sku}').")
+
+    # Clean up payload by removing any subcategory keys that ended up with a None value
+    # This prevents sending {"SubCategory2": null} if "vr_category_2_id" was missing or null in the map.
+    keys_to_delete = []
+    for i in range(1, 5): # Check SubCategory1 through SubCategory4 (assuming max 4 levels for now)
+        key = f"SubCategory{i}"
+        # Ensure the key was added to payload (i.e., it was in vr_category_settings) before checking if its value is None
+        if key in payload and payload[key] is None:
+            keys_to_delete.append(key)
+    for key in keys_to_delete:
+        del payload[key]
+    
+    # Construct log message for mapped categories
+    log_message_parts = [f"Cat1='{payload.get('Category')}'"]
+    if "SubCategory1" in payload: log_message_parts.append(f"Cat2='{payload.get('SubCategory1')}'")
+    if "SubCategory2" in payload: log_message_parts.append(f"Cat3='{payload.get('SubCategory2')}'")
+    if "SubCategory3" in payload: log_message_parts.append(f"Cat4='{payload.get('SubCategory3')}'") 
+    
+    logger_instance.info(
+        f"Mapped Reverb category '{product_reverb_category}' to V&R categories: {', '.join(log_message_parts)} for SKU '{product.sku}'."
+    )    
+
+    # --- Brand / Maker (With fallback support) ---
+    if not product.brand:
+        logger_instance.warning(f"Product SKU '{product.sku}' has no brand set. Using '{DEFAULT_VR_BRAND}' for V&R.")
+        payload["brand"] = DEFAULT_VR_BRAND
+        brand_was_defaulted = True
+    elif use_fallback_brand:
+        # User chose to proceed with fallback brand for unrecognized brand
+        logger_instance.info(f"Using fallback brand '{DEFAULT_VR_BRAND}' for SKU '{product.sku}' (original brand '{product.brand}' not recognized by V&R).")
+        payload["brand"] = DEFAULT_VR_BRAND
+        brand_was_defaulted = True
+    else:
+        # Use the validated brand
+        payload["brand"] = product.brand
+        logger_instance.info(f"Using validated brand '{product.brand}' for SKU '{product.sku}'.")
+    
+    
+    # --- Model Name --- (Mandatory)
+    if not product.model:
+        raise ValueError(f"Model name is mandatory for V&R listing (product SKU: {product.sku}).")
+    payload["model"] = product.model
+
+    # --- Year --- (Optional)
+    if product.year:
+        payload["year"] = str(product.year)
+        payload["decade"] = f"{str(product.year // 10 * 10)}s"
+
+    # --- Finish/Color --- (Optional)
+    if product.finish:
+        payload["finish"] = product.finish # V&R uses "FinishColour"
+
+    # --- Item Description --- (User-side mandatory for you)
+    if not product.description: # Ensuring it's not empty, as per your requirement
+        raise ValueError(f"Description is mandatory for V&R listing (product SKU: {product.sku}).")
+    payload["description"] = product.description
+
+    # --- SKU --- 
+    if product.sku:
+        # payload["sku"] = product.sku  # ✅ Keep this for reference  
+        payload["external_id"] = product.sku  # ✅ Add this - what client.py expects
+            
+    #  --- Condition --- (not a value in V&R)
+    if product.condition:
+        payload["condition"] = product.condition.value if isinstance(product.condition, Enum) else str(product.condition)
+
+    # --- Item Price ---
+    if product.base_price is None:
+        raise ValueError(f"Price is mandatory for V&R listing (product SKU: {product.sku}).")
+    try:
+        payload["price"] = float(Decimal(str(product.base_price))) # Ensure no commas; V&R expects number or string number
+    except Exception:
+        raise ValueError(f"Invalid price format for product SKU '{product.sku}': {product.base_price}")
+    payload["currency"] = "GBP"
+
+    # --- Media (Structured for client.py) ---
+    payload['primary_image'] = product.primary_image if product.primary_image and isinstance(product.primary_image, str) else None
+    
+    additional_images_list: List[str] = []
+    if product.additional_images:
+        source_images = product.additional_images
+        if isinstance(source_images, str): # If it's a JSON string
+            try:
+                parsed_images = json.loads(source_images)
+                if isinstance(parsed_images, list): source_images = parsed_images
+                else: source_images = [str(parsed_images)]
+            except json.JSONDecodeError: source_images = [source_images] # Treat as single URL string
+        
+        if isinstance(source_images, list):
+            for img_item in source_images:
+                url_to_add: Optional[str] = None
+                if isinstance(img_item, dict) and 'url' in img_item and isinstance(img_item['url'], str):
+                    url_to_add = img_item['url']
+                elif isinstance(img_item, str):
+                    url_to_add = img_item
+                
+                if url_to_add and url_to_add != payload['primary_image'] and url_to_add not in additional_images_list:
+                    additional_images_list.append(url_to_add)
+        else:
+            logger_instance.warning(f"product.additional_images for SKU {product.sku} unhandled type: {type(source_images)}")
+            
+    payload['additional_images'] = additional_images_list
+
+    payload['video_url'] = product.video_url
+    payload['external_link'] = product.external_link
+
+    # # --- V&R Specific Fields (sourcing from Product model if attributes exist) ---
+    # payload['vr_show_vat'] = product.show_vat if hasattr(product, 'show_vat') and product.show_vat is not None else True
+    # payload['vr_in_collective'] = product.in_collective if hasattr(product, 'in_collective') and product.in_collective is not None else False
+    # payload['vr_in_inventory'] = product.in_inventory if hasattr(product, 'in_inventory') and product.in_inventory is not None else True
+    # payload['vr_in_reseller'] = product.in_reseller if hasattr(product, 'in_reseller') and product.in_reseller is not None else False
+    # # Add others like 'vr_call_for_price', 'vr_discounted_price', 'vr_collective_discount', 'vr_buy_now' if on Product model
+
+    # payload['processing_time'] = str(product.processing_time) if hasattr(product, 'processing_time') and product.processing_time is not None else '3'
+    # # payload['time_unit'] = 'Days' # Default in client, or add from product if it varies
+
+    # payload['available_for_shipment'] = product.available_for_shipment if hasattr(product, 'available_for_shipment') and product.available_for_shipment is not None else True
+    # payload['local_pickup'] = product.local_pickup if hasattr(product, 'local_pickup') and product.local_pickup is not None else False
+
+    # if not product.shipping_profile_id:
+    #     logger_instance.warning(f"No shipping profile ID for {product.sku}. V&R shipping details in client will use defaults.")
+    # # Else: If you have shipping profile logic, populate keys like 'shipping_europe_fee', etc.
+    # # payload['shipping_europe_fee'] = ...
+
+
+    # --- Shipping --- (Placeholder - requires detailed logic)
+    if product.shipping_profile_id:
+        logger_instance.info(f"Shipping profile ID {product.shipping_profile_id} for {product.sku} needs mapping to V&R fields.")
+        # TODO: Implement logic to fetch ShippingProfile by ID, then extract and map details to:
+        # payload["ShippingAvailableForLocalPickup"] = resolved_profile.allows_pickup 
+        # payload["ShippingAvailableForShipment"] = resolved_profile.allows_shipment
+        # payload["ShippingCostsUK"] = resolved_profile.get_cost("UK") 
+        # payload["ShippingCostsEurope"] = resolved_profile.get_cost("Europe")
+        # payload["ShippingCostsUSA"] = resolved_profile.get_cost("USA")
+        # payload["ShippingCostsROW"] = resolved_profile.get_cost("ROW")
+        # This depends on your ShippingProfile model and how V&R expects these.
+        # For now, these fields will be omitted or rely on V&R exporter defaults if not explicitly set.
+    else:
+        logger_instance.warning(f"No shipping profile ID for {product.sku}. V&R shipping details will be default/minimal.")
+
+    # Log the final payload before returning
+    try:
+        payload_json_for_log = json.dumps(payload, indent=2, default=str)
+        logger_instance.debug(f"Prepared V&R payload for SKU '{product.sku}': {payload_json_for_log}")
+    except TypeError: # In case something non-serializable is in payload (shouldn't be)
+        logger_instance.debug(f"Prepared V&R payload for SKU '{product.sku}' (contains non-serializable elements, showing dict): {payload}")
+
+    return payload, brand_was_defaulted
 
 async def save_upload_file(upload_file: UploadFile) -> str:
     """Save an uploaded file and return its path"""
@@ -111,15 +399,15 @@ def process_platform_data(form_data: Dict[str, Any]) -> Dict[str, Any]:
     if vr_data:
         platform_data["vr"] = vr_data
     
-    # Process Website data
-    website_data = {}
+    # Process shopify data
+    shopify_data = {}
     for key, value in form_data.items():
-        if key.startswith("platform_data__website__"):
-            field_name = key.replace("platform_data__website__", "")
-            website_data[field_name] = value
+        if key.startswith("platform_data__shopify__"):
+            field_name = key.replace("platform_data__shopify__", "")
+            shopify_data[field_name] = value
     
-    if website_data:
-        platform_data["website"] = website_data
+    if shopify_data:
+        platform_data["shopify"] = shopify_data
     
     return platform_data
 
@@ -150,7 +438,12 @@ async def list_products(
     search: Optional[str] = None,
     category: Optional[str] = None,
     brand: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),  # Change to AsyncSession
+    platform: Optional[str] = None,  
+    status: Optional[str] = None,
+    state: Optional[str] = None,
+    sort: Optional[str] = None,      # NEW: Sort column
+    order: Optional[str] = 'asc',    # NEW: Sort direction
+    db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings)
 ):
     # Handle the case when per_page is 'all'
@@ -166,10 +459,61 @@ async def list_products(
         pagination_limit = per_page
         pagination_offset = (page - 1) * per_page
     
-    # Build query using async style (select instead of query)
-    query = select(Product)
+    # Handle status/state parameter (state is alias for status)
+    filter_status = status or state
     
-    # Apply filters
+    # Build query using async style
+    if platform:
+        # If platform filter is specified, join with PlatformCommon to filter by platform
+        from app.models.platform_common import PlatformCommon
+        
+        query = (
+            select(Product)
+            .join(PlatformCommon, Product.id == PlatformCommon.product_id)
+            .where(PlatformCommon.platform_name.ilike(f"%{platform}%"))
+        )
+        
+        # Add status filter if specified
+        if filter_status:
+            # Map common status values
+            status_mapping = {
+                'active': 'active',
+                'live': 'active',
+                'draft': 'draft',
+                'sold': 'sold',
+                'ended': 'ended',
+                'pending': 'pending'
+            }
+            
+            mapped_status = status_mapping.get(filter_status.lower(), filter_status)
+            query = query.where(PlatformCommon.status.ilike(f"%{mapped_status}%"))
+            
+    else:
+        # No platform filter - query products directly
+        query = select(Product)
+        
+        # Add status filter on Product table if specified
+        if filter_status:
+            # Convert string to enum for comparison
+            from app.models.product import ProductStatus
+            
+            # Map frontend values to ProductStatus enum
+            status_mapping = {
+                'active': ProductStatus.ACTIVE,
+                'live': ProductStatus.ACTIVE,     # Alias
+                'draft': ProductStatus.DRAFT,
+                'sold': ProductStatus.SOLD,
+                'archived': ProductStatus.ARCHIVED,
+                'ended': ProductStatus.ARCHIVED,  # Map "ended" to archived
+                'pending': ProductStatus.DRAFT,   # Map "pending" to draft
+            }
+            
+            # Get the enum value
+            enum_status = status_mapping.get(filter_status.lower())
+            if enum_status:
+                query = query.where(Product.status == enum_status)
+    
+    # Apply existing filters
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -193,6 +537,29 @@ async def list_products(
     total = count_result.scalar_one()
     
     # Apply pagination and ordering
+    # Add sorting logic BEFORE the default ordering
+    if sort and sort in ['brand', 'model', 'category', 'price', 'status']:
+        if sort == 'price':
+            sort_column = Product.base_price
+        elif sort == 'brand':
+            sort_column = Product.brand
+        elif sort == 'model':
+            sort_column = Product.model
+        elif sort == 'category':
+            sort_column = Product.category
+        elif sort == 'status':
+            sort_column = Product.status
+        
+        # Apply sort direction
+        if order == 'desc':
+            query = query.order_by(desc(sort_column))
+        else:
+            query = query.order_by(sort_column)
+    else:
+        # Default ordering - newest first
+        query = query.order_by(desc(Product.created_at))
+    
+    # Apply pagination and ordering
     query = query.order_by(desc(Product.created_at))
     
     if pagination_limit:
@@ -202,7 +569,7 @@ async def list_products(
     result = await db.execute(query)
     products = result.scalars().all()
     
-    # Get unique categories and brands for filters
+    # Get unique categories and brands for filters (keep existing logic)
     categories_query = (
         select(Product.category, func.count(Product.id).label("count"))
         .filter(Product.category.isnot(None))
@@ -250,15 +617,19 @@ async def list_products(
             "total_pages": total_pages,
             "start_page": start_page,
             "end_page": end_page,
-            "start_item": start_item,   # Add these two
-            "end_item": end_item,       # variables to the template context
-            "categories": categories_with_counts,  # Updated
-            "brands": brands_with_counts,  # Updated
+            "start_item": start_item,
+            "end_item": end_item,
+            "categories": categories_with_counts,
+            "brands": brands_with_counts,
             "selected_category": category,
             "selected_brand": brand,
+            "selected_platform": platform,    # NEW: Pass to template
+            "selected_status": filter_status,  # NEW: Pass to template
             "search": search,
             "has_prev": page > 1,
-            "has_next": page < total_pages
+            "has_next": page < total_pages,
+            "current_sort": sort,          # NEW: Pass current sort
+            "current_order": order,        # NEW: Pass current order
         }
     )
 
@@ -274,60 +645,219 @@ async def product_detail(
     product_id: int,
     db: AsyncSession = Depends(get_db)
 ):
+    logger.info(f"Fetching details for product ID: {product_id}")
     try:
-        query = select(Product).where(Product.id == product_id)
-        result = await db.execute(query)
-        product = result.scalar_one_or_none()
-        
+        # 1. Fetch Product
+        product_query = select(Product).where(Product.id == product_id)
+        product_result = await db.execute(product_query)
+        product = product_result.scalar_one_or_none()
+
         if not product:
+            logger.warning(f"Product with ID {product_id} not found.")
             return templates.TemplateResponse(
                 "errors/404.html",
-                {"request": request},
+                {"request": request, "error_message": f"Product ID {product_id} not found."},
                 status_code=404
             )
+
+        # 2. Fetch Existing PlatformCommon Listings for this Product
+        common_listings_query = select(PlatformCommon).where(PlatformCommon.product_id == product_id)
+        common_listings_result = await db.execute(common_listings_query)
+        existing_common_listings = common_listings_result.scalars().all()
+
+        common_listings_map = {
+            listing.platform_name.upper(): listing for listing in existing_common_listings
+        }
+        logger.debug(f"Fetched {len(existing_common_listings)} PlatformCommon records for product {product_id}.")
+
+        # 3. Construct `all_platforms_status` for the template
+        all_platforms_status = []
+
+        for platform_enum in PlatformName:
+            platform_display_name = platform_enum.value # This will be "EBAY", "REVERB", "VR", "SHOPIFY"
+            platform_url_slug = platform_enum.slug # Uses the @property from your enum
+
+            entry = {
+                "name": platform_display_name, # For display in template
+                "slug": platform_url_slug,     # For URL generation in template
+                "is_listed": False,
+                "details": None
+            }
+
+            # platform_enum.value (e.g., "VR") is used to check against keys in common_listings_map
+            if platform_enum.value in common_listings_map:
+                common_listing_record = common_listings_map[platform_enum.value]
+                entry["is_listed"] = True
+
+                sync_status_for_template = "Unknown"
+                if common_listing_record.status:
+                    status_upper = common_listing_record.status.upper()
+                    if status_upper == "ACTIVE":
+                        sync_status_for_template = "SYNCED"
+                    elif status_upper == "DRAFT":
+                        sync_status_for_template = "PENDING"
+                    elif status_upper == "ERROR":
+                        sync_status_for_template = "ERROR"
+                    else:
+                        sync_status_for_template = common_listing_record.status
+                
+                # Ensure these getattr calls use the correct attribute names from your PlatformCommon model
+                entry["details"] = {
+                    "external_id": getattr(common_listing_record, 'external_id', None) or \
+                                    getattr(common_listing_record, 'platform_product_id', 'N/A'),
+                    "status": getattr(common_listing_record, 'status', None),
+                    "sync_status": sync_status_for_template,
+                    "last_sync": getattr(common_listing_record, 'last_synced', None) or \
+                                    getattr(common_listing_record, 'updated_at', None),
+                    "message": getattr(common_listing_record, 'platform_message', None),
+                    "listing_url": getattr(common_listing_record, 'listing_url', None)
+                }
+            
+            all_platforms_status.append(entry)
         
-        platform_query = select(PlatformCommon).where(PlatformCommon.product_id == product_id)
-        platform_result = await db.execute(platform_query)
-        platform_listings = platform_result.scalars().all()
-        
-       # Get platform status information
-        platform_statuses = {
-            "ebay": {"status": "pending", "message": "Not synchronized"},
-            "reverb": {"status": "pending", "message": "Not synchronized"},
-            "vr": {"status": "pending", "message": "Not synchronized"},
-            "website": {"status": "pending", "message": "Not synchronized"}
+        logger.debug(f"Constructed all_platforms_status for product {product_id}: {all_platforms_status}")
+
+        # 4. Prepare context for the template
+        context = {
+            "request": request,
+            "product": product,
+            "all_platforms_status": all_platforms_status,
         }
         
-        for listing in platform_listings:
-            platform_name = listing.platform_name.lower()
-            if platform_name in platform_statuses:
-                if listing.status == "ACTIVE":
-                    platform_statuses[platform_name] = {
-                        "status": "success",
-                        "message": f"Active on {listing.platform_name}"
-                    }
-                elif listing.status == "DRAFT":
-                    platform_statuses[platform_name] = {
-                        "status": "pending",
-                        "message": f"Draft on {listing.platform_name}"
-                    }
-                elif listing.status == "ERROR":
-                    platform_statuses[platform_name] = {
-                        "status": "error",
-                        "message": listing.platform_message or f"Error on {listing.platform_name}"
-                    }
-        
-        return templates.TemplateResponse(
-            "inventory/detail.html",
-            {
-                "request": request,
-                "product": product,
-                "platform_listings": platform_listings,
-                "platform_statuses": platform_statuses
-            }
-        )
+        return templates.TemplateResponse("inventory/detail.html", context)
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in product_detail for product_id {product_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+@router.post("/product/{product_id}/list_on/{platform_slug}", name="create_platform_listing_from_detail")
+async def handle_create_platform_listing_from_detail(
+    request: Request,
+    product_id: int,
+    platform_slug: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings) # Inject settings
+  ):
+        
+    product_service = ProductService(db)
+    product = await product_service.get_product_model_instance(product_id) # Using the new method name in ProductService Class
+
+    if not product:
+        logger.error(f"Product ID {product_id} not found for listing on {platform_slug}.")
+        raise HTTPException(status_code=404, detail=f"Product {product_id} not found.")
+    
+    redirect_url = request.url_for('product_detail', product_id=product_id)
+    message = f"An error occurred." # Default
+    message_type = "error" # Default
+    
+    try:
+        if platform_slug == "vr":
+            logger.info(f"Processing Vintage & Rare listing for product {product.sku}.")
+            
+            # Prepare the V&R payload using the helper function
+            vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(product, db, logger) # NEW
+        
+            # Fast AJAX brand validation BEFORE expensive Selenium process
+            logger.info(f"Validating brand '{product.brand}' with V&R before listing...")
+            validation = VRBrandValidator.validate_brand(product.brand)
+
+            if not validation["is_valid"]:
+                # Brand not recognized by V&R - offer to proceed with fallback
+                logger.warning(f"Brand '{product.brand}' not recognized by V&R for {product.sku}")
+                
+                # Check if user explicitly wants to use fallback (via query parameter)
+                use_fallback = request.query_params.get('use_fallback_brand', 'false').lower() == 'true'
+                
+                if not use_fallback:
+                    # First time - ask user if they want to proceed with fallback
+                    error_message = f"Brand '{product.brand}' is not recognized by Vintage & Rare. Would you like to proceed using '{DEFAULT_VR_BRAND}' as the brand instead?"
+                    fallback_url = f"{redirect_url}?use_fallback_brand=true"
+                    
+                    # You could render a confirmation template or redirect with options
+                    return RedirectResponse(
+                        url=f"{redirect_url}?message={error_message}&message_type=warning&fallback_url={fallback_url}", 
+                        status_code=303
+                    )
+                else:
+                    # User confirmed - proceed with fallback brand
+                    logger.info(f"Using fallback brand '{DEFAULT_VR_BRAND}' for {product.sku} (original: '{product.brand}')")
+                    # Set a flag so payload preparation knows to use fallback
+                    vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(
+                        product, db, logger, use_fallback_brand=True
+                    )
+            else:
+                # Brand is valid - proceed normally
+                logger.info(f"✅ Brand '{product.brand}' validated successfully (V&R ID: {validation['brand_id']})")
+                vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(
+                    product, db, logger, use_fallback_brand=False
+                )
+
+            # Instantiate VintageAndRareClient correctly
+            vintage_rare_client = VintageAndRareClient(
+                username=settings.VINTAGE_AND_RARE_USERNAME,
+                password=settings.VINTAGE_AND_RARE_PASSWORD,
+                db_session=db 
+            )
+            
+            logger.info(f"Calling create_listing_selenium for product SKU {product.sku} with payload.")
+            # The `raise RuntimeError` for debugging is inside create_listing_selenium in client.py
+            
+            export_result = await vintage_rare_client.create_listing_selenium(
+                product_data=vr_payload_dict, # This is the payload from _prepare_vr_payload_from_product_object
+                test_mode=False,
+                from_scratch=False,
+                db_session=db   
+            )
+        
+        # # ... (elif for ebay, reverb) ...
+        
+            # Handle the result from create_listing_selenium
+            if export_result and export_result.get("status") == "success":
+                # Get the SKU before the async operation
+                product_sku = product.sku  # ✅ Get it early
+                message = f"Successfully initiated V&R listing process for SKU '{product_sku}'. Action: {export_result.get('message', '')}"
+                if brand_defaulted:
+                    # Ensure vr_payload_dict contains the brand key used (e.g., 'brand')
+                    defaulted_brand_name = vr_payload_dict.get('brand', 'the default brand')
+                    message += f" NOTE: Product brand '{product.brand}' was not V&R recognized; defaulted to '{defaulted_brand_name}'. Please verify on V&R."
+                message_type = "success"
+            elif export_result and export_result.get("status") == "debug": # Handling the debug halt
+                message = f"DEBUG: Halted in V&R client for payload inspection. SKU: {product.sku}. Client Message: {export_result.get('message')}"
+                message_type = "info"
+                # Optionally log the detailed payloads if returned in export_result for debug status
+                if "received_payload" in export_result and "prepared_form_data" in export_result:
+                    logger.info(f"DEBUG PAYLOADS for SKU {product.sku}:\nRECEIVED BY CLIENT:\n{json.dumps(export_result['received_payload'], indent=2, default=str)}\nPREPARED FORM DATA:\n{json.dumps(export_result['prepared_form_data'], indent=2, default=str)}")
+
+            else: # Handles "error" status or unexpected structure
+                error_detail = export_result.get("message", "Unknown V&R client error.") if export_result else "No result from V&R client."
+                message = f"Failed to process V&R listing for SKU '{product.sku}': {error_detail}"
+                # message_type is already "error"
+            
+            logger.info(f"V&R processing result for {product.sku}: {message}")
+        
+        # ... (elif for other platforms like ebay, reverb) ...
+        
+        else:
+            message = f"Listing on platform '{platform_slug}' is not yet implemented."
+            message_type = "info"
+            logger.info(message)
+
+    except ValueError as ve: # Catch data validation/mapping errors from our helper
+        logger.error(f"Data error for {platform_slug} listing (product {product_id}): {str(ve)}", exc_info=True)
+        message = f"Data error for {platform_slug}: {str(ve)}"
+        message_type = "error"
+    except HTTPException: # Re-raise HTTPExceptions to let FastAPI handle them
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error listing product {product_id} on {platform_slug}: {str(e)}", exc_info=True)
+        message = f"Server error listing on {platform_slug}. Check logs."
+        message_type = "error"
+
+    # Using quote_plus to safely encode the message for URL and avoid truncation at ampersand
+    return RedirectResponse(
+        url=f"{redirect_url}?message={quote_plus(message)}&message_type={message_type}", 
+        status_code=303
+    )
 
 @router.get("/add", response_class=HTMLResponse)
 async def add_product_form(
@@ -370,7 +900,7 @@ async def add_product_form(
             "ebay_status": "pending",
             "reverb_status": "pending",
             "vr_status": "pending",
-            "website_status": "pending",
+            "shopify_status": "pending",
             "tinymce_api_key": settings.TINYMCE_API_KEY  # This is important
         }
     )
@@ -475,7 +1005,7 @@ async def add_product(
         "ebay": {"status": "pending", "message": "Waiting for sync"},
         "reverb": {"status": "pending", "message": "Waiting for sync"},
         "vr": {"status": "pending", "message": "Waiting for sync"},
-        "website": {"status": "pending", "message": "Waiting for sync"}
+        "shopify": {"status": "pending", "message": "Waiting for sync"}
     }
 
     try:
@@ -483,7 +1013,7 @@ async def add_product(
         product_service = ProductService(db)
         ebay_service = EbayService(db, settings)
         reverb_service = ReverbService(db, settings)
-        website_service = WebsiteService(db, settings)
+        shopify_service = ShopifyService(db, settings)
 
         # Process brand
         brand = brand.title()
@@ -505,7 +1035,7 @@ async def add_product(
                     "ebay_status": "error",
                     "reverb_status": "error",
                     "vr_status": "error",
-                    "website_status": "error"
+                    "shopify_status": "error"
                 },
                 status_code=400
             )
@@ -526,7 +1056,7 @@ async def add_product(
                     "ebay_status": "error",
                     "reverb_status": "error",
                     "vr_status": "error",
-                    "website_status": "error"
+                    "shopify_status": "error"
                 },
                 status_code=400
             )
@@ -699,18 +1229,18 @@ async def add_product(
                     "message": f"Error: {str(e)}"
                 }
         
-        # Step 2.4: Website Integration
-        if platform_data.get("website"):
+        # Step 2.4: Shopify Integration
+        if platform_data.get("shopify"):
             try:
-                # Implement Website integration
-                # This is a placeholder - implement actual Website integration
-                platform_statuses["website"] = {
+                # Implement shopify integration
+                # This is a placeholder - implement actual shopify integration
+                platform_statuses["shopify"] = {
                     "status": "success", 
-                    "message": "Product published to website"
+                    "message": "Product published to shopify"
                 }
             except Exception as e:
-                print(f"Website integration error: {str(e)}")
-                platform_statuses["website"] = {
+                print(f"shopify integration error: {str(e)}")
+                platform_statuses["shopify"] = {
                     "status": "error", 
                     "message": f"Error: {str(e)}"
                 }
@@ -758,8 +1288,8 @@ async def add_product(
                 "reverb_message": platform_statuses["reverb"]["message"],
                 "vr_status": platform_statuses["vr"]["status"],
                 "vr_message": platform_statuses["vr"]["message"],
-                "website_status": platform_statuses["website"]["status"],
-                "website_message": platform_statuses["website"]["message"]
+                "shopify_status": platform_statuses["shopify"]["status"],
+                "shopify_message": platform_statuses["shopify"]["message"]
             },
             status_code=400
         )
@@ -784,8 +1314,8 @@ async def add_product(
                 "reverb_message": platform_statuses["reverb"]["message"],
                 "vr_status": platform_statuses["vr"]["status"],
                 "vr_message": platform_statuses["vr"]["message"],
-                "website_status": platform_statuses["website"]["status"],
-                "website_message": platform_statuses["website"]["message"]
+                "shopify_status": platform_statuses["shopify"]["status"],
+                "shopify_message": platform_statuses["shopify"]["message"]
             },
             status_code=400
         )
@@ -808,7 +1338,7 @@ async def add_product(
                 "ebay_status": "error",
                 "reverb_status": "error",
                 "vr_status": "error",
-                "website_status": "error"
+                "shopify_status": "error"
             },
             status_code=400
         )
@@ -1082,13 +1612,13 @@ async def sync_vintageandrare_submit(
             }
             
             # Call V&R client to create listing (test mode for now)
-            vr_response = await vr_client.create_listing(product_data, test_mode=True)
+            vr_response = await vr_client.create_listing(product_data, test_mode=False)
             
             # Update platform_common with response data
             if vr_response.get("status") == "success":
                 if vr_response.get("external_id"):
                     platform_common.external_id = vr_response["external_id"]
-                platform_common.sync_status = SyncStatus.SUCCESS.value
+                platform_common.sync_status = SyncStatus.SYNCED.value
                 platform_common.last_sync = datetime.now(timezone.utc)()
                 
                 results["success"] += 1

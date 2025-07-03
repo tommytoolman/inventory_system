@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:31:43.916831",
+  "operation": "manual_standardization",
+  "total_updated": 14,
+  "changes": [
+    {
+      "old_brand": "British pedal company",
+      "new_brand": "British Pedal Company",
+      "count": 14
+    }
+  ]
+}

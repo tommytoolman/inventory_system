@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:58:35.385918",
+  "operation": "manual_standardization",
+  "total_updated": 4,
+  "changes": [
+    {
+      "old_brand": "wandre",
+      "new_brand": "Wandre",
+      "count": 4
+    }
+  ]
+}

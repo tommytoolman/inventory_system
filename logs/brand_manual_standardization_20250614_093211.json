@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-14T09:32:11.143662",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Hagstrom kent",
+      "new_brand": "Hagstrom",
+      "count": 1
+    }
+  ]
+}

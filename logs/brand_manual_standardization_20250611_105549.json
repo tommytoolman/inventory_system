@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:55:49.877414",
+  "operation": "manual_standardization",
+  "total_updated": 2,
+  "changes": [
+    {
+      "old_brand": "Fender Marilyn Monroe",
+      "new_brand": "Fender",
+      "count": 2
+    }
+  ]
+}

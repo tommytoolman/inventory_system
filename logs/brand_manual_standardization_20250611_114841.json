@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:48:41.165585",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Baldwin / burns",
+      "new_brand": "Baldwin / Burns",
+      "count": 1
+    }
+  ]
+}

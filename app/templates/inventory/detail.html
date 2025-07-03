@@ -6,7 +6,7 @@
         <!-- Product Header -->
         <div class="px-6 py-4 bg-gray-50 border-b">
             <div class="flex justify-between items-center">
-                <div class="flex items-center">
+                <div class="flex items-center flex-1">
                     <div class="h-16 w-16 rounded-full overflow-hidden mr-4">
                         {% if product.primary_image %}
                             <img src="{{ product.primary_image }}" alt="{{ product.brand }} {{ product.model }}" class="h-full w-full object-cover">
@@ -18,16 +18,25 @@
                             </div>
                         {% endif %}
                     </div>
-                    <h1 class="text-2xl font-bold text-gray-900">
-                        {{ product.brand }} {{ product.model }}
-                    </h1>
+                    <div class="flex-1">
+                        <h1 class="text-2xl font-bold text-gray-900">
+                            {{ product.brand }} {{ product.model }}
+                        </h1>
+                    </div>
+                    
+                    <!-- Status badges moved next to title -->
+                    <div class="flex items-center space-x-3 mr-4">
+                        <!-- Product Status -->
+                        <span class="px-3 py-1 text-sm rounded-full {% if product.status.value|upper == 'SOLD' %}bg-red-100 text-red-800{% elif product.status.value|upper == 'DRAFT' %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">
+                            {{ product.status.value|upper }}
+                        </span>
+                    </div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <span class="px-3 py-1 text-sm rounded-full {% if product.status.value == 'sold' %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %}">
-                        {{ product.status.value|title }}
-                    </span>
-                    <a href="/inventory" class="text-blue-600 hover:text-blue-800">
-                        Back to List
+                
+                <!-- Back button stays on far right -->
+                <div class="ml-4">
+                    <a href="/inventory" class="text-blue-600 hover:text-blue-800 font-medium">
+                        ← Back to List
                     </a>
                 </div>
             </div>
@@ -49,7 +58,7 @@
                     <dd>{{ product.year or 'N/A' }}</dd>
                     
                     <dt class="text-gray-600">Condition</dt>
-                    <dd>{{ product.condition or 'N/A' }}</dd>
+                    <dd>{{ product.condition.value|title if product.condition else 'N/A' }}</dd>
                     
                     <dt class="text-gray-600">Base Price</dt>
                     <dd>
@@ -71,26 +80,90 @@
             <div>
                 <h2 class="text-lg font-semibold mb-4">Platform Listings</h2>
                 <div class="space-y-4">
-                    {% for listing in platform_listings %}
-                    <div class="border rounded p-4">
-                        <div class="flex justify-between items-center">
-                            <span class="font-medium">{{ listing.platform_name|title }}</span>
-                            <span class="px-2 py-1 text-sm rounded bg-blue-100 text-blue-800">
-                                {{ listing.sync_status }}
-                            </span>
+                    {% if all_platforms_status %}
+                        {% for platform_entry in all_platforms_status %}
+                        <div class="border rounded p-4">
+                            <!-- 🔍 DEBUG: Show all available data -->
+                            <div class="text-xs text-red-500 mb-2 p-2 bg-red-50 border border-red-200 rounded">
+                                <strong>DEBUG DATA:</strong><br>
+                                Platform: {{ platform_entry.name }}<br>
+                                Is Listed: {{ platform_entry.is_listed }}<br>
+                                Has Details: {{ platform_entry.details is not none }}<br>
+                                {% if platform_entry.details %}
+                                    External ID: "{{ platform_entry.details.external_id or 'NONE' }}"<br>
+                                    Listing URL: "{{ platform_entry.details.listing_url or 'NONE' }}"<br>
+                                    Sync Status: "{{ platform_entry.details.sync_status or 'NONE' }}"<br>
+                                    Last Sync: "{{ platform_entry.details.last_sync or 'NONE' }}"<br>
+                                    Details Keys: {{ platform_entry.details.keys() if platform_entry.details is mapping else 'Not a dict' }}
+                                {% endif %}
+                            </div>
+
+                            <!-- Line 1: Platform Name + Status/Action -->
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="font-medium">{{ platform_entry.name|title }}</span>
+                                <div class="flex items-center space-x-2">
+                                    {% if platform_entry.is_listed and platform_entry.details %}
+                                        {# Show actual platform status instead of sync_status #}
+                                        {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
+                                        {% set status_color_class = 'bg-gray-100 text-gray-800' %} {# Default #}
+                                        {% if platform_status in ['ACTIVE', 'LIVE'] %}
+                                            {% set status_color_class = 'bg-green-100 text-green-800' %}
+                                        {% elif platform_status in ['SOLD', 'ENDED', 'SOLD_OUT'] %}
+                                            {% set status_color_class = 'bg-red-100 text-red-800' %}
+                                        {% elif platform_status in ['DRAFT'] %}
+                                            {% set status_color_class = 'bg-yellow-100 text-yellow-800' %}
+                                        {% endif %}
+                                        <span class="px-2 py-1 text-xs rounded {{ status_color_class }}">
+                                            {{ platform_status }}
+                                        </span>
+                                    {% else %}
+                                        <!-- Not Listed + List Item button on same line -->
+                                        <span class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-700">
+                                            Not Listed
+                                        </span>
+                                        <form action="{{ url_for('create_platform_listing_from_detail', product_id=product.id, platform_slug=platform_entry.slug) }}" method="POST" class="inline">
+                                            <button type="submit" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
+                                                List Item
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if platform_entry.is_listed and platform_entry.details %}
+                                <!-- Line 2: ID + Show Listing button -->
+                                <div class="flex justify-between items-center text-sm text-gray-600 mb-1">
+                                    <span>ID: {{ platform_entry.details.external_id or 'N/A' }}</span>
+                                    
+                                    <!-- 🔍 DEBUG: Force show the button with debug info -->
+                                    <div class="flex items-center space-x-2">
+                                        {% if platform_entry.details.listing_url %}
+                                            <a href="{{ platform_entry.details.listing_url }}" target="_blank" 
+                                            class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
+                                                Show Listing
+                                            </a>
+                                        {% else %}
+                                            <span class="text-xs text-red-500">NO URL FOUND</span>
+                                        {% endif %}
+                                        
+                                        <!-- Force show button regardless -->
+                                        <!-- <a href="https://www.vintageandrare.com/product/{{ platform_entry.details.external_id }}" target="_blank" 
+                                        class="px-2 py-1 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200 focus:outline-none focus:ring-1 focus:ring-green-300">
+                                            Force Open
+                                        </a> -->
+                                    </div>
+                                </div>
+                                <!-- Line 3: Last Sync -->
+                                <div class="text-sm text-gray-600">
+                                    Last Sync: {{ platform_entry.details.last_sync.strftime('%Y-%m-%d %H:%M:%S') if platform_entry.details.last_sync else 'Never' }}
+                                </div>
+                            {% endif %}
                         </div>
-                        <div class="mt-2 text-sm text-gray-600">
-                            ID: {{ listing.external_id }}
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-gray-500 italic">
+                            No platform information available or platforms not configured.
                         </div>
-                        <div class="mt-1 text-sm text-gray-600">
-                            Last Sync: {{ listing.last_sync.strftime('%Y-%m-%d %H:%M:%S') if listing.last_sync else 'Never' }}
-                        </div>
-                    </div>
-                    {% endfor %}
-                    {% if not platform_listings %}
-                    <div class="text-gray-500 italic">
-                        No platform listings available
-                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -110,26 +183,144 @@
                 <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
                     {% if product.primary_image %}
                     <div class="aspect-w-4 aspect-h-3">
-                        <img src="{{ product.primary_image }}" alt="Primary image" class="product-image">
+                        <img src="{{ product.primary_image }}" 
+                            alt="Primary image" 
+                            class="product-image clickable-image primary-image" 
+                            data-full-url="{{ product.primary_image }}"
+                            title="Primary image - Click to view full size">
                     </div>
                     {% endif %}
                     {% for image in product.additional_images %}
                     <div class="aspect-w-4 aspect-h-3">
-                        <!-- <img src="{{ image }}" alt="Additional image" class="object-cover rounded-lg shadow-md"> -->
-                        <img src="{{ image }}" alt="Additional image" class="product-image">
+                        <img src="{{ image }}" 
+                            alt="Additional image" 
+                            class="product-image clickable-image"
+                            data-full-url="{{ image }}"
+                            title="Click to view full size">
                     </div>
                     {% endfor %}
                 </div>
             </div>
             {% endif %}
+
+
         </div>
     </div>
 </div>
+
 <style>
     .product-image {
         max-width: 250px;
         max-height: 250px;
         object-fit: contain;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    .clickable-image {
+        cursor: pointer;
+        transition: opacity 0.2s ease;
+    }
+    
+    .clickable-image:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* ✨ Primary image styling */
+    .primary-image {
+        border: 3px solid #fbbf24; /* Golden border */
+        box-shadow: 0 0 15px rgba(251, 191, 36, 0.4); /* Golden glow */
+        position: relative;
+    }
+    
+    .primary-image:hover {
+        border-color: #f59e0b; /* Darker gold on hover */
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);
+        transform: scale(1.08); /* Slightly bigger hover effect */
     }
 </style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check URL parameters for brand validation feedback
+        
+        // Add click handlers for images
+        const clickableImages = document.querySelectorAll('.clickable-image');
+        clickableImages.forEach(image => {
+            image.addEventListener('click', function() {
+                const fullUrl = this.getAttribute('data-full-url');
+                if (fullUrl) {
+                    // Open in new tab
+                    window.open(fullUrl, '_blank');
+                }
+            });
+        });
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const message = urlParams.get('message');
+        const messageType = urlParams.get('message_type');
+        const fallbackUrl = urlParams.get('fallback_url');
+        
+        // Display message if present
+        if (message) {
+            displayMessage(message, messageType);
+        }
+        
+        // Handle fallback brand confirmation
+        if (fallbackUrl && messageType === 'warning') {
+            // Show confirmation dialog for brand fallback
+            const confirmed = confirm(
+                `${message}\n\n` +
+                `Click OK to proceed with 'Justin' as the brand, or Cancel to go back.`
+            );
+            
+            if (confirmed) {
+                // User confirmed - redirect to fallback URL
+                window.location.href = fallbackUrl;
+            } else {
+                // User cancelled - clear the URL parameters to remove the message
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+        
+        function displayMessage(message, type) {
+            // Create message element
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `alert alert-${type || 'info'} mb-4 p-4 rounded-md`;
+            
+            // Set colors based on message type
+            if (type === 'error') {
+                messageDiv.className += ' bg-red-100 border border-red-400 text-red-700';
+            } else if (type === 'warning') {
+                messageDiv.className += ' bg-yellow-100 border border-yellow-400 text-yellow-700';
+            } else if (type === 'success') {
+                messageDiv.className += ' bg-green-100 border border-green-400 text-green-700';
+            } else {
+                messageDiv.className += ' bg-blue-100 border border-blue-400 text-blue-700';
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span>${message.replace(/\+/g, ' ')}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-lg">&times;</button>
+                </div>
+            `;
+            
+            // Insert at the top of the container
+            const container = document.querySelector('.container');
+            container.insertBefore(messageDiv, container.firstChild);
+            
+            // Auto-remove success/info messages after 5 seconds
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    if (messageDiv.parentElement) {
+                        messageDiv.remove();
+                    }
+                }, 5000);
+            }
+        }
+    });
+</script>
+
 {% endblock %}

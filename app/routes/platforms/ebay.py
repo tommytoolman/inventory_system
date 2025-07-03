@@ -85,7 +85,7 @@ async def run_ebay_sync_background(db: AsyncSession, settings: Settings):
         # Run the import process
         result = await ebay_service.sync_inventory_from_ebay(progress_callback=send_progress)
         
-        if result.get('errors', 0) == 0:
+        if result.get('api_errors', 0) == 0: # Primary check for API-level success
             # Update last_sync timestamp for eBay platform entries
             update_query = text("""
                 UPDATE platform_common 
@@ -95,48 +95,96 @@ async def run_ebay_sync_background(db: AsyncSession, settings: Settings):
             """)
             await db.execute(update_query)
             
-            # Log successful sync
+            # Log successful sync (or sync with details if there were partial errors)
+            total_api_items = result.get('total_api_items', 0)
+            processed_db_items = result.get('processed_db_items', 0)
+            created_db = result.get('created_db', 0)
+            updated_db = result.get('updated_db', 0)
+            marked_sold_db = result.get('marked_sold_db', 0)
+            db_errors = result.get('db_errors', 0)
+            api_errors = result.get('api_errors', 0) # Already checked above, but good to have for logging
+
+            # Determine overall status message based on errors
+            log_status_message = "success"
+            icon = "✅"
+            if db_errors > 0 or api_errors > 0: # If there were any errors at all
+                log_status_message = f"completed with {db_errors + api_errors} errors"
+                icon = "⚠️" # Use a warning icon if there were errors but we are still in this "success" block of the route
+
+            activity_log_message_str = (
+                f"Synced eBay. API Items: {total_api_items}, "
+                f"DB Processed: {processed_db_items} (Created: {created_db}, Updated: {updated_db}, Sold: {marked_sold_db}). "
+                f"DB Errors: {db_errors}, API Errors: {api_errors}"
+            )
+
             await activity_logger.log_activity(
-                action="sync",
+                action="sync", # Consider changing action if errors occurred, e.g., "sync_completed_with_issues"
                 entity_type="platform", 
                 entity_id="ebay",
                 platform="ebay",
                 details={
-                    "status": "success",
-                    "processed": result.get('total', 0),
-                    "created": result.get('created', 0),
-                    "updated": result.get('updated', 0),
-                    "errors": result.get('errors', 0),
-                    "icon": "✅",
-                    "message": f"Synced eBay ({result.get('total', 0)} items)"
+                    "status": log_status_message,
+                    "total_api_items": total_api_items,
+                    "processed_db_items": processed_db_items,
+                    "created_db": created_db,
+                    "updated_db": updated_db,
+                    "marked_sold_db": marked_sold_db,
+                    "db_errors": db_errors,
+                    "api_errors": api_errors,
+                    "icon": icon,
+                    "message": activity_log_message_str
                 }
             )
             
-            # Send success notification
+            # Send success notification (status reflects if there were any DB errors)
+            websocket_status = "success"
+            if result.get('db_errors', 0) > 0 or result.get('api_errors', 0) > 0: # Check both from the service result
+                websocket_status = "error" # Or "success_with_issues" if your frontend can handle it
+
             await manager.broadcast({
                 "type": "sync_completed",
                 "platform": "ebay",
-                "status": "success",
-                "data": result,
+                "status": websocket_status, # More accurate status
+                "data": result, # This is the detailed dict from ebay_service.py
+                "message": activity_log_message_str, # Send the detailed message too
                 "timestamp": datetime.now().isoformat()
             })
+            
             logger.info(f"eBay import process result: {result}")
-        else:
-            # Log failed sync
+        
+        else: # This 'else' corresponds to your 'if result.get('api_errors', 0) == 0:' condition
+            # This block now means there were API errors or other critical failures identified by the service
+            # which prevented the main "success" path.
+            
+            # Try to get a specific message if the service provided one,
+            # otherwise create a generic one.
+            error_message_from_service = "eBay sync failed with API errors or other critical issues."
+            if result and isinstance(result, dict): # Ensure result is a dict
+                if result.get('message'): # If service explicitly provides a top-level error message
+                    error_message_from_service = result.get('message')
+                else: # Construct from error counts
+                    api_errors = result.get('api_errors', 0)
+                    db_errors = result.get('db_errors', 0)
+                    if api_errors > 0 or db_errors > 0:
+                        error_message_from_service = f"eBay sync failed. API Errors: {api_errors}, DB Errors: {db_errors}."
+                    # else: result might be an empty dict or unexpected structure if service failed badly
+            
+            logger.error(f"eBay sync failed or completed with significant errors: {error_message_from_service}. Full result: {result}")
+
             await activity_logger.log_activity(
                 action="sync_error",
                 entity_type="platform",
-                entity_id="ebay", 
+                entity_id="ebay",
                 platform="ebay",
-                details={"error": f"Completed with {result.get('errors', 0)} errors"}
+                details={"error": error_message_from_service, "full_result_summary": str(result)[:500]} # Log summary of result
             )
             
-            # Send error notification
             await manager.broadcast({
                 "type": "sync_completed",
                 "platform": "ebay",
                 "status": "error",
-                "message": f"Completed with {result.get('errors', 0)} errors",
+                "message": error_message_from_service,
+                "data": result, # Send the result from service for debugging on client if needed
                 "timestamp": datetime.now().isoformat()
             })
             logger.error(f"eBay sync completed with errors: {result.get('errors', 0)}")

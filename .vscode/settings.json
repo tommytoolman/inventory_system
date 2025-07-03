@@ -1,7 +1,19 @@
 {
-    "workbench.colorTheme": "Python Stereo Darker",
-    "workbench.colorCustomizations": {
-        "tab.activeBorder": "#ffffab",
-        "tab.unfocusedActiveBorder": "#000000"
-    }
+"workbench.colorTheme": "Minone",
+"workbench.colorCustomizations": {
+    "tab.activeBorder": "#ffffab",
+    "tab.unfocusedActiveBorder": "#000000"
+},
+"files.associations": {
+    "*.html": "html"
+},
+"emmet.includeLanguages": {
+    "jinja-html": "html"
+},
+"[jinja-html]": {
+    "typescript.validate.enable": false,
+    "javascript.validate.enable": false
+},
+"html.validate.scripts": false,
+"html.validate.styles": false
 }

@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:50:04.289996",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Burrns",
+      "new_brand": "Burns",
+      "count": 1
+    }
+  ]
+}

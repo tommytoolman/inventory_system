@@ -3,7 +3,7 @@ from .platform_common import PlatformCommon, ListingStatus, SyncStatus
 from .ebay import EbayListing
 from .reverb import ReverbListing
 from .vr import VRListing
-from .website import WebsiteListing
+from .shopify import ShopifyListing
 from .sale import Sale
 from .category_mapping import CategoryMapping 
 from .product_mapping import ProductMapping   
@@ -23,7 +23,7 @@ __all__ = [
     'EbayListing',
     'ReverbListing',
     'VRListing',
-    'WebsiteListing',
+    'ShopifyListing',
     'Sale',
     'CategoryMapping',
     'ProductMapping',

@@ -1,0 +1,1078 @@
+{
+  "id": 90053379,
+  "make": "Fender",
+  "model": "Telecaster",
+  "finish": "Blonde",
+  "year": "1958",
+  "title": "Fender Telecaster 1958 - Blonde",
+  "created_at": "2025-05-16T06:46:54-05:00",
+  "shop_name": "London Vintage Guitars of Denmark Street, UK & Amsterdam, NL",
+  "shop": {
+    "feedback_count": 1859,
+    "preferred_seller": true,
+    "rating_percentage": 1.0
+  },
+  "description": "<p><b><strong>THE PLAYERS 58&nbsp;</strong></b></p><p>We are happy to offer the following original 1958 Fender Telecaster featuring a later period correct body only  cellulose ash blonde finish. details as follows.</p><p><b><strong>Fender Telecaster&nbsp;</strong></b></p><p>1958&nbsp;</p><p>Blonde&nbsp;</p><p>Maple Neck&nbsp;</p><p>White Guard&nbsp;</p><p>Weight&nbsp;- 3KG </p><p>Neck Depth -12th fret  24.6mm &nbsp;- 1st fret 20.9mm </p><p>Original Pickups , Hardware , Electronics </p><p>Internally/Externally original Except for later Cellulose Body Finish&nbsp;</p><p>Case (Later 60s)&nbsp;</p><p>Sound / Tone - Optumin sounding and feeling original 50s Telecaster&nbsp;</p><p><b><strong>Comments&nbsp;</strong></b></p><p>The above instrument will appeal to those players and collectors whom require a classic 50s Telecaster at somewhat more of an affordable pricing level than that of a \u00a330,000 + Original&nbsp;</p><p><br></p><p><b><strong>ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID</strong></b></p><p>All purchases include EU Taxes / Duties paid , ie nothing further is due on receipt of goods to any EU State.</p><p><b><strong>WHY BUY FROM US&nbsp;</strong></b></p><p>We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping each item will be fully serviced and professionally packed&nbsp;</p><p><b><strong>SELL - TRADE - CONSIGN&nbsp;</strong></b></p><p>If you are looking to sell, trade or consign any of your classic gear please contact us by message.</p><p><b><strong>WORLDWIDE COLLECTION - DELIVERY&nbsp;</strong></b></p><p>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam and Chicago.</p><p><b><strong>VALUATION SERVICE&nbsp;</strong></b></p><p>If you require a valuation of any of your classic year please forward a brief description and pictures and we will come back to your ASAP.</p>",
+  "condition": {
+    "uuid": "df268ad1-c462-4ba6-b6db-e007e23922ea",
+    "display_name": "Excellent",
+    "slug": "excellent"
+  },
+  "price": {
+    "tax_included": false,
+    "amount": "13499.00",
+    "amount_cents": 1349900,
+    "currency": "GBP",
+    "symbol": "\u00a3",
+    "display": "\u00a313,499"
+  },
+  "buyer_price": {
+    "tax_included": false,
+    "amount": "13499.00",
+    "amount_cents": 1349900,
+    "currency": "GBP",
+    "symbol": "\u00a3",
+    "display": "\u00a313,499"
+  },
+  "inventory": 1,
+  "has_inventory": false,
+  "offers_enabled": true,
+  "categories": [
+    {
+      "uuid": "e57deb7a-382b-4e18-a008-67d4fbcb2879",
+      "full_name": "Electric Guitars / Solid Body"
+    }
+  ],
+  "listing_currency": "GBP",
+  "published_at": "2025-05-16T10:56:55-05:00",
+  "state": {
+    "slug": "live",
+    "description": "Live"
+  },
+  "auction": false,
+  "shop_id": 46591,
+  "price_guide_id": "726",
+  "shipping": {
+    "free_expedited_shipping": false,
+    "local": false,
+    "rates": [
+      {
+        "region_code": "GB",
+        "rate": {
+          "amount": "60.00",
+          "amount_cents": 6000,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a360"
+        },
+        "carrier_calculated": false,
+        "regional": false,
+        "destination_postal_code_needed": false
+      },
+      {
+        "region_code": "US",
+        "rate": {
+          "amount": "200.00",
+          "amount_cents": 20000,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a3200"
+        },
+        "carrier_calculated": false,
+        "regional": false,
+        "destination_postal_code_needed": false
+      },
+      {
+        "region_code": "EUR_EU",
+        "rate": {
+          "amount": "200.00",
+          "amount_cents": 20000,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a3200"
+        },
+        "carrier_calculated": false,
+        "regional": false,
+        "destination_postal_code_needed": false
+      },
+      {
+        "region_code": "XX",
+        "rate": {
+          "amount": "200.00",
+          "amount_cents": 20000,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a3200"
+        },
+        "carrier_calculated": false,
+        "regional": false,
+        "destination_postal_code_needed": false
+      }
+    ],
+    "user_region_rate": {
+      "region_code": "GB",
+      "rate": {
+        "amount": "60.00",
+        "amount_cents": 6000,
+        "currency": "GBP",
+        "symbol": "\u00a3",
+        "display": "\u00a360"
+      },
+      "incremental_rate": {
+        "amount": "60.00",
+        "amount_cents": 6000,
+        "currency": "GBP",
+        "symbol": "\u00a3",
+        "display": "\u00a360"
+      },
+      "carrier_calculated": false,
+      "regional": false,
+      "destination_postal_code_needed": false
+    },
+    "initial_offer_rate": {
+      "region_code": "GB",
+      "rate": {
+        "original": {
+          "amount": "60.00",
+          "amount_cents": 6000,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a360"
+        },
+        "display": {
+          "amount": "60.00",
+          "amount_cents": 6000,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a360"
+        }
+      },
+      "carrier_calculated": false,
+      "regional": false,
+      "destination_postal_code_needed": false
+    }
+  },
+  "in_watchlist": false,
+  "us_outlet": false,
+  "_links": {
+    "photo": {
+      "href": "https://rvb-img.reverb.com/image/upload/s--SLiS3KOp--/a_0/f_auto,t_large/v1747396027/uvlir50muevhexzqnulf.jpg"
+    },
+    "self": {
+      "href": "https://api.reverb.com/api/listings/90053379-fender-telecaster-1958-blonde"
+    },
+    "update": {
+      "href": "https://api.reverb.com/api/listings/90053379-fender-telecaster-1958-blonde",
+      "method": "PUT"
+    },
+    "bump": {
+      "href": "https://api.reverb.com/api/listings/90053379/bump"
+    },
+    "end": {
+      "href": "https://api.reverb.com/api/my/listings/90053379/state/end",
+      "method": "PUT"
+    },
+    "edit": {
+      "href": "https://api.reverb.com/api/listings/90053379-fender-telecaster-1958-blonde/edit"
+    },
+    "web": {
+      "href": "https://reverb.com/item/90053379-fender-telecaster-1958-blonde"
+    },
+    "make_offer": {
+      "href": "https://api.reverb.com/api/listings/90053379-fender-telecaster-1958-blonde/offer",
+      "method": "POST"
+    },
+    "cart": {
+      "href": "https://api.reverb.com/api/cart/90053379"
+    },
+    "watchlist": {
+      "href": "https://api.reverb.com/api/wants/90053379-fender-telecaster-1958-blonde"
+    },
+    "buy": {
+      "href": "https://reverb.com/uk/cart/add?cart_item%5Baction_source_attributes%5D%5Bdevice%5D=web&cart_item%5Bproduct_id%5D=90053379&token=7c15db2bbe8ef3cdea2ec1d734914597d64651aff6034fd1b86cd2d5b680a373"
+    },
+    "flag": {
+      "href": "https://api.reverb.com/api/listings/90053379-fender-telecaster-1958-blonde/flag"
+    },
+    "contact_seller": {
+      "web": {
+        "href": "https://reverb.com/uk/my/messages/new?item=90053379-fender-telecaster-1958-blonde&recipient_uuid=8f5593c2-2e82-4e1a-a20a-5d548493ab36&token=7c15db2bbe8ef3cdea2ec1d734914597d64651aff6034fd1b86cd2d5b680a373"
+      }
+    },
+    "conversations": {
+      "href": "https://api.reverb.com/api/listings/90053379/conversations"
+    },
+    "shop": {
+      "href": "https://api.reverb.com/api/shops/hanks",
+      "web": {
+        "href": "https://reverb.com/uk/shop/hanks"
+      }
+    },
+    "comparison_shopping": {
+      "href": "https://api.reverb.com/api/comparison_shopping_pages/22822"
+    },
+    "sales": {
+      "href": "https://api.reverb.com/api/listings/90053379/sales"
+    },
+    "brand": {
+      "href": "https://api.reverb.com/api/listings?brand_slug=fender"
+    }
+  },
+  "accepted_payment_methods": [
+    "direct_checkout",
+    "paypal"
+  ],
+  "location": {
+    "region": "ENG",
+    "locality": "London",
+    "country_code": "GB",
+    "display_location": "London, United Kingdom"
+  },
+  "handmade": false,
+  "draft": false,
+  "live": true,
+  "local_pickup_only": false,
+  "cloudinary_photos": [
+    {
+      "id": 248637461,
+      "public_id": "uvlir50muevhexzqnulf",
+      "version": "1747396027",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396027/uvlir50muevhexzqnulf.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--mAgcVp3D--/v1747396027/uvlir50muevhexzqnulf.jpg"
+    },
+    {
+      "id": 248637462,
+      "public_id": "dyodrneslk7zt1tfz4rt",
+      "version": "1747396025",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396025/dyodrneslk7zt1tfz4rt.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--LeCUUmye--/v1747396025/dyodrneslk7zt1tfz4rt.jpg"
+    },
+    {
+      "id": 248637463,
+      "public_id": "soyi1udknjsalobreo5q",
+      "version": "1747396026",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396026/soyi1udknjsalobreo5q.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--neFCnl7a--/v1747396026/soyi1udknjsalobreo5q.jpg"
+    },
+    {
+      "id": 248637464,
+      "public_id": "cqci2sfhrpoyttuscbvj",
+      "version": "1747396025",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396025/cqci2sfhrpoyttuscbvj.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--BYbkyPoJ--/v1747396025/cqci2sfhrpoyttuscbvj.jpg"
+    },
+    {
+      "id": 248637465,
+      "public_id": "npxgevrb3getyafpv6ms",
+      "version": "1747396025",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396025/npxgevrb3getyafpv6ms.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--52lftdQ9--/v1747396025/npxgevrb3getyafpv6ms.jpg"
+    },
+    {
+      "id": 248637466,
+      "public_id": "xsh813tyzws45uoyirwi",
+      "version": "1747396026",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396026/xsh813tyzws45uoyirwi.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--ayN6U3Nt--/v1747396026/xsh813tyzws45uoyirwi.jpg"
+    },
+    {
+      "id": 248637467,
+      "public_id": "waz2r6yzenmjhy3epysw",
+      "version": "1747396026",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396026/waz2r6yzenmjhy3epysw.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--Y6aCp-XW--/v1747396026/waz2r6yzenmjhy3epysw.jpg"
+    },
+    {
+      "id": 248637468,
+      "public_id": "ridquhy3mbv5gwfvp0vg",
+      "version": "1747396026",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396026/ridquhy3mbv5gwfvp0vg.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--YOeeFYDJ--/v1747396026/ridquhy3mbv5gwfvp0vg.jpg"
+    },
+    {
+      "id": 248637469,
+      "public_id": "bdkogqnhppvqkz7ez6k7",
+      "version": "1747396026",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396026/bdkogqnhppvqkz7ez6k7.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s---diG_VDV--/v1747396026/bdkogqnhppvqkz7ez6k7.jpg"
+    },
+    {
+      "id": 248637470,
+      "public_id": "jrhkt9oju6trriywbkd4",
+      "version": "1747396026",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396026/jrhkt9oju6trriywbkd4.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--yIEZYIDk--/v1747396026/jrhkt9oju6trriywbkd4.jpg"
+    },
+    {
+      "id": 248637471,
+      "public_id": "wwpdry55mbnivdcwcu6o",
+      "version": "1747396027",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396027/wwpdry55mbnivdcwcu6o.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--MRZyfp7p--/v1747396027/wwpdry55mbnivdcwcu6o.jpg"
+    },
+    {
+      "id": 248637472,
+      "public_id": "ui6zavmxpbnfzxlsddks",
+      "version": "1747396027",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396027/ui6zavmxpbnfzxlsddks.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--TTnCDUnd--/v1747396027/ui6zavmxpbnfzxlsddks.jpg"
+    },
+    {
+      "id": 248637473,
+      "public_id": "k2udlfr1izvsro86qd1s",
+      "version": "1747396027",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396027/k2udlfr1izvsro86qd1s.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--c_jKg8rd--/v1747396027/k2udlfr1izvsro86qd1s.jpg"
+    },
+    {
+      "id": 248637474,
+      "public_id": "camvhmnzcewa0pzx9nbo",
+      "version": "1747396027",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396027/camvhmnzcewa0pzx9nbo.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--hqdKK9hb--/v1747396027/camvhmnzcewa0pzx9nbo.jpg"
+    },
+    {
+      "id": 248637475,
+      "public_id": "svyalylxw1alglka1ss5",
+      "version": "1747396027",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396027/svyalylxw1alglka1ss5.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--98PjMH0O--/v1747396027/svyalylxw1alglka1ss5.jpg"
+    },
+    {
+      "id": 248637476,
+      "public_id": "owdpmemp27kzutpbax7a",
+      "version": "1747396028",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396028/owdpmemp27kzutpbax7a.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--VnAcGRuk--/v1747396028/owdpmemp27kzutpbax7a.jpg"
+    },
+    {
+      "id": 248637477,
+      "public_id": "kqajo4gocrtqutkymav9",
+      "version": "1747396028",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396028/kqajo4gocrtqutkymav9.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--_mTe0U2l--/v1747396028/kqajo4gocrtqutkymav9.jpg"
+    },
+    {
+      "id": 248637478,
+      "public_id": "ojdirsefeg5zp1unqoif",
+      "version": "1747396028",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396028/ojdirsefeg5zp1unqoif.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--pYaIIidR--/v1747396028/ojdirsefeg5zp1unqoif.jpg"
+    },
+    {
+      "id": 248637479,
+      "public_id": "gycgjis4gzo9jjbwb7td",
+      "version": "1747396028",
+      "width": 1500,
+      "height": 1500,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747396028/gycgjis4gzo9jjbwb7td.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--YB-IQFqV--/v1747396028/gycgjis4gzo9jjbwb7td.jpg"
+    },
+    {
+      "id": 249403585,
+      "public_id": "gm8ztpazrvtaeqxu3yvw",
+      "version": "1747695207",
+      "width": 4590,
+      "height": 4590,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747695207/gm8ztpazrvtaeqxu3yvw.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--J8WVp0m8--/v1747695207/gm8ztpazrvtaeqxu3yvw.jpg"
+    },
+    {
+      "id": 249403586,
+      "public_id": "g9cf1wolmg4tkabgwrcg",
+      "version": "1747695208",
+      "width": 4084,
+      "height": 4084,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747695208/g9cf1wolmg4tkabgwrcg.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--QBqYXQ7Y--/v1747695208/g9cf1wolmg4tkabgwrcg.jpg"
+    },
+    {
+      "id": 249403587,
+      "public_id": "avs10yk9vknybbhcmchb",
+      "version": "1747695208",
+      "width": 4837,
+      "height": 4837,
+      "format": "jpg",
+      "resource_type": "image",
+      "transformation": {
+        "width": "",
+        "height": "",
+        "x": "",
+        "y": "",
+        "crop": "",
+        "angle": 0
+      },
+      "path": "v1747695208/avs10yk9vknybbhcmchb.jpg",
+      "preview_url": "https://rvb-img.reverb.com/image/upload/s--0Oe4k8T2--/v1747695208/avs10yk9vknybbhcmchb.jpg"
+    }
+  ],
+  "photos": [
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--SLiS3KOp--/a_0/f_auto,t_large/v1747396027/uvlir50muevhexzqnulf.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--6Rmj1yDw--/a_0/t_card-square/v1747396027/uvlir50muevhexzqnulf.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--SLiS3KOp--/a_0/f_auto,t_large/v1747396027/uvlir50muevhexzqnulf.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--6Rmj1yDw--/a_0/t_card-square/v1747396027/uvlir50muevhexzqnulf.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--8u9-NWCb--/a_0/f_auto,t_large/v1747396025/dyodrneslk7zt1tfz4rt.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--attDOA2z--/a_0/t_card-square/v1747396025/dyodrneslk7zt1tfz4rt.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--8u9-NWCb--/a_0/f_auto,t_large/v1747396025/dyodrneslk7zt1tfz4rt.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--attDOA2z--/a_0/t_card-square/v1747396025/dyodrneslk7zt1tfz4rt.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--5qolZRmk--/a_0/f_auto,t_large/v1747396026/soyi1udknjsalobreo5q.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--3gQDKh8O--/a_0/t_card-square/v1747396026/soyi1udknjsalobreo5q.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--5qolZRmk--/a_0/f_auto,t_large/v1747396026/soyi1udknjsalobreo5q.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--3gQDKh8O--/a_0/t_card-square/v1747396026/soyi1udknjsalobreo5q.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--bNghnre0--/a_0/f_auto,t_large/v1747396025/cqci2sfhrpoyttuscbvj.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--V3hk0NNN--/a_0/t_card-square/v1747396025/cqci2sfhrpoyttuscbvj.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--bNghnre0--/a_0/f_auto,t_large/v1747396025/cqci2sfhrpoyttuscbvj.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--V3hk0NNN--/a_0/t_card-square/v1747396025/cqci2sfhrpoyttuscbvj.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--Kwojn1Ww--/a_0/f_auto,t_large/v1747396025/npxgevrb3getyafpv6ms.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--UNY4jXUN--/a_0/t_card-square/v1747396025/npxgevrb3getyafpv6ms.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--Kwojn1Ww--/a_0/f_auto,t_large/v1747396025/npxgevrb3getyafpv6ms.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--UNY4jXUN--/a_0/t_card-square/v1747396025/npxgevrb3getyafpv6ms.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--tFzS4RP_--/a_0/f_auto,t_large/v1747396026/xsh813tyzws45uoyirwi.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--JGXRgkBC--/a_0/t_card-square/v1747396026/xsh813tyzws45uoyirwi.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--tFzS4RP_--/a_0/f_auto,t_large/v1747396026/xsh813tyzws45uoyirwi.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--JGXRgkBC--/a_0/t_card-square/v1747396026/xsh813tyzws45uoyirwi.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--xaicykMT--/a_0/f_auto,t_large/v1747396026/waz2r6yzenmjhy3epysw.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--HWb9BMg0--/a_0/t_card-square/v1747396026/waz2r6yzenmjhy3epysw.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--xaicykMT--/a_0/f_auto,t_large/v1747396026/waz2r6yzenmjhy3epysw.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--HWb9BMg0--/a_0/t_card-square/v1747396026/waz2r6yzenmjhy3epysw.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--mcthOchn--/a_0/f_auto,t_large/v1747396026/ridquhy3mbv5gwfvp0vg.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--8zTmd0Gq--/a_0/t_card-square/v1747396026/ridquhy3mbv5gwfvp0vg.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--mcthOchn--/a_0/f_auto,t_large/v1747396026/ridquhy3mbv5gwfvp0vg.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--8zTmd0Gq--/a_0/t_card-square/v1747396026/ridquhy3mbv5gwfvp0vg.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--JFhi37dy--/a_0/f_auto,t_large/v1747396026/bdkogqnhppvqkz7ez6k7.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--kTOkN1_O--/a_0/t_card-square/v1747396026/bdkogqnhppvqkz7ez6k7.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--JFhi37dy--/a_0/f_auto,t_large/v1747396026/bdkogqnhppvqkz7ez6k7.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--kTOkN1_O--/a_0/t_card-square/v1747396026/bdkogqnhppvqkz7ez6k7.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s---u-fPNRK--/a_0/f_auto,t_large/v1747396026/jrhkt9oju6trriywbkd4.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--zeLyydzr--/a_0/t_card-square/v1747396026/jrhkt9oju6trriywbkd4.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s---u-fPNRK--/a_0/f_auto,t_large/v1747396026/jrhkt9oju6trriywbkd4.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--zeLyydzr--/a_0/t_card-square/v1747396026/jrhkt9oju6trriywbkd4.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--OObWY1F1--/a_0/f_auto,t_large/v1747396027/wwpdry55mbnivdcwcu6o.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--xdQeP5tR--/a_0/t_card-square/v1747396027/wwpdry55mbnivdcwcu6o.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--OObWY1F1--/a_0/f_auto,t_large/v1747396027/wwpdry55mbnivdcwcu6o.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--xdQeP5tR--/a_0/t_card-square/v1747396027/wwpdry55mbnivdcwcu6o.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--sWRN5v3D--/a_0/f_auto,t_large/v1747396027/ui6zavmxpbnfzxlsddks.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--ihsR_2QF--/a_0/t_card-square/v1747396027/ui6zavmxpbnfzxlsddks.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--sWRN5v3D--/a_0/f_auto,t_large/v1747396027/ui6zavmxpbnfzxlsddks.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--ihsR_2QF--/a_0/t_card-square/v1747396027/ui6zavmxpbnfzxlsddks.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--vBaC3rOZ--/a_0/f_auto,t_large/v1747396027/k2udlfr1izvsro86qd1s.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--0Avhx7zN--/a_0/t_card-square/v1747396027/k2udlfr1izvsro86qd1s.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--vBaC3rOZ--/a_0/f_auto,t_large/v1747396027/k2udlfr1izvsro86qd1s.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--0Avhx7zN--/a_0/t_card-square/v1747396027/k2udlfr1izvsro86qd1s.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--Dayjapx1--/a_0/f_auto,t_large/v1747396027/camvhmnzcewa0pzx9nbo.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--phkyIIx8--/a_0/t_card-square/v1747396027/camvhmnzcewa0pzx9nbo.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--Dayjapx1--/a_0/f_auto,t_large/v1747396027/camvhmnzcewa0pzx9nbo.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--phkyIIx8--/a_0/t_card-square/v1747396027/camvhmnzcewa0pzx9nbo.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--ozkr1bt9--/a_0/f_auto,t_large/v1747396027/svyalylxw1alglka1ss5.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--81YpzmCC--/a_0/t_card-square/v1747396027/svyalylxw1alglka1ss5.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--ozkr1bt9--/a_0/f_auto,t_large/v1747396027/svyalylxw1alglka1ss5.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--81YpzmCC--/a_0/t_card-square/v1747396027/svyalylxw1alglka1ss5.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--uVWpvJqZ--/a_0/f_auto,t_large/v1747396028/owdpmemp27kzutpbax7a.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--hjqlV__i--/a_0/t_card-square/v1747396028/owdpmemp27kzutpbax7a.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--uVWpvJqZ--/a_0/f_auto,t_large/v1747396028/owdpmemp27kzutpbax7a.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--hjqlV__i--/a_0/t_card-square/v1747396028/owdpmemp27kzutpbax7a.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--thmfnZBP--/a_0/f_auto,t_large/v1747396028/kqajo4gocrtqutkymav9.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--3J5oQNDu--/a_0/t_card-square/v1747396028/kqajo4gocrtqutkymav9.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--thmfnZBP--/a_0/f_auto,t_large/v1747396028/kqajo4gocrtqutkymav9.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--3J5oQNDu--/a_0/t_card-square/v1747396028/kqajo4gocrtqutkymav9.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--N3B8BhS4--/a_0/f_auto,t_large/v1747396028/ojdirsefeg5zp1unqoif.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--XxOlZm9b--/a_0/t_card-square/v1747396028/ojdirsefeg5zp1unqoif.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--N3B8BhS4--/a_0/f_auto,t_large/v1747396028/ojdirsefeg5zp1unqoif.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--XxOlZm9b--/a_0/t_card-square/v1747396028/ojdirsefeg5zp1unqoif.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--pxbz0kv---/a_0/f_auto,t_large/v1747396028/gycgjis4gzo9jjbwb7td.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--tspCICU9--/a_0/t_card-square/v1747396028/gycgjis4gzo9jjbwb7td.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--pxbz0kv---/a_0/f_auto,t_large/v1747396028/gycgjis4gzo9jjbwb7td.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--tspCICU9--/a_0/t_card-square/v1747396028/gycgjis4gzo9jjbwb7td.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--6VB5A7H8--/a_0/f_auto,t_large/v1747695207/gm8ztpazrvtaeqxu3yvw.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--4pS7hSAl--/a_0/t_card-square/v1747695207/gm8ztpazrvtaeqxu3yvw.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--6VB5A7H8--/a_0/f_auto,t_large/v1747695207/gm8ztpazrvtaeqxu3yvw.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--4pS7hSAl--/a_0/t_card-square/v1747695207/gm8ztpazrvtaeqxu3yvw.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--onukvAH8--/a_0/f_auto,t_large/v1747695208/g9cf1wolmg4tkabgwrcg.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--_urtYbKc--/a_0/t_card-square/v1747695208/g9cf1wolmg4tkabgwrcg.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--onukvAH8--/a_0/f_auto,t_large/v1747695208/g9cf1wolmg4tkabgwrcg.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--_urtYbKc--/a_0/t_card-square/v1747695208/g9cf1wolmg4tkabgwrcg.jpg"
+        }
+      }
+    },
+    {
+      "_links": {
+        "large_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--4YlDQhJs--/a_0/f_auto,t_large/v1747695208/avs10yk9vknybbhcmchb.jpg"
+        },
+        "small_crop": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--EDACba14--/a_0/t_card-square/v1747695208/avs10yk9vknybbhcmchb.jpg"
+        },
+        "full": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--4YlDQhJs--/a_0/f_auto,t_large/v1747695208/avs10yk9vknybbhcmchb.jpg"
+        },
+        "thumbnail": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--EDACba14--/a_0/t_card-square/v1747695208/avs10yk9vknybbhcmchb.jpg"
+        }
+      }
+    }
+  ],
+  "stats": {
+    "views": 282,
+    "watches": 31
+  },
+  "offer_count": 0,
+  "shipping_policy": "Please contact us for accurate shipping rates",
+  "sold_as_is": false,
+  "upc_does_not_apply": true,
+  "origin_country_code": "US",
+  "same_day_shipping_ineligible": false,
+  "return_policy": {
+    "description": "This product can be returned within 2 days of receipt."
+  },
+  "has_offer_for_buyer": false,
+  "is_my_listing": true,
+  "shipping_profile": {
+    "name": "Electric Guitars",
+    "id": "15655"
+  },
+  "videos": [],
+  "_embedded": {
+    "price_guide": {
+      "id": 726,
+      "title": "Fender Telecaster 1958 Blonde",
+      "make": "Fender",
+      "model": "Telecaster",
+      "year": "1958",
+      "finish": "Blonde",
+      "categories": [
+        {
+          "uuid": "e57deb7a-382b-4e18-a008-67d4fbcb2879",
+          "full_name": "Electric Guitars / Solid Body"
+        }
+      ],
+      "description": "In early 1951, Fender renamed its only production solid-body guitar the Telecaster, replacing the short-lived Broadcaster moniker used in late 1950. The Telecaster quickly became the guitar of its age, propelling the status of the solid-body electric guitar from\u00a0novelty\u00a0to the defining instrument of popular music. Like most long-lasting guitar models, the Tele has seen its share of variations and\u00a0specialty\u00a0models come off the line since the early '50s. The standard no-frills Telecaster, however, has stayed largely the same, strutting two single-coil pickups, a slab body of Ash (or later Alder), and an unmistakable twang that helped shape the sound of country and rock music.\u00a0<b><br><br>Years of Production:\u00a0</b>1951 - present<br><br><b>Unique to this Year:\u00a0</b>Starting in late '58, Fender introduces threaded steel saddles with string terminating at the bridge rather than going through the body. This reverts in 1960.\u00a0<br><br><b>Body Style:\u00a0</b>Single cutaway solid-body<br><br><b>Wood Composition:</b>\u00a0Ash, one-piece Maple neck<br><br><b>Design Elements:\u00a0</b>\u00a0Two single-coil pickups, white plastic pickguard, \u00a0volume and tone\u00a0controls, 25 1/2-inch scale length,\u00a0<br><br><b>Finish Specifications:\u00a0</b>Blond was a standard finish for the Telecaster.<br><br><b>Notable Tele Players:</b>\u00a0Keith Richards, Merle Haggard, Johnny Greenwood, James Burton \u00a0",
+      "estimated_value": {
+        "release_date": "2012-12-01",
+        "price_low": {
+          "amount": "11802.99",
+          "amount_cents": 1180299,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a311,802.99"
+        },
+        "price_high": {
+          "amount": "19671.64",
+          "amount_cents": 1967164,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a319,671.64"
+        }
+      },
+      "_links": {
+        "photo": {
+          "href": "https://rvb-img.reverb.com/image/upload/s--GVy_iByn--/a_exif,c_thumb,f_auto,fl_progressive,g_south,h_296,q_auto:eco,w_296/v1360301932/nwpxpbineaftqw2xfhxy.jpg"
+        },
+        "self": {
+          "href": "https://api.reverb.com/api/priceguide/726"
+        },
+        "web": {
+          "href": "https://reverb.com/price-guide/guide/726-fender-telecaster-1958-blonde"
+        },
+        "transactions": {
+          "href": "https://api.reverb.com/api/priceguide/726/transactions"
+        }
+      }
+    }
+  },
+  "comparison_shopping_page_id": "22822"
+}

@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:04:03.831998",
+  "operation": "manual_standardization",
+  "total_updated": 2,
+  "changes": [
+    {
+      "old_brand": "Burns London",
+      "new_brand": "Burns",
+      "count": 2
+    }
+  ]
+}

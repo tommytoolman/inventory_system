@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:30:21.441237",
+  "operation": "manual_standardization",
+  "total_updated": 2,
+  "changes": [
+    {
+      "old_brand": "Hofner Violin Bass",
+      "new_brand": "Hofner",
+      "count": 2
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:40:19.972024",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "BOSS GRAPHIC",
+      "new_brand": "Boss Graphic",
+      "count": 1
+    }
+  ]
+}

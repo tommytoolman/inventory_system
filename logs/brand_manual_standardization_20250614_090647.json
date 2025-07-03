@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-14T09:06:47.833925",
+  "operation": "manual_standardization",
+  "total_updated": 5,
+  "changes": [
+    {
+      "old_brand": "Larrivee",
+      "new_brand": "L'Arrivee",
+      "count": 5
+    }
+  ]
+}

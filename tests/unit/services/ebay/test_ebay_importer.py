@@ -217,7 +217,7 @@ async def test_process_single_listing(mocker):
     })
     
     # Patch SyncStatus in the module context
-    # This will prevent the AttributeError when accessing SyncStatus.SUCCESS
+    # This will prevent the AttributeError when accessing SyncStatus.SYNCED
     with patch('app.services.ebay.importer.SyncStatus') as mock_sync_status:
         # Set up the SUCCESS attribute to have a value
         mock_sync_status.SYNCED = MagicMock()

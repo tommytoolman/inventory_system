@@ -15,22 +15,23 @@ from app.core.config import get_settings
 
 from app import models
 
-from app.integrations.setup import setup_stock_manager
-from app.integrations.stock_manager import StockManager
-from app.integrations.platforms.ebay import EbayPlatform
-from app.integrations.platforms.reverb import ReverbPlatform
-from app.routes import shipping, dashboard
+# from app.integrations.setup import setup_stock_manager
+# from app.integrations.stock_manager import StockManager
+# from app.integrations.platforms.ebay import EbayPlatform
+# from app.integrations.platforms.reverb import ReverbPlatform
+from app.routes import shipping, dashboard, sync_scheduler, matching, reports
 from app.routes.platforms.ebay import router as ebay_router
 from app.routes.platforms.reverb import router as reverb_router
 from app.routes.platforms.vr import router as vr_router
 from app.routes.webhooks import router as webhook_router
+
 from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize stock manager
-    app.state.stock_manager = await setup_stock_manager()
+    # app.state.stock_manager = await setup_stock_manager()
    # Try to load Dropbox cache at startup
     try:
         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
@@ -84,17 +85,35 @@ app.include_router(reverb_router)
 app.include_router(vr_router)
 app.include_router(webhook_router)
 app.include_router(websocket_router.router)
+app.include_router(sync_scheduler.router)
+app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(shipping.router)
+app.include_router(matching.router, prefix="/matching", tags=["matching"])
 
-print("Registered routes:")
-for route in app.routes:
-    if hasattr(route, 'path') and hasattr(route, 'methods'):
-        print(f"  {route.methods} {route.path}")
+## This will show us in CLI all our registered routes. Uncomment to show.
+# print("Registered routes:")
+# for route in app.routes:
+#     if hasattr(route, 'path') and hasattr(route, 'methods'):
+#         print(f"  {route.methods} {route.path}")
 
 # Root redirect
 @app.get("/")
 async def root():
     return RedirectResponse(url="/inventory")
+
+# Root redirect - this might conflict with dashboard.router if dashboard is also on "/"
+# If dashboard.router handles "/", this root redirect might not be hit as dashboard would match first.
+# Check the order or ensure dashboard.router is not on the bare "/" if this redirect is desired.
+# Your dashboard.router is on prefix="", so its @router.get("/") is indeed the root.
+# This @app.get("/") will likely not be reached if dashboard.router handles "/".
+# You might want to remove this or make dashboard.router have a prefix if this is the intended root.
+# For now, assuming dashboard.router serves your root HTML page.
+# @app.get("/")
+# async def root():
+#     return RedirectResponse(url="/inventory") # Or perhaps "/dashboard" if dashboard.py is the entry?
+                                             # Your dashboard.html seems to be served from "/" by dashboard.router
+
+
 
 # Test route for 404
 @app.get("/test-404")
@@ -123,39 +142,8 @@ async def test_db(session: AsyncSession = Depends(get_session)):
             return {"status": "database connected"}
         except Exception as e:
             return {"status": "database error", "detail": str(e)}
-        
-# In main.py or app setup
-# @app.on_event("startup")
-# async def start_background_tasks():
-#     asyncio.create_task(periodic_dropbox_refresh(app))
+       
 
-# In app/main.py
-# @app.on_event("startup")
-# async def start_background_tasks():
-#     # Existing code...
-    
-#     # Try to load Dropbox cache
-#     try:
-#         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
-        
-#         print("Loading Dropbox cache at startup...")
-#         client = AsyncDropboxClient()
-        
-#         # Load cache components
-#         folder_structure = client.load_folder_structure_from_cache()
-#         temp_links = client.load_temp_links_from_cache()
-        
-#         if folder_structure and temp_links:
-#             # Create a dropbox_map in app state
-#             app.state.dropbox_map = {
-#                 'folder_structure': folder_structure,
-#                 'all_entries': [],
-#                 'temp_links': temp_links
-#             }
-#             app.state.dropbox_last_updated = datetime.now()
-#             print(f"Loaded Dropbox cache with {len(temp_links)} temporary links")
-#     except Exception as e:
-#         print(f"Error loading Dropbox cache: {str(e)}")
 
 async def periodic_dropbox_refresh(app):
     """Run the Dropbox refresh periodically"""

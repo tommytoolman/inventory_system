@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+import logging
 
 # Import the correct database session dependency
 from app.database import async_session
@@ -10,248 +11,434 @@ from app.models.platform_common import PlatformCommon
 from app.models.product import Product
 from app.models.activity_log import ActivityLog
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+class DashboardService:
+    """Service class to handle dashboard data collection"""
+    
+    def __init__(self, db: AsyncSession):
+        self.db = db
+        self.platforms = ["ebay", "reverb", "vr", "shopify"]
+        
+    async def get_platform_counts(self) -> dict:
+        """Get counts for all platforms"""
+        platform_counts = {}
+        
+        for platform in self.platforms:
+            logger.info(f"Processing platform: {platform}")
+            
+            if platform == "reverb":
+                counts = await self._get_reverb_counts()
+            elif platform == "ebay":
+                counts = await self._get_ebay_counts()
+            elif platform == "shopify":
+                counts = await self._get_shopify_counts()
+            elif platform == "vr":
+                counts = await self._get_vr_counts()
+            else:
+                counts = await self._get_default_platform_counts(platform)
+            
+            # Add platform-specific counts to main dict
+            for key, value in counts.items():
+                platform_counts[f"{platform}_{key}"] = value
+                
+        return platform_counts
+    
+    async def _get_reverb_counts(self) -> dict:
+        """Get detailed Reverb counts from reverb_listings table"""
+        try:
+            query = text("""
+                SELECT reverb_state, COUNT(*) as count 
+                FROM reverb_listings 
+                GROUP BY reverb_state
+                ORDER BY reverb_state
+            """)
+            result = await self.db.execute(query)
+            rows = result.fetchall()
+            
+            # Initialize counts
+            counts = {
+                "count": 0,      # live = active
+                "sold_count": 0,
+                "ended_count": 0,
+                "draft_count": 0,
+                "other_count": 0,
+                "total": 0
+            }
+            
+            # Map Reverb states to our categories
+            for row in rows:
+                state = row.reverb_state
+                count = row.count
+                
+                if state == 'live':
+                    counts["count"] = count  # live = active
+                elif state == 'sold':
+                    counts["sold_count"] = count
+                elif state == 'ended':
+                    counts["ended_count"] = count
+                elif state == 'draft':
+                    counts["draft_count"] = count
+                else:
+                    counts["other_count"] += count
+            
+            # Calculate total
+            counts["total"] = sum(counts.values()) - counts["total"]  # Exclude total from sum
+            
+            logger.info(f"Reverb counts: {counts}")
+            return counts
+            
+        except Exception as e:
+            logger.error(f"Error getting Reverb counts: {str(e)}")
+            return {
+                "count": 0, "sold_count": 0, "ended_count": 0, 
+                "draft_count": 0, "other_count": 0, "total": 0
+            }
+    
+    async def _get_ebay_counts(self) -> dict:
+        """Get eBay counts from ebay_listings table with debugging"""
+        try:
+            # First, let's see what statuses we actually have
+            debug_query = text("""
+                SELECT listing_status, COUNT(*) as count 
+                FROM ebay_listings 
+                GROUP BY listing_status 
+                ORDER BY count DESC
+            """)
+            debug_result = await self.db.execute(debug_query)
+            debug_rows = debug_result.fetchall()
+            
+            logger.info(f"eBay listing_status breakdown: {[(row.listing_status, row.count) for row in debug_rows]}")
+            
+            # Now get organized counts - CASE INSENSITIVE
+            active_query = text("""
+                SELECT COUNT(*) FROM ebay_listings 
+                WHERE LOWER(listing_status) IN ('active')
+            """)
+            
+            sold_query = text("""
+                SELECT COUNT(*) FROM ebay_listings 
+                WHERE LOWER(listing_status) IN ('sold', 'completed')
+            """)
+            
+            ended_query = text("""
+                SELECT COUNT(*) FROM ebay_listings 
+                WHERE LOWER(listing_status) IN ('ended', 'unsold', 'cancelled', 'suspended')
+            """)
+            
+            draft_query = text("""
+                SELECT COUNT(*) FROM ebay_listings 
+                WHERE LOWER(listing_status) IN ('draft', 'scheduled')
+            """)
+            
+            # Check for other statuses
+            other_query = text("""
+                SELECT COUNT(*) FROM ebay_listings 
+                WHERE LOWER(listing_status) NOT IN (
+                    'active', 'sold', 'completed', 'ended', 'unsold', 
+                    'cancelled', 'suspended', 'draft', 'scheduled'
+                ) OR listing_status IS NULL
+            """)
+            
+            active_result = await self.db.execute(active_query)
+            sold_result = await self.db.execute(sold_query)
+            ended_result = await self.db.execute(ended_query)
+            draft_result = await self.db.execute(draft_query)
+            other_result = await self.db.execute(other_query)
+            
+            counts = {
+                "count": active_result.scalar() or 0,
+                "sold_count": sold_result.scalar() or 0,
+                "ended_count": ended_result.scalar() or 0,
+                "draft_count": draft_result.scalar() or 0,
+                "other_count": other_result.scalar() or 0
+            }
+            
+            # Calculate total
+            counts["total"] = sum(counts.values())
+            
+            logger.info(f"eBay organized counts: {counts}")
+            return counts
+            
+        except Exception as e:
+            logger.error(f"Error getting eBay counts: {str(e)}")
+            return await self._get_default_platform_counts("ebay")
+    
+    async def _get_shopify_counts(self) -> dict:
+        """Get Shopify counts with proper status breakdown"""
+        try:
+            # Query to get status breakdown
+            query = text("""
+                SELECT status, COUNT(*) as count 
+                FROM shopify_listings 
+                GROUP BY status
+                ORDER BY status
+            """)
+            result = await self.db.execute(query)
+            rows = result.fetchall()
+            
+            # Initialize counts
+            counts = {
+                "count": 0,      # active
+                "sold_count": 0,
+                "ended_count": 0,
+                "draft_count": 0,
+                "other_count": 0,
+                "total": 0
+            }
+            
+            # Map Shopify statuses to our categories
+            for row in rows:
+                status = row.status
+                count = row.count  # This should be the COUNT, not the status string
+                
+                if status == 'ACTIVE':  # Note: uppercase to match your data
+                    counts["count"] = count
+                elif status == 'SOLD':
+                    counts["sold_count"] = count
+                elif status in ['ENDED', 'ARCHIVED']:
+                    counts["ended_count"] = count
+                elif status == 'DRAFT':
+                    counts["draft_count"] = count
+                else:
+                    counts["other_count"] += count
+            
+            # Calculate total
+            counts["total"] = sum(v for k, v in counts.items() if k != "total")
+            
+            logger.info(f"Shopify counts: {counts}")
+            return counts
+            
+        except Exception as e:
+            logger.error(f"Error getting Shopify counts: {str(e)}")
+            return {
+                "count": 0, "sold_count": 0, "ended_count": 0, 
+                "draft_count": 0, "other_count": 0, "total": 0
+            }
+    
+    async def _get_vr_counts(self) -> dict:
+        """Get Vintage & Rare counts"""
+        try:
+            query = text("""
+                SELECT vr_state, COUNT(*) as count 
+                FROM vr_listings 
+                GROUP BY vr_state
+                ORDER BY vr_state
+            """)
+            result = await self.db.execute(query)
+            rows = result.fetchall()
+            
+            # Initialize counts
+            counts = {
+                "count": 0,      # active
+                "sold_count": 0,
+                "ended_count": 0,
+                "draft_count": 0,
+                "other_count": 0,
+                "total": 0
+            }
+            
+            # Map V&R states to our categories
+            for row in rows:
+                state = row.vr_state
+                count = row.count
+                
+                if state == 'active':
+                    counts["count"] = count
+                elif state == 'sold':
+                    counts["sold_count"] = count
+                elif state == 'ended':
+                    counts["ended_count"] = count
+                elif state == 'draft':
+                    counts["draft_count"] = count
+                else:
+                    counts["other_count"] += count
+            
+            # Calculate total
+            counts["total"] = sum(counts.values()) - counts["total"]  # Exclude total from sum
+            
+            logger.info(f"V&R counts: {counts}")
+            return counts
+            
+        except Exception as e:
+            logger.error(f"Error getting V&R counts: {str(e)}")
+            return {
+                "count": 0, "sold_count": 0, "ended_count": 0, 
+                "draft_count": 0, "other_count": 0, "total": 0
+            }
+    
+    async def _get_default_platform_counts(self, platform: str) -> dict:
+        """Get counts from platform_common table (fallback)"""
+        try:
+            active_query = select(func.count(PlatformCommon.id)).where(
+                PlatformCommon.platform_name == platform,
+                PlatformCommon.status == "active"
+            )
+            sold_query = select(func.count(PlatformCommon.id)).where(
+                PlatformCommon.platform_name == platform,
+                PlatformCommon.status == "sold"
+            )
+            other_query = select(func.count(PlatformCommon.id)).where(
+                PlatformCommon.platform_name == platform,
+                PlatformCommon.status.notin_(["active", "sold"])
+            )
+            
+            active_result = await self.db.execute(active_query)
+            sold_result = await self.db.execute(sold_query)
+            other_result = await self.db.execute(other_query)
+            
+            counts = {
+                "count": active_result.scalar() or 0,
+                "sold_count": sold_result.scalar() or 0,
+                "other_count": other_result.scalar() or 0
+            }
+            
+            logger.info(f"{platform} (platform_common) counts: {counts}")
+            return counts
+            
+        except Exception as e:
+            logger.error(f"Error getting {platform} counts from platform_common: {str(e)}")
+            return {"count": 0, "sold_count": 0, "other_count": 0}
+    
+    async def get_sync_times(self) -> dict:
+        """Get last sync times for all platforms"""
+        sync_times = {}
+        
+        for platform in self.platforms:
+            try:
+                query = select(PlatformCommon.last_sync).where(
+                    PlatformCommon.platform_name == platform,
+                    PlatformCommon.last_sync.isnot(None)
+                ).order_by(PlatformCommon.last_sync.desc()).limit(1)
+                
+                result = await self.db.execute(query)
+                last_sync = result.scalar_one_or_none()
+                
+                if last_sync:
+                    sync_times[f"{platform}_last_sync"] = last_sync
+                    
+            except Exception as e:
+                logger.error(f"Error getting sync time for {platform}: {str(e)}")
+        
+        return sync_times
+    
+    async def get_platform_connections(self, request: Request, platform_counts: dict) -> dict:
+        """Determine platform connection status"""
+        connections = {}
+        
+        for platform in self.platforms:
+            # Check app state first, fallback to having active listings
+            if hasattr(request.app.state, f"{platform}_connected"):
+                is_connected = getattr(request.app.state, f"{platform}_connected")
+            else:
+                is_connected = platform_counts.get(f"{platform}_count", 0) > 0
+            
+            connections[f"{platform}_connected"] = is_connected
+        
+        return connections
+    
+    async def get_total_products(self) -> int:
+        """Get total product count"""
+        try:
+            query = select(func.count(Product.id))
+            result = await self.db.execute(query)
+            return result.scalar() or 0
+        except Exception as e:
+            logger.error(f"Error getting total products: {str(e)}")
+            return 0
+    
+    async def get_recent_activity(self) -> list:
+        """Get recent activity logs"""
+        try:
+            query = select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(5)
+            result = await self.db.execute(query)
+            logs = result.scalars().all()
+            
+            bst_tz = timezone(timedelta(hours=1))
+            activity = []
+            
+            for log in logs:
+                # Determine icon
+                icon = self._get_activity_icon(log)
+                
+                # Determine message
+                message = self._get_activity_message(log)
+                
+                # Format timestamp
+                if log.created_at.tzinfo is None:
+                    created_at_local = log.created_at.replace(tzinfo=timezone.utc).astimezone(bst_tz)
+                else:
+                    created_at_local = log.created_at.astimezone(bst_tz)
+                
+                activity.append({
+                    "icon": icon,
+                    "message": message,
+                    "time": created_at_local.strftime("%d/%m/%Y, %H:%M:%S")
+                })
+            
+            return activity
+            
+        except Exception as e:
+            logger.error(f"Error getting recent activity: {str(e)}")
+            return []
+    
+    def _get_activity_icon(self, log) -> str:
+        """Get icon for activity log entry"""
+        if log.details and 'icon' in log.details:
+            return log.details['icon']
+        
+        icon_map = {
+            "create": "➕",
+            "update": "🔄", 
+            "delete": "❌",
+            "sync": "✅" if log.details and log.details.get("status") == "success" else "🔄",
+            "sync_start": "🔄",
+            "sync_error": "⚠️",
+            "sale": "💰"
+        }
+        
+        return icon_map.get(log.action, "📝")
+    
+    def _get_activity_message(self, log) -> str:
+        """Get message for activity log entry"""
+        if log.details and 'message' in log.details:
+            return log.details['message']
+        
+        if log.action == "sync":
+            message = f"Synced {log.entity_id}"
+            if log.details and "processed" in log.details:
+                message += f" ({log.details['processed']} items)"
+            return message
+        elif log.action == "sync_start":
+            return f"Started sync for {log.entity_id}"
+        elif log.action == "sync_error":
+            message = f"Error syncing {log.entity_id}"
+            if log.details and "error" in log.details:
+                message += f": {log.details['error'][:30]}..."
+            return message
+        else:
+            message = f"{log.action.capitalize()} {log.entity_type} #{log.entity_id}"
+            if log.platform:
+                message += f" on {log.platform}"
+            return message
+
 
 @router.get("/")
 async def dashboard(request: Request):
     """
-    Render the dashboard/splash page with key metrics
+    Render the dashboard with key metrics
     """
-
-    platform_counts = {}
-    platform_sync_times = {}
-    platforms = ["ebay", "reverb", "vr", "website"]
-    
-    # Create a new session using async_session()
     async with async_session() as db:
         try:
-            # Get counts for all platforms with status breakdown
-            for platform in platforms:
-                try:
-                    # Get active listings
-                    active_query = select(func.count(PlatformCommon.id)).where(
-                        PlatformCommon.platform_name == platform,
-                        PlatformCommon.status == "active" # Changed from ACTIVE
-                    )
-                    active_result = await db.execute(active_query)
-                    active_count = active_result.scalar() or 0
-                    
-                    # Get sold listings
-                    sold_query = select(func.count(PlatformCommon.id)).where(
-                        PlatformCommon.platform_name == platform,
-                        PlatformCommon.status == "sold"
-                    )
-                    sold_result = await db.execute(sold_query)
-                    sold_count = sold_result.scalar() or 0
-                    
-                    # Get other listings (like DRAFT, ARCHIVED, etc.)
-                    other_query = select(func.count(PlatformCommon.id)).where(
-                        PlatformCommon.platform_name == platform,
-                        PlatformCommon.status.notin_(["active", "sold"])
-                    )
-                    other_result = await db.execute(other_query)
-                    other_count = other_result.scalar() or 0
-                    
-                    # Store all counts
-                    platform_counts[f"{platform}_count"] = active_count
-                    platform_counts[f"{platform}_sold_count"] = sold_count
-                    platform_counts[f"{platform}_other_count"] = other_count
-                    
-                    # ADD SYNC TIME LOGIC HERE
-                    sync_query = select(PlatformCommon.last_sync).where(
-                        PlatformCommon.platform_name == platform,
-                        PlatformCommon.last_sync.isnot(None)
-                    ).order_by(PlatformCommon.last_sync.desc()).limit(1)
-                    
-                    sync_result = await db.execute(sync_query)
-                    last_sync = sync_result.scalar_one_or_none()
-                    
-                    if last_sync:
-                        platform_sync_times[f"{platform}_last_sync"] = last_sync
-                    # END SYNC TIME LOGIC
-                    
-                    # Check if we need to fall back to platform-specific tables
-                    if active_count == 0 and sold_count == 0 and other_count == 0:
-                        if platform == "ebay":
-                            # Try the ebay_listings table if it exists
-                            try:
-                                # For active listings
-                                ebay_active_query = select(func.count(text("id"))).select_from(text("ebay_listings")) \
-                                    .where(text("listing_status = 'active'"))
-                                ebay_active_result = await db.execute(ebay_active_query)
-                                active_count = ebay_active_result.scalar() or 0
-                                
-                                # For sold listings
-                                ebay_sold_query = select(func.count(text("id"))).select_from(text("ebay_listings")) \
-                                    .where(text("listing_status = 'sold'"))
-                                ebay_sold_result = await db.execute(ebay_sold_query)
-                                sold_count = ebay_sold_result.scalar() or 0
-                                
-                                # For other listings
-                                ebay_other_query = select(func.count(text("id"))).select_from(text("ebay_listings")) \
-                                    .where(text("listing_status NOT IN ('active', 'sold')"))
-                                ebay_other_result = await db.execute(ebay_other_query)
-                                other_count = ebay_other_result.scalar() or 0
-                                
-                                platform_counts[f"{platform}_count"] = active_count
-                                platform_counts[f"{platform}_sold_count"] = sold_count
-                                platform_counts[f"{platform}_other_count"] = other_count
-                            except Exception as e:
-                                print(f"Error querying ebay_listings: {str(e)}")
-                                # Table might not exist
-                                pass
-                        
-                        elif platform == "reverb":
-                            # Try the reverb_listings table if it exists
-                            try:
-                                # For active listings
-                                reverb_active_query = select(func.count(text("id"))).select_from(text("reverb_listings")) \
-                                    .where(text("reverb_state = 'published'"))
-                                reverb_active_result = await db.execute(reverb_active_query)
-                                active_count = reverb_active_result.scalar() or 0
-                                
-                                # For sold listings
-                                reverb_sold_query = select(func.count(text("id"))).select_from(text("reverb_listings")) \
-                                    .where(text("reverb_state = 'sold'"))
-                                reverb_sold_result = await db.execute(reverb_sold_query)
-                                sold_count = reverb_sold_result.scalar() or 0
-                                
-                                # For other listings
-                                reverb_other_query = select(func.count(text("id"))).select_from(text("reverb_listings")) \
-                                    .where(text("reverb_state NOT IN ('published', 'sold')"))
-                                reverb_other_result = await db.execute(reverb_other_query)
-                                other_count = reverb_other_result.scalar() or 0
-                                
-                                platform_counts[f"{platform}_count"] = active_count
-                                platform_counts[f"{platform}_sold_count"] = sold_count
-                                platform_counts[f"{platform}_other_count"] = other_count
-                            except Exception as e:
-                                print(f"Error querying reverb_listings: {str(e)}")
-                                # Table might not exist
-                                pass
-                        
-                        elif platform == "vr":
-                            # Try the vr_listings table if it exists
-                            try:
-                                vr_query = select(func.count(text("id"))).select_from(text("vr_listings"))
-                                vr_result = await db.execute(vr_query)
-                                count = vr_result.scalar() or 0
-                                
-                                # Set only active count for now, as VR doesn't track status separately
-                                platform_counts[f"{platform}_count"] = count
-                                platform_counts[f"{platform}_sold_count"] = 0
-                                platform_counts[f"{platform}_other_count"] = 0
-                            except Exception as e:
-                                print(f"Error querying vr_listings: {str(e)}")
-                                # Table might not exist
-                                pass
-                        
-                        elif platform == "website":
-                            # Try the website_listings table if it exists
-                            try:
-                                website_query = select(func.count(text("id"))).select_from(text("website_listings"))
-                                website_result = await db.execute(website_query)
-                                count = website_result.scalar() or 0
-                                
-                                # Set only active count for now
-                                platform_counts[f"{platform}_count"] = count
-                                platform_counts[f"{platform}_sold_count"] = 0
-                                platform_counts[f"{platform}_other_count"] = 0
-                            except Exception as e:
-                                print(f"Error querying website_listings: {str(e)}")
-                                # Table might not exist
-                                pass
-                            
-                except Exception as e:
-                    print(f"Error getting count for {platform}: {str(e)}")
-                    platform_counts[f"{platform}_count"] = 0
-                    platform_counts[f"{platform}_sold_count"] = 0
-                    platform_counts[f"{platform}_other_count"] = 0
+            service = DashboardService(db)
             
-            # Get total product count
-            product_query = select(func.count(Product.id))
-            product_result = await db.execute(product_query)
-            total_products = product_result.scalar() or 0
-            
-            # Get platform connection status - using app state if available
-            platform_connections = {}
-            for platform in platforms:
-                # Check if we have a state variable for platform connection
-                # Fallback to checking if we have any items
-                is_connected = False
-                
-                if hasattr(request.app.state, f"{platform}_connected"):
-                    is_connected = getattr(request.app.state, f"{platform}_connected")
-                else:
-                    is_connected = platform_counts[f"{platform}_count"] > 0
-                    
-                platform_connections[f"{platform}_connected"] = is_connected
-            
-            # Get recent activity from database (last 5 changes)
-            recent_activity = []
-            try:
-                # Use the ActivityLog model directly instead of raw SQL
-                activity_query = select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(5)
-                activity_result = await db.execute(activity_query)
-                activity_logs = activity_result.scalars().all()
-                
-                for log in activity_logs:
-                    icon = "📝"  # Default icon
-                    
-                    # First check if icon is stored in details (for new entries)
-                    if log.details and 'icon' in log.details:
-                        icon = log.details['icon']
-                    else:
-                        # Fallback logic for entries without stored icons
-                        if log.action == "create":
-                            icon = "➕"
-                        elif log.action == "update":
-                            icon = "🔄"
-                        elif log.action == "delete":
-                            icon = "❌"
-                        elif log.action == "sync":
-                            # Check if success status is in details
-                            if log.details and log.details.get("status") == "success":
-                                icon = "✅"  # Use green checkmark for successful syncs
-                            else:
-                                icon = "🔄"  # Default sync icon
-                        elif log.action == "sync_start":
-                            icon = "🔄"
-                        elif log.action == "sync_error":
-                            icon = "⚠️"
-                        elif log.action == "sale":
-                            icon = "💰"
-                    
-                    # First check if message is stored in details (for new entries)
-                    if log.details and 'message' in log.details:
-                        message = log.details['message']
-                    else:
-                        # Fallback message generation
-                        if log.action == "sync":
-                            message = f"Synced {log.entity_id}"
-                            if log.details and "processed" in log.details:
-                                message += f" ({log.details['processed']} items)"
-                        elif log.action == "sync_start":
-                            message = f"Started sync for {log.entity_id}"
-                        elif log.action == "sync_error":
-                            message = f"Error syncing {log.entity_id}"
-                            if log.details and "error" in log.details:
-                                message += f": {log.details['error'][:30]}..."
-                        else:
-                            message = f"{log.action.capitalize()} {log.entity_type} #{log.entity_id}"
-                            if log.platform:
-                                message += f" on {log.platform}"
-                    
-                    recent_activity.append({
-                        "icon": icon,
-                        "message": message,
-                        "time": log.created_at.strftime("%Y-%m-%d %H:%M")
-                    })
-                    
-            except Exception as e:
-                # This will handle both the case where the table doesn't exist
-                # or any other error
-                print(f"Error fetching activity log: {e}")
+            # Get all dashboard data
+            platform_counts = await service.get_platform_counts()
+            sync_times = await service.get_sync_times()
+            connections = await service.get_platform_connections(request, platform_counts)
+            total_products = await service.get_total_products()
+            recent_activity = await service.get_recent_activity()
             
             # System status
             system_status = {
@@ -260,58 +447,50 @@ async def dashboard(request: Request):
                 "total_products": total_products
             }
             
-            # Add sync times if available in app state
-            for platform in platforms:
+            # Add sync times from app state if available
+            for platform in service.platforms:
                 if hasattr(request.app.state, f"{platform}_last_sync"):
                     system_status[f"{platform}_last_sync"] = getattr(request.app.state, f"{platform}_last_sync")
             
-            # Return template with data
-            return templates.TemplateResponse(
-                "dashboard.html", 
-                {
-                    "request": request,
-                    **platform_counts,
-                    **platform_connections,
-                    **platform_sync_times,
-                    "system_status": system_status,
-                    "recent_activity": recent_activity,
-                    "total_products": total_products
-                }
-            )
-        
-        except Exception as e:
-            # Important: Roll back the transaction if any error occurs
-            await db.rollback()
-            print(f"Dashboard error: {str(e)}")
+            # Prepare template context
+            context = {
+                "request": request,
+                **platform_counts,
+                **connections,
+                **sync_times,
+                "system_status": system_status,
+                "recent_activity": recent_activity,
+                "total_products": total_products,
+                "debug_platform_counts": platform_counts  # For debugging
+            }
             
-            # Return a minimal dashboard with error information
-            return templates.TemplateResponse(
-                "dashboard.html",
-                {
-                    "request": request,
-                    "ebay_count": 0,
-                    "reverb_count": 0,
-                    "vr_count": 0,
-                    "website_count": 0,
-                    "ebay_sold_count": 0,
-                    "reverb_sold_count": 0,
-                    "vr_sold_count": 0,
-                    "website_sold_count": 0,
-                    "ebay_other_count": 0,
-                    "reverb_other_count": 0,
-                    "vr_other_count": 0,
-                    "website_other_count": 0,
-                    "ebay_connected": False,
-                    "reverb_connected": False,
-                    "vr_connected": False,
-                    "website_connected": False,
-                    "system_status": {
-                        "background_tasks_healthy": False,
-                        "last_sync": None,
-                        "total_products": 0,
-                        "error": str(e)
-                    },
-                    "recent_activity": [],
-                    "error": f"Error loading dashboard data: {str(e)}"
-                }
-            )
+            logger.info(f"Dashboard context prepared with {len(platform_counts)} platform metrics")
+            return templates.TemplateResponse("dashboard.html", context)
+            
+        except Exception as e:
+            logger.error(f"Dashboard error: {str(e)}", exc_info=True)
+            
+            # Return error dashboard
+            error_context = {
+                "request": request,
+                "error": f"Error loading dashboard data: {str(e)}",
+                "system_status": {
+                    "background_tasks_healthy": False,
+                    "last_sync": None,
+                    "total_products": 0,
+                    "error": str(e)
+                },
+                "recent_activity": [],
+                # Set all platform counts to 0
+                **{f"{platform}_{key}": 0 
+                   for platform in ["ebay", "reverb", "vr", "shopify"] 
+                   for key in ["count", "sold_count", "other_count"]},
+                **{f"{platform}_connected": False 
+                   for platform in ["ebay", "reverb", "vr", "shopify"]},
+                # Reverb specific fields
+                "reverb_ended_count": 0,
+                "reverb_draft_count": 0,
+                "reverb_total": 0
+            }
+            
+            return templates.TemplateResponse("dashboard.html", error_context)

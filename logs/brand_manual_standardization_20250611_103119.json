@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:31:19.722785",
+  "operation": "manual_standardization",
+  "total_updated": 3,
+  "changes": [
+    {
+      "old_brand": "Gibson custom shop",
+      "new_brand": "Gibson",
+      "count": 3
+    }
+  ]
+}

@@ -349,13 +349,17 @@ class ReverbClient:
             "Please upload the image to a publicly accessible URL first, then use that URL."
         )
         
-    async def get_my_listings(self, page: int = 1, per_page: int = 50) -> Dict:
+    async def get_my_listings(self, page: int = 1, per_page: int = 50, state: str = "all") -> Dict:
         """
         Get current user's listings from Reverb
+        
+        Args:
+            page: Page number
+            per_page: Items per page
+            state: Listing state ('all', 'live', 'draft', 'sold', 'ended', 'suspended')
         """
-        # Use the non-awaited version
         headers = self._get_headers()
-        url = f"{self.BASE_URL}/my/listings?page={page}&per_page={per_page}"
+        url = f"{self.BASE_URL}/my/listings?page={page}&per_page={per_page}&state={state}"
         
         try:
             async with httpx.AsyncClient() as client:
@@ -370,12 +374,14 @@ class ReverbClient:
         except httpx.RequestError as e:
             logger.error(f"Network error getting listings: {str(e)}")
             raise ReverbAPIError(f"Network error getting listings: {str(e)}")
-    
-    
-    async def get_all_listings(self) -> List[Dict]:
+        
+    async def get_all_listings(self, state: str = "all") -> List[Dict]:
         """
         Get all listings by paginating through results
-        
+
+        Args:
+            state: Listing state to fetch ('all', 'live', 'draft', 'sold', 'ended')
+
         Returns:
             List[Dict]: All listings
         """
@@ -384,7 +390,7 @@ class ReverbClient:
         per_page = 50
         
         while True:
-            response = await self.get_my_listings(page=page, per_page=per_page)
+            response = await self.get_my_listings(page=page, per_page=per_page, state=state)
             listings = response.get('listings', [])
             
             if not listings:
@@ -401,12 +407,16 @@ class ReverbClient:
         
         return all_listings
     
-    async def get_all_listings_detailed(self) -> List[Dict]:
+    async def get_all_listings_detailed(self, max_concurrent: int = 10, state: str = "all") -> List[Dict]:
         """
-        Get all listings with detailed information (handles pagination)
+        Get all listings with detailed information (handles pagination) using concurrent requests
         
         This enhanced version gets full listing details for each listing, which
         provides all the data we need for our enhanced schema.
+        
+        Args:
+            max_concurrent: Maximum number of concurrent API calls (default: 10)
+            state: Listing state to fetch ('all', 'live', 'draft', 'sold', 'ended')
         
         Returns:
             List[Dict]: All listings with full details
@@ -416,23 +426,48 @@ class ReverbClient:
         """
         try:
             # First get the basic listings to get listing IDs
-            basic_listings = await self.get_all_listings()
+            basic_listings = await self.get_all_listings(state=state)
+            logger.info(f"Got {len(basic_listings)} basic listings, fetching details...")
             
-            # Then fetch detailed information for each listing
-            detailed_listings = []
+            # Create semaphore to limit concurrent requests
+            semaphore = asyncio.Semaphore(max_concurrent)
             
-            for listing in basic_listings:
-                try:
-                    listing_id = listing.get('id')
-                    if listing_id:
-                        details = await self.get_listing_details(listing_id)
-                        detailed_listings.append(details)
-                except Exception as e:
-                    logger.warning(f"Error getting details for listing {listing.get('id')}: {str(e)}")
-                    # Still include the basic listing to maintain the count
-                    detailed_listings.append(listing)
+            async def get_details_with_semaphore(listing):
+                async with semaphore:
+                    try:
+                        listing_id = listing.get('id')
+                        if listing_id:
+                            detailed = await self.get_listing_details(str(listing_id))
+                            return detailed
+                        else:
+                            logger.warning(f"Listing missing ID: {listing}")
+                            return listing
+                    except Exception as e:
+                        logger.warning(f"Error getting details for listing {listing.get('id')}: {str(e)}")
+                        return listing  # Return basic listing if details fail
             
-            return detailed_listings
+            # Execute all detail requests concurrently
+            logger.info(f"Starting {len(basic_listings)} concurrent detail requests (max {max_concurrent} at once)...")
+            detailed_listings = await asyncio.gather(
+                *[get_details_with_semaphore(listing) for listing in basic_listings],
+                return_exceptions=True
+            )
+            
+            # Filter out any exceptions and log them
+            valid_listings = []
+            for i, result in enumerate(detailed_listings):
+                if isinstance(result, Exception):
+                    logger.error(f"Failed to get details for listing {basic_listings[i].get('id')}: {result}")
+                    valid_listings.append(basic_listings[i])  # Use basic listing as fallback
+                else:
+                    valid_listings.append(result)
+            
+            logger.info(f"Successfully retrieved details for {len(valid_listings)} listings")
+            return valid_listings
+            
+        except Exception as e:
+            logger.error(f"Error getting all listings with details: {str(e)}")
+            raise ReverbAPIError(f"Failed to get all listings with details: {str(e)}")
         
         except Exception as e:
             logger.error(f"Error getting all listings with details: {str(e)}")
@@ -463,76 +498,104 @@ class ReverbClient:
                     logger.error(f"Reverb API error: {response.text}")
                     raise ReverbAPIError(f"Failed to get listing details: {response.text}")
                 
-                return response.json()
+                data = response.json()
+                
+                # Debug log
+                if 'slug' in data:
+                    logger.info(f"Listing {listing_id} has slug: {data['slug']}")
+                else:
+                    # [logger.warning(f"Listing {listing_id} MISSING slug field")
+                    logger.info(f"Available fields: {list(data.keys())}")
+                
+                return data
         
         except httpx.RequestError as e:
             logger.error(f"Network error getting listing details: {str(e)}")
             raise ReverbAPIError(f"Network error getting listing details: {str(e)}")
         
-    async def get_all_sold_orders(self, per_page=50, max_pages=None):
-        """
-        Get all sold orders from Reverb with improved reliability
+    # async def get_all_sold_orders(self, per_page=50, max_pages=None):
+    #     """
+    #     Get all sold orders from Reverb with improved reliability
         
-        Args:
-            per_page: Number of orders per page
-            max_pages: Maximum number of pages to fetch (None for all)
+    #     Args:
+    #         per_page: Number of orders per page
+    #         max_pages: Maximum number of pages to fetch (None for all)
             
-        Returns:
-            List of order objects
-        """
-        url = "/my/orders/selling/all"
-        params = {"per_page": per_page}
+    #     Returns:
+    #         List of order objects
+    #     """
+    #     url = "/my/orders/selling/all"
+    #     params = {"per_page": per_page}
         
-        # First request to get total count and first page
-        response = await self._make_request("GET", url, params=params, timeout=60.0)
-        if not response:
-            return []
+    #     # First request to get total count and first page
+    #     response = await self._make_request("GET", url, params=params, timeout=60.0)
+    #     if not response:
+    #         return []
         
-        total = response.get('total', 0)
-        orders = response.get('orders', [])
+    #     total = response.get('total', 0)
+    #     orders = response.get('orders', [])
         
-        # Calculate number of pages
-        total_pages = (total + per_page - 1) // per_page
-        if max_pages is not None:
-            total_pages = min(total_pages, max_pages)
+    #     # Calculate number of pages
+    #     total_pages = (total + per_page - 1) // per_page
+    #     if max_pages is not None:
+    #         total_pages = min(total_pages, max_pages)
         
-        logger.info(f"Found {total} sold orders across {total_pages} pages")
+    #     logger.info(f"Found {total} sold orders across {total_pages} pages")
         
-        # Fetch remaining pages with retry logic
-        for page in range(2, total_pages + 1):
-            logger.info(f"Fetching sold orders page {page}/{total_pages}")
-            params["page"] = page
+    #     # Fetch remaining pages with retry logic
+    #     for page in range(2, total_pages + 1):
+    #         logger.info(f"Fetching sold orders page {page}/{total_pages}")
+    #         params["page"] = page
             
-            # Add retry logic
-            max_retries = 3
-            retry_count = 0
-            success = False
+    #         # Add retry logic
+    #         max_retries = 3
+    #         retry_count = 0
+    #         success = False
             
-            while not success and retry_count < max_retries:
-                try:
-                    # Add a delay to avoid rate limiting (increase with each retry)
-                    await asyncio.sleep(1 + retry_count)
+    #         while not success and retry_count < max_retries:
+    #             try:
+    #                 # Add a delay to avoid rate limiting (increase with each retry)
+    #                 await asyncio.sleep(1 + retry_count)
                     
-                    # Increase timeout for potentially slow responses
-                    page_response = await self._make_request("GET", url, params=params, timeout=60.0)
+    #                 # Increase timeout for potentially slow responses
+    #                 page_response = await self._make_request("GET", url, params=params, timeout=60.0)
                     
-                    if page_response and 'orders' in page_response:
-                        orders.extend(page_response['orders'])
-                        success = True
-                    else:
-                        raise Exception("Invalid response format")
+    #                 if page_response and 'orders' in page_response:
+    #                     orders.extend(page_response['orders'])
+    #                     success = True
+    #                 else:
+    #                     raise Exception("Invalid response format")
                         
-                except Exception as e:
-                    retry_count += 1
-                    logger.warning(f"Error fetching page {page}, attempt {retry_count}/{max_retries}: {str(e)}")
+    #             except Exception as e:
+    #                 retry_count += 1
+    #                 logger.warning(f"Error fetching page {page}, attempt {retry_count}/{max_retries}: {str(e)}")
                     
-                    if retry_count >= max_retries:
-                        logger.error(f"Failed to fetch page {page} after {max_retries} attempts")
-                        # Continue with what we have instead of failing completely
-                        break
+    #                 if retry_count >= max_retries:
+    #                     logger.error(f"Failed to fetch page {page} after {max_retries} attempts")
+    #                     # Continue with what we have instead of failing completely
+    #                     break
                     
-                    # Exponential backoff
-                    await asyncio.sleep(retry_count * 2)
+    #                 # Exponential backoff
+    #                 await asyncio.sleep(retry_count * 2)
         
-        logger.info(f"Successfully retrieved {len(orders)} sold orders")
-        return orders
+    #     logger.info(f"Successfully retrieved {len(orders)} sold orders")
+    #     return orders
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

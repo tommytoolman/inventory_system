@@ -16,631 +16,1592 @@ from app.schemas.platform.ebay import EbayListingCreate
 from app.core.config import Settings
 from app.core.enums import EbayListingStatus
 from app.core.exceptions import EbayAPIError, ListingNotFoundError, DatabaseError
-from app.services.ebay.client import EbayClient
+from app.services.ebay.client import EbayClient # Assuming this might be used, though not directly in provided code
 from app.services.ebay.trading import EbayTradingLegacyAPI
 
 logger = logging.getLogger(__name__)
 
+# class EbayService:
+#     """
+#     Service for managing eBay listings and synchronization.
+#     Focused on importing FROM eBay to detect sales and keep our system updated.
+#     """
+    
+#     # def __init__(self, db: AsyncSession, settings: Settings = None):
+#     #     """Initialize the eBay service with database session and settings"""
+#     #     self.db = db
+#     #     self.settings = settings
+        
+#     #     # Use settings to determine sandbox mode, default to production
+#     #     sandbox_mode = settings.EBAY_SANDBOX_MODE if settings else False
+        
+#     #     # Initialize API clients
+#     #     self.trading_api = EbayTradingLegacyAPI(sandbox=sandbox_mode)
+        
+#     #     # Default user expected for verification
+#     #     self.expected_user_id = "londonvintagegts"
+    
+#     def __init__(self, db: AsyncSession, settings: Settings = None):
+#         print("DEBUG: EbayService.__init__ - Initializing.") # Your existing print
+#         self.db = db
+#         self.settings = settings
+        
+#         sandbox_mode = settings.EBAY_SANDBOX_MODE if settings else False
+#         print(f"DEBUG: EbayService.__init__ - Sandbox mode: {sandbox_mode}")
+        
+#         self.trading_api = EbayTradingLegacyAPI(sandbox=sandbox_mode) # This has its own prints
+        
+#         self.expected_user_id = "londonvintagegts" 
+#         print(f"DEBUG: EbayService.__init__ - Expected User ID: {self.expected_user_id}")
+
+    
+    
+#     # -------------------------------------------------------------------------
+#     # Main Sync Methods (FROM eBay)
+#     # -------------------------------------------------------------------------
+    
+#     # async def sync_inventory_from_ebay(self, progress_callback=None) -> Dict[str, int]:
+#     #     """
+#     #     Synchronize all eBay inventory to database with optional progress reporting
+#     #     Returns: Dict with statistics about the sync operation
+#     #     """
+        
+#     #     # Initialize result stats
+#     #     results = {
+#     #         "total": 0,
+#     #         "created": 0,
+#     #         "updated": 0,
+#     #         "errors": 0,
+#     #         "marked_sold": 0
+#     #     }
+        
+#     #     try:
+#     #         print("==============================================")
+#     #         print("EbayService: Entered sync_inventory_from_ebay")
+#     #         logger.info("=== STARTING EBAY SYNC ===")
+#     #         print("=== STARTING EBAY SYNC ===")
+#     #         # Send initial progress
+#     #         if progress_callback:
+#     #             await progress_callback({
+#     #                 "message": "Starting eBay sync...",
+#     #                 "progress": 0,
+#     #                 "total": 0,
+#     #                 "processed": 0
+#     #             })
+            
+#     #         # Verify eBay user
+#     #         if progress_callback:
+#     #             await progress_callback({
+#     #                 "message": "Verifying eBay credentials...",
+#     #                 "progress": 10,
+#     #                 "total": 0,
+#     #                 "processed": 0
+#     #             })
+            
+#     #         print("EbayService: About to call self.verify_credentials()")
+#     #         logger.info("About to verify eBay credentials...")
+#     #         if not await self.verify_credentials():
+#     #             logger.error("Failed to verify eBay user, canceling sync")
+#     #             if progress_callback:
+#     #                 await progress_callback({
+#     #                     "error": "Failed to verify eBay credentials",
+#     #                     "message": "Authentication failed"
+#     #                 })
+#     #             return results
+
+#     #         logger.info("eBay credentials verified successfully") 
+#     #         print("*** eBay credentials verified successfully ***")
+#     #         # Get all listings from eBay (active, sold, unsold)
+#     #         if progress_callback:
+#     #             await progress_callback({
+#     #                 "message": "Fetching eBay listings...",
+#     #                 "progress": 20,
+#     #                 "total": 0,
+#     #                 "processed": 0
+#     #             })
+                
+#     #         logger.info("Fetching all eBay listings (active, sold, unsold)")
+#     #         print("*** ABOUT TO FETCH ALL eBay LISTINGS ***")
+#     #         all_listings = await self.trading_api.get_all_selling_listings(
+#     #             include_active=True,
+#     #             include_sold=True,
+#     #             include_unsold=True,
+#     #             include_details=True
+#     #         )
+#     #         print("*** FINISHED FETCHING ALL eBay LISTINGS ***")
+#     #         import time
+#     #         time.sleep(20)
+#     #         # Count total listings
+#     #         total_listings = 0
+#     #         for listing_type in ['active', 'sold', 'unsold']:
+#     #             if listing_type in all_listings:
+#     #                 total_listings += len(all_listings.get(listing_type, []))
+            
+#     #         results["total"] = total_listings
+            
+#     #         if progress_callback:
+#     #             await progress_callback({
+#     #                 "message": f"Processing {total_listings} eBay listings...",
+#     #                 "progress": 30,
+#     #                 "total": total_listings,
+#     #                 "processed": 0
+#     #             })
+
+#     #         logger.info(f"Processing {total_listings} eBay listings")
+            
+#     #         # Process each type of listing
+#     #         created_count = 0
+#     #         updated_count = 0
+#     #         error_count = 0
+#     #         marked_sold_count = 0
+#     #         processed_count = 0
+            
+#     #         listing_types = ['active', 'sold', 'unsold']
+#     #         for listing_type in listing_types:
+#     #             if listing_type not in all_listings:
+#     #                 continue
+                    
+#     #             listings = all_listings[listing_type]
+#     #             logger.info(f"Processing {len(listings)} {listing_type} eBay listings")
+                
+#     #             for idx, listing in enumerate(listings):
+#     #                 try:
+#     #                     # Skip invalid listings
+#     #                     if not listing or not isinstance(listing, dict) or 'ItemID' not in listing:
+#     #                         logger.warning(f"Skipping invalid {listing_type} listing")
+#     #                         error_count += 1
+#     #                         continue
+                        
+#     #                     item_id = listing.get('ItemID')
+                        
+#     #                     # Check if listing exists in database
+#     #                     query = select(EbayListing).where(EbayListing.ebay_item_id == item_id)
+#     #                     result = await self.db.execute(query)
+#     #                     existing_listing = result.scalar_one_or_none()
+                        
+#     #                     if existing_listing:
+#     #                         # Update existing listing
+#     #                         update_result = await self._update_listing_from_api_data(
+#     #                             existing_listing, listing, listing_type
+#     #                         )
+#     #                         if update_result == "updated":
+#     #                             updated_count += 1
+#     #                         elif update_result == "marked_sold":
+#     #                             marked_sold_count += 1
+#     #                         else:
+#     #                             error_count += 1
+#     #                     else:
+#     #                         # Create new listing
+#     #                         create_result = await self._create_listing_from_api_data(listing, listing_type)
+#     #                         if create_result:
+#     #                             created_count += 1
+#     #                         else:
+#     #                             error_count += 1
+                        
+#     #                     processed_count += 1
+                        
+#     #                     # Send progress update every 10 items
+#     #                     if processed_count % 10 == 0 and progress_callback:
+#     #                         progress = 30 + (processed_count / total_listings) * 60
+#     #                         await progress_callback({
+#     #                             "message": f"Processed {processed_count}/{total_listings} listings...",
+#     #                             "progress": int(progress),
+#     #                             "total": total_listings,
+#     #                             "processed": processed_count
+#     #                         })
+                            
+#     #                 except Exception as e:
+#     #                     logger.exception(f"Error processing {listing_type} listing {listing.get('ItemID')}: {str(e)}")
+#     #                     error_count += 1
+#     #                     processed_count += 1
+            
+#     #         # Update final results
+#     #         results["created"] = created_count
+#     #         results["updated"] = updated_count
+#     #         results["errors"] = error_count
+#     #         results["marked_sold"] = marked_sold_count
+
+#     #         # Always send completion notification
+#     #         if progress_callback:
+#     #             await progress_callback({
+#     #                 "message": f"eBay sync complete! Created: {created_count}, Updated: {updated_count}, Sold: {marked_sold_count}, Errors: {error_count}",
+#     #                 "progress": 100,
+#     #                 "total": total_listings,
+#     #                 "processed": total_listings,
+#     #                 "completed": True,
+#     #                 "stats": results
+#     #             })
+
+#     #         # Log completion
+#     #         logger.info(f"eBay sync completed. Created: {created_count}, Updated: {updated_count}, Sold: {marked_sold_count}, Errors: {error_count}")
+
+#     #         return results
+            
+#     #     except Exception as e:
+#     #         logger.error(f"Error in eBay inventory sync: {str(e)}")
+#     #         if progress_callback:
+#     #             await progress_callback({
+#     #                 "error": str(e),
+#     #                 "message": "eBay sync failed"
+#     #             })
+#     #         raise
+
+#     async def sync_inventory_from_ebay(self, progress_callback=None) -> Dict[str, int]:
+#         print("==============================================")
+#         print("DEBUG: EbayService.sync_inventory_from_ebay - Entered method.")
+#         logger.info("=== STARTING EBAY SYNC ===") # Your existing print
+#         print("=== STARTING EBAY SYNC ===") # Your existing print
+        
+#         results = {
+#             "total_api_items": 0, # Renamed from "total" to be specific
+#             "processed_db_items": 0, # New counter for items processed into DB
+#             "created_db": 0, # Renamed from "created"
+#             "updated_db": 0, # Renamed from "updated"
+#             "db_errors": 0,  # Renamed from "errors"
+#             "marked_sold_db": 0 # Renamed from "marked_sold"
+#         }
+        
+#         try:
+#             if progress_callback:
+#                 print("DEBUG: EbayService.sync_inventory_from_ebay - Sending initial progress callback.")
+#                 await progress_callback({"message": "Starting eBay sync...", "progress": 0, "total_api_items": 0, "processed_db_items": 0})
+            
+#             print("DEBUG: EbayService.sync_inventory_from_ebay - About to verify credentials.")
+#             if not await self.verify_credentials(): # This calls instrumented methods
+#                 print("DEBUG: EbayService.sync_inventory_from_ebay - Credentials verification FAILED. Aborting sync.")
+#                 logger.error("Failed to verify eBay user, canceling sync")
+#                 results["db_errors"] +=1 
+#                 if progress_callback:
+#                     await progress_callback({"error": "Failed to verify eBay credentials", "message": "Authentication failed"})
+#                 return results
+
+#             print("DEBUG: EbayService.sync_inventory_from_ebay - Credentials verified successfully.")
+#             logger.info("eBay credentials verified successfully") # Your existing print
+#             print("*** eBay credentials verified successfully ***") # Your existing print
+            
+#             if progress_callback:
+#                 print("DEBUG: EbayService.sync_inventory_from_ebay - Sending 'Fetching eBay listings...' progress.")
+#                 await progress_callback({"message": "Fetching eBay listings...", "progress": 20, "total_api_items": 0, "processed_db_items": 0}) # total will be updated
+                
+#             print("DEBUG: EbayService.sync_inventory_from_ebay - Fetching all eBay listings.")
+#             logger.info("Fetching all eBay listings (active, sold, unsold)") # Your existing print
+#             print("*** ABOUT TO FETCH ALL eBay LISTINGS ***") # Your existing print
+            
+#             all_listings_from_api = await self.trading_api.get_all_selling_listings(
+#                 include_active=True, include_sold=True, include_unsold=True, include_details=True
+#             ) # This method is now instrumented
+#             print("*** FINISHED FETCHING ALL eBay LISTINGS ***") # Your existing print
+            
+#             # Calculate total items fetched from API
+#             total_api_listings = 0
+#             for list_type_key in ['active', 'sold', 'unsold']:
+#                 count = len(all_listings_from_api.get(list_type_key, []))
+#                 total_api_listings += count
+#                 print(f"DEBUG: EbayService.sync_inventory_from_ebay - Fetched {count} items for type '{list_type_key}' from API.")
+#             results["total_api_items"] = total_api_listings
+#             print(f"DEBUG: EbayService.sync_inventory_from_ebay - Total items fetched from API: {total_api_listings}")
+
+#             if progress_callback:
+#                 print(f"DEBUG: EbayService.sync_inventory_from_ebay - Sending 'Processing {total_api_listings} listings...' progress.")
+#                 await progress_callback({
+#                     "message": f"Processing {total_api_listings} eBay listings into database...",
+#                     "progress": 30, # Example progress step
+#                     "total_api_items": total_api_listings,
+#                     "processed_db_items": 0
+#                 })
+
+#             logger.info(f"Processing {total_api_listings} eBay listings into database.")
+            
+#             # Process each type of listing
+#             # Your original counters: created_count, updated_count, error_count, marked_sold_count, processed_count
+#             # These are now results["created_db"], results["updated_db"], etc.
+
+#             listing_types_to_process = ['active', 'sold', 'unsold']
+#             current_progress_percentage = 30 # Starting after fetching
+
+#             for list_type_api_name in listing_types_to_process:
+#                 listings_of_type = all_listings_from_api.get(list_type_api_name, [])
+#                 if not listings_of_type:
+#                     print(f"DEBUG: EbayService.sync_inventory_from_ebay - No listings to process for type: {list_type_api_name}")
+#                     continue
+                    
+#                 print(f"DEBUG: EbayService.sync_inventory_from_ebay - Processing {len(listings_of_type)} '{list_type_api_name}' listings from API into DB.")
+                
+#                 for idx, listing_api_data in enumerate(listings_of_type):
+#                     item_id_api = listing_api_data.get('ItemID', 'UnknownItemID')
+#                     print(f"DEBUG: EbayService.sync_inventory_from_ebay - Processing DB for ItemID: {item_id_api} (Type: {list_type_api_name}, Index: {idx+1}/{len(listings_of_type)})")
+                    
+#                     try:
+#                         if not listing_api_data or not isinstance(listing_api_data, dict) or 'ItemID' not in listing_api_data:
+#                             print(f"DEBUG: EbayService.sync_inventory_from_ebay - WARNING: Skipping invalid API listing data for type {list_type_api_name}. Data: {str(listing_api_data)[:200]}")
+#                             results["db_errors"] += 1
+#                             continue
+                        
+#                         # Check if listing exists in database
+#                         stmt_select_existing = select(EbayListing).where(EbayListing.ebay_item_id == item_id_api)
+#                         db_result_existing = await self.db.execute(stmt_select_existing)
+#                         existing_db_listing = db_result_existing.scalar_one_or_none()
+                        
+#                         if existing_db_listing:
+#                             print(f"DEBUG: EbayService.sync_inventory_from_ebay - ItemID: {item_id_api} exists in DB. Attempting update.")
+#                             update_status_msg = await self._update_listing_from_api_data(
+#                                 existing_db_listing, listing_api_data, list_type_api_name
+#                             )
+#                             if update_status_msg == "updated":
+#                                 results["updated_db"] += 1
+#                             elif update_status_msg == "marked_sold":
+#                                 results["marked_sold_db"] += 1
+#                             # No explicit "error" string from _update_listing_from_api_data, it raises or logs
+#                         else:
+#                             print(f"DEBUG: EbayService.sync_inventory_from_ebay - ItemID: {item_id_api} does NOT exist in DB. Attempting create.")
+#                             create_successful = await self._create_listing_from_api_data(listing_api_data, list_type_api_name)
+#                             if create_successful:
+#                                 results["created_db"] += 1
+#                             # No explicit error count here, _create_listing_from_api_data raises or logs
+                        
+#                         results["processed_db_items"] += 1
+                        
+#                         # Send progress update (example: every item or every N items)
+#                         if results["processed_db_items"] % 10 == 0 and progress_callback and total_api_listings > 0: # Avoid division by zero
+#                             current_progress_percentage = 30 + int((results["processed_db_items"] / total_api_listings) * 60) # Scale 30-90% for DB processing
+#                             print(f"DEBUG: EbayService.sync_inventory_from_ebay - Sending DB processing progress. Processed: {results['processed_db_items']}/{total_api_listings}, Progress%: {current_progress_percentage}")
+#                             await progress_callback({
+#                                 "message": f"DB Processed {results['processed_db_items']}/{total_api_listings} listings...",
+#                                 "progress": current_progress_percentage,
+#                                 "total_api_items": total_api_listings,
+#                                 "processed_db_items": results["processed_db_items"]
+#                             })
+                            
+#                     except Exception as e_item_proc: # Catch errors from _create or _update
+#                         print(f"DEBUG: EbayService.sync_inventory_from_ebay - EXCEPTION processing ItemID {item_id_api} into DB: {e_item_proc}")
+#                         logger.exception(f"Error processing DB for {list_type_api_name} listing {item_id_api}: {str(e_item_proc)}")
+#                         results["db_errors"] += 1
+#                         # results["processed_db_items"] += 1 # Ensure it's counted even if error occurs after this line
+
+#             # Final commit for all DB operations if no rollback occurred per item (depends on _create/_update logic)
+#             # Your _create_listing_from_api_data and _update_listing_from_api_data do their own commit/rollback.
+#             # A final commit here might be redundant if those methods are fully transactional.
+#             # If they only add/flush, then a commit here would be needed.
+#             # Based on your provided code, they do commit/rollback.
+#             print("DEBUG: EbayService.sync_inventory_from_ebay - DB processing loop finished.")
+
+#             if progress_callback:
+#                 print("DEBUG: EbayService.sync_inventory_from_ebay - Sending final DB completion progress.")
+#                 await progress_callback({
+#                     "message": f"eBay DB sync complete! Created: {results['created_db']}, Updated: {results['updated_db']}, Sold: {results['marked_sold_db']}, Errors: {results['db_errors']}",
+#                     "progress": 100,
+#                     "total_api_items": total_api_listings,
+#                     "processed_db_items": results["processed_db_items"],
+#                     "completed": True, # This signals end of this specific task part
+#                     "stats": results # Pass all detailed stats
+#                 })
+
+#             log_msg = f"eBay DB sync completed. API Items: {total_api_listings}, DB Processed: {results['processed_db_items']}, Created: {results['created_db']}, Updated: {results['updated_db']}, Sold: {results['marked_sold_db']}, DB Errors: {results['db_errors']}"
+#             print(f"DEBUG: EbayService.sync_inventory_from_ebay - {log_msg}")
+#             logger.info(log_msg)
+            
+#         except EbayAPIError as e_api_outer:
+#             print(f"DEBUG: EbayService.sync_inventory_from_ebay - EbayAPIError during sync (outer scope): {e_api_outer}")
+#             logger.error(f"EbayAPIError during eBay inventory sync (outer scope): {e_api_outer}", exc_info=True)
+#             results["db_errors"] +=1 # Or a general API error counter
+#             if progress_callback:
+#                 await progress_callback({"error": str(e_api_outer), "message": "eBay API error during sync (outer scope)"})
+#         except Exception as e_outer:
+#             print(f"DEBUG: EbayService.sync_inventory_from_ebay - Generic EXCEPTION during sync (outer scope): {e_outer}")
+#             logger.error(f"Error in eBay inventory sync (outer scope): {e_outer}", exc_info=True)
+#             results["db_errors"] +=1
+#             if progress_callback:
+#                 await progress_callback({"error": str(e_outer), "message": "eBay sync failed due to an unexpected error (outer scope)"})
+#         finally:
+#             print(f"DEBUG: EbayService.sync_inventory_from_ebay - Exiting method. Final Results: {results}")
+#             print("==============================================")
+#         return results # Return the detailed results
+    
+#     # Helper methods _create_listing_from_api_data, _update_listing_from_api_data, _mark_item_as_sold
+#     # _extract_ebay_listing_data, _parse_ebay_datetime, _extract_item_specifics
+#     # should also be instrumented if we need to debug DB operations further.
+#     # For now, let's add prints to the entry/exit and key decision points in _create and _update.
+
+
+    
+#     # -------------------------------------------------------------------------
+#     # Create/Update Methods (FROM eBay API Data)
+#     # -------------------------------------------------------------------------
+    
+#     # async def _create_listing_from_api_data(self, listing: Dict[str, Any], listing_type: str = "active") -> bool:
+#     #     """
+#     #     Create a new EbayListing and associated Product from API data
+        
+#     #     Args:
+#     #         listing: Listing data from eBay API
+#     #         listing_type: Type of listing ('active', 'sold', 'unsold')
+            
+#     #     Returns:
+#     #         bool: True if successful, False otherwise
+#     #     """
+#     #     now = datetime.now(timezone.utc).replace(tzinfo=None)
+#     #     item_id = listing.get('ItemID')
+        
+#     #     try:
+#     #         # Extract basic listing data
+#     #         title = listing.get('Title', '')
+            
+#     #         # Extract price with proper error handling
+#     #         selling_status = listing.get('SellingStatus', {})
+#     #         price_data = selling_status.get('CurrentPrice', {})
+#     #         try:
+#     #             price = float(price_data.get('#text', '0')) if price_data else 0.0
+#     #         except (ValueError, TypeError):
+#     #             price = 0.0
+            
+#     #         # Extract quantities with proper error handling
+#     #         try:
+#     #             quantity = int(listing.get('Quantity', '1'))
+#     #         except (ValueError, TypeError):
+#     #             quantity = 1
+                
+#     #         try:
+#     #             quantity_available = int(listing.get('QuantityAvailable', quantity))
+#     #         except (ValueError, TypeError):
+#     #             quantity_available = quantity
+                
+#     #         try:
+#     #             quantity_sold = int(selling_status.get('QuantitySold', '0'))
+#     #         except (ValueError, TypeError):
+#     #             quantity_sold = 0
+            
+#     #         # Generate SKU
+#     #         sku = f"EB-{item_id}"
+            
+#     #         # Extract brand/model from title for Product creation
+#     #         brand = title.split(' ')[0] if title else 'Unknown'
+#     #         model = ' '.join(title.split(' ')[1:]) if len(title.split(' ')) > 1 else title
+            
+#     #         # Check if product already exists
+#     #         query = select(Product).where(Product.sku == sku)
+#     #         result = await self.db.execute(query)
+#     #         product = result.scalar_one_or_none()
+            
+#     #         if not product:
+#     #             # Extract category for Product
+#     #             primary_category = listing.get('PrimaryCategory', {})
+#     #             category_name = primary_category.get('CategoryName', 'Uncategorized')
+                
+#     #             # Map eBay condition to ProductCondition
+#     #             condition = ProductCondition.VERYGOOD  # Default
+#     #             ebay_condition = listing.get('ConditionDisplayName', '').lower()
+#     #             if 'new' in ebay_condition:
+#     #                 condition = ProductCondition.NEW
+#     #             elif 'excellent' in ebay_condition:
+#     #                 condition = ProductCondition.EXCELLENT
+#     #             elif 'very good' in ebay_condition:
+#     #                 condition = ProductCondition.VERYGOOD
+#     #             elif 'good' in ebay_condition:
+#     #                 condition = ProductCondition.GOOD
+#     #             elif 'fair' in ebay_condition:
+#     #                 condition = ProductCondition.FAIR
+#     #             elif 'poor' in ebay_condition:
+#     #                 condition = ProductCondition.POOR
+                
+#     #             # Extract images for Product
+#     #             picture_details = listing.get('PictureDetails', {})
+#     #             picture_urls = picture_details.get('PictureURL', [])
+#     #             if not isinstance(picture_urls, list):
+#     #                 picture_urls = [picture_urls] if picture_urls else []
+                
+#     #             primary_image = picture_urls[0] if picture_urls else None
+#     #             additional_images = picture_urls[1:] if len(picture_urls) > 1 else []
+                
+#     #             # Set product status based on listing type
+#     #             product_status = ProductStatus.ACTIVE
+#     #             if listing_type.lower() == 'sold':
+#     #                 product_status = ProductStatus.SOLD
+                
+#     #             # Create new product
+#     #             product = Product(
+#     #                 sku=sku,
+#     #                 brand=brand,
+#     #                 model=model,
+#     #                 category=category_name,
+#     #                 description=listing.get('Description', ''),
+#     #                 condition=condition,
+#     #                 status=product_status,
+#     #                 base_price=price,
+#     #                 primary_image=primary_image,
+#     #                 additional_images=json.dumps(additional_images),
+#     #                 created_at=now,
+#     #                 updated_at=now
+#     #             )
+#     #             self.db.add(product)
+#     #             await self.db.flush()  # Get product ID without committing
+            
+#     #         # Create platform_common record
+#     #         platform_status = 'active'
+#     #         if listing_type.lower() == 'sold':
+#     #             platform_status = 'sold'
+#     #         elif listing_type.lower() == 'unsold':
+#     #             platform_status = 'inactive'
+            
+#     #         platform_common = PlatformCommon(
+#     #             product_id=product.id,
+#     #             platform_name='ebay',
+#     #             external_id=item_id,
+#     #             status=platform_status,
+#     #             sync_status='success',
+#     #             created_at=now,
+#     #             updated_at=now
+#     #         )
+#     #         self.db.add(platform_common)
+#     #         await self.db.flush()  # Get platform_common ID
+            
+#     #         # Extract detailed data for eBay listing
+#     #         ebay_listing_data = self._extract_ebay_listing_data(listing, listing_type)
+#     #         ebay_listing_data.update({
+#     #             'platform_id': platform_common.id,
+#     #             'ebay_item_id': item_id,
+#     #             'title': title,
+#     #             'price': price,
+#     #             'quantity': quantity,
+#     #             'quantity_available': quantity_available,
+#     #             'quantity_sold': quantity_sold,
+#     #             'listing_status': platform_status,
+#     #             'created_at': now,
+#     #             'updated_at': now,
+#     #             'last_synced_at': now,
+#     #             'listing_data': json.dumps(listing)  # Store complete API response
+#     #         })
+            
+#     #         # Create eBay listing
+#     #         ebay_listing = EbayListing(**ebay_listing_data)
+#     #         self.db.add(ebay_listing)
+            
+#     #         # Commit all changes
+#     #         await self.db.commit()
+            
+#     #         logger.info(f"Successfully created eBay listing for item {item_id}")
+#     #         return True
+            
+#     #     except Exception as e:
+#     #         await self.db.rollback()
+#     #         logger.error(f"Error creating listing from API data for item {item_id}: {str(e)}")
+#     #         logger.exception("Full traceback:")
+#     #         return False
+    
+#     # async def _update_listing_from_api_data(self, existing_listing: EbayListing, listing: Dict[str, Any], listing_type: str) -> str:
+#     #     """
+#     #     Update an existing EbayListing from API data
+        
+#     #     Args:
+#     #         existing_listing: Existing EbayListing record
+#     #         listing: Updated listing data from eBay API
+#     #         listing_type: Type of listing ('active', 'sold', 'unsold')
+            
+#     #     Returns:
+#     #         str: "updated", "marked_sold", or "error"
+#     #     """
+#     #     now = datetime.now(timezone.utc).replace(tzinfo=None)
+#     #     item_id = listing.get('ItemID')
+        
+#     #     try:
+#     #         # Extract basic data
+#     #         price = float(listing.get('SellingStatus', {}).get('CurrentPrice', {}).get('#text', '0'))
+#     #         quantity = int(listing.get('Quantity', existing_listing.quantity or 1))
+#     #         quantity_available = int(listing.get('QuantityAvailable', quantity))
+#     #         quantity_sold = int(listing.get('SellingStatus', {}).get('QuantitySold', '0'))
+            
+#     #         # Check if item was sold
+#     #         was_sold = (listing_type.lower() == 'sold' or 
+#     #                    quantity_available == 0 or 
+#     #                    listing.get('SellingStatus', {}).get('ListingStatus') == 'Completed')
+            
+#     #         # Update listing fields
+#     #         existing_listing.price = price
+#     #         existing_listing.quantity = quantity
+#     #         existing_listing.quantity_available = quantity_available
+#     #         existing_listing.quantity_sold = quantity_sold
+#     #         existing_listing.updated_at = now
+#     #         existing_listing.last_synced_at = now
+            
+#     #         # Update status based on listing type
+#     #         if was_sold:
+#     #             existing_listing.listing_status = 'sold'
+#     #             # Also need to update platform_common and product
+#     #             result = await self._mark_item_as_sold(existing_listing.platform_id)
+#     #             if result:
+#     #                 await self.db.commit()
+#     #                 logger.info(f"Marked eBay item {item_id} as SOLD")
+#     #                 return "marked_sold"
+#     #         else:
+#     #             existing_listing.listing_status = 'active' if listing_type == 'active' else 'inactive'
+            
+#     #         # Update other fields from extracted data
+#     #         extracted_data = self._extract_ebay_listing_data(listing, listing_type)
+#     #         for field, value in extracted_data.items():
+#     #             if hasattr(existing_listing, field) and field not in ['platform_id', 'ebay_item_id', 'created_at']:
+#     #                 setattr(existing_listing, field, value)
+            
+#     #         # Update complete listing data
+#     #         existing_listing.listing_data = json.dumps(listing)
+            
+#     #         # Commit changes
+#     #         await self.db.commit()
+            
+#     #         return "updated"
+            
+#     #     except Exception as e:
+#     #         await self.db.rollback()
+#     #         logger.error(f"Error updating listing from API data for item {item_id}: {str(e)}")
+#     #         return "error"
+    
+#     # async def _mark_item_as_sold(self, platform_id: int) -> bool:
+#     #     """
+#     #     Mark an item as sold across Product and PlatformCommon
+        
+#     #     Args:
+#     #         platform_id: ID of the platform_common record
+            
+#     #     Returns:
+#     #         bool: True if successful
+#     #     """
+#     #     try:
+#     #         # Get platform_common record
+#     #         query = select(PlatformCommon).where(PlatformCommon.id == platform_id)
+#     #         result = await self.db.execute(query)
+#     #         platform_common = result.scalar_one_or_none()
+            
+#     #         if not platform_common:
+#     #             logger.error(f"Platform record not found for ID {platform_id}")
+#     #             return False
+            
+#     #         # Update platform_common status
+#     #         platform_common.status = 'sold'
+#     #         platform_common.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            
+#     #         # Get and update product status
+#     #         product_query = select(Product).where(Product.id == platform_common.product_id)
+#     #         product_result = await self.db.execute(product_query)
+#     #         product = product_result.scalar_one_or_none()
+            
+#     #         if product:
+#     #             product.status = ProductStatus.SOLD
+#     #             product.is_sold = True
+#     #             product.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            
+#     #         return True
+            
+#     #     except Exception as e:
+#     #         logger.error(f"Error marking item as sold: {str(e)}")
+#     #         return False
+    
+    
+#     async def _create_listing_from_api_data(self, listing_api_data: Dict[str, Any], listing_type_api_name: str = "active") -> bool:
+#         item_id_api = listing_api_data.get('ItemID', 'UnknownItemID')
+#         print(f"    DEBUG: EbayService._create_listing_from_api_data - Entered for ItemID: {item_id_api}, Type: {listing_type_api_name}")
+#         now_utc_naive = datetime.now(timezone.utc).replace(tzinfo=None) # As per your original
+        
+#         try:
+#             # ... (your existing data extraction logic: title, price, quantity, sku, brand, model etc.) ...
+#             # Example for one extraction:
+#             title = listing_api_data.get('Title', '')
+#             print(f"    DEBUG: EbayService._create_listing_from_api_data - ItemID: {item_id_api}, Extracted Title: {title[:50]}...")
+
+#             # Simplified: Assuming data extraction works and you get to product creation/update
+#             # Your original code has extensive extraction, which should remain.
+
+#             # Check if product already exists (by SKU you generate: f"EB-{item_id_api}")
+#             generated_sku = f"EB-{item_id_api}"
+#             print(f"    DEBUG: EbayService._create_listing_from_api_data - ItemID: {item_id_api}, Generated SKU: {generated_sku}")
+            
+#             # --- This is a critical section from your original code ---
+#             # (Simulating product creation/fetching and platform_common creation)
+#             # This part needs careful debugging if DB issues arise.
+#             # For now, assume it creates/fetches product and platform_common correctly.
+#             # ---
+            
+#             # Simulate product and platform_common creation for demonstration
+#             # In real code, this would involve DB selects and inserts.
+#             # Example:
+#             # product_id_for_platform = await self._ensure_product_exists_for_ebay_item(listing_api_data, generated_sku, now_utc_naive)
+#             # platform_common_id_for_listing = await self._ensure_platform_common_exists(product_id_for_platform, item_id_api, listing_type_api_name, now_utc_naive)
+
+#             # For the sake of print statements, let's assume we have product and platform_common IDs
+#             # This is where you'd call your actual DB operations to get these.
+#             # This section should be replaced by your actual logic from the uploaded ebay_service.py
+#             # For now, I'll just print that we're about to create the EbayListing specific record.
+            
+#             print(f"    DEBUG: EbayService._create_listing_from_api_data - ItemID: {item_id_api}, About to prepare and add EbayListing specific record.")
+#             # ... (your logic for extracting detailed eBay data into ebay_listing_specific_data) ...
+#             # ... (self.db.add(new_ebay_listing_record)) ...
+#             # ... (await self.db.commit()) ...
+            
+#             # For now, let's assume success if it reaches here without raising an exception from your DB logic.
+#             # Your actual implementation handles commit/rollback.
+#             print(f"    DEBUG: EbayService._create_listing_from_api_data - ItemID: {item_id_api}, DB operations (simulated) successful.")
+#             # This return True/False should reflect actual success of DB commit.
+#             # If your code inside this try block can fail and not raise, adjust.
+#             # Your original `_create_listing_from_api_data` returns bool.
+
+#             # Simulate successful creation for now, replace with actual logic's outcome
+#             # This part needs to be your original logic for DB operations and returning True/False
+#             # Based on the structure of your provided `ebay_service.py`:
+#             # You create Product, PlatformCommon, then EbayListing, then commit.
+#             # We'll assume this structure.
+            
+#             # --- PASTE YOUR FULL _create_listing_from_api_data content here ---
+#             # --- And add prints within it, similar to what I've started above. ---
+#             # --- For this example, I'll keep it high level. ---
+#             # Example print within your actual product creation:
+#             # print(f"    DEBUG: EbayService._create_listing_from_api_data - ItemID: {item_id_api}, Created new Product record with ID: {product.id}")
+#             # Example print within your actual platform_common creation:
+#             # print(f"    DEBUG: EbayService._create_listing_from_api_data - ItemID: {item_id_api}, Created new PlatformCommon record with ID: {platform_common.id}")
+#             # Example print within your actual EbayListing creation:
+#             # print(f"    DEBUG: EbayService._create_listing_from_api_data - ItemID: {item_id_api}, Created new EbayListing record.")
+#             # print(f"    DEBUG: EbayService._create_listing_from_api_data - ItemID: {item_id_api}, Committing DB changes.")
+#             # await self.db.commit() # Your original code has this
+            
+#             # Placeholder return based on your original function signature
+#             # The actual success depends on your internal logic and commit.
+#             # For now, we'll assume it has prints and a try/except for commit.
+#             logger.info(f"Successfully created DB entries for new eBay listing {item_id_api}") # From your code
+#             return True # Placeholder for successful DB operation
+
+#         except Exception as e_create:
+#             # await self.db.rollback() # Your original code has this
+#             print(f"    DEBUG: EbayService._create_listing_from_api_data - EXCEPTION for ItemID: {item_id_api}: {e_create}")
+#             logger.error(f"Error creating DB listing from API data for item {item_id_api}: {str(e_create)}", exc_info=True) # from your code
+#             return False # As per your original
+
+#     async def _update_listing_from_api_data(self, existing_db_listing: EbayListing, listing_api_data: Dict[str, Any], listing_type_api_name: str) -> str:
+#         item_id_api = listing_api_data.get('ItemID', 'UnknownItemID')
+#         print(f"    DEBUG: EbayService._update_listing_from_api_data - Entered for ItemID: {item_id_api}, DB_ID: {existing_db_listing.id}, Type: {listing_type_api_name}")
+#         now_utc_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+
+#         try:
+#             # ... (your existing data extraction for price, quantity etc.) ...
+#             # Example:
+#             # price_api = float(listing_api_data.get('SellingStatus', {}).get('CurrentPrice', {}).get('#text', '0'))
+#             # print(f"    DEBUG: EbayService._update_listing_from_api_data - ItemID: {item_id_api}, API Price: {price_api}, DB Price: {existing_db_listing.price}")
+            
+#             # --- PASTE YOUR FULL _update_listing_from_api_data content here ---
+#             # --- And add prints within it. ---
+#             # --- For this example, keeping it high level. ---
+
+#             was_sold_api = (listing_type_api_name.lower() == 'sold' or 
+#                            int(listing_api_data.get('QuantityAvailable', 1)) == 0 or # Assuming QuantityAvailable is string if not present
+#                            listing_api_data.get('SellingStatus', {}).get('ListingStatus') == 'Completed')
+#             print(f"    DEBUG: EbayService._update_listing_from_api_data - ItemID: {item_id_api}, API indicates sold status: {was_sold_api}")
+
+#             # Example print before updating fields:
+#             # print(f"    DEBUG: EbayService._update_listing_from_api_data - ItemID: {item_id_api}, Updating existing_db_listing fields.")
+#             # existing_db_listing.price = price_api 
+#             # ... other fields ...
+#             # existing_db_listing.updated_at = now_utc_naive
+#             # existing_db_listing.last_synced_at = now_utc_naive
+
+#             if was_sold_api:
+#                 print(f"    DEBUG: EbayService._update_listing_from_api_data - ItemID: {item_id_api}, Marking item as sold in DB.")
+#                 # marked_sold_success = await self._mark_item_as_sold(existing_db_listing.platform_id) # From your original
+#                 # if marked_sold_success:
+#                 #     print(f"    DEBUG: EbayService._update_listing_from_api_data - ItemID: {item_id_api}, Committing DB for sold status.")
+#                 #     await self.db.commit() # Your original code has this
+#                 #     return "marked_sold" # As per your original
+#                 # else:
+#                 #     print(f"    DEBUG: EbayService._update_listing_from_api_data - ItemID: {item_id_api}, Failed to mark as sold in _mark_item_as_sold. Rolling back.")
+#                 #     await self.db.rollback() # Your original might do this if _mark_item_as_sold returns False
+#                 #     return "error" # Or raise
+#                 return "marked_sold" # Placeholder
+#             else:
+#                 # ... (update other fields from _extract_ebay_listing_data) ...
+#                 # print(f"    DEBUG: EbayService._update_listing_from_api_data - ItemID: {item_id_api}, Committing DB for updated active/inactive listing.")
+#                 # await self.db.commit() # Your original code has this
+#                 # return "updated" # As per your original
+#                 return "updated" # Placeholder
+
+#         except Exception as e_update:
+#             # await self.db.rollback() # Your original code has this
+#             print(f"    DEBUG: EbayService._update_listing_from_api_data - EXCEPTION for ItemID: {item_id_api}: {e_update}")
+#             logger.error(f"Error updating DB listing from API data for item {item_id_api}: {str(e_update)}", exc_info=True) # from your code
+#             return "error" # As per your original
+
+#     # Ensure other helper methods called by the above are also instrumented if issues persist in DB logic.
+#     # For example: _mark_item_as_sold, _extract_ebay_listing_data
+    
+#     async def _mark_item_as_sold(self, platform_common_id: int) -> bool:
+#         print(f"        DEBUG: EbayService._mark_item_as_sold - Entered for PlatformCommonID: {platform_common_id}")
+#         try:
+#             # ... your original logic ...
+#             # Example prints:
+#             # print(f"        DEBUG: EbayService._mark_item_as_sold - Found PlatformCommon: {platform_common.id}, ProductID: {platform_common.product_id}")
+#             # print(f"        DEBUG: EbayService._mark_item_as_sold - Updating PlatformCommon status to 'sold'.")
+#             # print(f"        DEBUG: EbayService._mark_item_as_sold - Found Product: {product.id if product else 'None'}")
+#             # if product: print(f"        DEBUG: EbayService._mark_item_as_sold - Updating Product status to SOLD.")
+#             print(f"        DEBUG: EbayService._mark_item_as_sold - DB updates for 'sold' status prepared (simulated). Returning True.")
+#             return True # Placeholder for your actual logic's success
+#         except Exception as e_mark_sold:
+#             print(f"        DEBUG: EbayService._mark_item_as_sold - EXCEPTION: {e_mark_sold}")
+#             return False
+
+#     # ... (verify_credentials, get_all_active_listings, etc. are mostly for API interaction, already covered by trading.py prints) ...
+#     # The sync_inventory_to_ebay is a placeholder in your code.
+    
+#     def _extract_ebay_listing_data(self, listing: Dict[str, Any], listing_type: str) -> Dict[str, Any]:
+#         """
+#         Extract all relevant eBay-specific data from API response
+        
+#         Args:
+#             listing: eBay API response data
+#             listing_type: Type of listing ('active', 'sold', 'unsold')
+            
+#         Returns:
+#             Dict with eBay listing fields
+#         """
+#         # Initialize result dict
+#         extracted = {}
+        
+#         # Extract category data
+#         primary_category = listing.get('PrimaryCategory', {})
+#         extracted['ebay_category_id'] = primary_category.get('CategoryID')
+#         extracted['ebay_category_name'] = primary_category.get('CategoryName')
+        
+#         secondary_category = listing.get('SecondaryCategory', {})
+#         extracted['ebay_second_category_id'] = secondary_category.get('CategoryID')
+        
+#         # Extract condition
+#         extracted['ebay_condition_id'] = listing.get('ConditionID')
+#         extracted['condition_display_name'] = listing.get('ConditionDisplayName')
+        
+#         # Extract format
+#         listing_type_api = listing.get('ListingType', '')
+#         if listing_type_api == 'Chinese':
+#             extracted['format'] = 'AUCTION'
+#         elif listing_type_api in ['FixedPriceItem', 'StoreInventory']:
+#             extracted['format'] = 'BUY_IT_NOW'
+#         else:
+#             extracted['format'] = listing_type_api.upper()
+        
+#         # Extract dates with timezone handling
+#         listing_details = listing.get('ListingDetails', {})
+#         if listing_details:
+#             extracted['start_time'] = self._parse_ebay_datetime(listing_details.get('StartTime'))
+#             extracted['end_time'] = self._parse_ebay_datetime(listing_details.get('EndTime'))
+#             extracted['listing_url'] = listing_details.get('ViewItemURL')
+        
+#         # Extract image data
+#         picture_details = listing.get('PictureDetails', {})
+#         if picture_details:
+#             extracted['gallery_url'] = picture_details.get('GalleryURL')
+            
+#             picture_urls = picture_details.get('PictureURL', [])
+#             if not isinstance(picture_urls, list):
+#                 picture_urls = [picture_urls] if picture_urls else []
+#             extracted['picture_urls'] = json.dumps(picture_urls)
+        
+#         # Extract item specifics
+#         item_specifics = self._extract_item_specifics(listing)
+#         if item_specifics:
+#             extracted['item_specifics'] = json.dumps(item_specifics)
+        
+#         # Extract business policies
+#         seller_profiles = listing.get('SellerProfiles', {})
+#         if seller_profiles:
+#             payment_profile = seller_profiles.get('SellerPaymentProfile', {})
+#             if payment_profile:
+#                 extracted['payment_policy_id'] = payment_profile.get('PaymentProfileID')
+                
+#             return_profile = seller_profiles.get('SellerReturnProfile', {})
+#             if return_profile:
+#                 extracted['return_policy_id'] = return_profile.get('ReturnProfileID')
+                
+#             shipping_profile = seller_profiles.get('SellerShippingProfile', {})
+#             if shipping_profile:
+#                 extracted['shipping_policy_id'] = shipping_profile.get('ShippingProfileID')
+        
+#         # Extract transaction data for sold items
+#         if listing_type.lower() == 'sold':
+#             transaction = listing.get('Transaction', {})
+#             if transaction:
+#                 extracted['transaction_id'] = transaction.get('TransactionID')
+#                 extracted['order_line_item_id'] = transaction.get('OrderLineItemID')
+                
+#                 buyer = transaction.get('Buyer', {})
+#                 if buyer:
+#                     extracted['buyer_user_id'] = buyer.get('UserID')
+                
+#                 extracted['paid_time'] = self._parse_ebay_datetime(transaction.get('PaidTime'))
+#                 extracted['payment_status'] = transaction.get('SellerPaidStatus')
+                
+#                 # Determine shipping status
+#                 if transaction.get('SellerPaidStatus') == 'Paid':
+#                     extracted['shipping_status'] = 'READY_TO_SHIP'
+#                 else:
+#                     extracted['shipping_status'] = 'PENDING_PAYMENT'
+        
+#         return extracted
+    
+#     def _parse_ebay_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
+#         """Parse eBay datetime string to Python datetime object (timezone-naive)"""
+#         if not dt_str:
+#             return None
+        
+#         try:
+#             # Handle ISO format datetime strings
+#             dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+#             return dt.replace(tzinfo=None)  # Make timezone-naive for PostgreSQL
+#         except (ValueError, TypeError):
+#             try:
+#                 # Fallback to more flexible parsing
+#                 dt = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+#                 return dt.replace(tzinfo=None)
+#             except (ValueError, TypeError):
+#                 logger.warning(f"Could not parse datetime: {dt_str}")
+#                 return None
+    
+#     def _extract_item_specifics(self, listing: Dict[str, Any]) -> Dict[str, Any]:
+#         """Extract item specifics from eBay listing data"""
+#         result = {}
+        
+#         try:
+#             item_specifics = listing.get("ItemSpecifics", {})
+#             if not item_specifics:
+#                 return result
+                
+#             name_value_list = item_specifics.get("NameValueList")
+#             if not name_value_list:
+#                 return result
+                
+#             # Handle both single dict and list of dicts
+#             if isinstance(name_value_list, list):
+#                 for item in name_value_list:
+#                     if not isinstance(item, dict):
+#                         continue
+#                     name = item.get("Name")
+#                     value = item.get("Value")
+#                     if name and value:
+#                         result[name] = value
+#             elif isinstance(name_value_list, dict):
+#                 name = name_value_list.get("Name")
+#                 value = name_value_list.get("Value")
+#                 if name and value:
+#                     result[name] = value
+#         except Exception as e:
+#             logger.exception(f"Error extracting item specifics: {str(e)}")
+            
+#         return result
+    
+#     # -------------------------------------------------------------------------
+#     # API Wrapper Methods
+#     # -------------------------------------------------------------------------
+    
+#     async def verify_credentials(self) -> bool:
+#         """
+#         Verify eBay credentials and check user ID
+        
+#         Returns:
+#             bool: True if credentials are valid and user ID matches expected
+#         """
+#         try:
+#             user_info = await self.trading_api.get_user_info()
+            
+#             if not user_info.get('success'):
+#                 logger.error(f"Failed to get eBay user info: {user_info.get('message')}")
+#                 return False
+            
+#             user_id = user_info.get('user_data', {}).get('UserID')
+#             if user_id != self.expected_user_id:
+#                 logger.error(f"Unexpected eBay user: {user_id}, expected: {self.expected_user_id}")
+#                 return False
+            
+#             logger.info(f"Successfully authenticated as eBay user: {user_id}")
+#             return True
+            
+#         except Exception as e:
+#             logger.error(f"Error verifying eBay credentials: {str(e)}")
+#             return False
+    
+#     async def get_all_active_listings(self, include_details: bool = False) -> List[Dict[str, Any]]:
+#         """
+#         Get all active eBay listings
+        
+#         Args:
+#             include_details: Whether to include full item details
+            
+#         Returns:
+#             List of active listings data
+#         """
+#         return await self.trading_api.get_all_active_listings(include_details=include_details)
+    
+#     async def get_active_listing_count(self) -> int:
+#         """
+#         Get count of active eBay listings
+        
+#         Returns:
+#             int: Count of active listings
+#         """
+#         return await self.trading_api.get_total_active_listings_count()
+    
+#     # -------------------------------------------------------------------------
+#     # Placeholder for TO eBay Methods (Future Implementation)
+#     # -------------------------------------------------------------------------
+    
+#     async def sync_inventory_to_ebay(self) -> Dict[str, int]:
+#         """
+#         Placeholder for future implementation of syncing TO eBay
+        
+#         This will handle cross-platform inventory sync when items are sold
+#         on other platforms and need to be updated on eBay.
+#         """
+#         logger.info("sync_inventory_to_ebay - placeholder for future implementation")
+#         return {
+#             "total": 0,
+#             "updated": 0,
+#             "errors": 0,
+#             "message": "Not yet implemented - coming soon!"
+#         }
+        
 class EbayService:
     """
     Service for managing eBay listings and synchronization.
-    
     Focused on importing FROM eBay to detect sales and keep our system updated.
     """
     
     def __init__(self, db: AsyncSession, settings: Settings = None):
-        """Initialize the eBay service with database session and settings"""
+        logger.debug("EbayService.__init__ - Initializing.")
         self.db = db
         self.settings = settings
         
-        # Use settings to determine sandbox mode, default to production
         sandbox_mode = settings.EBAY_SANDBOX_MODE if settings else False
+        logger.debug(f"EbayService.__init__ - Sandbox mode: {sandbox_mode}")
         
-        # Initialize API clients
         self.trading_api = EbayTradingLegacyAPI(sandbox=sandbox_mode)
         
-        # Default user expected for verification
-        self.expected_user_id = "londonvintagegts"
-    
+        self.expected_user_id = "londonvintagegts" 
+        logger.debug(f"EbayService.__init__ - Expected User ID: {self.expected_user_id}")
+
     # -------------------------------------------------------------------------
     # Main Sync Methods (FROM eBay)
     # -------------------------------------------------------------------------
     
     async def sync_inventory_from_ebay(self, progress_callback=None) -> Dict[str, int]:
-        """
-        Synchronize all eBay inventory to database with optional progress reporting
-        Returns: Dict with statistics about the sync operation
-        """
+        logger.info("=== EbayService: STARTING EBAY SYNC FROM API ===")
         
-        # Initialize result stats
         results = {
-            "total": 0,
-            "created": 0,
-            "updated": 0,
-            "errors": 0,
-            "marked_sold": 0
+            "total_api_items": 0,    # Total items fetched from eBay API
+            "processed_db_items": 0, # Items for which DB processing was attempted
+            "created_db": 0,         # New items created in DB
+            "updated_db": 0,         # Existing items updated in DB
+            "marked_sold_db": 0,     # Items marked as sold in DB
+            "db_errors": 0,          # Errors during DB operations
+            "api_errors": 0          # Errors during API calls (e.g., verification)
         }
         
         try:
-            logger.info("=== STARTING EBAY SYNC ===")
-            print("=== STARTING EBAY SYNC ===")
-            # Send initial progress
             if progress_callback:
+                logger.debug("EbayService.sync_inventory_from_ebay - Sending initial progress callback.")
                 await progress_callback({
-                    "message": "Starting eBay sync...",
-                    "progress": 0,
-                    "total": 0,
-                    "processed": 0
+                    "message": "Starting eBay sync...", 
+                    "progress": 0, 
+                    "total_api_items": 0, 
+                    "processed_db_items": 0
                 })
             
-            # Verify eBay user
-            if progress_callback:
-                await progress_callback({
-                    "message": "Verifying eBay credentials...",
-                    "progress": 10,
-                    "total": 0,
-                    "processed": 0
-                })
-            
-            logger.info("About to verify eBay credentials...")
-            print("About to verify eBay credentials...")
+            logger.debug("EbayService.sync_inventory_from_ebay - Verifying eBay credentials.")
             if not await self.verify_credentials():
-                logger.error("Failed to verify eBay user, canceling sync")
+                logger.error("EbayService.sync_inventory_from_ebay - Credentials verification FAILED. Aborting sync.")
+                results["api_errors"] +=1 
                 if progress_callback:
-                    await progress_callback({
-                        "error": "Failed to verify eBay credentials",
-                        "message": "Authentication failed"
-                    })
+                    await progress_callback({"error": "Failed to verify eBay credentials", "message": "Authentication failed"})
                 return results
 
-            logger.info("eBay credentials verified successfully") 
-            print("*** eBay credentials verified successfully ***")
-            # Get all listings from eBay (active, sold, unsold)
+            logger.info("EbayService.sync_inventory_from_ebay - Credentials verified successfully.")
+            
             if progress_callback:
+                logger.debug("EbayService.sync_inventory_from_ebay - Sending 'Fetching eBay listings...' progress.")
                 await progress_callback({
-                    "message": "Fetching eBay listings...",
-                    "progress": 20,
-                    "total": 0,
-                    "processed": 0
+                    "message": "Fetching eBay listings...", 
+                    "progress": 20, # Arbitrary progress step
+                    "total_api_items": 0, # Will be updated after fetch
+                    "processed_db_items": 0
                 })
                 
-            logger.info("Fetching all eBay listings (active, sold, unsold)")
-            print("*** ABOUT TO FETCH ALL eBay LISTINGS ***")
-            all_listings = await self.trading_api.get_all_selling_listings(
-                include_active=True,
-                include_sold=True,
-                include_unsold=True,
-                include_details=True
+            logger.info("EbayService.sync_inventory_from_ebay - Fetching all eBay listings (active, sold, unsold).")
+            
+            all_listings_from_api = await self.trading_api.get_all_selling_listings(
+                include_active=True, include_sold=True, include_unsold=True, include_details=True
             )
-            print("*** FINISHED FETCHING ALL eBay LISTINGS ***")
-            import time
-            time.sleep(20)
-            # Count total listings
-            total_listings = 0
-            for listing_type in ['active', 'sold', 'unsold']:
-                if listing_type in all_listings:
-                    total_listings += len(all_listings.get(listing_type, []))
+            logger.info("EbayService.sync_inventory_from_ebay - Finished fetching all eBay listings from API.")
             
-            results["total"] = total_listings
-            
+            total_api_listings = 0
+            for list_type_key in ['active', 'sold', 'unsold']:
+                count = len(all_listings_from_api.get(list_type_key, []))
+                total_api_listings += count
+                logger.debug(f"EbayService.sync_inventory_from_ebay - Fetched {count} items for type '{list_type_key}' from API.")
+            results["total_api_items"] = total_api_listings
+            logger.info(f"EbayService.sync_inventory_from_ebay - Total items fetched from API: {total_api_listings}")
+
             if progress_callback:
+                logger.debug(f"EbayService.sync_inventory_from_ebay - Sending 'Processing {total_api_listings} listings into DB...' progress.")
                 await progress_callback({
-                    "message": f"Processing {total_listings} eBay listings...",
-                    "progress": 30,
-                    "total": total_listings,
-                    "processed": 0
+                    "message": f"Processing {total_api_listings} eBay listings into database...",
+                    "progress": 30, 
+                    "total_api_items": total_api_listings,
+                    "processed_db_items": 0
                 })
 
-            logger.info(f"Processing {total_listings} eBay listings")
+            logger.info(f"EbayService.sync_inventory_from_ebay - Starting processing of {total_api_listings} eBay listings into database.")
             
-            # Process each type of listing
-            created_count = 0
-            updated_count = 0
-            error_count = 0
-            marked_sold_count = 0
-            processed_count = 0
+            listing_types_to_process = ['active', 'sold', 'unsold']
             
-            listing_types = ['active', 'sold', 'unsold']
-            for listing_type in listing_types:
-                if listing_type not in all_listings:
+            for list_type_api_name in listing_types_to_process:
+                listings_of_type = all_listings_from_api.get(list_type_api_name, [])
+                if not listings_of_type:
+                    logger.debug(f"EbayService.sync_inventory_from_ebay - No listings to process for type: {list_type_api_name}")
                     continue
                     
-                listings = all_listings[listing_type]
-                logger.info(f"Processing {len(listings)} {listing_type} eBay listings")
+                logger.info(f"EbayService.sync_inventory_from_ebay - Processing {len(listings_of_type)} '{list_type_api_name}' listings from API into DB.")
                 
-                for idx, listing in enumerate(listings):
+                for idx, listing_api_data in enumerate(listings_of_type):
+                    item_id_api = listing_api_data.get('ItemID', 'UnknownItemID')
+                    logger.debug(f"EbayService.sync_inventory_from_ebay - DB Processing for ItemID: {item_id_api} (Type: {list_type_api_name}, Index: {idx+1}/{len(listings_of_type)})")
+                    
                     try:
-                        # Skip invalid listings
-                        if not listing or not isinstance(listing, dict) or 'ItemID' not in listing:
-                            logger.warning(f"Skipping invalid {listing_type} listing")
-                            error_count += 1
+                        if not listing_api_data or not isinstance(listing_api_data, dict) or 'ItemID' not in listing_api_data:
+                            logger.warning(f"EbayService.sync_inventory_from_ebay - Skipping invalid API listing data for type {list_type_api_name}. ItemID: {item_id_api}. Data: {str(listing_api_data)[:200]}")
+                            results["db_errors"] += 1
                             continue
                         
-                        item_id = listing.get('ItemID')
+                        stmt_select_existing = select(EbayListing).where(EbayListing.ebay_item_id == item_id_api)
+                        db_result_existing = await self.db.execute(stmt_select_existing)
+                        existing_db_listing = db_result_existing.scalar_one_or_none()
                         
-                        # Check if listing exists in database
-                        query = select(EbayListing).where(EbayListing.ebay_item_id == item_id)
-                        result = await self.db.execute(query)
-                        existing_listing = result.scalar_one_or_none()
-                        
-                        if existing_listing:
-                            # Update existing listing
-                            update_result = await self._update_listing_from_api_data(
-                                existing_listing, listing, listing_type
+                        results["processed_db_items"] += 1 # Count as attempted for DB processing
+
+                        if existing_db_listing:
+                            logger.debug(f"EbayService.sync_inventory_from_ebay - ItemID: {item_id_api} exists in DB. Attempting update.")
+                            update_status_msg = await self._update_listing_from_api_data(
+                                existing_db_listing, listing_api_data, list_type_api_name
                             )
-                            if update_result == "updated":
-                                updated_count += 1
-                            elif update_result == "marked_sold":
-                                marked_sold_count += 1
-                            else:
-                                error_count += 1
+                            if update_status_msg == "updated":
+                                results["updated_db"] += 1
+                            elif update_status_msg == "marked_sold":
+                                results["marked_sold_db"] += 1
+                            elif update_status_msg == "error":
+                                results["db_errors"] +=1
                         else:
-                            # Create new listing
-                            create_result = await self._create_listing_from_api_data(listing, listing_type)
-                            if create_result:
-                                created_count += 1
+                            logger.debug(f"EbayService.sync_inventory_from_ebay - ItemID: {item_id_api} does NOT exist in DB. Attempting create.")
+                            create_successful = await self._create_listing_from_api_data(listing_api_data, list_type_api_name)
+                            if create_successful:
+                                results["created_db"] += 1
                             else:
-                                error_count += 1
+                                results["db_errors"] +=1
                         
-                        processed_count += 1
-                        
-                        # Send progress update every 10 items
-                        if processed_count % 10 == 0 and progress_callback:
-                            progress = 30 + (processed_count / total_listings) * 60
+                        if results["processed_db_items"] > 0 and results["processed_db_items"] % 10 == 0 and progress_callback and total_api_listings > 0:
+                            current_progress_percentage = 30 + int((results["processed_db_items"] / total_api_listings) * 60)
+                            logger.debug(f"EbayService.sync_inventory_from_ebay - Sending DB processing progress. Processed: {results['processed_db_items']}/{total_api_listings}, Progress%: {current_progress_percentage}")
                             await progress_callback({
-                                "message": f"Processed {processed_count}/{total_listings} listings...",
-                                "progress": int(progress),
-                                "total": total_listings,
-                                "processed": processed_count
+                                "message": f"DB Processed {results['processed_db_items']}/{total_api_listings} listings...",
+                                "progress": min(current_progress_percentage, 99), # Cap at 99 before final
+                                "total_api_items": total_api_listings,
+                                "processed_db_items": results["processed_db_items"]
                             })
                             
-                    except Exception as e:
-                        logger.exception(f"Error processing {listing_type} listing {listing.get('ItemID')}: {str(e)}")
-                        error_count += 1
-                        processed_count += 1
+                    except Exception as e_item_proc: 
+                        logger.exception(f"EbayService.sync_inventory_from_ebay - EXCEPTION during DB processing for ItemID {item_id_api}: {e_item_proc}")
+                        results["db_errors"] += 1
             
-            # Update final results
-            results["created"] = created_count
-            results["updated"] = updated_count
-            results["errors"] = error_count
-            results["marked_sold"] = marked_sold_count
+            logger.info("EbayService.sync_inventory_from_ebay - DB processing loop finished.")
 
-            # Always send completion notification
             if progress_callback:
+                logger.debug("EbayService.sync_inventory_from_ebay - Sending final DB completion progress.")
+                final_message = (
+                    f"eBay DB sync complete! Fetched: {results['total_api_items']}. "
+                    f"DB Processed: {results['processed_db_items']}, "
+                    f"Created: {results['created_db']}, Updated: {results['updated_db']}, "
+                    f"Sold: {results['marked_sold_db']}, Errors: {results['db_errors']}"
+                )
                 await progress_callback({
-                    "message": f"eBay sync complete! Created: {created_count}, Updated: {updated_count}, Sold: {marked_sold_count}, Errors: {error_count}",
+                    "message": final_message,
                     "progress": 100,
-                    "total": total_listings,
-                    "processed": total_listings,
+                    "total_api_items": results["total_api_items"],
+                    "processed_db_items": results["processed_db_items"],
                     "completed": True,
-                    "stats": results
+                    "stats": results 
                 })
 
-            # Log completion
-            logger.info(f"eBay sync completed. Created: {created_count}, Updated: {updated_count}, Sold: {marked_sold_count}, Errors: {error_count}")
-
-            return results
+            log_msg_summary = (
+                f"EbayService: eBay sync completed. API Items: {results['total_api_items']}, "
+                f"DB Processed Attempts: {results['processed_db_items']}, "
+                f"DB Created: {results['created_db']}, DB Updated: {results['updated_db']}, "
+                f"DB Marked Sold: {results['marked_sold_db']}, DB Errors: {results['db_errors']}, API Errors: {results['api_errors']}"
+            )
+            logger.info(log_msg_summary)
             
-        except Exception as e:
-            logger.error(f"Error in eBay inventory sync: {str(e)}")
+        except EbayAPIError as e_api_outer:
+            logger.error(f"EbayService: EbayAPIError during eBay inventory sync (outer scope): {e_api_outer}", exc_info=True)
+            results["api_errors"] +=1 
             if progress_callback:
-                await progress_callback({
-                    "error": str(e),
-                    "message": "eBay sync failed"
-                })
-            raise
+                await progress_callback({"error": str(e_api_outer), "message": "eBay API error during sync"})
+        except Exception as e_outer:
+            logger.error(f"EbayService: Generic EXCEPTION during eBay inventory sync (outer scope): {e_outer}", exc_info=True)
+            # results["db_errors"] could be incremented or a general "sync_failed_error" count
+            if progress_callback:
+                await progress_callback({"error": str(e_outer), "message": "eBay sync failed due to an unexpected error"})
+        finally:
+            logger.info(f"=== EbayService: FINISHED EBAY SYNC FROM API === Final Results: {results}")
+        return results
     
     # -------------------------------------------------------------------------
     # Create/Update Methods (FROM eBay API Data)
     # -------------------------------------------------------------------------
     
-    async def _create_listing_from_api_data(self, listing: Dict[str, Any], listing_type: str = "active") -> bool:
+    async def _create_listing_from_api_data(self, listing_api_data: Dict[str, Any], listing_type_api_name: str = "active") -> bool:
         """
-        Create a new EbayListing and associated Product from API data
-        
-        Args:
-            listing: Listing data from eBay API
-            listing_type: Type of listing ('active', 'sold', 'unsold')
-            
-        Returns:
-            bool: True if successful, False otherwise
+        Create a new EbayListing and associated Product from API data.
+        (Based on the fuller, original commented-out version with logging added)
         """
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        item_id = listing.get('ItemID')
+        now_utc_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+        item_id_api = listing_api_data.get('ItemID', 'UnknownItemID')
+        logger.debug(f"EbayService._create_listing_from_api_data - Entered for ItemID: {item_id_api}, Type: {listing_type_api_name}")
         
         try:
-            # Extract basic listing data
-            title = listing.get('Title', '')
-            
-            # Extract price with proper error handling
-            selling_status = listing.get('SellingStatus', {})
+            title = listing_api_data.get('Title', '')
+            logger.debug(f"    ItemID: {item_id_api}, Extracted Title: '{title[:50]}...'")
+
+            selling_status = listing_api_data.get('SellingStatus', {})
             price_data = selling_status.get('CurrentPrice', {})
+            price = 0.0
             try:
                 price = float(price_data.get('#text', '0')) if price_data else 0.0
-            except (ValueError, TypeError):
-                price = 0.0
-            
-            # Extract quantities with proper error handling
+            except (ValueError, TypeError) as e_price:
+                logger.warning(f"    ItemID: {item_id_api}, Could not parse price data '{price_data}'. Defaulting to 0.0. Error: {e_price}")
+            logger.debug(f"    ItemID: {item_id_api}, Extracted Price: {price}")
+
+            quantity, quantity_available, quantity_sold = 1, 1, 0
             try:
-                quantity = int(listing.get('Quantity', '1'))
-            except (ValueError, TypeError):
-                quantity = 1
-                
-            try:
-                quantity_available = int(listing.get('QuantityAvailable', quantity))
-            except (ValueError, TypeError):
-                quantity_available = quantity
-                
-            try:
+                quantity = int(listing_api_data.get('Quantity', '1'))
+                quantity_available = int(listing_api_data.get('QuantityAvailable', quantity))
                 quantity_sold = int(selling_status.get('QuantitySold', '0'))
-            except (ValueError, TypeError):
-                quantity_sold = 0
+            except (ValueError, TypeError) as e_qty:
+                logger.warning(f"    ItemID: {item_id_api}, Could not parse quantity data. Defaults used. Error: {e_qty}")
+            logger.debug(f"    ItemID: {item_id_api}, Qty: {quantity}, QtyAvail: {quantity_available}, QtySold: {quantity_sold}")
             
-            # Generate SKU
-            sku = f"EB-{item_id}"
+            sku = f"EB-{item_id_api}"
+            logger.debug(f"    ItemID: {item_id_api}, Generated SKU: {sku}")
             
-            # Extract brand/model from title for Product creation
             brand = title.split(' ')[0] if title else 'Unknown'
             model = ' '.join(title.split(' ')[1:]) if len(title.split(' ')) > 1 else title
             
-            # Check if product already exists
-            query = select(Product).where(Product.sku == sku)
-            result = await self.db.execute(query)
-            product = result.scalar_one_or_none()
+            stmt_product = select(Product).where(Product.sku == sku)
+            product_result_db = await self.db.execute(stmt_product)
+            product = product_result_db.scalar_one_or_none()
             
             if not product:
-                # Extract category for Product
-                primary_category = listing.get('PrimaryCategory', {})
+                logger.debug(f"    ItemID: {item_id_api}, Product with SKU {sku} not found. Creating new product.")
+                primary_category = listing_api_data.get('PrimaryCategory', {})
                 category_name = primary_category.get('CategoryName', 'Uncategorized')
                 
-                # Map eBay condition to ProductCondition
-                condition = ProductCondition.VERYGOOD  # Default
-                ebay_condition = listing.get('ConditionDisplayName', '').lower()
-                if 'new' in ebay_condition:
-                    condition = ProductCondition.NEW
-                elif 'excellent' in ebay_condition:
-                    condition = ProductCondition.EXCELLENT
-                elif 'very good' in ebay_condition:
-                    condition = ProductCondition.VERYGOOD
-                elif 'good' in ebay_condition:
-                    condition = ProductCondition.GOOD
-                elif 'fair' in ebay_condition:
-                    condition = ProductCondition.FAIR
-                elif 'poor' in ebay_condition:
-                    condition = ProductCondition.POOR
+                condition = ProductCondition.VERYGOOD 
+                ebay_condition_str = listing_api_data.get('ConditionDisplayName', '').lower()
+                if 'new' in ebay_condition_str: condition = ProductCondition.NEW
+                elif 'excellent' in ebay_condition_str: condition = ProductCondition.EXCELLENT
+                elif 'very good' in ebay_condition_str: condition = ProductCondition.VERYGOOD
+                elif 'good' in ebay_condition_str: condition = ProductCondition.GOOD
+                elif 'fair' in ebay_condition_str: condition = ProductCondition.FAIR
+                elif 'poor' in ebay_condition_str: condition = ProductCondition.POOR
+                logger.debug(f"    ItemID: {item_id_api}, Mapped condition: {condition.value} from eBay condition: '{ebay_condition_str}'")
+
+                picture_details = listing_api_data.get('PictureDetails', {})
+                picture_urls_api = picture_details.get('PictureURL', [])
+                if not isinstance(picture_urls_api, list):
+                    picture_urls_api = [picture_urls_api] if picture_urls_api else []
                 
-                # Extract images for Product
-                picture_details = listing.get('PictureDetails', {})
-                picture_urls = picture_details.get('PictureURL', [])
-                if not isinstance(picture_urls, list):
-                    picture_urls = [picture_urls] if picture_urls else []
+                primary_image = picture_urls_api[0] if picture_urls_api else None
+                additional_images = picture_urls_api[1:] if len(picture_urls_api) > 1 else []
                 
-                primary_image = picture_urls[0] if picture_urls else None
-                additional_images = picture_urls[1:] if len(picture_urls) > 1 else []
-                
-                # Set product status based on listing type
                 product_status = ProductStatus.ACTIVE
-                if listing_type.lower() == 'sold':
+                if listing_type_api_name.lower() == 'sold':
                     product_status = ProductStatus.SOLD
                 
-                # Create new product
                 product = Product(
-                    sku=sku,
-                    brand=brand,
-                    model=model,
-                    category=category_name,
-                    description=listing.get('Description', ''),
-                    condition=condition,
-                    status=product_status,
-                    base_price=price,
-                    primary_image=primary_image,
-                    additional_images=json.dumps(additional_images),
-                    created_at=now,
-                    updated_at=now
+                    sku=sku, brand=brand, model=model, category=category_name,
+                    description=listing_api_data.get('Description', ''), # Note: Full description might be separate call in Trading API
+                    condition=condition, status=product_status, base_price=price,
+                    primary_image=primary_image, additional_images=json.dumps(additional_images),
+                    created_at=now_utc_naive, updated_at=now_utc_naive
                 )
                 self.db.add(product)
-                await self.db.flush()  # Get product ID without committing
-            
-            # Create platform_common record
-            platform_status = 'active'
-            if listing_type.lower() == 'sold':
-                platform_status = 'sold'
-            elif listing_type.lower() == 'unsold':
-                platform_status = 'inactive'
+                await self.db.flush() 
+                logger.info(f"    ItemID: {item_id_api}, Created new Product record with ID: {product.id}")
+            else:
+                logger.debug(f"    ItemID: {item_id_api}, Found existing Product with ID: {product.id}, SKU: {sku}")
+
+            platform_status_str = 'active'
+            if listing_type_api_name.lower() == 'sold': platform_status_str = ListingStatus.SOLD.value # Use Enum
+            elif listing_type_api_name.lower() == 'unsold': platform_status_str = ListingStatus.INACTIVE.value # Use Enum
             
             platform_common = PlatformCommon(
-                product_id=product.id,
-                platform_name='ebay',
-                external_id=item_id,
-                status=platform_status,
-                sync_status='success',
-                created_at=now,
-                updated_at=now
+                product_id=product.id, platform_name='ebay', external_id=item_id_api,
+                status=platform_status_str, sync_status=SyncStatus.SYNCED.value, # Use Enum
+                created_at=now_utc_naive, updated_at=now_utc_naive
             )
             self.db.add(platform_common)
-            await self.db.flush()  # Get platform_common ID
+            await self.db.flush()
+            logger.debug(f"    ItemID: {item_id_api}, Created new PlatformCommon record with ID: {platform_common.id}")
             
-            # Extract detailed data for eBay listing
-            ebay_listing_data = self._extract_ebay_listing_data(listing, listing_type)
-            ebay_listing_data.update({
-                'platform_id': platform_common.id,
-                'ebay_item_id': item_id,
-                'title': title,
-                'price': price,
-                'quantity': quantity,
-                'quantity_available': quantity_available,
-                'quantity_sold': quantity_sold,
-                'listing_status': platform_status,
-                'created_at': now,
-                'updated_at': now,
-                'last_synced_at': now,
-                'listing_data': json.dumps(listing)  # Store complete API response
+            ebay_listing_specific_data = self._extract_ebay_listing_data(listing_api_data, listing_type_api_name)
+            ebay_listing_specific_data.update({
+                'platform_id': platform_common.id, 'ebay_item_id': item_id_api,
+                'title': title, 'price': price, 'quantity': quantity,
+                'quantity_available': quantity_available, 'quantity_sold': quantity_sold,
+                'listing_status': platform_status_str, # Match platform_common status
+                'created_at': now_utc_naive, 'updated_at': now_utc_naive,
+                'last_synced_at': now_utc_naive,
+                'listing_data': json.dumps(listing_api_data) 
             })
             
-            # Create eBay listing
-            ebay_listing = EbayListing(**ebay_listing_data)
-            self.db.add(ebay_listing)
+            new_ebay_listing_record = EbayListing(**ebay_listing_specific_data)
+            self.db.add(new_ebay_listing_record)
             
-            # Commit all changes
             await self.db.commit()
-            
-            logger.info(f"Successfully created eBay listing for item {item_id}")
+            logger.info(f"    ItemID: {item_id_api}, Successfully created new eBay listing and associated records in DB.")
             return True
             
-        except Exception as e:
+        except Exception as e_create:
             await self.db.rollback()
-            logger.error(f"Error creating listing from API data for item {item_id}: {str(e)}")
-            logger.exception("Full traceback:")
+            logger.error(f"    ItemID: {item_id_api}, EXCEPTION in _create_listing_from_api_data: {e_create}", exc_info=True)
             return False
-    
-    async def _update_listing_from_api_data(self, existing_listing: EbayListing, listing: Dict[str, Any], listing_type: str) -> str:
+
+    async def _update_listing_from_api_data(self, existing_db_listing: EbayListing, listing_api_data: Dict[str, Any], listing_type_api_name: str) -> str:
         """
-        Update an existing EbayListing from API data
-        
-        Args:
-            existing_listing: Existing EbayListing record
-            listing: Updated listing data from eBay API
-            listing_type: Type of listing ('active', 'sold', 'unsold')
-            
-        Returns:
-            str: "updated", "marked_sold", or "error"
+        Update an existing EbayListing from API data.
+        (Based on the fuller, original commented-out version with logging added)
+        Returns: "updated", "marked_sold", or "error"
         """
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        item_id = listing.get('ItemID')
-        
+        now_utc_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+        item_id_api = listing_api_data.get('ItemID', existing_db_listing.ebay_item_id) # Prefer API, fallback to DB
+        logger.debug(f"EbayService._update_listing_from_api_data - Entered for ItemID: {item_id_api}, DB_ID: {existing_db_listing.id}, Type: {listing_type_api_name}")
+
         try:
-            # Extract basic data
-            price = float(listing.get('SellingStatus', {}).get('CurrentPrice', {}).get('#text', '0'))
-            quantity = int(listing.get('Quantity', existing_listing.quantity or 1))
-            quantity_available = int(listing.get('QuantityAvailable', quantity))
-            quantity_sold = int(listing.get('SellingStatus', {}).get('QuantitySold', '0'))
-            
-            # Check if item was sold
-            was_sold = (listing_type.lower() == 'sold' or 
-                       quantity_available == 0 or 
-                       listing.get('SellingStatus', {}).get('ListingStatus') == 'Completed')
-            
-            # Update listing fields
-            existing_listing.price = price
-            existing_listing.quantity = quantity
-            existing_listing.quantity_available = quantity_available
-            existing_listing.quantity_sold = quantity_sold
-            existing_listing.updated_at = now
-            existing_listing.last_synced_at = now
-            
-            # Update status based on listing type
-            if was_sold:
-                existing_listing.listing_status = 'sold'
-                # Also need to update platform_common and product
-                result = await self._mark_item_as_sold(existing_listing.platform_id)
-                if result:
-                    await self.db.commit()
-                    logger.info(f"Marked eBay item {item_id} as SOLD")
-                    return "marked_sold"
-            else:
-                existing_listing.listing_status = 'active' if listing_type == 'active' else 'inactive'
+            price_api = float(listing_api_data.get('SellingStatus', {}).get('CurrentPrice', {}).get('#text', '0'))
+            quantity_api = int(listing_api_data.get('Quantity', existing_db_listing.quantity or 1))
+            quantity_available_api = int(listing_api_data.get('QuantityAvailable', quantity_api))
+            quantity_sold_api = int(listing_api_data.get('SellingStatus', {}).get('QuantitySold', '0'))
+            logger.debug(f"    ItemID: {item_id_api}, API Data - Price: {price_api}, Qty: {quantity_api}, QtyAvail: {quantity_available_api}, QtySold: {quantity_sold_api}")
+
+            # Determine if the item is effectively sold based on API data
+            is_sold_per_api = (listing_type_api_name.lower() == 'sold' or 
+                               quantity_available_api == 0 or 
+                               listing_api_data.get('SellingStatus', {}).get('ListingStatus') == 'Completed') # Completed means ended, often sold or unsold
+            logger.debug(f"    ItemID: {item_id_api}, API indicates sold status: {is_sold_per_api}")
+
+            # Update EbayListing fields
+            existing_db_listing.price = price_api
+            existing_db_listing.quantity = quantity_api
+            existing_db_listing.quantity_available = quantity_available_api
+            existing_db_listing.quantity_sold = quantity_sold_api
+            existing_db_listing.updated_at = now_utc_naive
+            existing_db_listing.last_synced_at = now_utc_naive
             
             # Update other fields from extracted data
-            extracted_data = self._extract_ebay_listing_data(listing, listing_type)
-            for field, value in extracted_data.items():
-                if hasattr(existing_listing, field) and field not in ['platform_id', 'ebay_item_id', 'created_at']:
-                    setattr(existing_listing, field, value)
+            extracted_data_api = self._extract_ebay_listing_data(listing_api_data, listing_type_api_name)
+            for field, value in extracted_data_api.items():
+                if hasattr(existing_db_listing, field) and field not in ['id', 'platform_id', 'ebay_item_id', 'created_at']:
+                    setattr(existing_db_listing, field, value)
             
-            # Update complete listing data
-            existing_listing.listing_data = json.dumps(listing)
+            existing_db_listing.listing_data = json.dumps(listing_api_data) # Store fresh API data
+
+            if is_sold_per_api:
+                logger.info(f"    ItemID: {item_id_api}, API data indicates item is SOLD. Updating DB status.")
+                existing_db_listing.listing_status = ListingStatus.SOLD.value
+                marked_sold_success = await self._mark_item_as_sold(existing_db_listing.platform_id, item_id_api)
+                if marked_sold_success:
+                    await self.db.commit()
+                    logger.info(f"    ItemID: {item_id_api}, Successfully marked as SOLD in DB and committed.")
+                    return "marked_sold"
+                else:
+                    logger.error(f"    ItemID: {item_id_api}, Failed to mark item as sold via _mark_item_as_sold. Rolling back.")
+                    await self.db.rollback()
+                    return "error" # Error during the _mark_item_as_sold process
+            else:
+                # Not sold, determine if active or inactive based on API listing_type
+                if listing_type_api_name.lower() == 'active':
+                    existing_db_listing.listing_status = ListingStatus.ACTIVE.value
+                elif listing_type_api_name.lower() == 'unsold': # Or 'ended' without being sold
+                    existing_db_listing.listing_status = ListingStatus.INACTIVE.value
+                else: # Default to current or active if unsure
+                    existing_db_listing.listing_status = ListingStatus.ACTIVE.value 
+                    logger.warning(f"    ItemID: {item_id_api}, Unknown listing_type_api_name '{listing_type_api_name}' for non-sold item. Defaulting to active.")
+                
+                # Update PlatformCommon status to match
+                platform_common = await self.db.get(PlatformCommon, existing_db_listing.platform_id)
+                if platform_common:
+                    platform_common.status = existing_db_listing.listing_status
+                    platform_common.sync_status = SyncStatus.SYNCED.value
+                    platform_common.updated_at = now_utc_naive
+                    logger.debug(f"    ItemID: {item_id_api}, Updated PlatformCommon ID {platform_common.id} status to '{platform_common.status}'.")
+                else:
+                    logger.error(f"    ItemID: {item_id_api}, PlatformCommon record not found for ID {existing_db_listing.platform_id} during update.")
+                    # Continue to commit EbayListing changes, but log error for PlatformCommon.
+
+                await self.db.commit()
+                logger.info(f"    ItemID: {item_id_api}, Successfully updated listing in DB. Status: {existing_db_listing.listing_status}")
+                return "updated"
             
-            # Commit changes
-            await self.db.commit()
-            
-            return "updated"
-            
-        except Exception as e:
+        except Exception as e_update:
             await self.db.rollback()
-            logger.error(f"Error updating listing from API data for item {item_id}: {str(e)}")
+            logger.error(f"    ItemID: {item_id_api}, EXCEPTION in _update_listing_from_api_data: {e_update}", exc_info=True)
             return "error"
-    
-    async def _mark_item_as_sold(self, platform_id: int) -> bool:
+
+    async def _mark_item_as_sold(self, platform_common_id: int, item_id_for_log: str = "Unknown") -> bool:
         """
-        Mark an item as sold across Product and PlatformCommon
-        
-        Args:
-            platform_id: ID of the platform_common record
-            
-        Returns:
-            bool: True if successful
+        Mark an item as sold across Product and PlatformCommon.
+        (Based on the fuller, original commented-out version with logging added)
         """
+        logger.debug(f"EbayService._mark_item_as_sold - Entered for PlatformCommonID: {platform_common_id}, ItemID: {item_id_for_log}")
         try:
-            # Get platform_common record
-            query = select(PlatformCommon).where(PlatformCommon.id == platform_id)
-            result = await self.db.execute(query)
-            platform_common = result.scalar_one_or_none()
+            now_utc_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+            platform_common = await self.db.get(PlatformCommon, platform_common_id)
             
             if not platform_common:
-                logger.error(f"Platform record not found for ID {platform_id}")
+                logger.error(f"    ItemID: {item_id_for_log}, PlatformCommon record not found for ID {platform_common_id} in _mark_item_as_sold.")
                 return False
             
-            # Update platform_common status
-            platform_common.status = 'sold'
-            platform_common.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            logger.debug(f"    ItemID: {item_id_for_log}, Found PlatformCommon: {platform_common.id}, ProductID: {platform_common.product_id}")
+            platform_common.status = ListingStatus.SOLD.value
+            platform_common.sync_status = SyncStatus.SYNCED.value # Ensure it's marked as synced
+            platform_common.updated_at = now_utc_naive
+            logger.debug(f"    ItemID: {item_id_for_log}, Updated PlatformCommon status to '{ListingStatus.SOLD.value}'.")
             
-            # Get and update product status
-            product_query = select(Product).where(Product.id == platform_common.product_id)
-            product_result = await self.db.execute(product_query)
-            product = product_result.scalar_one_or_none()
+            if platform_common.product_id:
+                product = await self.db.get(Product, platform_common.product_id)
+                if product:
+                    logger.debug(f"    ItemID: {item_id_for_log}, Found Product: {product.id}. Current status: {product.status.value}")
+                    product.status = ProductStatus.SOLD
+                    product.is_sold = True # Explicitly set if you have this field
+                    product.updated_at = now_utc_naive
+                    logger.debug(f"    ItemID: {item_id_for_log}, Updated Product status to '{ProductStatus.SOLD.value}'.")
+                else:
+                    logger.warning(f"    ItemID: {item_id_for_log}, Product not found for ProductID {platform_common.product_id} during _mark_item_as_sold.")
+            else:
+                logger.warning(f"    ItemID: {item_id_for_log}, PlatformCommon record {platform_common.id} has no product_id.")
+
+            # Note: The commit for these changes is handled by the calling function (_update_listing_from_api_data)
+            # This method just prepares the changes on the objects.
+            logger.debug(f"    ItemID: {item_id_for_log}, DB objects prepared for 'sold' status. Returning True from _mark_item_as_sold.")
+            return True # Indicates changes are staged
             
-            if product:
-                product.status = ProductStatus.SOLD
-                product.is_sold = True
-                product.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error marking item as sold: {str(e)}")
+        except Exception as e_mark_sold:
+            logger.error(f"    ItemID: {item_id_for_log}, EXCEPTION in _mark_item_as_sold for PlatformCommonID {platform_common_id}: {e_mark_sold}", exc_info=True)
             return False
     
     def _extract_ebay_listing_data(self, listing: Dict[str, Any], listing_type: str) -> Dict[str, Any]:
-        """
-        Extract all relevant eBay-specific data from API response
-        
-        Args:
-            listing: eBay API response data
-            listing_type: Type of listing ('active', 'sold', 'unsold')
-            
-        Returns:
-            Dict with eBay listing fields
-        """
-        # Initialize result dict
+        # This method seems okay, no debug prints to remove. Original logging is fine.
         extracted = {}
-        
-        # Extract category data
         primary_category = listing.get('PrimaryCategory', {})
         extracted['ebay_category_id'] = primary_category.get('CategoryID')
         extracted['ebay_category_name'] = primary_category.get('CategoryName')
-        
         secondary_category = listing.get('SecondaryCategory', {})
         extracted['ebay_second_category_id'] = secondary_category.get('CategoryID')
-        
-        # Extract condition
         extracted['ebay_condition_id'] = listing.get('ConditionID')
         extracted['condition_display_name'] = listing.get('ConditionDisplayName')
-        
-        # Extract format
         listing_type_api = listing.get('ListingType', '')
-        if listing_type_api == 'Chinese':
-            extracted['format'] = 'AUCTION'
-        elif listing_type_api in ['FixedPriceItem', 'StoreInventory']:
-            extracted['format'] = 'BUY_IT_NOW'
-        else:
-            extracted['format'] = listing_type_api.upper()
-        
-        # Extract dates with timezone handling
+        if listing_type_api == 'Chinese': extracted['format'] = 'AUCTION'
+        elif listing_type_api in ['FixedPriceItem', 'StoreInventory']: extracted['format'] = 'BUY_IT_NOW'
+        else: extracted['format'] = listing_type_api.upper()
         listing_details = listing.get('ListingDetails', {})
         if listing_details:
             extracted['start_time'] = self._parse_ebay_datetime(listing_details.get('StartTime'))
             extracted['end_time'] = self._parse_ebay_datetime(listing_details.get('EndTime'))
             extracted['listing_url'] = listing_details.get('ViewItemURL')
-        
-        # Extract image data
         picture_details = listing.get('PictureDetails', {})
         if picture_details:
             extracted['gallery_url'] = picture_details.get('GalleryURL')
-            
             picture_urls = picture_details.get('PictureURL', [])
             if not isinstance(picture_urls, list):
                 picture_urls = [picture_urls] if picture_urls else []
             extracted['picture_urls'] = json.dumps(picture_urls)
-        
-        # Extract item specifics
         item_specifics = self._extract_item_specifics(listing)
-        if item_specifics:
-            extracted['item_specifics'] = json.dumps(item_specifics)
-        
-        # Extract business policies
+        if item_specifics: extracted['item_specifics'] = json.dumps(item_specifics)
         seller_profiles = listing.get('SellerProfiles', {})
         if seller_profiles:
             payment_profile = seller_profiles.get('SellerPaymentProfile', {})
-            if payment_profile:
-                extracted['payment_policy_id'] = payment_profile.get('PaymentProfileID')
-                
+            if payment_profile: extracted['payment_policy_id'] = payment_profile.get('PaymentProfileID')
             return_profile = seller_profiles.get('SellerReturnProfile', {})
-            if return_profile:
-                extracted['return_policy_id'] = return_profile.get('ReturnProfileID')
-                
+            if return_profile: extracted['return_policy_id'] = return_profile.get('ReturnProfileID')
             shipping_profile = seller_profiles.get('SellerShippingProfile', {})
-            if shipping_profile:
-                extracted['shipping_policy_id'] = shipping_profile.get('ShippingProfileID')
-        
-        # Extract transaction data for sold items
+            if shipping_profile: extracted['shipping_policy_id'] = shipping_profile.get('ShippingProfileID')
         if listing_type.lower() == 'sold':
-            transaction = listing.get('Transaction', {})
-            if transaction:
+            # Corrected: 'SellingStatus' is top-level, 'TransactionArray' might contain transactions
+            # The original Trading API response for GetMyeBaySelling for sold items often has transaction info
+            # directly in the item, or sometimes nested. This needs to match your API response structure.
+            # Assuming 'TransactionArray' > 'Transaction' structure for sold items if available
+            transactions = listing.get('TransactionArray', {}).get('Transaction', [])
+            if not isinstance(transactions, list): # If only one transaction, it might not be a list
+                transactions = [transactions] if transactions else []
+            
+            if transactions: # Process the first transaction for simplicity, or adapt if multiple needed
+                transaction = transactions[0] 
                 extracted['transaction_id'] = transaction.get('TransactionID')
                 extracted['order_line_item_id'] = transaction.get('OrderLineItemID')
-                
                 buyer = transaction.get('Buyer', {})
-                if buyer:
-                    extracted['buyer_user_id'] = buyer.get('UserID')
-                
+                if buyer: extracted['buyer_user_id'] = buyer.get('UserID')
                 extracted['paid_time'] = self._parse_ebay_datetime(transaction.get('PaidTime'))
-                extracted['payment_status'] = transaction.get('SellerPaidStatus')
                 
-                # Determine shipping status
-                if transaction.get('SellerPaidStatus') == 'Paid':
-                    extracted['shipping_status'] = 'READY_TO_SHIP'
+                # Determine payment_status and shipping_status based on Transaction details
+                # This part might need adjustment based on exact API fields for sold items
+                # For example, 'Status.PaymentHoldStatus', 'ShippedTime', 'PaidTime'
+                status_info = transaction.get('Status', {})
+                if transaction.get('PaidTime'):
+                    extracted['payment_status'] = "Paid" # Simplified
+                    if transaction.get('ShippedTime'):
+                         extracted['shipping_status'] = "SHIPPED"
+                    else:
+                         extracted['shipping_status'] = "READY_TO_SHIP" # Or 'AWAITING_SHIPMENT'
                 else:
-                    extracted['shipping_status'] = 'PENDING_PAYMENT'
-        
+                    extracted['payment_status'] = status_info.get('eBayPaymentStatus', "NotPaid")
+                    extracted['shipping_status'] = "PENDING_PAYMENT"
+
+            # If transaction details are not in TransactionArray but directly in SellingStatus for sold items
+            elif listing.get('SellingStatus', {}).get('OrderStatus') == 'Completed': # Another way to check if sold
+                 selling_status = listing.get('SellingStatus', {})
+                 if selling_status.get('PaidStatus') == 'Paid': # Example
+                    extracted['payment_status'] = "Paid"
+                    extracted['shipping_status'] = "READY_TO_SHIP" # Placeholder
+                 # Add more logic here based on your actual sold item data structure
+
         return extracted
     
     def _parse_ebay_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
-        """Parse eBay datetime string to Python datetime object (timezone-naive)"""
-        if not dt_str:
-            return None
-        
+        # This method seems okay. Original logging is fine.
+        if not dt_str: return None
         try:
-            # Handle ISO format datetime strings
             dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
-            return dt.replace(tzinfo=None)  # Make timezone-naive for PostgreSQL
+            return dt.replace(tzinfo=None)
         except (ValueError, TypeError):
             try:
-                # Fallback to more flexible parsing
                 dt = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S.%fZ")
                 return dt.replace(tzinfo=None)
             except (ValueError, TypeError):
-                logger.warning(f"Could not parse datetime: {dt_str}")
+                logger.warning(f"Could not parse eBay datetime: {dt_str}")
                 return None
     
     def _extract_item_specifics(self, listing: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract item specifics from eBay listing data"""
+        # This method seems okay. Original logging is fine.
         result = {}
-        
         try:
-            item_specifics = listing.get("ItemSpecifics", {})
-            if not item_specifics:
-                return result
-                
-            name_value_list = item_specifics.get("NameValueList")
-            if not name_value_list:
-                return result
-                
-            # Handle both single dict and list of dicts
+            item_specifics_node = listing.get("ItemSpecifics", {})
+            if not item_specifics_node: return result
+            name_value_list = item_specifics_node.get("NameValueList")
+            if not name_value_list: return result
             if isinstance(name_value_list, list):
                 for item in name_value_list:
-                    if not isinstance(item, dict):
-                        continue
-                    name = item.get("Name")
-                    value = item.get("Value")
-                    if name and value:
-                        result[name] = value
-            elif isinstance(name_value_list, dict):
-                name = name_value_list.get("Name")
-                value = name_value_list.get("Value")
-                if name and value:
-                    result[name] = value
+                    if not isinstance(item, dict): continue
+                    name, value = item.get("Name"), item.get("Value")
+                    if name and value: result[name] = value if not isinstance(value, list) else value[0] # Take first value if list
+            elif isinstance(name_value_list, dict): # Single item specific
+                name, value = name_value_list.get("Name"), name_value_list.get("Value")
+                if name and value: result[name] = value if not isinstance(value, list) else value[0]
         except Exception as e:
-            logger.exception(f"Error extracting item specifics: {str(e)}")
-            
+            logger.exception(f"Error extracting item specifics from listing ItemID {listing.get('ItemID', 'N/A')}: {str(e)}")
         return result
     
     # -------------------------------------------------------------------------
@@ -648,50 +1609,32 @@ class EbayService:
     # -------------------------------------------------------------------------
     
     async def verify_credentials(self) -> bool:
-        """
-        Verify eBay credentials and check user ID
-        
-        Returns:
-            bool: True if credentials are valid and user ID matches expected
-        """
+        logger.debug("EbayService.verify_credentials - Attempting to verify eBay credentials.")
         try:
-            user_info = await self.trading_api.get_user_info()
+            user_info = await self.trading_api.get_user_info() # This method in trading_api should have its own detailed logs
             
-            if not user_info.get('success'):
-                logger.error(f"Failed to get eBay user info: {user_info.get('message')}")
+            if not user_info or not user_info.get('success'): # Check if user_info is None as well
+                logger.error(f"EbayService.verify_credentials - Failed to get eBay user info. API Response: {user_info}")
                 return False
             
             user_id = user_info.get('user_data', {}).get('UserID')
             if user_id != self.expected_user_id:
-                logger.error(f"Unexpected eBay user: {user_id}, expected: {self.expected_user_id}")
+                logger.error(f"EbayService.verify_credentials - Unexpected eBay user: '{user_id}', expected: '{self.expected_user_id}'")
                 return False
             
-            logger.info(f"Successfully authenticated as eBay user: {user_id}")
+            logger.info(f"EbayService.verify_credentials - Successfully authenticated as eBay user: {user_id}")
             return True
             
-        except Exception as e:
-            logger.error(f"Error verifying eBay credentials: {str(e)}")
+        except Exception as e: # Catch any exception from trading_api call or processing
+            logger.error(f"EbayService.verify_credentials - EXCEPTION during credential verification: {e}", exc_info=True)
             return False
     
     async def get_all_active_listings(self, include_details: bool = False) -> List[Dict[str, Any]]:
-        """
-        Get all active eBay listings
-        
-        Args:
-            include_details: Whether to include full item details
-            
-        Returns:
-            List of active listings data
-        """
+        logger.debug(f"EbayService.get_all_active_listings - Called with include_details: {include_details}")
         return await self.trading_api.get_all_active_listings(include_details=include_details)
     
     async def get_active_listing_count(self) -> int:
-        """
-        Get count of active eBay listings
-        
-        Returns:
-            int: Count of active listings
-        """
+        logger.debug("EbayService.get_active_listing_count - Called.")
         return await self.trading_api.get_total_active_listings_count()
     
     # -------------------------------------------------------------------------
@@ -699,16 +1642,14 @@ class EbayService:
     # -------------------------------------------------------------------------
     
     async def sync_inventory_to_ebay(self) -> Dict[str, int]:
-        """
-        Placeholder for future implementation of syncing TO eBay
-        
-        This will handle cross-platform inventory sync when items are sold
-        on other platforms and need to be updated on eBay.
-        """
-        logger.info("sync_inventory_to_ebay - placeholder for future implementation")
+        logger.info("EbayService.sync_inventory_to_ebay - Placeholder for future implementation.")
         return {
-            "total": 0,
+            "processed": 0, # Changed from "total" for consistency
             "updated": 0,
             "errors": 0,
             "message": "Not yet implemented - coming soon!"
-        }
+        }        
+        
+        
+        
+        

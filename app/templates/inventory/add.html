@@ -446,12 +446,12 @@
                                 </li>
                                 <li role="presentation">
                                     <button class="inline-block py-2 px-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300 platform-tab" 
-                                        id="website-tab" 
-                                        data-target="websiteTabContent" 
+                                        id="shopify-tab" 
+                                        data-target="shopifyTabContent" 
                                         type="button" 
                                         role="tab" 
                                         aria-selected="false">
-                                        Website
+                                        Shopify
                                     </button>
                                 </li>
                             </ul>
@@ -612,12 +612,12 @@
                                 </div>
                             </div>
 
-                            <!-- Website Tab Content -->
-                            <div id="websiteTabContent" class="tab-pane hidden">
+                            <!-- Shopify Tab Content -->
+                            <div id="shopifyTabContent" class="tab-pane hidden">
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700">Website Category</label>
-                                        <select name="platform_data__website__category" id="website_category"
+                                        <label class="block text-sm font-medium text-gray-700">Shopify Category</label>
+                                        <select name="platform_data__shopify__category" id="shopify_category"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                             <option value="guitars">Guitars</option>
                                             <option value="basses">Basses</option>
@@ -628,8 +628,8 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700">Website Display Priority</label>
-                                        <select name="platform_data__website__priority" id="website_priority"
+                                        <label class="block text-sm font-medium text-gray-700">Shopify Display Priority</label>
+                                        <select name="platform_data__shopify__priority" id="shopify_priority"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                             <option value="0">Normal</option>
                                             <option value="1">Featured</option>
@@ -637,14 +637,14 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700">Website Price</label>
+                                        <label class="block text-sm font-medium text-gray-700">Shopify Price</label>
                                         <div class="mt-1 relative rounded-md shadow-sm">
                                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                                 <span class="text-gray-500 sm:text-sm">£</span>
                                             </div>
-                                            <input type="text" name="platform_data__website__price_display" id="website_price_display" 
+                                            <input type="text" name="platform_data__shopify__price_display" id="shopify_price_display" 
                                                 class="pl-7 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <input type="hidden" name="platform_data__website__price" id="website_price">
+                                            <input type="hidden" name="platform_data__shopify__price" id="shopify_price">
                                         </div>
                                         <p class="text-xs text-gray-500 mt-1">Same as base price</p>
                                     </div>
@@ -655,13 +655,13 @@
                                                 Generate
                                             </button>
                                         </label>
-                                        <input type="text" name="platform_data__website__seo_keywords" id="website_seo_keywords"
+                                        <input type="text" name="platform_data__shopify__seo_keywords" id="shopify_seo_keywords"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                             placeholder="vintage, guitar, instrument">
                                     </div>
                                     <div class="col-span-2">
                                         <label class="block text-sm font-medium text-gray-700">Short Description (for listings)</label>
-                                        <textarea name="platform_data__website__short_description" id="website_short_description" rows="2"
+                                        <textarea name="platform_data__shopify__short_description" id="shopify_short_description" rows="2"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
                                     </div>
                                 </div>
@@ -917,9 +917,9 @@
                                     <label for="sync_vr" class="ml-2 block text-sm text-gray-700">Vintage & Rare</label>
                                 </div>
                                 <div class="flex items-center">
-                                    <input type="checkbox" name="sync_platforms" value="website" id="sync_website"
+                                    <input type="checkbox" name="sync_platforms" value="shopify" id="sync_shopify"
                                         class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                    <label for="sync_website" class="ml-2 block text-sm text-gray-700">Website</label>
+                                    <label for="sync_shopify" class="ml-2 block text-sm text-gray-700">Shopify</label>
                                 </div>
                             </div>
                         </div>
@@ -969,13 +969,13 @@
                     <p class="text-sm text-gray-600 mt-2">{{ vr_message or 'Waiting for sync' }}</p>
                 </div>
 
-                <!-- Website Status -->
+                <!-- Shopify Status -->
                 <div class="border rounded p-4">
                     <div class="flex items-center space-x-2">
-                        <div class="w-3 h-3 rounded-full {% if website_status == 'success' %}bg-green-500{% elif website_status == 'pending' %}bg-yellow-500{% else %}bg-red-500{% endif %}"></div>
-                        <span>Website</span>
+                        <div class="w-3 h-3 rounded-full {% if shopify_status == 'success' %}bg-green-500{% elif shopify_status == 'pending' %}bg-yellow-500{% else %}bg-red-500{% endif %}"></div>
+                        <span>Shopify</span>
                     </div>
-                    <p class="text-sm text-gray-600 mt-2">{{ website_message or 'Waiting for sync' }}</p>
+                    <p class="text-sm text-gray-600 mt-2">{{ shopify_message or 'Waiting for sync' }}</p>
                 </div>
             </div>
         </div> 
@@ -1362,12 +1362,12 @@ function initializeSortable() {
             setValueIfExists('vr_notes', data.platform_data.vr.notes);
         }
         
-        // Platform data - Website
-        if (data.platform_data && data.platform_data.website) {
-            setValueIfExists('website_category', data.platform_data.website.category);
-            setValueIfExists('website_priority', data.platform_data.website.priority);
-            setValueIfExists('website_seo_keywords', data.platform_data.website.seo_keywords);
-            setValueIfExists('website_short_description', data.platform_data.website.short_description);
+        // Platform data - Shopify
+        if (data.platform_data && data.platform_data.shopify) {
+            setValueIfExists('shopify_category', data.platform_data.shopify.category);
+            setValueIfExists('shopify_priority', data.platform_data.shopify.priority);
+            setValueIfExists('shopify_seo_keywords', data.platform_data.shopify.seo_keywords);
+            setValueIfExists('shopify_short_description', data.platform_data.shopify.short_description);
         }
     }
 
@@ -2560,7 +2560,7 @@ document.getElementById('generate-seo')?.addEventListener('click', function() {
         .filter((word, index, self) => self.indexOf(word) === index); // Remove duplicates
     
     // Set the keywords field
-    const keywordsField = document.getElementById('website_seo_keywords');
+    const keywordsField = document.getElementById('shopify_seo_keywords');
     if (keywordsField) {
         keywordsField.value = keywords.join(', ');
     }
@@ -2605,7 +2605,7 @@ function calculateVRPrice(basePrice) {
     return Math.round(basePrice * 1.05);
 }
 
-function calculateWebsitePrice(basePrice) {
+function calculateShopifyPrice(basePrice) {
     // Same as base price
     return basePrice;
 }
@@ -2662,13 +2662,13 @@ function updatePlatformPrices(basePrice) {
     document.getElementById('vr_price').value = vrPrice;
     document.getElementById('vr_price_display').value = formatPrice(vrPrice);
     
-    // Website price (same as base)
-    document.getElementById('website_price').value = basePrice;
-    document.getElementById('website_price_display').value = formatPrice(basePrice);
+    // Shopify price (same as base)
+    document.getElementById('shopify_price').value = basePrice;
+    document.getElementById('shopify_price_display').value = formatPrice(basePrice);
 }
 
 // Make platform price fields updatable but also format them on blur
-['ebay_price_display', 'reverb_price_display', 'vr_price_display', 'website_price_display'].forEach(id => {
+['ebay_price_display', 'reverb_price_display', 'vr_price_display', 'shopify_price_display'].forEach(id => {
     const displayField = document.getElementById(id);
     const valueField = document.getElementById(id.replace('_display', ''));
     

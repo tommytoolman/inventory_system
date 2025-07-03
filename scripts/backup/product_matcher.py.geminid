@@ -1,0 +1,310 @@
+import asyncio
+import logging
+import os
+import json
+from typing import Dict, List, Tuple, Set, Any, Optional
+
+import pandas as pd
+from datetime import datetime
+
+from sqlalchemy import text, select
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
+from fuzzywuzzy import fuzz
+from dotenv import load_dotenv
+
+# Assuming these are your actual model and schema imports based on your project structure
+from app.models.product import Product # You are using this ORM model
+from app.core.enums import ProductStatus
+from app.schemas.product import Product as ProductSchema # Used for serializing in _get_product_json_for_merge
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO) # Keep basicConfig if it's the module-level setup
+logger = logging.getLogger(__name__)
+
+ProductDict = Dict[str, Any] # Type alias for clarity
+PROGRESS_FILE = "product_matching_progress.json"
+
+
+class ProductMatcher:
+    def __init__(self, session_maker: sessionmaker, progress_file: str = PROGRESS_FILE): # Changed from create_async_engine
+        self.session_maker = session_maker
+        self.logger = logger
+        self.progress_file = progress_file
+        self.all_products: List[ProductDict] = []
+        self.products_df = pd.DataFrame()
+        self.confirmed_matches: List[Dict[str, Any]] = []
+        self.processed_pairs: Set[Tuple[int, int]] = set()
+        self.permanently_merged_product_ids: Set[int] = set()
+
+    async def _populate_permanently_merged_ids(self, session: AsyncSession):
+        self.logger.info("Populating set of permanently merged product IDs...")
+        try:
+            # Using raw SQL for product_merges as no ORM model was indicated for it here
+            stmt = text("SELECT DISTINCT merged_product_id FROM product_merges")
+            result = await session.execute(stmt)
+            self.permanently_merged_product_ids = {row[0] for row in result.fetchall() if row[0] is not None}
+            self.logger.info(f"Loaded {len(self.permanently_merged_product_ids)} permanently merged product IDs.")
+        except Exception as e:
+            self.logger.error(f"Error loading permanently merged product IDs: {e}", exc_info=True)
+            self.permanently_merged_product_ids = set()
+
+    async def _load_all_products_from_db(self, session: AsyncSession):
+        self.logger.info("Loading relevant products from DB for matcher...")
+        
+        if not self.permanently_merged_product_ids: # Ensure it's populated if called directly
+            await self._populate_permanently_merged_ids(session)
+
+        try:
+            # Using ORM for Product table as you import app.models.product.Product
+            stmt = select(Product).where(
+                Product.status == ProductStatus.ACTIVE,
+                Product.id.notin_(self.permanently_merged_product_ids)
+            ).order_by(Product.id)
+            
+            result = await session.execute(stmt)
+            active_products_from_db = result.scalars().all()
+            
+            self.all_products = []
+            for prod_model in active_products_from_db:
+                prod_dict = {c.name: getattr(prod_model, c.name) for c in prod_model.__table__.columns}
+                self.all_products.append(prod_dict)
+
+            self.logger.info(f"Loaded {len(self.all_products)} active, non-merged products.")
+            
+            if self.all_products:
+                self.products_df = pd.DataFrame(self.all_products)
+                if 'id' in self.products_df.columns:
+                    self.products_df['id'] = self.products_df['id'].astype(int)
+            else:
+                self.products_df = pd.DataFrame()
+        except Exception as e:
+            self.logger.error(f"Error loading products from database: {e}", exc_info=True)
+            self.all_products = []
+            self.products_df = pd.DataFrame()
+        return bool(self.all_products)
+
+    async def load_progress(self, session: AsyncSession, filename: str = PROGRESS_FILE):
+        self.logger.info(f"Loading progress from {filename}...")
+        await self._populate_permanently_merged_ids(session) # Load DB state first
+
+        if not os.path.exists(filename):
+            self.logger.warning(f"Progress file '{filename}' not found. Initializing products.")
+            if not self.all_products:
+                await self._load_all_products_from_db(session)
+            return [], set()
+        try:
+            with open(filename, 'r') as f:
+                progress_data = json.load(f)
+            self.confirmed_matches = progress_data.get('confirmed_matches', [])
+            processed_pairs_list = progress_data.get('processed_pairs', [])
+            self.processed_pairs = set(tuple(pair) for pair in processed_pairs_list if isinstance(pair, list))
+            self.logger.info(f"Loaded progress: {len(self.confirmed_matches)} confirmed, {len(self.processed_pairs)} processed.")
+        except Exception as e:
+            self.logger.error(f"Error loading progress from '{filename}': {e}. Initializing.", exc_info=True)
+            self.confirmed_matches, self.processed_pairs = [], set()
+
+        if not self.all_products: # Ensure products are loaded
+            await self._load_all_products_from_db(session)
+            
+        return self.confirmed_matches, self.processed_pairs
+
+    async def save_progress(self, confirmed_matches: List[Dict], processed_pairs: Set[Tuple[int, int]], filename: str = PROGRESS_FILE):
+        self.logger.info(f"Saving progress to {filename}...")
+        processed_pairs_list = [list(pair) for pair in processed_pairs]
+        progress_data = {
+            'confirmed_matches': confirmed_matches,
+            'processed_pairs': processed_pairs_list
+        }
+        try:
+            with open(filename, 'w') as f:
+                json.dump(progress_data, f, indent=4)
+            self.logger.info("Progress saved.")
+        except Exception as e:
+            self.logger.error(f"Error saving progress to '{filename}': {e}", exc_info=True)
+
+    def _add_to_processed(self, id1: int, id2: int):
+        pair = tuple(sorted((id1, id2)))
+        self.processed_pairs.add(pair)
+
+    def _is_already_processed(self, id1: int, id2: int) -> bool:
+        return tuple(sorted((id1, id2))) in self.processed_pairs
+
+    async def _get_product_json_for_merge(self, session: AsyncSession, product_id: int) -> Optional[str]:
+        self.logger.debug(f"Fetching data for product {product_id} to be merged.")
+        try:
+            product_model = await session.get(Product, product_id) # Using your Product ORM model
+            if product_model:
+                # Using Pydantic schema as per your likely project structure
+                product_schema = ProductSchema.from_orm(product_model)
+                return product_schema.json() 
+            else:
+                self.logger.warning(f"Product with ID {product_id} not found for generating merge data.")
+                return None
+        except Exception as e:
+            self.logger.error(f"Error fetching product data for merge (ID: {product_id}): {e}", exc_info=True)
+            return None
+
+    async def _record_merge(self, session: AsyncSession, kept_id: int, merged_id: int, product_data_json: str, merged_by: str, reason: Optional[str] = "Product matching"):
+        self.logger.info(f"Recording merge: Kept Product ID {kept_id}, Merged Product ID {merged_id}")
+        try:
+            merge_query = text("""
+                INSERT INTO product_merges
+                (kept_product_id, merged_product_id, merged_product_data, merged_by, reason, merged_at)
+                VALUES (:kept_id, :merged_id, CAST(:p_data AS JSONB), :m_by, :reason, NOW())
+            """) # Using CAST(:p_data AS JSONB) as previously fixed
+            await session.execute(merge_query, {
+                "kept_id": kept_id, "merged_id": merged_id, 
+                "p_data": product_data_json, "m_by": merged_by, "reason": reason
+            })
+            self.logger.debug(f"Successfully recorded merge: Kept {kept_id}, Merged {merged_id}")
+        except Exception as e:
+            self.logger.error(f"DATABASE ERROR recording merge (Kept {kept_id}, Merged {merged_id}): {e}", exc_info=True)
+            raise
+
+    async def _delete_product_and_references(self, session: AsyncSession, product_id_to_delete: int, keep_product_id: Optional[int] = None):
+        self.logger.info(f"Processing product {product_id_to_delete} for merge into {keep_product_id if keep_product_id else 'N/A'}.")
+        try:
+            product_to_modify = await session.get(Product, product_id_to_delete) # Using ORM
+            if product_to_modify:
+                # Soft delete by changing status
+                product_to_modify.status = ProductStatus.MERGED # Or your preferred 'inactive due to merge' status
+                product_to_modify.updated_at = datetime.datetime.utcnow() # Explicitly set if not auto
+                session.add(product_to_modify)
+                self.logger.info(f"Marked product {product_id_to_delete} as '{product_to_modify.status.value}'.")
+                
+                # Update product_platform_mapping if keep_product_id is provided
+                if keep_product_id:
+                    # This assumes you have a ProductPlatformMapping model or use raw SQL
+                    # For raw SQL:
+                    update_mappings_stmt = text("""
+                        UPDATE product_platform_mapping 
+                        SET product_id = :keep_id 
+                        WHERE product_id = :delete_id
+                    """)
+                    await session.execute(update_mappings_stmt, {"keep_id": keep_product_id, "delete_id": product_id_to_delete})
+                    self.logger.info(f"Updated product_platform_mapping for old product {product_id_to_delete} to new product {keep_product_id}")
+            else:
+                self.logger.warning(f"Product {product_id_to_delete} not found for status update/deletion.")
+        except Exception as e:
+            self.logger.error(f"Error updating/deleting product {product_id_to_delete} or its references: {e}", exc_info=True)
+            raise
+
+    async def merge_products(self, session: AsyncSession, confirmed_matches_list: List[Dict[str, Any]], merged_by: str = "product_matcher"):
+        if not confirmed_matches_list:
+            return 0
+        self.logger.info(f"Processing {len(confirmed_matches_list)} confirmed match groups for merge.")
+        successfully_merged_count = 0
+
+        for match_group in confirmed_matches_list:
+            keep_product_id = match_group.get('keep_product_id')
+            products_to_merge_ids = match_group.get('merge_product_ids', [])
+
+            if not isinstance(keep_product_id, int) or not products_to_merge_ids:
+                self.logger.warning(f"Invalid match group: {match_group}. Skipping.")
+                continue
+            
+            if self.products_df.empty or keep_product_id not in self.products_df['id'].values:
+                self.logger.warning(f"Keep product ID {keep_product_id} no longer in active list. Skipping group.")
+                for merge_id in products_to_merge_ids: self._add_to_processed(keep_product_id, merge_id)
+                continue
+
+            for product_id_to_merge in products_to_merge_ids:
+                if not isinstance(product_id_to_merge, int) or product_id_to_merge == keep_product_id:
+                    continue
+
+                if product_id_to_merge not in self.products_df['id'].values or \
+                   product_id_to_merge in self.permanently_merged_product_ids:
+                    self.logger.info(f"Product {product_id_to_merge} already merged or not in active list. Skipping merge into {keep_product_id}.")
+                    self._add_to_processed(keep_product_id, product_id_to_merge)
+                    continue
+                
+                product_data_json = await self._get_product_json_for_merge(session, product_id_to_merge)
+                if product_data_json:
+                    try:
+                        await self._record_merge(session, keep_product_id, product_id_to_merge, product_data_json, merged_by)
+                        await self._delete_product_and_references(session, product_id_to_merge, keep_product_id)
+                        
+                        self.permanently_merged_product_ids.add(product_id_to_merge)
+                        self.products_df = self.products_df[self.products_df['id'] != product_id_to_merge].reset_index(drop=True)
+                        self.all_products = [p for p in self.all_products if p['id'] != product_id_to_merge]
+                        self._add_to_processed(keep_product_id, product_id_to_merge)
+                        
+                        successfully_merged_count += 1
+                    except Exception as e: # Catching specific errors from _record_merge or _delete would be better
+                        self.logger.error(f"Merge failed for {product_id_to_merge} into {keep_product_id}: {e}", exc_info=True)
+                        # Transaction will be rolled back by the CLI for the whole batch
+                        # No need to add to processed_pairs here if the DB operation failed.
+                else:
+                    self.logger.warning(f"No data for product {product_id_to_merge} to merge. Skipping.")
+        
+        self.logger.info(f"Merge batch finished. Successfully merged {successfully_merged_count} products.")
+        return successfully_merged_count
+
+    def _calculate_similarity(self, str1: Optional[str], str2: Optional[str]) -> int:
+        if not str1 or not str2: # Ensure both are non-empty strings
+            return 0
+        return fuzz.token_sort_ratio(str(str1).lower(), str(str2).lower())
+
+    async def find_potential_match_groups(self, processed_pairs: Set[Tuple[int, int]], similarity_threshold=75):
+        self.logger.info(f"Finding potential matches. {len(self.products_df)} products in DataFrame. {len(processed_pairs)} pairs already processed.")
+        if self.products_df.empty:
+            self.logger.warning("Products DataFrame is empty, cannot find matches.")
+            return iter([]) # Return an empty iterator
+
+        self.processed_pairs.update(processed_pairs) # Ensure internal set is up-to-date
+        match_groups = []
+        already_grouped_ids = set() # To avoid using a product as primary if already grouped
+
+        # Iterate on a copy if df is modified, but here it's read-only during this method
+        for _, primary_product_series in self.products_df.iterrows():
+            primary_product_id = int(primary_product_series['id'])
+
+            if primary_product_id in already_grouped_ids:
+                continue
+            
+            # This check should be redundant if _load_all_products_from_db worked correctly
+            if primary_product_id in self.permanently_merged_product_ids:
+                already_grouped_ids.add(primary_product_id) 
+                continue
+
+            potential_duplicates_for_primary = []
+            for _, candidate_product_series in self.products_df.iterrows():
+                candidate_product_id = int(candidate_product_series['id'])
+
+                if primary_product_id == candidate_product_id:
+                    continue
+                if candidate_product_id in self.permanently_merged_product_ids: # Redundant if df is clean
+                    continue
+                if self._is_already_processed(primary_product_id, candidate_product_id):
+                    continue
+                
+                # Your matching criteria (title similarity, SKU, platform, etc.)
+                # This is a placeholder for your more sophisticated matching logic
+                title_similarity = self._calculate_similarity(primary_product_series.get('title'), candidate_product_series.get('title'))
+                
+                is_potential = False
+                if title_similarity >= similarity_threshold:
+                    if primary_product_series.get('sku') and primary_product_series.get('sku') == candidate_product_series.get('sku'):
+                        is_potential = True
+                    elif primary_product_series.get('platform_name') != candidate_product_series.get('platform_name'):
+                         # Add more refined checks here based on manufacturer, model, etc.
+                         # For example, if manufacturer and model match closely with high title similarity:
+                         manu_sim = self._calculate_similarity(primary_product_series.get('manufacturer'), candidate_product_series.get('manufacturer'))
+                         model_sim = self._calculate_similarity(primary_product_series.get('model_name'), candidate_product_series.get('model_name'))
+                         if manu_sim > 85 and model_sim > 85 : # Example thresholds
+                            is_potential = True
+                
+                if is_potential:
+                    potential_duplicates_for_primary.append(candidate_product_series.to_dict())
+
+            if potential_duplicates_for_primary:
+                group = {'primary_product': primary_product_series.to_dict(), 'potential_duplicates': potential_duplicates_for_primary}
+                match_groups.append(group)
+                already_grouped_ids.add(primary_product_id)
+                for dupe in potential_duplicates_for_primary:
+                    already_grouped_ids.add(int(dupe['id']))
+        
+        self.logger.info(f"Found {len(match_groups)} potential match groups in this pass.")
+        return iter(match_groups)

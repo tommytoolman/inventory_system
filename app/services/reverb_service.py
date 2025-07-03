@@ -1,6 +1,8 @@
 # app.services.reverb_service.py
 import json
+import time
 import logging
+import iso8601
 
 from datetime import datetime, timezone    
 from fastapi import HTTPException
@@ -17,7 +19,6 @@ from app.models.reverb import ReverbListing
 from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
-
 
 logger = logging.getLogger(__name__)
 
@@ -370,7 +371,10 @@ class ReverbService:
             
             # Get all listings from Reverb
             print("Downloading listings from Reverb API...")
-            listings = await client.get_all_listings()  # This method exists in your ReverbClient
+            start_time = time.time()
+            listings = await client.get_all_listings_detailed(max_concurrent=10)
+            end_time = time.time()
+            print(f"Downloaded {len(listings)} detailed listings in {end_time - start_time:.1f} seconds")
             
             if not listings:
                 print("Reverb listings download failed - received None or empty")
@@ -638,6 +642,22 @@ class ReverbService:
             except:
                 pass
         
+        # Extract images from listing - ADD THIS SECTION
+        primary_image = None
+        additional_images = []
+        
+        # Get primary image (first photo)
+        photos = listing.get('photos', [])
+        if photos and len(photos) > 0:
+            primary_image = photos[0].get('_links', {}).get('full', {}).get('href')
+        
+        # Get additional images (remaining photos)
+        if photos and len(photos) > 1:
+            for photo in photos[1:]:
+                img_url = photo.get('_links', {}).get('full', {}).get('href')
+                if img_url:
+                    additional_images.append(img_url)
+        
         # Determine condition
         condition = ProductCondition.GOOD  # Default
         if listing.get('condition', {}).get('display_name'):
@@ -652,8 +672,25 @@ class ReverbService:
             }
             condition = condition_map.get(condition_name, ProductCondition.GOOD)
         
+        reverb_created_at = None
+        reverb_published_at = None
+        if listing.get('created_at'):
+            # reverb_created_at = datetime.fromisoformat(listing['created_at'].replace('Z', '+00:00'))
+            self._convert_api_timestamp_to_naive_utc(listing.get('created_at'))
+        if listing.get('published_at'):
+            # reverb_published_at = datetime.fromisoformat(listing['published_at'].replace('Z', '+00:00'))
+            self._convert_api_timestamp_to_naive_utc(listing.get('published_at'))
+
+        extended_attributes = {}
+        # Copy all listing data except fields we store directly
+        excluded_fields = ['id', 'make', 'model', 'description', 'price', 'condition', 'state', 'year']
+        for key, value in listing.items():
+            if key not in excluded_fields:
+                extended_attributes[key] = value
+        
         # Check if sold
         is_sold = listing.get('state', {}).get('slug') == 'sold'
+        
         
         # Create product
         product = Product(
@@ -665,7 +702,9 @@ class ReverbService:
             condition=condition,
             category=listing.get('categories', [{}])[0].get('full_name', '') if listing.get('categories') else '',
             base_price=price,
-            status=ProductStatus.SOLD if is_sold else ProductStatus.ACTIVE
+            status=ProductStatus.SOLD if is_sold else ProductStatus.ACTIVE,
+            primary_image=primary_image,
+            additional_images=additional_images
         )
         self.db.add(product)
         await self.db.flush()
@@ -699,6 +738,39 @@ class ReverbService:
             reverb_state=listing.get('state', {}).get('slug', 'live'),
             created_at=datetime.now(),
             updated_at=datetime.now(),
+            reverb_created_at=reverb_created_at,
+            reverb_published_at=reverb_published_at,
+            extended_attributes=extended_attributes,
             last_synced_at=datetime.now()
         )
         self.db.add(reverb_listing)
+        
+    def _convert_api_timestamp_to_naive_utc(self, timestamp_str: str | None) -> datetime | None:
+        """
+        Parses an ISO 8601 timestamp string (which can be offset-aware)
+        from an API, converts it to UTC, and returns an offset-naive 
+        datetime object suitable for storing in TIMESTAMP WITHOUT TIME ZONE columns.
+        """
+        if not timestamp_str:
+            return None
+        try:
+            # 1. Parse the string from Reverb. 
+            #    iso8601.parse_date() will create an "offset-aware" datetime object
+            #    if the string has timezone info (e.g., '2023-03-09T04:46:32-06:00').
+            dt_aware = iso8601.parse_date(timestamp_str)
+            
+            # 2. Convert this "aware" datetime object to its equivalent in UTC.
+            #    The object is still "aware" at this point, but its time and tzinfo now represent UTC.
+            dt_utc_aware = dt_aware.astimezone(datetime.timezone.utc)
+            
+            # 3. Make it "naive" by removing the timezone information.
+            #    The actual clock time is now UTC, and we remove the "UTC" label
+            #    because the database column doesn't store the label.
+            dt_utc_naive = dt_utc_aware.replace(tzinfo=None)
+            
+            return dt_utc_naive
+        except Exception as e:
+            # logger.warning(f"Could not parse or convert API timestamp '{timestamp_str}': {e}")
+            # Depending on how strict you want to be, you might log this or even raise an error.
+            # For now, returning None if conversion fails.
+            return None

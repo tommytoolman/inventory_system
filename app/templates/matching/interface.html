@@ -1,0 +1,772 @@
+{% extends "base.html" %}
+
+{% block title %}Product Matcher{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Manual Product Matcher</h1>
+    
+    <!-- GLOBAL MATCH STATUS CONTROL -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6">
+        <div class="grid grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Show Products</label>
+                <select id="global_match_status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetBothOffsets(); loadProducts(1); loadProducts(2);">
+                    <option value="unmatched" selected>Unmatched Only</option>
+                    <option value="matched">Matched Only</option>
+                    <option value="all">All Products</option>
+                </select>
+            </div>
+            <div class="text-center">
+                <div class="text-sm text-gray-600">Matching Status</div>
+                <div id="match-summary" class="text-lg font-semibold">
+                    <!-- Will show: "X unmatched, Y matched" -->
+                </div>
+            </div>
+            <div class="text-center">
+                <div class="text-sm text-gray-600">Progress</div>
+                <div id="match-progress" class="text-lg font-semibold">
+                    <!-- Will show: "85% complete" -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Platform Statistics -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6">
+        <h2 class="text-lg font-semibold mb-2">Platform Matching Status</h2>
+        <div class="grid grid-cols-4 gap-4" id="platform-match-grid">
+            <!-- Platform match stats will be loaded here -->
+        </div>
+    </div>
+    
+    <!-- Two-Panel Layout -->
+    <div class="grid grid-cols-2 gap-6">
+
+        <!-- Platform 1 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">Platform 1</h2>
+            
+            <!-- Platform 1 Filters -->
+            <div class="space-y-4 mb-6">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Platform</label>
+                        <select id="platform1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetBothOffsets(); updateStatusDropdown(1, this.value); loadProducts(1); loadProducts(2);">
+                            <option value="reverb">Reverb</option>
+                            <option value="shopify">Shopify</option>
+                            <option value="vr">Vintage & Rare</option>
+                            <option value="ebay">eBay</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Status</label>
+                        <select id="status1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetOffset(1); loadProducts(1);">
+                            <option value="all">All Status</option>
+                            <option value="live">Live/Active</option>
+                            <option value="sold">Sold</option>
+                            <option value="ended">Ended</option>
+                            <option value="draft">Draft</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Brand</label>
+                        <select id="brand1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetOffset(1); loadProducts(1)">
+                            <option value="all">All Brands</option>
+                            <!-- Options loaded dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Year</label>
+                        <select id="year1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetOffset(1); loadProducts(1)">
+                            <option value="all">All Years</option>
+                            <!-- Options loaded dynamically -->
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Price input section -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Price Range</label>
+                    <div class="grid grid-cols-2 gap-1">
+                        <div>
+                            <select id="price_min1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm" onchange="resetOffset(1); loadProducts(1)">
+                                <option value="">Min Price</option>
+                                <!-- Options loaded dynamically -->
+                            </select>
+                        </div>
+                        <div>
+                            <select id="price_max1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm" onchange="resetOffset(1); loadProducts(1)">
+                                <option value="">Max Price</option>
+                                <!-- Options loaded dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">
+                        Range: £<span id="price_range1">0 - 100,000</span>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Search Text</label>
+                    <input type="text" id="search_text1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" 
+                        placeholder="e.g. Buddy Holly, vintage, sunburst..." onkeyup="if(event.key==='Enter'){resetOffset(1); loadProducts(1)}">
+                    <div class="text-xs text-gray-500 mt-1">
+                        Searches title, description, model, SKU, and finish
+                    </div>
+                </div>
+                
+                <button onclick="resetOffset(1); loadProducts(1)" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full">
+                    Search
+                </button>
+            </div>
+            
+            <!-- Products List -->
+            <div id="products1" class="space-y-3 max-h-96 overflow-y-auto">
+                <!-- Products will be loaded here -->
+            </div>
+            
+            <button onclick="loadMoreProducts(1)" id="loadMore1" class="mt-4 text-blue-500 hover:text-blue-700 hidden">
+                Load More...
+            </button>
+        </div>
+        
+        <!-- Platform 2 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">Platform 2</h2>
+            
+            <!-- Platform 2 Filters -->
+            <div class="space-y-4 mb-6">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Platform</label>
+                        <select id="platform2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetBothOffsets(); updateStatusDropdown(2, this.value); loadProducts(1); loadProducts(2);">    
+                            <option value="reverb">Reverb</option>
+                            <option value="shopify" selected>Shopify</option>
+                            <option value="vr">Vintage & Rare</option>
+                            <option value="ebay">eBay</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Status</label>
+                        <select id="status2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetOffset(2); loadProducts(2);">
+                            <option value="all">All Status</option>
+                            <option value="live">Live/Active</option>
+                            <option value="sold">Sold</option>
+                            <option value="ended">Ended</option>
+                            <option value="draft">Draft</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Brand</label>
+                        <select id="brand2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetOffset(2); loadProducts(2)">
+                            <option value="all">All Brands</option>
+                            <!-- Options loaded dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Year</label>
+                        <select id="year2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" onchange="resetOffset(2); loadProducts(2)">
+                            <option value="all">All Years</option>
+                            <!-- Options loaded dynamically -->
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Price input section -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Price Range</label>
+                    <div class="grid grid-cols-2 gap-1">
+                        <div>
+                            <select id="price_min2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm" onchange="resetOffset(2); loadProducts(2)">
+                                <option value="">Min Price</option>
+                                <!-- Options loaded dynamically -->
+                            </select>
+                        </div>
+                        <div>
+                            <select id="price_max2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm" onchange="resetOffset(2); loadProducts(2)">
+                                <option value="">Max Price</option>
+                                <!-- Options loaded dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">
+                        Range: £<span id="price_range2">0 - 100,000</span>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Search Text</label>
+                    <input type="text" id="search_text2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" 
+                        placeholder="e.g. Buddy Holly, vintage, sunburst..." onkeyup="if(event.key==='Enter'){resetOffset(2); loadProducts(2)}">
+                    <div class="text-xs text-gray-500 mt-1">
+                        Searches title, description, model, SKU, and finish
+                    </div>
+                </div>
+                
+                <button onclick="resetOffset(2); loadProducts(2)" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full">
+                    Search
+                </button>
+            </div>
+            
+            <!-- Products List -->
+            <div id="products2" class="space-y-3 max-h-96 overflow-y-auto">
+                <!-- Products will be loaded here -->
+            </div>
+            
+            <button onclick="loadMoreProducts(2)" id="loadMore2" class="mt-4 text-blue-500 hover:text-blue-700 hidden">
+                Load More...
+            </button>
+        </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="mt-6 flex justify-center space-x-4">
+        <button id="matchBtn" onclick="confirmMatch()" class="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+            Match Selected Products
+        </button>
+        <button onclick="skipProducts()" class="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-3 px-6 rounded-lg">
+            Skip These Products
+        </button>
+        <button onclick="resetSelections()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg">
+            Reset Selections
+        </button>
+    </div>
+    
+    <!-- Match History -->
+    <div class="mt-8">
+        <h2 class="text-xl font-semibold mb-4">Recent Matches</h2>
+        <div id="matchHistory" class="bg-white rounded-lg shadow p-4">
+            <!-- Match history will be loaded here -->
+        </div>
+    </div>
+</div>
+
+
+
+<!-- JAVASCRIPT  -->
+<script>
+
+let selectedProduct1 = null;
+let selectedProduct2 = null;
+let offset1 = 0;
+let offset2 = 0;
+const limit = 20;
+
+let filterOptions = {
+    brands: [],
+    years: [],
+    priceRange: { min: 0, max: 100000 }
+};
+
+
+// Load initial statistics
+document.addEventListener('DOMContentLoaded', function() {
+    loadFilterOptions();
+    loadStats();
+
+    // Initialize status dropdowns for default platforms
+    updateStatusDropdown(1, 'reverb');    // Platform 1 default
+    updateStatusDropdown(2, 'shopify');   // Platform 2 default
+
+    loadProducts(1);
+    loadProducts(2);
+    loadMatchHistory();
+});
+
+function resetOffset(side) {
+    if (side === 1) {
+        offset1 = 0;
+    } else {
+        offset2 = 0;
+    }
+    console.log(`Reset offset for side ${side}`);
+}
+
+function resetBothOffsets() {
+    offset1 = 0;
+    offset2 = 0;
+}
+
+async function loadStats() {
+    try {
+        // Load basic stats
+        const response = await fetch('/matching/api/stats');
+        const stats = await response.json();
+        
+        // Load detailed match stats
+        const matchResponse = await fetch('/matching/api/match-stats');
+        const matchStats = await matchResponse.json();
+        
+        // Display platform match statistics
+        const platformMatchGrid = document.getElementById('platform-match-grid');
+        platformMatchGrid.innerHTML = '';
+        
+        for (const [platform, data] of Object.entries(matchStats)) {
+            platformMatchGrid.innerHTML += `
+                <div class="text-center">
+                    <div class="text-lg font-bold text-blue-600">${data.matched}/${data.total}</div>
+                    <div class="text-xs text-gray-500">${platform.toUpperCase()}</div>
+                    <div class="text-xs text-green-600">${data.percentage}% matched</div>
+                </div>
+            `;
+        }
+        
+        // Update global match summary
+        const totalMatched = Object.values(matchStats).reduce((sum, data) => sum + data.matched, 0);
+        const totalProducts = Object.values(matchStats).reduce((sum, data) => sum + data.total, 0);
+        
+        document.getElementById('match-summary').textContent = 
+            `${totalMatched} matched, ${totalProducts - totalMatched} unmatched`;
+        document.getElementById('match-progress').textContent = 
+            `${Math.round(totalMatched * 100 / totalProducts)}% complete`;
+        
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+
+async function loadFilterOptions() {
+    try {
+        const response = await fetch('/matching/api/filter-options');
+        filterOptions = await response.json();
+        
+        // Populate brand dropdowns
+        populateBrandDropdowns();
+        populateYearDropdowns();
+        populatePriceDropdowns();
+        updatePriceRangeDisplays();
+        
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+function populateBrandDropdowns() {
+    const brand1Select = document.getElementById('brand1');
+    const brand2Select = document.getElementById('brand2');
+    
+    // Clear existing options (except "All Brands")
+    brand1Select.innerHTML = '<option value="all">All Brands</option>';
+    brand2Select.innerHTML = '<option value="all">All Brands</option>';
+    
+    // Add brand options
+    filterOptions.brands.forEach(brand => {
+        const option1 = new Option(brand, brand);
+        const option2 = new Option(brand, brand);
+        brand1Select.appendChild(option1);
+        brand2Select.appendChild(option2);
+    });
+}
+
+function populateYearDropdowns() {
+    const year1Select = document.getElementById('year1');
+    const year2Select = document.getElementById('year2');
+    
+    // Clear existing options
+    year1Select.innerHTML = '<option value="all">All Years</option>';
+    year2Select.innerHTML = '<option value="all">All Years</option>';
+    
+    // Add year options
+    filterOptions.years.forEach(year => {
+        const option1 = new Option(year, year);
+        const option2 = new Option(year, year);
+        year1Select.appendChild(option1);
+        year2Select.appendChild(option2);
+    });
+}
+
+function updatePriceRangeDisplays() {
+    const range1 = document.getElementById('price_range1');
+    const range2 = document.getElementById('price_range2');
+    const rangeText = `${filterOptions.priceRange.min.toLocaleString()} - ${filterOptions.priceRange.max.toLocaleString()}`;
+    
+    range1.textContent = rangeText;
+    range2.textContent = rangeText;
+    
+    // Set placeholder values
+    document.getElementById('price_min1').placeholder = filterOptions.priceRange.min;
+    document.getElementById('price_max1').placeholder = filterOptions.priceRange.max;
+    document.getElementById('price_min2').placeholder = filterOptions.priceRange.min;
+    document.getElementById('price_max2').placeholder = filterOptions.priceRange.max;
+}
+
+function populatePriceDropdowns() {
+    const priceMin1 = document.getElementById('price_min1');
+    const priceMax1 = document.getElementById('price_max1');
+    const priceMin2 = document.getElementById('price_min2');
+    const priceMax2 = document.getElementById('price_max2');
+    
+    // Clear existing options
+    priceMin1.innerHTML = '<option value="">Min Price</option>';
+    priceMax1.innerHTML = '<option value="">Max Price</option>';
+    priceMin2.innerHTML = '<option value="">Min Price</option>';
+    priceMax2.innerHTML = '<option value="">Max Price</option>';
+    
+    // Populate min prices (ascending)
+    filterOptions.prices_asc.forEach(price => {
+        const formattedPrice = `£${price.toLocaleString()}`;
+        const option1 = new Option(formattedPrice, price);
+        const option2 = new Option(formattedPrice, price);
+        priceMin1.appendChild(option1);
+        priceMin2.appendChild(option2.cloneNode(true));
+    });
+    
+    // Populate max prices (descending) 
+    filterOptions.prices_desc.forEach(price => {
+        const formattedPrice = `£${price.toLocaleString()}`;
+        const option1 = new Option(formattedPrice, price);
+        const option2 = new Option(formattedPrice, price);
+        priceMax1.appendChild(option1);
+        priceMax2.appendChild(option2.cloneNode(true));
+    });
+}
+
+async function loadProducts(side) {
+    const platform = document.getElementById(`platform${side}`).value;
+    const brand = document.getElementById(`brand${side}`).value;
+    const year = document.getElementById(`year${side}`).value;
+    const status = document.getElementById(`status${side}`).value;
+    const matchStatus = document.getElementById('global_match_status').value; 
+    const priceMin = document.getElementById(`price_min${side}`).value;
+    const priceMax = document.getElementById(`price_max${side}`).value;
+    const searchText = document.getElementById(`search_text${side}`).value;
+
+    const otherSide = side === 1 ? 2 : 1;
+    const otherPlatform = document.getElementById(`platform${otherSide}`).value;
+
+    const offset = side === 1 ? offset1 : offset2;
+    
+    try {
+        const formData = new FormData();
+        formData.append('platform', platform);
+        formData.append('other_platform', otherPlatform);  
+        if (brand && brand !== 'all') formData.append('brand', brand);
+        if (year && year !== 'all') formData.append('year', year);
+        if (status && status !== 'all') formData.append('status', status);
+        if (matchStatus && matchStatus !== 'all') formData.append('match_status', matchStatus);
+        if (priceMin) formData.append('price_min', priceMin);
+        if (priceMax) formData.append('price_max', priceMax);
+        if (searchText) formData.append('search_text', searchText);
+        formData.append('offset', offset);
+        formData.append('limit', limit);
+        
+        const response = await fetch('/matching/api/products', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+
+        // ADD THIS DEBUG LINE:
+        console.log(`Received ${data.products.length} products for side ${side}:`, data.products);
+    
+
+        if (offset === 0) {
+            // New search - replace content
+            document.getElementById(`products${side}`).innerHTML = '';
+            if (side === 1) offset1 = 0;
+            else offset2 = 0;
+        }
+        
+        // ADD THIS DEBUG LINE:
+        console.log(`About to display products for side ${side}`);
+            
+        displayProducts(side, data.products);
+
+        // ADD THIS DEBUG LINE:
+        console.log(`Finished displaying products for side ${side}`);
+        
+        // Show/hide load more button
+        const loadMoreBtn = document.getElementById(`loadMore${side}`);
+        if (data.has_more) {
+            loadMoreBtn.classList.remove('hidden');
+        } else {
+            loadMoreBtn.classList.add('hidden');
+        }
+        
+        // Show filtered count for VR platform
+        if (status !== 'all' && (platform === 'vr' || platform === 'reverb')) {
+            console.log(`Showing ${data.products.length} ${status} ${platform} products`);
+        }
+        
+    } catch (error) {
+        console.error('Error loading products:', error);
+        alert('Error loading products. Please try again.');
+    }
+}
+
+function displayProducts(side, products) {
+    const container = document.getElementById(`products${side}`);
+    
+    products.forEach(product => {
+        const productDiv = document.createElement('div');
+        productDiv.className = 'border rounded-lg p-3 cursor-pointer hover:bg-gray-50 product-item relative';
+        productDiv.dataset.productId = product.id;
+        productDiv.setAttribute('data-product-id', product.id);
+        productDiv.dataset.side = side;
+        
+        // Format price
+        const price = product.price ? `£${product.price.toLocaleString()}` : 'No price';
+        
+        // Format year
+        const year = product.year ? ` (${product.year})` : '';
+        
+        // Status badge
+        const statusBadge = product.status ? 
+            `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                product.status === 'live' ? 'bg-green-100 text-green-800' :
+                product.status === 'sold' ? 'bg-red-100 text-red-800' :
+                product.status === 'ended' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-gray-100 text-gray-800'
+            }">${product.status.toUpperCase()}</span>` : '';
+        
+        // Create platform link
+        const platformLink = product.platform_url ? 
+            `<a href="${product.platform_url}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 underline">${product.platform}</a>` : 
+            `<span class="text-xs text-gray-500">${product.platform}</span>`;
+        
+        // Create image element
+        const imageElement = product.primary_image ? 
+            `<img src="${product.primary_image}" alt="Product image" class="w-12 h-12 object-cover rounded border">` :
+            `<div class="w-12 h-12 bg-gray-200 rounded border flex items-center justify-center">
+                <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2v12a2 2 0 002 2z" />
+                </svg>
+            </div>`;
+        
+        productDiv.innerHTML = `
+            <div class="flex items-start space-x-3">
+                <input type="radio" name="product${side}" value="${product.id}" 
+                    onchange="selectProduct(${side}, ${product.id}, this)"
+                    class="mt-1 h-4 w-4 text-blue-600">
+                ${imageElement}
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2 mb-1">
+                                <p class="text-sm font-medium text-gray-900 truncate">
+                                    ${product.title || 'No title'}${year}
+                                </p>
+                                ${statusBadge}
+                            </div>
+                            <p class="text-sm text-gray-500">
+                                SKU: ${product.sku} | Brand: ${product.brand || 'N/A'}
+                            </p>
+                            <p class="text-sm text-gray-500">
+                                Model: ${product.model || 'N/A'}
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm font-medium text-gray-900">${price}</p>
+                            ${platformLink}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(productDiv);
+    });
+}
+
+function selectProduct(side, productId, radio) {
+    // Remove previous selection styling from ALL items on this side
+    document.querySelectorAll(`#products${side} .product-item`).forEach(item => {
+        item.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50');
+    });
+    
+    // Add selection styling to the clicked item
+    radio.closest('.product-item').classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+    
+    // Store selection
+    if (side === 1) {
+        selectedProduct1 = productId;
+    } else {
+        selectedProduct2 = productId;
+    }
+    
+    // Enable match button if both products selected
+    updateMatchButton();
+}
+
+function updateMatchButton() {
+    const matchBtn = document.getElementById('matchBtn');
+    if (selectedProduct1 && selectedProduct2) {
+        matchBtn.disabled = false;
+        matchBtn.textContent = `Match Products (${selectedProduct1} ↔ ${selectedProduct2})`;
+    } else {
+        matchBtn.disabled = true;
+        matchBtn.textContent = 'Match Selected Products';
+    }
+}
+
+function loadMoreProducts(side) {
+    if (side === 1) {
+        offset1 += limit;
+    } else {
+        offset2 += limit;
+    }
+    loadProducts(side);
+}
+
+async function confirmMatch() {
+    if (!selectedProduct1 || !selectedProduct2) {
+        alert('Please select products from both sides.');
+        return;
+    }
+    
+    if (selectedProduct1 === selectedProduct2) {
+        alert('Cannot match a product with itself.');
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('product1_id', selectedProduct1);
+        formData.append('product2_id', selectedProduct2);
+        
+        const response = await fetch('/matching/api/confirm', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(`Successfully matched products! ${result.message}`);
+            
+            // Remove matched products from both lists
+            document.querySelector(`[data-product-id="${selectedProduct1}"]`).remove();
+            document.querySelector(`[data-product-id="${selectedProduct2}"]`).remove();
+            
+            // Reset selections
+            resetSelections();
+            
+            // Update stats
+            loadStats();
+            
+            // Load match history
+            loadMatchHistory();
+            
+        } else {
+            alert(`Error matching products: ${result.message}`);
+        }
+    } catch (error) {
+        console.error('Error matching products:', error);
+        alert('Error matching products. Please try again.');
+    }
+}
+
+function skipProducts() {
+    resetSelections();
+}
+
+function resetSelections() {
+    selectedProduct1 = null;
+    selectedProduct2 = null;
+    
+    // Clear radio selections
+    document.querySelectorAll('input[type="radio"]').forEach(radio => {
+        radio.checked = false;
+    });
+    
+    // Remove selection styling
+    document.querySelectorAll('.product-item').forEach(item => {
+        item.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50');
+    });
+    
+    updateMatchButton();
+}
+
+async function loadMatchHistory() {
+    try {
+        const response = await fetch('/matching/api/history');
+        const history = await response.json();
+        
+        const historyDiv = document.getElementById('matchHistory');
+        historyDiv.innerHTML = '';
+        
+        if (history.length === 0) {
+            historyDiv.innerHTML = '<p class="text-gray-500">No matches yet.</p>';
+            return;
+        }
+        
+        history.forEach(match => {
+            const matchDiv = document.createElement('div');
+            matchDiv.className = 'border-b pb-2 mb-2 last:border-b-0';
+            matchDiv.innerHTML = `
+                <div class="text-sm">
+                    <span class="font-medium">${match.platform1}</span> 
+                    ${match.product1_sku} ↔ 
+                    <span class="font-medium">${match.platform2}</span> 
+                    ${match.product2_sku}
+                </div>
+                <div class="text-xs text-gray-500">${new Date(match.created_at).toLocaleString()}</div>
+            `;
+            historyDiv.appendChild(matchDiv);
+        });
+        
+    } catch (error) {
+        console.error('Error loading match history:', error);
+    }
+}
+
+async function updateStatusDropdown(side, platform) {
+    try {
+        const response = await fetch(`/matching/api/platform-status-options/${platform}`);
+        const statuses = await response.json();
+        
+        const statusSelect = document.getElementById(`status${side}`);
+        const currentValue = statusSelect.value; // Remember current selection
+        
+        // Clear and rebuild options
+        statusSelect.innerHTML = '<option value="all">All Status</option>';
+        
+        statuses.forEach(status => {
+            const option = new Option(status.charAt(0).toUpperCase() + status.slice(1), status);
+            statusSelect.appendChild(option);
+        });
+        
+        // Restore selection if it still exists
+        if (statuses.includes(currentValue)) {
+            statusSelect.value = currentValue;
+        } else {
+            statusSelect.value = 'all';
+        }
+        
+        console.log(`Updated status dropdown for ${platform} side ${side}:`, statuses);
+        
+    } catch (error) {
+        console.error(`Error updating status dropdown for ${platform}:`, error);
+        // Fallback to default options
+        const statusSelect = document.getElementById(`status${side}`);
+        statusSelect.innerHTML = `
+            <option value="all">All Status</option>
+            <option value="live">Live/Active</option>
+            <option value="sold">Sold</option>
+            <option value="ended">Ended</option>
+            <option value="draft">Draft</option>
+        `;
+    }
+}
+
+
+// Auto-refresh stats every 30 seconds
+setInterval(loadStats, 300000);
+</script>
+
+<style>
+.product-item.ring-2 {
+    box-shadow: 0 0 0 2px #3b82f6 !important;
+    border-color: #3b82f6 !important;
+}
+</style>
+
+{% endblock %}

@@ -6,7 +6,7 @@
 - Backend: FastAPI with Python
 - Database: PostgreSQL with SQLAlchemy
 - Frontend: Jinja2 Templates
-- Platform Integrations: eBay, Reverb, VintageAndRare, Custom Website API
+- Platform Integrations: eBay, Reverb, VintageAndRare, Shopify API
 
 ### Project Structure
 - Modular design with separate services for each platform

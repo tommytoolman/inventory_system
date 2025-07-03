@@ -3,6 +3,9 @@ import asyncio
 from sqlalchemy import delete
 from app.database import get_session
 from app.models.reverb import ReverbListing
+from app.models.ebay import EbayListing
+from app.models.vr import VRListing
+from app.models.shopify import ShopifyListing
 from app.models.platform_common import PlatformCommon
 from app.models.product import Product
 
@@ -16,6 +19,15 @@ async def reset_database():
             print("Clearing database tables...")
             
             # Delete in order of dependencies (children first)
+            print("Deleting shopify_listings...")
+            await session.execute(delete(ShopifyListing))
+            
+            print("Deleting ebay_listings...")
+            await session.execute(delete(EbayListing))
+            
+            print("Deleting vr_listings...")
+            await session.execute(delete(VRListing))
+            
             print("Deleting reverb_listings...")
             await session.execute(delete(ReverbListing))
             
@@ -27,6 +39,7 @@ async def reset_database():
             
             await session.commit()
             print("Database reset complete.")
+            
         except Exception as e:
             await session.rollback()
             print(f"Error resetting database: {str(e)}")

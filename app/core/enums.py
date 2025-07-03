@@ -4,6 +4,21 @@ Shared enums and constants used across the application.
 
 from enum import Enum
 
+class PlatformName(str, Enum):
+    REVERB = "REVERB"
+    SHOPIFY = "SHOPIFY"
+    EBAY = "EBAY"
+    VR = "VR"
+    
+    @property
+    def slug(self):
+        # self.value will be "EBAY", "REVERB", "VR", "SHOPIFY"
+        # .lower() makes them "ebay", "reverb", "vr", "shopify"
+        # The replace calls are good practice for more complex names,
+        # though for these simple names, only .lower() is strictly needed.
+        return self.value.lower().replace('& ', 'and').replace(' ', '').replace('-', '')
+    
+
 class ProductStatus(str, Enum):
     """Product status values used in both models and schemas"""
     DRAFT = "DRAFT"

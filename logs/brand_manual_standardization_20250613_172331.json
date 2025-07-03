@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-13T17:23:31.664287",
+  "operation": "manual_standardization",
+  "total_updated": 3,
+  "changes": [
+    {
+      "old_brand": "Davoli wandre",
+      "new_brand": "Wandre",
+      "count": 3
+    }
+  ]
+}

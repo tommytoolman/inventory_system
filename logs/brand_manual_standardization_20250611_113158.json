@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:31:58.481707",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "eko",
+      "new_brand": "Eko",
+      "count": 1
+    }
+  ]
+}

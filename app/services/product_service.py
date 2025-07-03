@@ -110,6 +110,32 @@ class ProductService:
             
         return await model_to_schema(product, ProductRead)
 
+    async def get_product_model_instance(self, product_id: int) -> Optional[Product]: # Returns the DB Model
+        """
+        Retrieves a product SQLAlchemy model instance by ID.
+        This method should also handle eager loading of necessary relationships if not already handled.
+        """
+        # The query needs to ensure related data (images, category object if relational, etc.) is loaded
+        # For example, if product.category is a relationship:
+        # query = select(Product).options(selectinload(Product.category), selectinload(Product.images_relation_if_any)).where(Product.id == product_id)
+        query = select(Product).where(Product.id == product_id) # Basic query
+
+        # If you have specific relationships that _prepare_vr_payload_from_product_object needs,
+        # and they are not loaded by default or by accessing them (due to lazy loading settings),
+        # you'd add .options(selectinload(Product.your_relationship)) to the query above.
+        # For fields like product.images (JSONB), product.image_urls (ARRAY), product.category (String),
+        # no special selectinload is needed as they are direct columns.
+
+        result = await self.db.execute(query)
+        product_model = result.scalar_one_or_none() # Returns the Product SQLAlchemy model instance
+
+        if not product_model:
+            # You might still raise ProductNotFoundError or let the route handle None
+            # raise ProductNotFoundError(f"Product model with ID {product_id} not found")
+            return None
+
+        return product_model
+
     async def list_products(
         self,
         page: int = 1,
@@ -234,142 +260,6 @@ class ProductService:
         await self.db.commit()
         
         return True
-
-    # # Private helper methods
-    # async def _create_ebay_listing(
-    #     self,
-    #     product_id: int,
-    #     ebay_data: Dict[str, Any]
-    # ) -> None:
-    #     """
-    #     Creates platform_common entry and eBay listing in draft status.
-        
-    #     Args:
-    #         product_id: Product ID
-    #         ebay_data: eBay listing data
-    #     """
-    #     # Create platform_common entry
-    #     platform_common = PlatformCommon(
-    #         product_id=product_id,
-    #         platform_name="ebay",
-    #         status=ListingStatus.DRAFT.value,
-    #         sync_status=SyncStatus.PENDING.value,
-    #         platform_specific_data=ebay_data.get("item_specifics", {})
-    #     )
-    #     self.db.add(platform_common)
-    #     await self.db.flush()
-
-    #     # Create eBay listing
-    #     from app.models.ebay import EbayListing, EbayListingStatusInfo
-        
-    #     ebay_listing = EbayListing(
-    #         platform_id=platform_common.id,
-    #         ebay_category_id=ebay_data.get("category_id"),
-    #         ebay_condition_id=ebay_data.get("condition_id"),
-    #         price=ebay_data.get("price", 0),
-    #         listing_duration=ebay_data.get("duration", "GTC"),
-    #         item_specifics=ebay_data.get("item_specifics", {}),
-    #         listing_status=EbayListingStatus.DRAFT.value
-    #     )
-    #     self.db.add(ebay_listing)
-
-    # async def create_product(
-    #     self,
-    #     product_data: ProductCreate,
-    #     ebay_data: Optional[Dict[str, Any]] = None
-    # ) -> Product:
-    #     """
-    #     Creates a product and optionally initializes eBay listing.
-
-    #     Args:
-    #         product_data: Validated product data
-    #         ebay_data: Optional eBay-specific listing data
-
-    #     Returns:
-    #         Created product instance
-
-    #     Raises:
-    #         ProductCreationError: If product creation fails
-    #     """
-    #     try:
-    #         # Check if SKU exists
-    #         if await self.sku_exists(product_data.sku):
-    #             raise ProductCreationError(f"SKU '{product_data.sku}' already exists")
-            
-    #         # Create product
-    #         product = Product(**product_data.model_dump(exclude_unset=True))
-    #         self.db.add(product)
-    #         await self.db.flush()  # Get product ID without committing
-
-    #         # If eBay data provided, create platform listing
-    #         if ebay_data:
-    #             await self._create_ebay_listing(product.id, ebay_data)
-
-    #         await self.db.commit()
-    #         # return product
-    #         # Previously we returned product but ... we hit a lazy loading problem. Here we switch to eager loading.
-
-    #         from sqlalchemy.orm import selectinload
-    #         query = select(Product).options(selectinload(Product.platform_listings)).where(Product.id == product.id)
-    #         result = await self.db.execute(query)
-    #         return result.scalar_one()
-
-    #     except Exception as e:
-    #         await self.db.rollback()
-    #         raise ProductCreationError(f"Failed to create product: {str(e)}")
-
-    # async def _create_ebay_listing(
-    #     self,
-    #     product_id: int,
-    #     ebay_data: Dict[str, Any]
-    # ) -> None:
-    #     """
-    #     Creates platform_common entry and eBay listing in draft status.
-    #     """
-    #     # Create platform_common entry
-    #     platform_common = PlatformCommon(
-    #         product_id=product_id,
-    #         platform_name="ebay",
-    #         status=ListingStatus.DRAFT.value,  # Use .value here
-    #         sync_status=SyncStatus.PENDING.value,  # Use .value here
-    #         platform_specific_data=ebay_data.get("item_specifics", {})
-    #     )
-    #     self.db.add(platform_common)
-    #     await self.db.flush()
-
-    #     # Create eBay listing
-    #     ebay_listing = EbayListing(
-    #         platform_id=platform_common.id,
-    #         ebay_category_id=ebay_data.get("category_id"),
-    #         ebay_condition_id=ebay_data.get("condition_id"),
-    #         price=ebay_data.get("price", 0),
-    #         listing_duration=ebay_data.get("duration", "GTC"),
-    #         item_specifics=ebay_data.get("item_specifics", {}),
-    #         listing_status=EbayListingStatus.DRAFT.value  # Use .value here
-    #     )
-    #     self.db.add(ebay_listing)
-
-    # async def get_product(self, product_id: int) -> Optional[ProductRead]:
-    #     """
-    #     Retrieves a product by ID.
-        
-    #     Args:
-    #         product_id: Product ID
-            
-    #     Returns:
-    #         Product data or None if not found
-            
-    #     Raises:
-    #         ProductNotFoundError: If product not found
-    #     """
-    #     query = select(Product).where(Product.id == product_id)
-    #     result = await self.db.execute(query)
-    #     product = result.scalar_one_or_none()
-        
-    #     if not product:
-    #         raise ProductNotFoundError(f"Product with ID {product_id} not found")
-            
-    #     return await model_to_schema(product, ProductRead)
 
     async def update_product_status(
         self,

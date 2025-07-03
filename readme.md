@@ -62,7 +62,7 @@ app/
 - Support for V&R's unique selling features (Dealer's Collective, etc.)
 - Media and description formatting
 
-### Website
+### Shopify
 - Publish products to your own custom website
 - SEO optimization for listings
 - Custom layouts and templates
@@ -216,3 +216,75 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Pydantic validation
 - TailwindCSS for UI components
 - Jinja2 templating engine
+
+
+
+
+🎯 Core System Purpose:
+
+The inventory management system is the "Single Source of Truth" for guitar inventory, serving as:
+
+1. Central Hub - Manages all guitar/kit inventory in one place
+2. Multi-Platform Publisher - Can create/update/delete listings across 4 ecommerce sites
+3. Sync Manager - Keeps all platforms in sync with central inventory
+4. External Change Handler - Detects and manages listings created outside the system
+
+🔄 Two-Way Data Flow:
+  Outbound (System → Platforms):
+- Create new listings on eBay, Reverb, V&R, Shopify from central inventory
+- Update existing listings when inventory changes
+- Delete/end listings when items are sold or removed
+- Inbound (Platforms → System):
+
+- Detect new listings created directly on platforms (outside system)
+- Import those external listings into central inventory
+- Sync status changes (sold, ended, etc.) back to central system
+
+🤔 Questions to Clarify:
+Conflict Resolution: When someone creates a listing externally that might duplicate an existing inventory item, how should the system handle this?
+
+Primary Platform: Is there a hierarchy of platforms (e.g., if the same item is listed on multiple platforms, which one "wins" for status updates)?
+
+Inventory Sync: When an item sells on one platform, should it automatically be removed/ended on all other platforms?
+
+1. External Listing Handling:
+Import → Create new SKU in products table
+Link → Create corresponding platform_common and [platform]_listings records
+Display → Item detail page shows "synced with 1 platform" + option to list on others
+Report → Generate flagging report for manual review/action
+2. Platform Hierarchy (At Launch):
+Shopify (Primary when launched)
+Reverb
+Vintage & Rare
+eBay
+But any platform can sell first and becomes the "winner"
+
+3. Cross-Platform Sync Strategy:
+Frequency: 2x daily status checks across all platforms
+Rule: First platform to sell wins
+Action: Automatically end/remove listings on all other platforms
+Logic: Timestamp-based conflict resolution
+🎯 System Flow Example:
+Item sells on eBay at 10:30 AM
+Next sync cycle (12:00 PM) detects the sale
+System automatically ends listings on Reverb, V&R, and Shopify
+Central inventory marked as SOLD with eBay as winning platform
+🚀 Ready for Next Steps:
+I understand the complete two-way sync architecture. What would you like to tackle now?
+
+Are we looking at:
+
+Building the external listing detection/import system?
+Creating the cross-platform sync mechanism?
+Setting up the conflict resolution logic?
+Building the flagging reports?
+
+
+app/integrations/
+├── base.py             🗃️ ARCHIVE - PlatformInterface abstraction (unused)
+├── setup.py            🗃️ ARCHIVE - Platform registration system (unused)
+└── platforms/          🗃️ ARCHIVE - All stub implementations
+    ├── ebay.py         🗃️ ARCHIVE - Empty stub
+    ├── reverb.py       🗃️ ARCHIVE - Empty stub
+    ├── shopify.py      🗃️ ARCHIVE - Empty stub
+    └── vintageandrare/ 🗃️ ARCHIVE - Empty stubs

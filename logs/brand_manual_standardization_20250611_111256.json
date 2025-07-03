@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:12:56.668498",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Marshall Stack 1970s",
+      "new_brand": "Marshall",
+      "count": 1
+    }
+  ]
+}

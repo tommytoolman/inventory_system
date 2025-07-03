@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:57:43.848964",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "VoxAC30",
+      "new_brand": "Vox",
+      "count": 1
+    }
+  ]
+}

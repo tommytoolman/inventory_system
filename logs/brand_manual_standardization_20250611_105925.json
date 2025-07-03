@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T10:59:25.241353",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "musicman",
+      "new_brand": "Ernie Ball Music Man",
+      "count": 1
+    }
+  ]
+}

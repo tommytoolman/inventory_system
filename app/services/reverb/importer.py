@@ -44,7 +44,7 @@ class ReverbImporter:
         self.api_key = os.environ.get("REVERB_API_KEY")
         self.client = ReverbClient(self.api_key)
   
-    async def import_all_listings(self) -> Dict[str, int]:
+    async def import_all_listings(self, include_all_states: bool = True) -> Dict[str, int]:
         """
         Import all listings from Reverb and create corresponding database records
         
@@ -55,17 +55,19 @@ class ReverbImporter:
             "total": 0,
             "created": 0,
             "errors": 0,
-            "skipped": 0
+            "skipped": 0,
+            "by_state": {}
         }
         
         try:
+            state = "all" if include_all_states else "live"
             logger.info("Starting import of all Reverb listings")
             
             # Get all listings from Reverb
-            listings = await self.client.get_all_listings()
+            listings = await self.client.get_all_listings_detailed(max_concurrent=10, state=state)
+            
             if not isinstance(listings, list):
                 if isinstance(listings, dict) and 'listings' in listings:
-                    # If the API returns a dictionary with 'listings' key, use that
                     listings = listings.get('listings', [])
                 else:
                     logger.error(f"Unexpected response format from Reverb API: {type(listings)}")
@@ -73,7 +75,17 @@ class ReverbImporter:
             
             stats["total"] = len(listings)
             logger.info(f"Retrieved {stats['total']} listings from Reverb API")
-            
+
+            # Track listings by their individual states
+            for listing in listings:
+                listing_state = listing.get('state', 'unknown')
+                if listing_state not in stats["by_state"]:
+                    stats["by_state"][listing_state] = 0
+                stats["by_state"][listing_state] += 1
+                
+            # Log the breakdown
+            logger.info(f"Listings by state: {stats['by_state']}")
+
             # Process in batches of 50
             BATCH_SIZE = 50
             total_listings = len(listings)
@@ -139,6 +151,7 @@ class ReverbImporter:
                         except Exception as e:
                             stats["errors"] += len(valid_details)
                             logger.error(f"Error in batch processing: {str(e)}")
+                            print(f"Error in batch processing: {str(e)}")
                     else:
                         logger.warning("No valid listing details to process in batch")
                             
@@ -166,7 +179,7 @@ class ReverbImporter:
         if not listings_data:
             logger.warning("No listings data provided for batch creation")
             return
-
+    
         products = []
         platform_commons = []
         reverb_listings = []
@@ -259,7 +272,7 @@ class ReverbImporter:
                         platform_name="reverb",
                         external_id=listing_id,
                         status=ListingStatus.ACTIVE,
-                        sync_status=SyncStatus.SUCCESS,
+                        sync_status=SyncStatus.SYNCED,
                         last_sync=self._convert_to_naive_datetime(datetime.now(timezone.utc)),
                         listing_url=self._safe_get(listing_data, '_links', 'web', 'href', default=''),
                         created_at=now_naive,
@@ -286,6 +299,14 @@ class ReverbImporter:
                         
                     platform_common = platform_commons[i]
                     
+                    # Debug: Log the fields we're extracting for the first listing in the batch
+                    if i == 0:
+                        logger.info(f"Sample listing data keys: {list(listing_data.keys())}")
+                        if 'slug' in listing_data:
+                            logger.info(f"Found slug in listing data: {listing_data['slug']}")
+                        else:
+                            logger.warning(f"NO SLUG found in listing data for {listing_id}")
+                            
                     # Parse timestamps
                     reverb_created_at = None
                     if listing_data.get('created_at'):
@@ -294,7 +315,7 @@ class ReverbImporter:
                             reverb_created_at = self._convert_to_naive_datetime(dt)
                         except Exception as e:
                             logger.warning(f"Could not parse created_at timestamp: {e}")
-
+    
                     reverb_published_at = None
                     if listing_data.get('published_at'):
                         try:
@@ -302,12 +323,23 @@ class ReverbImporter:
                             reverb_published_at = self._convert_to_naive_datetime(dt)
                         except Exception as e:
                             logger.warning(f"Could not parse published_at timestamp: {e}")
-
+    
+                    # Debug: Log the specific values for slug and timestamps
+                    if i == 0:
+                        debug_fields = {
+                            'id': listing_id,
+                            'reverb_slug': listing_data.get('slug', ''),
+                            'reverb_created_at': str(reverb_created_at) if reverb_created_at else None,
+                            'reverb_published_at': str(reverb_published_at) if reverb_published_at else None,
+                            'extended_attributes_keys': list(self._prepare_extended_attributes(listing_data).keys())[:5] if self._prepare_extended_attributes(listing_data) else []
+                        }
+                        logger.info(f"Debug fields for first listing: {debug_fields}")
+    
                     # Use naive datetimes for all datetime fields
                     created_at = self._convert_to_naive_datetime(datetime.now(timezone.utc))
                     updated_at = self._convert_to_naive_datetime(datetime.now(timezone.utc))
                     last_synced_at = self._convert_to_naive_datetime(datetime.now(timezone.utc))
-
+    
                     # Parse state
                     state = ""
                     state_data = listing_data.get('state', {})
@@ -321,7 +353,7 @@ class ReverbImporter:
                     if isinstance(stats, dict):
                         view_count = self._safe_int(stats.get('views'), 0)
                         watch_count = self._safe_int(stats.get('watches'), 0)                   
-
+    
                     # Create enhanced reverb_listing with new fields
                     reverb_listing = ReverbListing(
                         platform_id=platform_common.id,
@@ -607,136 +639,7 @@ class ReverbImporter:
             return dt.replace(tzinfo=None)
         return dt
 
-    # Add these methods to your ReverbImporter class in app/services/reverb/importer.py
-    # async def import_sold_listings(self) -> Dict[str, int]:
-    #     """
-    #     Import all sold listings from Reverb orders API
-        
-    #     Returns:
-    #         Dict[str, int]: Statistics about the import operation
-    #     """
-    #     stats = {
-    #         "total": 0,
-    #         "created": 0,
-    #         "errors": 0,
-    #         "skipped": 0,
-    #         "sold_imported": 0
-    #     }
-        
-    #     try:
-    #         logger.info("Starting import of sold Reverb listings from orders API")
-            
-    #         # Get all sold orders from Reverb
-    #         orders = await self.client.get_all_sold_orders()
-            
-    #         stats["total"] = len(orders)
-    #         logger.info(f"Retrieved {stats['total']} sold orders from Reverb API")
-            
-    #         # Process in batches of 50
-    #         BATCH_SIZE = 50
-    #         total_orders = len(orders)
-            
-    #         for i in range(0, total_orders, BATCH_SIZE):
-    #             batch = orders[i:i+BATCH_SIZE]
-    #             logger.info(f"Processing batch {i//BATCH_SIZE + 1}/{math.ceil(total_orders/BATCH_SIZE)}")
-                
-    #             # Process order items as listings
-    #             listings_data = []
-    #             for order in batch:
-    #                 try:
-    #                     # Extract the listing data from the order
-    #                     listing_data = self._extract_listing_from_order(order)
-    #                     if listing_data:
-    #                         listings_data.append(listing_data)
-    #                 except Exception as e:
-    #                     logger.error(f"Error extracting listing from order: {str(e)}")
-    #                     stats["errors"] += 1
-                
-    #             # Process the extracted listings
-    #             if listings_data:
-    #                 try:
-    #                     # Create database records for these sold listings
-    #                     created = await self._create_sold_records_batch(listings_data)
-    #                     stats["created"] += created
-    #                     stats["sold_imported"] += created
-    #                 except Exception as e:
-    #                     stats["errors"] += len(listings_data)
-    #                     logger.error(f"Error in sold batch processing: {str(e)}")
-                
-    #             # Commit after each batch
-    #             await self.db.commit()
-                
-    #             # Report progress
-    #             logger.info(f"Completed sold batch: {stats['created']}/{total_orders} imported")
-            
-    #         logger.info(f"Sold import complete: Created {stats['created']} listings, "
-    #                 f"skipped {stats['skipped']}, errors {stats['errors']}")
-    #         return stats
-            
-    #     except Exception as e:
-    #         # Handle unexpected errors
-    #         await self.db.rollback()
-    #         logger.error(f"Critical error in sold import operation: {str(e)}")
-    #         import traceback
-    #         logger.error(traceback.format_exc())
-    #         # Re-raise to caller
-    #         raise ImportError(f"Failed to import sold Reverb listings: {str(e)}") from e
-
-    # def _extract_listing_from_order(self, order: Dict[str, Any]) -> Dict[str, Any]:
-    #     """
-    #     Extract listing data from an order object
-        
-    #     Args:
-    #         order: Order object from Reverb API
-            
-    #     Returns:
-    #         Dict[str, Any]: Listing data in a format similar to listings API
-    #     """
-    #     # Extract the listing info from the order
-    #     listing = order.get('listing_info', {})
-        
-    #     # Build a listing object similar to what we'd get from the listings API
-    #     listing_data = {
-    #         'id': listing.get('id'),
-    #         'title': listing.get('title', ''),
-    #         'description': listing.get('description', ''),
-    #         'price': {
-    #             'amount': order.get('amount', {}).get('amount', 0)
-    #         },
-    #         'condition': {
-    #             'display_name': listing.get('condition', {}).get('display_name', '')
-    #         },
-    #         'photos': [], # Try to extract photos if available
-    #         'categories': [{'full_name': listing.get('category', '')}],
-    #         'make': listing.get('make', ''),
-    #         'model': listing.get('model', ''),
-    #         'year': listing.get('year'),
-    #         'created_at': listing.get('created_at'),
-    #         'published_at': listing.get('published_at'),
-    #         'state': {'slug': 'sold'},  # Mark as sold
-    #         'slug': listing.get('slug', ''),
-    #         # Add any other fields that might be in the order data
-    #         # Add order-specific fields
-    #         'order_id': order.get('id'),
-    #         'order_number': order.get('order_number'),
-    #         'buyer_id': order.get('buyer', {}).get('id'),
-    #         'buyer_name': order.get('buyer', {}).get('name'),
-    #         'sold_at': order.get('created_at'),
-    #         'sold': True  # Explicitly mark as sold
-    #     }
-        
-    #     # Add additional order fields to extended attributes
-    #     listing_data['order_data'] = {
-    #         'shipping_address': order.get('shipping_address'),
-    #         'shipping_price': order.get('shipping_amount', {}).get('amount'),
-    #         'tax_amount': order.get('tax_amount', {}).get('amount'),
-    #         'total_price': order.get('total_amount', {}).get('amount'),
-    #         'payment_method': order.get('payment_method'),
-    #         'payment_status': order.get('status')
-    #     }
-        
-    #     return listing_data
-
+    
     async def _create_sold_records_batch(self, listings_data: List[Dict[str, Any]]) -> int:
         """Create database records for sold listings"""
         created_count = 0
@@ -828,7 +731,7 @@ class ReverbImporter:
                     platform_name="reverb",
                     external_id=listing_id,
                     status=ListingStatus.SOLD,  # Mark as SOLD
-                    sync_status=SyncStatus.SUCCESS,
+                    sync_status=SyncStatus.SYNCED,
                     last_sync=now_naive,
                     listing_url=self._safe_get(listing_data, '_links', 'web', 'href', default=''),
                     created_at=now_naive,
@@ -1048,8 +951,8 @@ class ReverbImporter:
             if orders is None:
                 logger.info("Fetching sold listings from Reverb API")
                 try:
-                    # Get all sold orders from Reverb
-                    orders = await self.client.get_all_sold_orders()
+                    # Get all sold orders from Reverb ... was previously the deprecated get_all_sold_orders()
+                    orders = await self.client.get_all_listings_detailed(max_concurrent=10, state="sold")
                     
                     # Save to cache file for future use
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

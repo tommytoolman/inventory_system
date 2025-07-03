@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:15:34.398863",
+  "operation": "manual_standardization",
+  "total_updated": 3,
+  "changes": [
+    {
+      "old_brand": "rickenbacker",
+      "new_brand": "Rickenbacker",
+      "count": 3
+    }
+  ]
+}

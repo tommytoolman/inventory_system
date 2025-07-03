@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:50:44.619928",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "D'angelico",
+      "new_brand": "D'Angelico",
+      "count": 1
+    }
+  ]
+}

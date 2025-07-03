@@ -1,11 +1,12 @@
-# Example for vr.py
+# app.models.vr.py
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, text, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, text, TIMESTAMP, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
+# from app.database import Base # Assuming your Base is in app.database
 
 from ..database import Base
 
@@ -52,4 +53,19 @@ class VRListing(Base):
 
     # Relationships
     platform_listing = relationship("PlatformCommon", back_populates="vr_listing")
+
+class VRAcceptedBrand(Base):
+    __tablename__ = "vr_accepted_brands"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True) # Your internal DB PK
+    vr_brand_id = Column(Integer, nullable=True, unique=True, index=True) # V&R's own ID for the brand, can be null
+    name = Column(String, nullable=False, unique=True, index=True)
+    name_normalized = Column(String, nullable=False, unique=True, index=True) # For case-insensitive lookups
+
+    # Optional: Add a UniqueConstraint if vr_brand_id should be unique when not null
+    # __table_args__ = (UniqueConstraint('vr_brand_id', name='uq_vr_brand_id_not_null'),)
+    # However, SQLAlchemy and PostgreSQL handle unique=True on nullable columns well.
+
+    def __repr__(self):
+        return f"<VRAcceptedBrand(id={self.id}, name='{self.name}', vr_brand_id={self.vr_brand_id})>"
     

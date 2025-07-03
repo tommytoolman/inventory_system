@@ -1,0 +1,226 @@
+{
+  "version": "1.0",
+  "source_platform": "reverb",
+  "target_platform": "shopify", 
+  "last_updated": "2025-06-09T10:00:00Z",
+  "mappings": {
+        "62835d2e-ac92-41fc-9b8d-4aba8c1c25d5": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7",
+            "merchant_type": "Accessories"
+        },
+        "cdadd9b5-9d6d-4193-b0ee-b94d9ffd02ec": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories > Musical Instrument Amplifier Accessories > Musical Instrument Amplifier Covers & Cases",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-9-2",
+            "merchant_type": "Amp Covers"
+        },
+        "7681b711-435c-4923-bdc3-65076d15d78c": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7",
+            "merchant_type": "Books and DVDs"
+        },
+        "516cfd7e-e745-44cf-bb72-053b3edcddaf": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7",
+            "merchant_type": "Cables"
+        },
+        "5cb132e1-1a42-42f4-bcd1-cf17405e7aff": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7",
+            "merchant_type": "Case Candy"
+        },
+        "b1f4ce46-26e5-4f27-8b8a-66bd0f41a8eb": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories > Musical Instrument Amplifier Accessories > Musical Instrument Amplifier Covers & Cases",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-9-2",
+            "merchant_type": "Guitar Cases"
+        },
+        "aff19d6a-ad5e-4b3b-b21c-8aa71ae834c6": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories > Electronic Tuners",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-3",
+            "merchant_type": "Tuners"
+        },
+        
+        "3ca3eb03-7eac-477d-b253-15ce603d2550": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Acoustic Guitars"
+        },
+        "14d6cc96-ed7b-4521-bc21-7713c61e9dc5": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "12-String Acoustic Guitar"
+        },
+        "be24976f-ab6e-42e1-a29b-275e5fbca68f": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Archtop Acoustic Guitar"
+        },
+        "d63135ba-55a8-4742-9891-a01d91538d96": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Baritone Acoustic Guitar"
+        },
+        "09ea109a-5df1-4156-b00c-7456a3e5abf3": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Acoustic Guitar with Electronics"
+        },
+        "a7f470d1-266d-4495-b4d6-998cc84b7474": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Classical Guitar"
+        },
+        "18bdeae7-e834-42a8-aeee-0e8ae33f8709": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Concert Acoustic Guitar"
+        },
+        "630dc140-45e2-4371-b569-19405de321cc": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Dreadnought Guitar"
+        },
+        "c58c6c12-4b50-4568-90c9-e071ec8e6a26": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Jumbo Acoustic Guitar"
+        },
+        "8b531867-88ee-46c5-b6d1-40d2d6b9dc35": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Acoustic Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-1",
+            "merchant_type": "Resonator Guitar"
+        },
+        
+        "09055aa7-ed49-459d-9452-aa959f288dc2": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories > Musical Instrument Amplifiers > Guitar Amplifiers",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-10-3",
+            "merchant_type": "Amplifier"
+        },
+        "10335451-31e5-418a-8ed8-f48cd738f17d": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories > Musical Instrument Amplifiers > Guitar Amplifiers",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-10-3",
+            "merchant_type": "Guitar Combo Amplifier"
+        },
+        "19d53222-297e-410c-ba4f-b48678e917f9": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories > Musical Instrument Amplifiers > Guitar Amplifiers",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-10-3",
+            "merchant_type": "Guitar Amplifier Head"
+        },
+        "f1b3d127-4158-43c3-934b-e402adc3d6ca": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories > Musical Instrument Amplifiers > Guitar Amplifiers",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-10-3",
+            "merchant_type": "Guitar Cabinet"
+        },
+        "892aa8b2-a209-49db-8ad2-eed758025a9d": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instrument & Orchestra Accessories > Musical Instrument Amplifiers > Bass Amplifiers",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-10-2",
+            "merchant_type": "Bass Amplifier Head"
+        },
+        
+        "53a9c7d7-d73d-4e7f-905c-553503e50a90": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Basses",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-2",
+            "merchant_type": "Bass Guitar"
+        },
+        "ac571749-28c7-4eec-a1d9-09dca3cf3e5f": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Basses",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-2",
+            "merchant_type": "4-String Bass"
+        },
+        "3178be7d-f1cd-4da5-a606-bf3c1b8e834d": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Basses",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-2",
+            "merchant_type": "5+ String Bass"
+        },
+        
+        "dfd39027-d134-4353-b9e4-57dc6be791b9": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Electric Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-4",
+            "merchant_type": "Electric Guitar"
+        },
+        "e57deb7a-382b-4e18-a008-67d4fbcb2879": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Electric Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-4",
+            "merchant_type": "Solid Body Electric Guitar"
+        },
+        "6a63ac2e-f2a5-4064-b6ea-0393f42ee497": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Electric Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-4",
+            "merchant_type": "Semi-Hollow Electric Guitar"
+        },
+        "5db35d7e-2b7e-4dcf-a73b-6a144c710956": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Electric Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-4",
+            "merchant_type": "Hollow Body Electric Guitar"
+        },
+        "367e1d5d-1185-4a1e-b283-8ec860dc1d5f": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Electric Guitars",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-4",
+            "merchant_type": "Archtop Electric Guitar"
+        },
+        
+        "fa10f97c-dd98-4a8f-933b-8cb55eb653dd": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > Instrument Accessories > Effects Pedal Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-13-1-14",
+            "merchant_type": "Effects Pedal"
+        },
+        "305e09a1-f9cb-4171-8a70-6428ad1b55a8": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > Instrument Accessories > Effects Pedal Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-13-1-14",
+            "merchant_type": "Fuzz Pedal"
+        },
+        "9bee8b39-c5f1-4fa7-90af-38740fc21a73": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > Instrument Accessories > Effects Pedal Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-13-1-14",
+            "merchant_type": "Overdrive/Boost Pedal"
+        },
+        "3b09f948-3462-4ac2-93b3-59dd66da787e": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > Instrument Accessories > Effects Pedal Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-13-1-14",
+            "merchant_type": "Delay Pedal"
+        },
+        "1738a9ae-6485-46c2-8ead-0807bb2e20e9": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > Instrument Accessories > Effects Pedal Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-13-1-14",
+            "merchant_type": "Reverb Pedal"
+        },
+        "a92165b2-2281-4dc2-850f-2789f513ec10": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > Instrument Accessories > Effects Pedal Accessories",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-7-13-1-14",
+            "merchant_type": "Wah/Filter Pedal"
+        },
+        
+        "b3cb9f8e-4cb6-4325-8215-1efcd9999daf": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > Percussion > Drum Kits",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-5-3",
+            "merchant_type": "Drums"
+        },
+        
+        "d6322534-edf5-43dd-b1c0-99f0c28e3053": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Mandolins",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-8",
+            "merchant_type": "Mandolin"
+        },
+        "45ba2a33-add3-4f9d-a2d4-842fa663924f": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Banjos",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-7",
+            "merchant_type": "Banjo"
+        },
+        "e70f504b-eee7-4b71-89bc-eb925e802b3d": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Ukuleles",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-7-9",
+            "merchant_type": "Ukulele"
+        },
+        
+        "5c89d4ef-7652-4f89-b766-bb257e746099": {
+            "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > Woodwinds > Saxophones",
+            "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8-8-12",
+            "merchant_type": "Saxophone"
+        }
+    },
+  "fallback": {
+    "shopify_category": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments",
+    "shopify_gid": "gid://shopify/TaxonomyCategory/ae-2-8",
+    "merchant_type": "Musical Instrument"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:37:03.648405",
+  "operation": "manual_standardization",
+  "total_updated": 2,
+  "changes": [
+    {
+      "old_brand": "dbx",
+      "new_brand": "DBX",
+      "count": 2
+    }
+  ]
+}

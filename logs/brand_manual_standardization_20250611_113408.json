@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:34:08.286510",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "guyatone",
+      "new_brand": "Guyatone",
+      "count": 1
+    }
+  ]
+}

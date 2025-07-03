@@ -52,9 +52,9 @@
                 </button>
             </form>
 
-            <a href="/inventory/sync/vintageandrare" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+            <!-- <a href="/inventory/sync/vintageandrare" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
                 Export to V&R
-            </a>
+            </a> -->
         </div>
     </div>
 
@@ -105,7 +105,7 @@
                     <td class="px-6 py-4 whitespace-nowrap">{{ product.brand }}</td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         <span title="{{ product.model }}" class="truncate inline-block max-w-xs">
-                            {% if product.model|length > 65 %}
+                            {% if product.model and product.model|length > 65 %}
                                 {{ product.model[:65] }}...
                             {% else %}
                                 {{ product.model }}

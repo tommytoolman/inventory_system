@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T20:51:37.320542",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "Tone king",
+      "new_brand": "Tone King",
+      "count": 1
+    }
+  ]
+}

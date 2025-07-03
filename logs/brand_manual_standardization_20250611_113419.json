@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:34:19.929693",
+  "operation": "manual_standardization",
+  "total_updated": 1,
+  "changes": [
+    {
+      "old_brand": "futurama",
+      "new_brand": "Futurama",
+      "count": 1
+    }
+  ]
+}

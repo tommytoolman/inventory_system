@@ -15,7 +15,7 @@ from app.models.product import Product
 from app.models.platform_common import PlatformCommon
 from app.models.reverb import ReverbListing
 from app.models.vr import VRListing
-from app.models.website import WebsiteListing
+from app.models.shopify import ShopifyListing
 
 settings = get_settings()
 

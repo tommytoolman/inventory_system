@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:30:22.669527",
+  "operation": "manual_standardization",
+  "total_updated": 4,
+  "changes": [
+    {
+      "old_brand": "mesa boogie",
+      "new_brand": "Mesa Boogie",
+      "count": 4
+    }
+  ]
+}

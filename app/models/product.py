@@ -52,6 +52,51 @@ class Product(Base):
     category = Column(String)
     condition = Column(ENUM(ProductCondition, name='productcondition', create_type=True), nullable=False)
     description = Column(String)
+    title = Column(String, nullable=True)  # Optional, computed field
+    
+    @property
+    def display_title(self):
+        """Always returns a title - computed or stored."""
+        if self.title:
+            return self.title
+        return f"{self.brand} {self.model} {self.year}".strip()
+
+    def generate_title(self):
+        """Generate title from attributes."""
+        parts = [self.brand, self.model, str(self.finish) if self.finish else None, str(self.year) if self.year else None]
+        return " ".join(p for p in parts if p)
+    
+    
+    def get_overall_sync_status(self) -> str:
+        """
+        Determine if all platform statuses are in sync
+        Returns 'SYNCED' if all platforms agree, 'NOT_SYNCED' if there are discrepancies
+        """
+        if not hasattr(self, 'platform_listings') or not self.platform_listings:
+            return 'SYNCED'  # No platforms = no discrepancies
+        
+        # Get central status
+        central_status = self.status.value.upper()
+        
+        # Check each platform status
+        for platform in self.platform_listings:
+            platform_status = platform.status.upper() if platform.status else 'UNKNOWN'
+            
+            # Map platform statuses to central equivalents
+            if central_status == 'SOLD':
+                # If central is SOLD, platforms should show sold/ended
+                if platform_status not in ['SOLD', 'ENDED']:
+                    return 'NOT_SYNCED'
+            elif central_status == 'ACTIVE':
+                # If central is ACTIVE, platforms should show active/live
+                if platform_status not in ['ACTIVE', 'LIVE']:
+                    return 'NOT_SYNCED'
+            elif central_status == 'DRAFT':
+                # If central is DRAFT, platforms should show draft
+                if platform_status not in ['DRAFT']:
+                    return 'NOT_SYNCED'
+        
+        return 'SYNCED'
     
     # Pricing Fields
     base_price = Column(Float)
@@ -88,6 +133,8 @@ class Product(Base):
     package_type = Column(String, nullable=True)
     package_weight = Column(Float, nullable=True)
     package_dimensions = Column(JSONB, nullable=True)  # Using JSONB for dimensions
+
+
 
 
     #####################################################

@@ -46,7 +46,7 @@ async def test_update_stock_success(db_session, mocker):
         product_id=product.id,
         platform_name="ebay",
         status=ListingStatus.ACTIVE.value,
-        sync_status="SUCCESS"
+        sync_status="SYNCED"
     )
     db_session.add(platform_common)
     await db_session.flush()
@@ -68,7 +68,7 @@ async def test_update_stock_success(db_session, mocker):
     
     # Verify last_sync was updated
     assert platform._last_sync is not None
-    assert platform._sync_status == SyncStatus.SUCCESS
+    assert platform._sync_status == SyncStatus.SYNCED
 
 
 @pytest.mark.asyncio
@@ -162,7 +162,7 @@ async def test_sync_status(db_session, mocker):
     platform = EbayPlatform()
     
     # Set various states to test
-    platform._sync_status = SyncStatus.SUCCESS
+    platform._sync_status = SyncStatus.SYNCED
     platform._last_sync = datetime.now(timezone.utc)
     
     # Create product
@@ -179,7 +179,7 @@ async def test_sync_status(db_session, mocker):
     status = await platform.sync_status(product.id)
     
     # Verify correct status returned
-    assert status == SyncStatus.SUCCESS
+    assert status == SyncStatus.SYNCED
     
     # Test with an old sync time (more than 1 hour ago)
     platform._last_sync = datetime.now(timezone.utc) - timedelta(hours=2)
@@ -358,4 +358,4 @@ async def test_rate_limiting_handling(db_session, mocker):
     # Verify eventual success
     assert result is True
     assert call_count == 2  # Confirms retry happened
-    assert platform._sync_status == SyncStatus.SUCCESS
+    assert platform._sync_status == SyncStatus.SYNCED

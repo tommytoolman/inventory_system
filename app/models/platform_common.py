@@ -47,7 +47,7 @@ class PlatformCommon(Base):
     ebay_listing = relationship("EbayListing", back_populates="platform_listing", uselist=False)
     reverb_listing = relationship("ReverbListing", back_populates="platform_listing", uselist=False)
     vr_listing = relationship("VRListing", back_populates="platform_listing", uselist=False)
-    website_listing = relationship("WebsiteListing", back_populates="platform_listing", uselist=False)
+    shopify_listing = relationship("ShopifyListing", back_populates="platform_listing", uselist=False)
     
     sale = relationship("Sale", back_populates="platform_listing", uselist=False)
     

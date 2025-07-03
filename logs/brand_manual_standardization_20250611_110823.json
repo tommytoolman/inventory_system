@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-06-11T11:08:23.031928",
+  "operation": "manual_standardization",
+  "total_updated": 2,
+  "changes": [
+    {
+      "old_brand": "a",
+      "new_brand": "A",
+      "count": 2
+    }
+  ]
+}

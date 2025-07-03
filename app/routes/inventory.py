@@ -560,7 +560,7 @@ async def list_products(
         query = query.order_by(desc(Product.created_at))
     
     # Apply pagination and ordering
-    query = query.order_by(desc(Product.created_at))
+    # query = query.order_by(desc(Product.created_at))
     
     if pagination_limit:
         query = query.offset(pagination_offset).limit(pagination_limit)

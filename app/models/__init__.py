@@ -1,3 +1,4 @@
+from .activity_log import ActivityLog
 from .product import Product, ProductStatus, ProductCondition
 from .platform_common import PlatformCommon, ListingStatus, SyncStatus
 from .ebay import EbayListing
@@ -8,7 +9,10 @@ from .sale import Sale
 from .category_mapping import CategoryMapping 
 from .product_mapping import ProductMapping   
 from .order import Order
-from .shipping import Shipment, ShippingProfile 
+from .shipping import Shipment, ShippingProfile
+from .sync_event import SyncEvent
+from .platform_status_mapping import PlatformStatusMapping
+
 # from .product_merges import ProductMerge # We don't currently have a model for this.
 # from .user import User  # Want to add this before we go live 
 
@@ -31,5 +35,8 @@ __all__ = [
     'Shipment', 
     'ShippingProfile',
     'ProductMerge',
+    'SyncEvent',
+    'ActivityLog',
+    'PlatformStatusMapping',
     # 'User',  
 ]

@@ -1,6 +1,7 @@
 import logging
 import json
 import asyncio
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,20 +32,23 @@ ebay_imports: Dict[str, Dict[str, Any]] = {}
 async def sync_ebay_inventory(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings) # Resolve settings here
 ):
-    """Run eBay sync - download latest inventory and update local database"""
+    """Endpoint to trigger a standalone eBay sync, which generates its own run ID."""
+    sync_run_id = uuid.uuid4()
+    logger.info(f"Initiating standalone eBay sync with run_id: {sync_run_id}")
     background_tasks.add_task(
         run_ebay_sync_background,
-        db,
-        settings
+        db=db,
+        settings=settings, # Pass the concrete settings object
+        sync_run_id=sync_run_id,
     )
-    return {"status": "success", "message": "eBay sync started"}
+    return {"status": "success", "message": "eBay sync started", "sync_run_id": sync_run_id}
 
 # Add this background task function
-async def run_ebay_sync_background(db: AsyncSession, settings: Settings):
+async def run_ebay_sync_background(db: AsyncSession, settings: Settings, sync_run_id: uuid.UUID):
     """Run eBay sync in background with WebSocket updates"""
-    logger.info("Starting eBay import process through background task")
+    logger.info(f"Background eBay sync started for run_id: {sync_run_id}.")
     
     # Add activity logger
     activity_logger = ActivityLogger(db)
@@ -69,21 +73,10 @@ async def run_ebay_sync_background(db: AsyncSession, settings: Settings):
         # Initialize eBay service
         ebay_service = EbayService(db, settings)
         
-        # Create progress callback function
-        async def send_progress(progress_data: Dict[str, Any]):
-            """Send progress updates via websocket"""
-            try:
-                notification = {
-                    "category": "ebay",
-                    "type": "sync",
-                    "data": progress_data
-                }
-                await manager.broadcast(notification)
-            except Exception as e:
-                logger.error(f"Error sending progress update: {str(e)}")
-        
-        # Run the import process
-        result = await ebay_service.sync_inventory_from_ebay(progress_callback=send_progress)
+        # Run the new import process, passing the sync_run_id
+        # The progress callback is no longer part of this simplified flow.
+        # We can add a more robust progress system later if needed.
+        result = await ebay_service.run_import_process(sync_run_id=sync_run_id)
         
         if result.get('api_errors', 0) == 0: # Primary check for API-level success
             # Update last_sync timestamp for eBay platform entries

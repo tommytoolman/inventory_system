@@ -120,14 +120,66 @@ class Settings(BaseSettings):
     FDX_PWD: str = ""
     
     model_config = ConfigDict(
-        env_file = ".env",
-        case_sensitive = True
+        env_file=os.environ.get('ENV_FILE', '.env'),  # 🎯 THIS IS THE KEY CHANGE
+        case_sensitive=True
     )
 
 @lru_cache()
 def get_settings():
     """Cached settings to avoid loading .env file for every request"""
     return Settings()
+
+def get_settings_no_cache():
+    """Get settings without caching - useful for testing different environments"""
+    return Settings()
+
+def clear_settings_cache():
+    """Clear the settings cache - useful when switching between environments"""
+    get_settings.cache_clear()
+
+def get_test_settings():
+    """Get settings specifically for testing - always loads .env.test"""
+    import os
+    original_env_file = os.environ.get('ENV_FILE')
+    os.environ['ENV_FILE'] = '.env.test'
+    
+    # Clear cache and get fresh settings
+    clear_settings_cache()
+    settings = Settings()
+    
+    # Restore original ENV_FILE if it existed
+    if original_env_file:
+        os.environ['ENV_FILE'] = original_env_file
+    elif 'ENV_FILE' in os.environ:
+        del os.environ['ENV_FILE']
+    
+    return settings
+
+def get_test_settings_v2():
+    """Get settings specifically for testing - properly loads .env.test"""
+    import os
+    import importlib
+    
+    # Set the environment variable
+    os.environ['ENV_FILE'] = '.env.test'
+    
+    # Clear the cache
+    clear_settings_cache()
+    
+    # Force reload the Settings class to pick up new env_file
+    from pydantic_settings import BaseSettings
+    
+    class TestSettings(BaseSettings):
+        DATABASE_URL: str = ""
+        SECRET_KEY: str = ""
+        # Add other essential fields here
+        
+        model_config = ConfigDict(
+            env_file='.env.test',  # Force it to use .env.test
+            case_sensitive=True
+        )
+    
+    return TestSettings()
 
 def get_webhook_secret():
     """Get the webhook secret for authentication"""

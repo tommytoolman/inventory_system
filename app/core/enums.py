@@ -44,6 +44,7 @@ class ListingStatus(str, Enum):
     SOLD = "sold"
     REMOVED = "removed"
     DELETED = "deleted"
+    UNMATCHED = "unmatched"
 
 class SyncStatus(str, Enum):
     """Consolidated sync status values used across the application."""
@@ -52,6 +53,7 @@ class SyncStatus(str, Enum):
     SYNCED = "synced"            # Local data matches the platform (equivalent to SUCCESS)
     OUT_OF_SYNC = "out_of_sync"  # Local data is known not to match the platform
     ERROR = "error"              # An error occurred during the sync attempt (e.g., API error)
+    NEEDS_REVIEW = "needs_review"  # For rogue listings needing manual attention
     # FAILED = "failed"          # Removed for now, assuming ERROR/OUT_OF_SYNC cover needs
     
 class EbayListingStatus(str, Enum):

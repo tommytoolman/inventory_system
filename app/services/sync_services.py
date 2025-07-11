@@ -6,6 +6,7 @@ This service coordinates:
 1. Stock level synchronization across platforms
 2. Platform-specific listing creation/updates
 3. Status tracking and error handling
+4. Reconciliation of detected changes from all platforms.
 """
 
 import logging
@@ -19,7 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.product import Product
 from app.models.platform_common import PlatformCommon
+from app.models.sync_event import SyncEvent
 from app.core.enums import SyncStatus, ListingStatus
+
+# Import platform services for outbound actions
+from app.services.vintageandrare_service import VintageAndRareService
+# from app.services.ebay_service import EbayService
+# from app.services.reverb_service import ReverbService
 from app.integrations.events import StockUpdateEvent
 
 logger = logging.getLogger(__name__)
@@ -78,6 +85,90 @@ class SyncService:
         """
         self.db = db
         self.stock_manager = stock_manager
+        
+        # Instantiate other services for outbound actions. This makes SyncService a true orchestrator.
+        self.platform_services = {
+            "vr": VintageAndRareService(db),
+            # "ebay": EbayService(db),
+            # "reverb": ReverbService(db),
+        }
+
+    async def reconcile_sync_run(self, sync_run_id: str) -> Dict[str, Any]:
+        """
+        Phase 2 of the sync process.
+        Processes all 'pending' SyncEvent records for a given run, resolves conflicts,
+        and triggers the necessary cross-platform actions.
+        """
+        logger.info(f"Starting reconciliation for sync_run_id: {sync_run_id}")
+        report = {"processed": 0, "actions_taken": 0, "errors": 0}
+
+        # 1. Fetch all pending events for this run
+        stmt = select(SyncEvent).where(
+            SyncEvent.sync_run_id == sync_run_id,
+            SyncEvent.status == 'pending'
+        ).order_by(SyncEvent.detected_at)
+        
+        result = await self.db.execute(stmt)
+        events = result.scalars().all()
+        logger.info(f"Found {len(events)} pending events to reconcile.")
+        
+        # 2. Group events by product_id to handle conflicts (e.g., sold on two platforms at once)
+        events_by_product: Dict[int, List[SyncEvent]] = {}
+        for event in events:
+            if event.product_id:
+                events_by_product.setdefault(event.product_id, []).append(event)
+
+        # 3. Process events product by product
+        for product_id, product_events in events_by_product.items():
+            try:
+                # Find the "winning" event. For sales, the first one detected wins.
+                sold_event = next((e for e in product_events if e.change_type == 'status' and e.change_data.get('new', '').upper() == 'SOLD'), None)
+
+                if sold_event:
+                    logger.info(f"Processing 'sold' event for product {sold_event.product_id} from {sold_event.platform_name}")
+                    
+                    # To propagate the sale, we need the external_ids for this product on OTHER platforms.
+                    platform_links_stmt = select(PlatformCommon).where(
+                        PlatformCommon.product_id == product_id,
+                        PlatformCommon.platform_name != sold_event.platform_name # Exclude the source platform
+                    )
+                    platform_links_result = await self.db.execute(platform_links_stmt)
+                    other_platform_links = platform_links_result.scalars().all()
+
+                    # Propagate the 'sold' status to all other platforms
+                    for link in other_platform_links:
+                        service = self.platform_services.get(link.platform_name)
+                        if service and hasattr(service, 'mark_item_as_sold'):
+                            logger.info(f"Telling {link.platform_name.upper()} to mark item {link.external_id} as sold.")
+                            try:
+                                success = await service.mark_item_as_sold(link.external_id)
+                                if not success:
+                                    logger.error(f"Failed to mark item {link.external_id} as sold on {link.platform_name.upper()}.")
+                                    # You might want to log this failure to the event notes
+                            except Exception as service_exc:
+                                logger.error(f"Exception calling mark_item_as_sold for {link.platform_name.upper()}: {service_exc}", exc_info=True)
+                        else:
+                            logger.warning(f"No 'mark_item_as_sold' method found for service '{link.platform_name}'.")
+
+                    report["actions_taken"] += 1
+                
+                # Mark all events for this product as processed
+                for e in product_events:
+                    e.status = 'processed'
+                    e.processed_at = datetime.now(timezone.utc)
+                    report["processed"] += 1
+
+            except Exception as e:
+                logger.error(f"Error reconciling events for product {product_id}: {e}", exc_info=True)
+                for e_event in product_events:
+                    e_event.status = 'error'
+                    e_event.notes = str(e)
+                    e_event.processed_at = datetime.now(timezone.utc)
+                report["errors"] += 1
+        
+        await self.db.commit()
+        logger.info(f"Reconciliation complete for {sync_run_id}. Report: {report}")
+        return report
     
     async def sync_product_to_platforms(
         self, 

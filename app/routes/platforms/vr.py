@@ -1,7 +1,8 @@
 # app/routes/platforms/vr.py
 import logging
+import uuid
 
-from fastapi import APIRouter, Request, Depends, BackgroundTasks
+from fastapi import APIRouter, Request, Depends, BackgroundTasks, HTTPException
 from app.services.vintageandrare_service import VintageAndRareService
 from app.services.activity_logger import ActivityLogger
 from app.services.websockets.manager import manager
@@ -23,17 +24,22 @@ async def sync_vr(
     settings: Settings = Depends(get_settings)
 ):
     """Run V&R read sync - download latest inventory and update local database"""
+    sync_run_id = uuid.uuid4()
+    logger.info(f"Initiating standalone V&R sync with run_id: {sync_run_id}")
     background_tasks.add_task(
         run_vr_sync_background,
-        settings.VINTAGE_AND_RARE_USERNAME,  # Pass username
-        settings.VINTAGE_AND_RARE_PASSWORD,  # Pass password  
-        db                                   # Pass db session
+        settings.VINTAGE_AND_RARE_USERNAME,     # Pass username
+        settings.VINTAGE_AND_RARE_PASSWORD,     # Pass password  
+        db,                                     # Pass db session
+        sync_run_id                             # Pass the newly generated sync_run_id
     )
-    return {"status": "success", "message": "V&R sync started"}
+    return {"status": "success", "message": "V&R sync started", "sync_run_id": sync_run_id}
 
                 
-async def run_vr_sync_background(username: str, password: str, db: AsyncSession):
-    """Run V&R sync in background with WebSocket updates"""
+async def run_vr_sync_background(username: str, password: str, db: AsyncSession, sync_run_id: uuid.UUID):
+    """
+    Background task to run the full V&R import and sync process.
+    This is designed to be called by the central sync scheduler."""
     logger.info("Starting V&R import process through background task")
     
     # Add activity logger
@@ -62,7 +68,7 @@ async def run_vr_sync_background(username: str, password: str, db: AsyncSession)
         })
         
         vr_service = VintageAndRareService(db)
-        result = await vr_service.run_import_process(username, password, save_only=False)
+        result = await vr_service.run_import_process(username, password, sync_run_id, save_only=False)
         
         if result.get('status') == 'success':
             # ADD THIS: Update last_sync timestamp for V&R platform entries

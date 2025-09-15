@@ -50,12 +50,22 @@ async def run_migrations():
         if not migrate_secret:
             raise HTTPException(status_code=403, detail="Migration endpoint disabled")
         
-        # Run alembic upgrade
+        # Get the database URL and ensure it's in the right format for Alembic
+        db_url = os.environ.get('DATABASE_URL', '')
+        if db_url.startswith('postgresql+asyncpg://'):
+            # Alembic needs standard postgresql:// not postgresql+asyncpg://
+            db_url = db_url.replace('postgresql+asyncpg://', 'postgresql://', 1)
+        
+        # Run alembic upgrade with the corrected URL
+        env = os.environ.copy()
+        env['DATABASE_URL'] = db_url
+        
         result = subprocess.run(
             ["alembic", "upgrade", "head"],
             capture_output=True,
             text=True,
-            cwd="/app"  # Ensure we're in the app directory
+            cwd="/app",  # Ensure we're in the app directory
+            env=env
         )
         
         if result.returncode == 0:

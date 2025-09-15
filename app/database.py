@@ -5,12 +5,21 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import declarative_base
 from contextlib import asynccontextmanager
 from app.core.config import get_settings
+import os
 
 settings = get_settings()
 
+# Debug: Print environment variables
+print(f"DATABASE_URL from settings: '{settings.DATABASE_URL}'")
+print(f"DATABASE_URL from env: '{os.environ.get('DATABASE_URL', 'NOT SET')}'")
+
+# Use environment variable directly if settings is empty
+database_url = settings.DATABASE_URL or os.environ.get('DATABASE_URL', '')
+if not database_url:
+    raise ValueError("DATABASE_URL is not set in environment variables")
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    database_url,
     echo=False,
     future=True,
     pool_size=10,             # Add these lines

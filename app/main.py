@@ -15,7 +15,7 @@ from app.core.config import get_settings
 
 from app import models
 
-from app.routes import shipping, dashboard, sync_scheduler, matching, reports
+from app.routes import shipping, dashboard, sync_scheduler, matching, reports, health
 from app.routes.platforms.ebay import router as ebay_router
 from app.routes.platforms.reverb import router as reverb_router
 from app.routes.platforms.vr import router as vr_router
@@ -92,6 +92,7 @@ app.include_router(websocket_router.router)
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(shipping.router)
 app.include_router(matching.router, prefix="/matching", tags=["matching"])
+app.include_router(health.router)
 
 ## This will show us in CLI all our registered routes. Uncomment to show.
 # print("Registered routes:")

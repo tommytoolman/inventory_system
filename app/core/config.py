@@ -96,6 +96,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = False
     
+    # Basic Auth (temporary)
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "changeme"
+    
     # Email notifications
     ADMIN_EMAIL: str = ""
     NOTIFICATION_EMAILS: List[str] = []

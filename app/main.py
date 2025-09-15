@@ -28,6 +28,21 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Run migrations on startup
+    try:
+        import subprocess
+        import os
+        if os.getenv('RUN_MIGRATIONS', 'false').lower() == 'true':
+            print("Running database migrations...")
+            result = subprocess.run(['alembic', 'upgrade', 'head'], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("Migrations completed successfully")
+                print(result.stdout)
+            else:
+                print(f"Migration failed: {result.stderr}")
+    except Exception as e:
+        print(f"Migration error: {e}")
+    
     # Startup: Initialize stock manager
     # app.state.stock_manager = await setup_stock_manager()
    # Try to load Dropbox cache at startup

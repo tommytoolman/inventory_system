@@ -11,24 +11,27 @@ async def health_check():
     return {"status": "healthy", "service": "RIFF Inventory System"}
 
 @router.get("/health/db")
-async def database_health(session: AsyncSession = Depends(get_session)):
+async def database_health():
     """Check database connectivity and tables"""
     try:
-        # Check connection
-        result = await session.execute(text("SELECT 1"))
+        from app.database import async_session
         
-        # Check if products table exists
-        tables_result = await session.execute(
-            text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
-        )
-        tables = [row[0] for row in tables_result]
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "tables_count": len(tables),
-            "tables": tables[:10]  # Show first 10 tables
-        }
+        async with async_session() as session:
+            # Check connection
+            result = await session.execute(text("SELECT 1"))
+            
+            # Check if products table exists
+            tables_result = await session.execute(
+                text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name")
+            )
+            tables = [row[0] for row in tables_result]
+            
+            return {
+                "status": "healthy",
+                "database": "connected",
+                "tables_count": len(tables),
+                "tables": tables
+            }
     except Exception as e:
         return {
             "status": "unhealthy",

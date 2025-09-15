@@ -18,6 +18,10 @@ database_url = settings.DATABASE_URL or os.environ.get('DATABASE_URL', '')
 if not database_url:
     raise ValueError("DATABASE_URL is not set in environment variables")
 
+# Convert postgresql:// to postgresql+asyncpg:// for async support
+if database_url.startswith('postgresql://'):
+    database_url = database_url.replace('postgresql://', 'postgresql+asyncpg://', 1)
+
 engine = create_async_engine(
     database_url,
     echo=False,

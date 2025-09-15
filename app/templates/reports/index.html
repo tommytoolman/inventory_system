@@ -36,6 +36,28 @@
             </a>
         </div>
 
+        <!-- Sync Event Log Report -->
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center mb-4">
+                <div class="p-2 bg-purple-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold">Sync Events Log</h3>
+                    <p class="text-sm text-gray-500">Interim log of all detected sync issues</p>
+                </div>
+            </div>
+            <p class="text-gray-600 mb-4">
+                Review a detailed feed of all detected changes, errors, and new listings before they are fully processed.
+            </p>
+            <a href="/reports/sync-events" 
+                class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                View Report →
+            </a>
+        </div>
+
         <!-- Non-Performing Inventory Report -->
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center mb-4">
@@ -76,9 +98,10 @@
                 Find products listed on some platforms but missing from others. 
                 Identify opportunities to maximize sales reach.
             </p>
-            <div class="inline-flex items-center px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed">
-                Coming Soon
-            </div>
+            <a href="/reports/platform-coverage" 
+                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                View Report →
+            </a>
         </div>
         
         <!-- Price Inconsistencies Report -->
@@ -98,9 +121,56 @@
                 Detect products with significant price differences between platforms. 
                 Ensure consistent pricing strategy.
             </p>
-            <div class="inline-flex items-center px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed">
-                Coming Soon
+            <a href="/reports/price-inconsistencies" 
+                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                View Report →
+            </a>
+        </div>
+        
+        <!-- Sync Statistics Report -->
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center mb-4">
+                <div class="p-2 bg-green-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold">Sync Statistics</h3>
+                    <p class="text-sm text-gray-500">Platform synchronization performance metrics</p>
+                </div>
             </div>
+            <p class="text-gray-600 mb-4">
+                View comprehensive sync statistics including events processed, sales detected, 
+                and error rates. Track sync health over time.
+            </p>
+            <a href="/reports/sync-stats" 
+                class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                View Report →
+            </a>
+        </div>
+        
+        <!-- Sales & Ended Listings Report -->
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center mb-4">
+                <div class="p-2 bg-indigo-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold">Sales & Ended Listings</h3>
+                    <p class="text-sm text-gray-500">Track sold items and determine sale platforms</p>
+                </div>
+            </div>
+            <p class="text-gray-600 mb-4">
+                Comprehensive view of all sales with intelligent platform detection. 
+                See where items sold versus being removed offline.
+            </p>
+            <a href="/reports/sales" 
+                class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                View Report →
+            </a>
         </div>
         
     </div>

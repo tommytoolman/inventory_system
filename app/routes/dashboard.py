@@ -72,7 +72,7 @@ class DashboardService:
                 state = row.reverb_state
                 count = row.count
                 
-                if state == 'live':
+                if state in ['live', 'active']:
                     counts["count"] = count  # live = active
                 elif state == 'sold':
                     counts["sold_count"] = count
@@ -193,13 +193,13 @@ class DashboardService:
                 status = row.status
                 count = row.count  # This should be the COUNT, not the status string
                 
-                if status == 'ACTIVE':  # Note: uppercase to match your data
+                if status.upper() == 'ACTIVE':
                     counts["count"] = count
-                elif status == 'SOLD':
+                elif status.upper() == 'SOLD':
                     counts["sold_count"] = count
-                elif status in ['ENDED', 'ARCHIVED']:
+                elif status.upper() in ['ENDED', 'ARCHIVED']:
                     counts["ended_count"] = count
-                elif status == 'DRAFT':
+                elif status.upper() == 'DRAFT':
                     counts["draft_count"] = count
                 else:
                     counts["other_count"] += count
@@ -458,6 +458,7 @@ async def dashboard(request: Request):
                 **platform_counts,
                 **connections,
                 **sync_times,
+                "shopify_last_sync": sync_times.get("shopify_last_sync", "Never synced"),  # Add default value
                 "system_status": system_status,
                 "recent_activity": recent_activity,
                 "total_products": total_products,
@@ -483,10 +484,10 @@ async def dashboard(request: Request):
                 "recent_activity": [],
                 # Set all platform counts to 0
                 **{f"{platform}_{key}": 0 
-                   for platform in ["ebay", "reverb", "vr", "shopify"] 
-                   for key in ["count", "sold_count", "other_count"]},
+                    for platform in ["ebay", "reverb", "vr", "shopify"] 
+                    for key in ["count", "sold_count", "other_count"]},
                 **{f"{platform}_connected": False 
-                   for platform in ["ebay", "reverb", "vr", "shopify"]},
+                    for platform in ["ebay", "reverb", "vr", "shopify"]},
                 # Reverb specific fields
                 "reverb_ended_count": 0,
                 "reverb_draft_count": 0,

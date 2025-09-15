@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     REVERB_SANDBOX_PASSWORD: str = ""
     REVERB_SANDBOX_API_KEY: str = ""
     
-    REVERB_USE_SANDBOX: bool = True
+    REVERB_USE_SANDBOX: bool = False
     
     # VintageAndRare
     VINTAGEANDRARE_API_KEY: str = ""

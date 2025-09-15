@@ -22,9 +22,42 @@ class ProductValidationMixin(BaseModel):
     @field_validator('base_price', 'cost_price', 'price', 'price_notax', 'collective_discount', 'offer_discount', mode='before', check_fields=False)
     @classmethod # Added @classmethod as validators are often class methods
     def validate_price(cls, v):
-        if v is None: return None
-        try: return float(v)
-        except (ValueError, TypeError): raise ValueError('Price must be a valid number')
+        if v is None: 
+            return None
+        
+            # Handle empty strings - convert to 0 or None
+        if v == '' or v == 0:
+            return 0.0  # or None if you prefer
+        
+        try: 
+            return float(v)
+        except (ValueError, TypeError): 
+            raise ValueError('Price must be a valid number')
+
+@field_validator('base_price', mode='before')
+@classmethod
+def validate_base_price(cls, v):
+    """Base price is required - must be > 0"""
+    if v == '' or v is None:
+        raise ValueError('Base price is required')
+    try:
+        price = float(v)
+        if price <= 0:
+            raise ValueError('Base price must be greater than 0')
+        return price
+    except (ValueError, TypeError):
+        raise ValueError(f'Base price must be a valid number, got: {v}')
+
+    @field_validator('cost_price', 'price', 'price_notax', 'collective_discount', 'offer_discount', mode='before')
+    @classmethod
+    def validate_optional_price(cls, v):
+        """Optional price fields - empty string becomes 0"""
+        if v == '' or v is None:
+            return 0.0
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            raise ValueError(f'Price must be a valid number, got: {v}')
 
     @field_validator('year', 'decade', 'processing_time', mode='before', check_fields=False)
     @classmethod # Added @classmethod
@@ -93,6 +126,8 @@ class ProductBase(ProductValidationMixin): # Inherit Mixin (gets config + valida
     show_vat: Optional[bool] = True
     local_pickup: Optional[bool] = False
     available_for_shipment: Optional[bool] = True
+    is_stocked_item: Optional[bool] = False
+    quantity: Optional[int] = None
 
     # Media and links
     primary_image: Optional[str] = None

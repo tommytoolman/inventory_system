@@ -104,8 +104,14 @@ async def run_import(recreate_table=False, import_sold=False, sold_only=False, u
             
             # Import active listings if not sold_only
             if not sold_only:
-                logger.info("Importing active Reverb listings")
-                active_stats = await importer.import_all_listings()
+                
+                # Before ... importing EVERYTHING
+                # logger.info("Importing active Reverb listings")
+                # active_stats = await importer.import_all_listings()
+
+                # After (only live)
+                logger.info("Importing LIVE Reverb listings only")
+                active_stats = await importer.import_all_listings(include_all_states=False)
                 
                 # Merge stats
                 for key in active_stats:

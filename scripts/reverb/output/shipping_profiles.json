@@ -1,0 +1,67 @@
+{
+  "fetch_date": "2025-09-06T12:19:53.189152",
+  "shop_name": "DENMARK STREET GUITARS , LONDON ENGLAND ",
+  "shop_id": "46591",
+  "shipping_profiles": [
+    {
+      "name": "10kg",
+      "id": "107308"
+    },
+    {
+      "name": "Amp Panels 24",
+      "id": "106058"
+    },
+    {
+      "name": "Amp Logos",
+      "id": "106057"
+    },
+    {
+      "name": "Production Cases",
+      "id": "105662"
+    },
+    {
+      "name": "Very Large Items",
+      "id": "103323"
+    },
+    {
+      "name": "Amp Panels",
+      "id": "85687"
+    },
+    {
+      "name": "Electric Guitars",
+      "id": "15655"
+    },
+    {
+      "name": "New Acoustic",
+      "id": "59948"
+    },
+    {
+      "name": "Regular Synth",
+      "id": "63784"
+    },
+    {
+      "name": "Small Spares",
+      "id": "23177"
+    },
+    {
+      "name": "Guitar Cabs",
+      "id": "15659"
+    },
+    {
+      "name": "Amp Heads",
+      "id": "15658"
+    },
+    {
+      "name": "Acoustic Guitars",
+      "id": "15656"
+    },
+    {
+      "name": "Effects Pedals",
+      "id": "15654"
+    },
+    {
+      "name": "Bass Guitars",
+      "id": "15657"
+    }
+  ]
+}

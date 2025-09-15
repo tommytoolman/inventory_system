@@ -11,6 +11,7 @@ This module provides endpoints for managing Reverb listings, including:
 """
 
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy import text
@@ -45,16 +46,19 @@ async def sync_reverb(
     settings: Settings = Depends(get_settings)
 ):
     """Run Reverb read sync - download latest inventory and update local database"""
+    sync_run_id = uuid.uuid4()  # ADD THIS LINE
+    logger.info(f"Initiating standalone Reverb sync with run_id: {sync_run_id}")  # ADD THIS LINE
     background_tasks.add_task(
         run_reverb_sync_background,
-        settings.REVERB_API_KEY,  # Assuming you have this in settings
+        settings.REVERB_API_KEY,
         db,
-        settings
+        settings,
+        sync_run_id  # ADD THIS PARAMETER
     )
-    return {"status": "success", "message": "Reverb sync started"}
+    return {"status": "success", "message": "Reverb sync started", "sync_run_id": sync_run_id}  # ADD sync_run_id to response
 
 # Add this background task function
-async def run_reverb_sync_background(api_key: str, db: AsyncSession, settings: Settings):
+async def run_reverb_sync_background(api_key: str, db: AsyncSession, settings: Settings, sync_run_id: uuid.UUID):  # ADD sync_run_id parameter
     """Run Reverb sync in background with WebSocket updates"""
     logger.info("Starting Reverb import process through background task")
     
@@ -81,7 +85,7 @@ async def run_reverb_sync_background(api_key: str, db: AsyncSession, settings: S
         # Initialize Reverb service
         reverb_service = ReverbService(db, settings)
         # You'll need to implement a sync method in ReverbService similar to V&R
-        result = await reverb_service.run_import_process(api_key)
+        result = await reverb_service.run_import_process(sync_run_id)
         
         if result.get('status') == 'success':
             # Update last_sync timestamp for Reverb platform entries
@@ -119,6 +123,8 @@ async def run_reverb_sync_background(api_key: str, db: AsyncSession, settings: S
                 "timestamp": datetime.now().isoformat()
             })
             logger.info(f"Reverb import process result: {result}")
+            logger.info(f"Background Reverb sync completed for run_id: {sync_run_id}.")
+            
         else:
             # Log failed sync
             await activity_logger.log_activity(

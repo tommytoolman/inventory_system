@@ -562,8 +562,12 @@ class ShopifyGraphQLClient:
               vendor
               productType
               productCategory {{ productTaxonomyNode {{ name fullName }} }}
+              category {{ id name fullName }}
+              seo {{ title description }}
               status
               onlineStoreUrl
+              onlineStorePreviewUrl
+              publishedAt
               createdAt
               updatedAt
               tags
@@ -1143,7 +1147,11 @@ class ShopifyGraphQLClient:
                 "tags": ["sold-via-sync", f"reduced-{datetime.now().strftime('%Y%m%d-%H%M%S')}"]
             }
             
-            update_success = self.update_complete_product(product_gid, inventory_updates)
+            # This correctly runs the synchronous code in the background
+            loop = asyncio.get_running_loop()
+            update_success = await loop.run_in_executor(
+                None, self.update_complete_product, product_gid, inventory_updates
+            )
             
             if not update_success:
                 return {

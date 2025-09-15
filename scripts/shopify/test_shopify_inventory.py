@@ -137,7 +137,7 @@ class ShopifyInventoryTester:
                         
                         print(f"\n🔧 Variant Details:")
                         print(f"   SKU: {variant.get('sku')}")
-                        print(f"   Price: ${variant.get('price')}")
+                        print(f"   Price: £{variant.get('price')}")
                         print(f"   Inventory Quantity: {variant.get('inventoryQuantity')}")
                         print(f"   Inventory Policy: {variant.get('inventoryPolicy')}")
                         

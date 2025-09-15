@@ -118,6 +118,10 @@ class Product(Base):
     local_pickup = Column(Boolean, default=False)
     available_for_shipment = Column(Boolean, default=True)
     
+    # The business logic flags we've agreed on:
+    is_stocked_item = Column(Boolean, default=False, nullable=False, index=True) # The master switch. If False, it's a unique item. If True, it's a stocked item.
+    quantity = Column(Integer, nullable=True) # The stock level for items where is_stocked_item is True. This can be NULL for unique items.
+    
     # Media and Links
     primary_image = Column(String)
     additional_images = Column(JSONB, default=list)

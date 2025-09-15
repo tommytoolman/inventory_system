@@ -1413,9 +1413,9 @@ async def test_update_stock_levels_from_remote(db_session, mocker):
     D. Stock Update Tests
     Test updating stock levels based on remote data.
     """
-    # Setup a mock StockManager for cross-platform updates
-    mock_stock_manager = MagicMock()
-    mock_stock_manager.process_stock_update = AsyncMock()
+    # Setup a mock for cross-platform updates
+    mock_sync_service = MagicMock()
+    mock_sync_service.process_update = AsyncMock()
     
     # First, create test products with inventory data
     async with db_session.begin():
@@ -1511,7 +1511,7 @@ async def test_update_stock_levels_from_remote(db_session, mocker):
     
     
     # Create a function that updates stock levels from remote data
-    async def update_stock_levels_from_remote(remote_df, db_session, stock_manager=None):
+    async def update_stock_levels_from_remote(remote_df, db_session, sync_service=None):
         """Update inventory quantities based on remote data and notify stock manager"""
         # Get all VR listings with inventory data
         query = (
@@ -1567,10 +1567,10 @@ async def test_update_stock_levels_from_remote(db_session, mocker):
                         })
                         
                         # Notify stock manager if available
-                        if stock_manager:
+                        if sync_service:
                             # Use UTC timezone explicitly for consistency
                             current_time = datetime.datetime.now(timezone.utc)
-                            await stock_manager.process_stock_update({
+                            await sync_service.process_stock_update({
                                 'product_id': info['product_id'],
                                 'platform': 'vintageandrare',
                                 'new_quantity': remote_quantity,
@@ -1587,7 +1587,7 @@ async def test_update_stock_levels_from_remote(db_session, mocker):
         return stock_updates
     
     # Act: Call the function to test
-    stock_updates = await update_stock_levels_from_remote(remote_inventory_df, db_session, mock_stock_manager)
+    stock_updates = await update_stock_levels_from_remote(remote_inventory_df, db_session, mock_sync_service)
     
     # Assert: Check stock levels were updated correctly
     assert len(stock_updates) == 2, "Should update 2 stock levels"
@@ -1642,10 +1642,10 @@ async def test_update_stock_levels_from_remote(db_session, mocker):
         assert record.last_sync is not None
     
     # Check if stock manager was called correctly with expected args
-    assert mock_stock_manager.process_stock_update.call_count == 2
+    assert mock_sync_service.process_stock_update.call_count == 2
     
     # Extract call arguments for verification
-    call_args_list = mock_stock_manager.process_stock_update.call_args_list
+    call_args_list = mock_sync_service.process_stock_update.call_args_list
     
     # Find calls for each product
     inc_call = next(call for call in call_args_list 
@@ -2604,8 +2604,8 @@ async def test_full_sync_process(db_session, mocker):
     ]))
     
     # Mock stock manager
-    mock_stock_manager = mocker.MagicMock()
-    mock_stock_manager.process_stock_update = AsyncMock()
+    mock_sync_service = mocker.MagicMock()
+    mock_sync_service.process_stock_update = AsyncMock()
     
     # Create some existing products in the database
     async with db_session.begin():
@@ -2677,7 +2677,7 @@ async def test_full_sync_process(db_session, mocker):
         db_session.add_all(vr_listings)
     
     # Create the main sync_inventory function that orchestrates the entire process
-    async def sync_inventory(db_session, vr_client, logger=None, stock_manager=None):
+    async def sync_inventory(db_session, vr_client, logger=None, sync_service=None):
         """Orchestrate the full sync process between local and remote inventory"""
         results = {
             'created': 0,
@@ -2885,9 +2885,9 @@ async def test_full_sync_process(db_session, mocker):
                                     stock_updated = True
                                     
                                     # Notify stock manager if available
-                                    if stock_manager:
+                                    if sync_service:
                                         current_time = datetime.now(timezone.utc)
-                                        await stock_manager.process_stock_update({
+                                        await sync_service.process_stock_update({
                                             'product_id': product.id,
                                             'platform': 'vintageandrare',
                                             'new_quantity': remote_quantity,
@@ -2934,7 +2934,7 @@ async def test_full_sync_process(db_session, mocker):
         db_session=db_session,
         vr_client=mock_vr_client,
         logger=mock_logger,
-        stock_manager=mock_stock_manager
+        sync_service=mock_sync_service
     )
     
     # Print debug info
@@ -2979,7 +2979,7 @@ async def test_full_sync_process(db_session, mocker):
     assert new_product.year == 1972
     
     # Verify stock update notifications
-    assert mock_stock_manager.process_stock_update.await_count == 2, "Stock manager should be called twice"
+    assert mock_sync_service.process_stock_update.await_count == 2, "Stock manager should be called twice"
     
     # Verify logger calls
     assert mock_logger.info.call_count >= 3, "Should have logged at least 3 info messages"
@@ -3277,8 +3277,8 @@ async def test_sync_performance_with_large_dataset(db_session, mocker):
     mock_vr_client = mocker.MagicMock()
     mock_vr_client.download_inventory = AsyncMock(return_value=pd.DataFrame(remote_data))
     
-    # Mock stock manager with timing capabilities
-    class TimingStockManager:
+    # Mock sync service with timing capabilities
+    class TimingSyncService:
         def __init__(self):
             self.updates = []
             self.processing_time = 0
@@ -3291,10 +3291,10 @@ async def test_sync_performance_with_large_dataset(db_session, mocker):
             end = time.time()
             self.processing_time += (end - start)
     
-    stock_manager = TimingStockManager()
+    sync_service = TimingSyncService()
     
     # Create a performance-optimized sync function
-    async def sync_inventory_optimized(db_session, vr_client, logger=None, stock_manager=None):
+    async def sync_inventory_optimized(db_session, vr_client, logger=None, sync_service=None):
         """Optimized function for syncing large inventories"""
         results = {
             'updated_price': 0,
@@ -3396,8 +3396,8 @@ async def test_sync_performance_with_large_dataset(db_session, mocker):
                                     results['updated_stock'] += 1
                                     
                                     # Notify stock manager if available
-                                    if stock_manager:
-                                        await stock_manager.process_stock_update({
+                                    if sync_service:
+                                        await sync_service.process_stock_update({
                                             'product_id': product.id,
                                             'platform': 'vintageandrare',
                                             'new_quantity': remote_quantity,
@@ -3437,7 +3437,7 @@ async def test_sync_performance_with_large_dataset(db_session, mocker):
         db_session=db_session,
         vr_client=mock_vr_client,
         logger=mock_logger,
-        stock_manager=stock_manager
+        sync_service=sync_service
     )
     sync_time = time.time() - sync_start
     
@@ -3451,7 +3451,7 @@ async def test_sync_performance_with_large_dataset(db_session, mocker):
     assert sync_results['total_processed'] == product_count, f"Expected {product_count} total processed"
     
     # Verify stock manager updates
-    assert len(stock_manager.updates) == expected_stock_updates, f"Expected {expected_stock_updates} stock manager updates"
+    assert len(sync_service.updates) == expected_stock_updates, f"Expected {expected_stock_updates} stock manager updates"
     
     # Print performance statistics
     print(f"\nPerformance Statistics for {product_count} products:")
@@ -3460,7 +3460,7 @@ async def test_sync_performance_with_large_dataset(db_session, mocker):
     print(f"Download time: {sync_results['processing_times']['download']:.2f} seconds")
     print(f"Local query time: {sync_results['processing_times']['local_query']:.2f} seconds")
     print(f"Processing time: {sync_results['processing_times']['processing']:.2f} seconds")
-    print(f"Stock manager processing time: {stock_manager.processing_time:.2f} seconds")
+    print(f"Stock manager processing time: {sync_service.processing_time:.2f} seconds")
     print(f"Updates per second: {sync_results['total_processed'] / sync_time:.2f}")
     
     # Performance assertions

@@ -6,11 +6,9 @@ import datetime
 import sys
 # Import the global session MAKER, not the session itself directly if passing
 from app.database import async_session as global_async_session_maker
-# Keep service import
-from app.services.vintageandrare_service import VintageAndRareService
+from app.services.vr_service import VRService
 # Need AsyncSession for type hint
 from sqlalchemy.ext.asyncio import AsyncSession
-
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +20,7 @@ async def _run_import_logic(session: AsyncSession, username: str, password: str,
     try:
         # --- Use the PASSED session ---
         # Instantiate the service with the session
-        vr_service = VintageAndRareService(db=session) # Pass the session
+        vr_service = VRService(db=session) # Pass the session
         # Call the service method to perform the import
         import_stats = await vr_service.run_import_process(username, password, save_only)
 

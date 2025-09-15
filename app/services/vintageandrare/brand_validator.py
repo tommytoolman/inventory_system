@@ -1,5 +1,9 @@
 # app/services/vintageandrare/brand_validator.py
 
+"""
+V&R validates brand entry vs list of known brands and does not allow "custom" or unknown brands. We use 
+"""
+
 import requests
 from typing import Dict, Any
 import logging
@@ -106,3 +110,4 @@ def get_brand_id(brand_name: str) -> int|None:
     """Get V&R brand ID for a valid brand"""
     result = VRBrandValidator.validate_brand(brand_name)
     return result["brand_id"] if result["is_valid"] else None
+

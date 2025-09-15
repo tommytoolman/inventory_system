@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Edit Product</h1>
+        
+        <form method="post" action="/inventory/products/{{ product.id }}/edit" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+            <!-- Basic Information -->
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-4">Basic Information</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="title">
+                            Title
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                               id="title" name="title" type="text" value="{{ product.title or '' }}">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="sku">
+                            SKU (Read-only)
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-100 leading-tight" 
+                               id="sku" type="text" value="{{ product.sku }}" disabled>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="brand">
+                            Brand
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                               id="brand" name="brand" type="text" value="{{ product.brand or '' }}">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="model">
+                            Model
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                               id="model" name="model" type="text" value="{{ product.model or '' }}">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="year">
+                            Year
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                               id="year" name="year" type="number" value="{{ product.year or '' }}">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="finish">
+                            Finish
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                               id="finish" name="finish" type="text" value="{{ product.finish or '' }}">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="category">
+                            Category
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                               id="category" name="category" type="text" value="{{ product.category or '' }}">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="condition">
+                            Condition
+                        </label>
+                        <select class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                                id="condition" name="condition">
+                            {% for condition in conditions %}
+                                <option value="{{ condition.value }}" {% if product.condition == condition %}selected{% endif %}>
+                                    {{ condition.value }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="description">
+                        Description
+                    </label>
+                    <textarea class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                              id="description" name="description" rows="4">{{ product.description or '' }}</textarea>
+                </div>
+            </div>
+            
+            <!-- Pricing and Inventory -->
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-4">Pricing and Inventory</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="base_price">
+                            Price (£)
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                               id="base_price" name="base_price" type="number" step="0.01" value="{{ product.base_price }}">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="quantity">
+                            Quantity
+                        </label>
+                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
+                               id="quantity" name="quantity" type="number" value="{{ product.quantity }}">
+                    </div>
+                    
+                    <div>
+                        <label class="flex items-center mt-8">
+                            <input type="checkbox" name="is_stocked_item" id="is_stocked_item" 
+                                   {% if product.is_stocked_item %}checked{% endif %} 
+                                   class="mr-2">
+                            <span class="text-sm font-bold text-gray-700">Stocked Item</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Platform Sync Options -->
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-4">Push Changes to Platforms</h2>
+                <p class="text-sm text-gray-600 mb-4">Select platforms to update with these changes:</p>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {% for platform_name, platform_info in platforms.items() %}
+                        <label class="flex items-center">
+                            <input type="checkbox" name="sync_{{ platform_name }}" class="mr-2"
+                                   {% if platform_info.status == 'active' %}checked{% endif %}>
+                            <span class="text-sm">
+                                {{ platform_name|title }}
+                                {% if platform_info.status == 'active' %}
+                                    <span class="text-green-600">(Active)</span>
+                                {% else %}
+                                    <span class="text-gray-400">(Not Listed)</span>
+                                {% endif %}
+                            </span>
+                        </label>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Current Platform Status -->
+            {% if platforms %}
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-4">Current Platform Listings</h2>
+                <div class="bg-gray-50 p-4 rounded">
+                    {% for platform_name, platform_info in platforms.items() %}
+                        {% if platform_info.status == 'active' %}
+                            <div class="mb-2">
+                                <span class="font-semibold">{{ platform_name|title }}:</span>
+                                <a href="{{ platform_info.url }}" target="_blank" class="text-blue-600 hover:underline">
+                                    {{ platform_info.external_id }}
+                                </a>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-between">
+                <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+                        type="submit">
+                    Save Changes
+                </button>
+                <a href="/inventory/product/{{ product.id }}" 
+                   class="text-gray-600 hover:text-gray-800">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

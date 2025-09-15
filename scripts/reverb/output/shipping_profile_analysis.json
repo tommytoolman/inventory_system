@@ -1,0 +1,464 @@
+{
+  "analysis_date": "2025-09-06T12:13:01.304643",
+  "total_listings": 444,
+  "unique_profiles": 15,
+  "no_profile_count": 0,
+  "no_shipping_count": 0,
+  "profiles": [
+    {
+      "profile_id": "15655",
+      "profile_name": "Electric Guitars",
+      "count": 180,
+      "percentage": 40.54,
+      "sample_listings": [
+        {
+          "id": 91990866,
+          "sku": "REV-91990866",
+          "title": "Fender Jazzmaster 1965 - Rare Original Blue Sparkl"
+        },
+        {
+          "id": 91981293,
+          "sku": "REV-91981293",
+          "title": "Fender Custom David Gilmour Signature Relic Strato"
+        },
+        {
+          "id": 91978827,
+          "sku": "REV-91978827",
+          "title": "Fender Cooder-Caster Stratocaster Ex Andy Fairweat"
+        },
+        {
+          "id": 91978806,
+          "sku": "REV-91978806",
+          "title": "Gibson Les Paul Custom USED BY MICK RONSON DAVID B"
+        },
+        {
+          "id": 91978762,
+          "sku": "REV-91978762",
+          "title": "Zemaitis Acoustic Bass RARE SPECIAL ORDER, 1977 - "
+        }
+      ]
+    },
+    {
+      "profile_id": "15654",
+      "profile_name": "Effects Pedals",
+      "count": 114,
+      "percentage": 25.68,
+      "sample_listings": [
+        {
+          "id": 91672400,
+          "sku": "REV-91672400",
+          "title": "Yamaha Sustain Pedal ex Oasis Touring Collection 1"
+        },
+        {
+          "id": 91672354,
+          "sku": "REV-91672354",
+          "title": "Oasis Custom 9v Splitter Ex Oasis Touring collecti"
+        },
+        {
+          "id": 91672208,
+          "sku": "REV-91672208",
+          "title": "Custom On/Off Amp Footswitch ex Oasis 1990s - Grey"
+        },
+        {
+          "id": 91672170,
+          "sku": "REV-91672170",
+          "title": "Electro-Harmonix Electric Mistress ex Oasis Noel G"
+        },
+        {
+          "id": 91410086,
+          "sku": "REV-91410086",
+          "title": "Klon Centaur Horsie Model original - Gold"
+        }
+      ]
+    },
+    {
+      "profile_id": "15658",
+      "profile_name": "Amp Heads",
+      "count": 41,
+      "percentage": 9.23,
+      "sample_listings": [
+        {
+          "id": 91823263,
+          "sku": "REV-91823263",
+          "title": "Ludwig Drum Ex The Beatles Video REAL LOVE 1960s -"
+        },
+        {
+          "id": 90953070,
+          "sku": "rev-90953070",
+          "title": "Celestion 12\" Speaker ex Noel Gallagher OASIS 1990"
+        },
+        {
+          "id": 86756088,
+          "sku": "rev-86756088",
+          "title": "Fender Custom Shop Woody Junior ERIC CLAPTON 1990s"
+        },
+        {
+          "id": 85389140,
+          "sku": "rev-85389140",
+          "title": "Ampeg SVT-4 Pro Rack mount Bass head 2000s - Black"
+        },
+        {
+          "id": 85387750,
+          "sku": "rev-85387750",
+          "title": "Akai S900 Digital Midi Sampler 1990s - Grey"
+        }
+      ]
+    },
+    {
+      "profile_id": "23177",
+      "profile_name": "Small Spares",
+      "count": 27,
+      "percentage": 6.08,
+      "sample_listings": [
+        {
+          "id": 79539551,
+          "sku": "rev-79539551",
+          "title": "Oasis Hand Written Noel Gallagher Lyrics ITS GOOD "
+        },
+        {
+          "id": 79539384,
+          "sku": "rev-79539384",
+          "title": "Oasis Hand Written Printed Noel Gallagher Lyrics T"
+        },
+        {
+          "id": 79285173,
+          "sku": "rev-79285173",
+          "title": "Oasis The Hindu Times A3 Laminated Lyrics 2000s"
+        },
+        {
+          "id": 79285163,
+          "sku": "rev-79285163",
+          "title": "Oasis The Meaning of Soul A3 Laminated Lyrics 2000"
+        },
+        {
+          "id": 79285151,
+          "sku": "rev-79285151",
+          "title": "Oasis Cigarettes and Alcohol A3 Laminated Lyrics 2"
+        }
+      ]
+    },
+    {
+      "profile_id": "15659",
+      "profile_name": "Guitar Cabs",
+      "count": 25,
+      "percentage": 5.63,
+      "sample_listings": [
+        {
+          "id": 90459746,
+          "sku": "rev-90459746",
+          "title": "Vox AC30 BRIAN MAY 1960s - Black"
+        },
+        {
+          "id": 87557454,
+          "sku": "rev-87557454",
+          "title": "Fender Bandmaster Cabinet ex John Lennon ,  Plasti"
+        },
+        {
+          "id": 87557486,
+          "sku": "rev-87557486",
+          "title": "Fender Tonemaster Head & Cabinet ex Mike Rutherfor"
+        },
+        {
+          "id": 87221484,
+          "sku": "rev-87221484",
+          "title": "Marshall JTM45 Gold Block Logo Head 1965 - Black"
+        },
+        {
+          "id": 87221323,
+          "sku": "rev-87221323",
+          "title": "Fender Bandmaster Combo Ex Noel Gallagher Oasis 19"
+        }
+      ]
+    },
+    {
+      "profile_id": "107308",
+      "profile_name": "10kg",
+      "count": 13,
+      "percentage": 2.93,
+      "sample_listings": [
+        {
+          "id": 85388871,
+          "sku": "rev-85388871",
+          "title": "Akai MX73 Midi Master Keyboard 1980s - White"
+        },
+        {
+          "id": 85385906,
+          "sku": "rev-85385906",
+          "title": "Gemini X-01 Power Amp 1990s - Black"
+        },
+        {
+          "id": 85385937,
+          "sku": "rev-85385937",
+          "title": "Sony TC-WE475 Tape Deck Spares or Repairs 1990s - "
+        },
+        {
+          "id": 85385983,
+          "sku": "rev-85385983",
+          "title": "Akai S2000 Midi Sampler 1980s - Cream"
+        },
+        {
+          "id": 85386079,
+          "sku": "rev-85386079",
+          "title": "TEAC C-3X Rack Mount Cassette Deck 1980s - Grey"
+        }
+      ]
+    },
+    {
+      "profile_id": "59948",
+      "profile_name": "New Acoustic",
+      "count": 11,
+      "percentage": 2.48,
+      "sample_listings": [
+        {
+          "id": 83653292,
+          "sku": "rev-83653292",
+          "title": "Guild F30 2000 Natural"
+        },
+        {
+          "id": 83653157,
+          "sku": "rev-83653157",
+          "title": "Martin J40 M 1986 Natural"
+        },
+        {
+          "id": 83653024,
+          "sku": "rev-83653024",
+          "title": "Larrivee JCL Jean Larrivee 40th Anniversary"
+        },
+        {
+          "id": 83653018,
+          "sku": "rev-83653018",
+          "title": "Brandoni Custom Acoustic Natural"
+        },
+        {
+          "id": 72707779,
+          "sku": "rev-72707779",
+          "title": "Guild D25 1990s - Rare White Finish"
+        }
+      ]
+    },
+    {
+      "profile_id": "15656",
+      "profile_name": "Acoustic Guitars",
+      "count": 6,
+      "percentage": 1.35,
+      "sample_listings": [
+        {
+          "id": 91863094,
+          "sku": "REV-91863094",
+          "title": "Takamine 12 String Acoustic  Ex David Bowie 1990s "
+        },
+        {
+          "id": 90149227,
+          "sku": "rev-90149227",
+          "title": "Taylor Swift Custom Built Acoustic Made for the Ar"
+        },
+        {
+          "id": 89151160,
+          "sku": "rev-89151160",
+          "title": "Ovation Adamas II 1980s  - Burst"
+        },
+        {
+          "id": 85783608,
+          "sku": "rev-85783608",
+          "title": "Gibson  J45  1960s  - Sunburst  - Paul McCartney C"
+        },
+        {
+          "id": 83653083,
+          "sku": "rev-83653083",
+          "title": "Martin D-28 Dreadnought 2008 Natural"
+        }
+      ]
+    },
+    {
+      "profile_id": "106058",
+      "profile_name": "Amp Panels 24",
+      "count": 5,
+      "percentage": 1.13,
+      "sample_listings": [
+        {
+          "id": 83655007,
+          "sku": "rev-83655007",
+          "title": "New Reproduction Plexi front panel for Marshall JM"
+        },
+        {
+          "id": 83654720,
+          "sku": "rev-83654720",
+          "title": "Marshall 1966 JTM45 Panel , Repro/replica - Gold"
+        },
+        {
+          "id": 83654665,
+          "sku": "rev-83654665",
+          "title": "Custom 1968 Bluesbreaker , 18 Watt , Mini Bluesbre"
+        },
+        {
+          "id": 83654590,
+          "sku": "rev-83654590",
+          "title": "Marshall Reproduction JTM 45 Offset Front Panel fo"
+        },
+        {
+          "id": 83654558,
+          "sku": "rev-83654558",
+          "title": "Marshall JTM 45 Black Flag Reproduction Plexi fron"
+        }
+      ]
+    },
+    {
+      "profile_id": "85687",
+      "profile_name": "Amp Panels",
+      "count": 5,
+      "percentage": 1.13,
+      "sample_listings": [
+        {
+          "id": 83654632,
+          "sku": "rev-83654632",
+          "title": "JMI Fawn Tolex for AC4 AC15 AC30 AC50 AC100 Amplif"
+        },
+        {
+          "id": 63446679,
+          "sku": "rev-63446679",
+          "title": "Marshall Reproduction JMP Superlead Plexi rear pan"
+        },
+        {
+          "id": 63445077,
+          "sku": "rev-63445077",
+          "title": "Marshall Reproduction JTM45 Front  panel for 1963-"
+        },
+        {
+          "id": 63446651,
+          "sku": "rev-63446651",
+          "title": "Marshall Reproduction Reverse Traffolite Front  pa"
+        },
+        {
+          "id": 63445028,
+          "sku": "rev-63445028",
+          "title": "Marshall Reproduction JTM 45 Offset Front Panel fo"
+        }
+      ]
+    },
+    {
+      "profile_id": "105662",
+      "profile_name": "Production Cases",
+      "count": 4,
+      "percentage": 0.9,
+      "sample_listings": [
+        {
+          "id": 88344289,
+          "sku": "rev-88344289",
+          "title": "Hiwatt DR103 Head and SE4123 Cabinet WISHBONE ASH "
+        },
+        {
+          "id": 83652114,
+          "sku": "rev-83652114",
+          "title": "Hammond L122 Organ owned & used by Rick Wakeman of"
+        },
+        {
+          "id": 83652080,
+          "sku": "rev-83652080",
+          "title": "Hammond C3 Organ owned & used by Rick Wakeman of Y"
+        },
+        {
+          "id": 83154580,
+          "sku": "rev-83154580",
+          "title": "Oasis Tour Used Flightcase No 3 1990s - Black"
+        }
+      ]
+    },
+    {
+      "profile_id": "106057",
+      "profile_name": "Amp Logos",
+      "count": 4,
+      "percentage": 0.9,
+      "sample_listings": [
+        {
+          "id": 85389002,
+          "sku": "rev-85389002",
+          "title": "Wurlitzer Organ Ex RIC RAC STUDIOS SISTERS OF MERC"
+        },
+        {
+          "id": 83654488,
+          "sku": "rev-83654488",
+          "title": "Marshall Reproduction Metal Badge Amplifier Knobs "
+        },
+        {
+          "id": 83651967,
+          "sku": "rev-83651967",
+          "title": "Vintage JTM & JMP SCRIPT LOGO FOR PLEXI AMP OR CAB"
+        },
+        {
+          "id": 52754396,
+          "sku": "rev-52754396",
+          "title": "Marshall Gold Script Logo for JTM JMP"
+        }
+      ]
+    },
+    {
+      "profile_id": "15657",
+      "profile_name": "Bass Guitars",
+      "count": 4,
+      "percentage": 0.9,
+      "sample_listings": [
+        {
+          "id": 85381354,
+          "sku": "rev-85381354",
+          "title": "Vox Lil Nightrain Head & Cab 2000s - Black"
+        },
+        {
+          "id": 83654036,
+          "sku": "rev-83654036",
+          "title": "Zemaitis Custom Bass ex Ronnie Lane - The Small Fa"
+        },
+        {
+          "id": 83143931,
+          "sku": "rev-83143931",
+          "title": "Penta Bass  Bass  2000s  - Pearl White - Alex Greg"
+        },
+        {
+          "id": 65901844,
+          "sku": "rev-65901844",
+          "title": "Rickenbacker 4003 2000s - Mapleglo"
+        }
+      ]
+    },
+    {
+      "profile_id": "103323",
+      "profile_name": "Very Large Items",
+      "count": 3,
+      "percentage": 0.68,
+      "sample_listings": [
+        {
+          "id": 89350675,
+          "sku": "rev-89350675",
+          "title": "Fender Twin EX NOEL GALLAGHER OASIS 2000s - Black"
+        },
+        {
+          "id": 85380948,
+          "sku": "rev-85380948",
+          "title": "Soundcraft 760 24 Channel Multi Track Tape Machine"
+        },
+        {
+          "id": 85380812,
+          "sku": "rev-85380812",
+          "title": "Soundcraft 24 Channel Mixing Desk SISTERS OF MERCY"
+        }
+      ]
+    },
+    {
+      "profile_id": "63784",
+      "profile_name": "Regular Synth",
+      "count": 2,
+      "percentage": 0.45,
+      "sample_listings": [
+        {
+          "id": 83653372,
+          "sku": "rev-83653372",
+          "title": "Polivoks Synth Owned and Used by Rick Wakeman of Y"
+        },
+        {
+          "id": 83652155,
+          "sku": "rev-83652155",
+          "title": "Sequential Circuits Prophet Remote owned and used "
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}Sync Events Report - RIFF{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">Sync Events Report</h1>
+                <p class="text-gray-600">Review and debug unprocessed synchronization events.</p>
+            </div>
+            <a href="/reports" class="text-blue-600 hover:text-blue-800">← Back to Reports</a>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">Filter Events</h3>
+        <form method="GET" id="filter-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Platform</label>
+                <select name="platform" class="w-full p-3 border border-gray-300 rounded-md">
+                    <option value="">All Platforms</option>
+                    {% for p in platforms %}
+                    <option value="{{ p }}" {% if p == platform_filter %}selected{% endif %}>{{ p.title() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Change Type</label>
+                <select name="change_type" class="w-full p-3 border border-gray-300 rounded-md">
+                    <option value="">All Change Types</option>
+                    {% for type in change_types %}
+                    <option value="{{ type }}" {% if type == change_type_filter %}selected{% endif %}>{{ type.replace('_', ' ').title() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select name="status" class="w-full p-3 border border-gray-300 rounded-md">
+                    <option value="">All Statuses</option>
+                    <option value="pending" {% if "pending" == status_filter %}selected{% endif %}>Pending</option>
+                    <option value="processed" {% if "processed" == status_filter %}selected{% endif %}>Processed</option>
+                    <option value="partial" {% if "partial" == status_filter %}selected{% endif %}>Partial</option>
+                    <option value="error" {% if "error" == status_filter %}selected{% endif %}>Error</option>
+                </select>
+            </div>
+            </form>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <!-- Platform Summary Box -->
+        <div class="bg-white rounded-lg shadow-sm p-4">
+            <h4 class="text-sm font-medium text-gray-600 mb-3">Events by Platform</h4>
+            <div class="grid grid-cols-2 gap-3">
+                {% for item in platform_summary %}
+                <div class="flex items-center justify-between p-2 rounded-md bg-gray-50">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm
+                            {% if item.platform_name == 'reverb' %}text-orange-600{% endif %}
+                            {% if item.platform_name == 'ebay' %}text-blue-600{% endif %}
+                            {% if item.platform_name == 'shopify' %}text-green-600{% endif %}
+                            {% if item.platform_name == 'vr' %}text-purple-600{% endif %}">
+                            {% if item.platform_name == 'reverb' %}🎸{% endif %}
+                            {% if item.platform_name == 'ebay' %}🛍️{% endif %}
+                            {% if item.platform_name == 'shopify' %}🛒{% endif %}
+                            {% if item.platform_name == 'vr' %}💎{% endif %}
+                        </span>
+                        <span class="text-sm font-medium text-gray-700">{{ item.platform_name.upper() }}</span>
+                    </div>
+                    <span class="text-sm font-bold text-gray-900">{{ item.event_count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Status Summary Box -->
+        <div class="bg-white rounded-lg shadow-sm p-4">
+            <h4 class="text-sm font-medium text-gray-600 mb-3">Events by Status</h4>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="flex items-center justify-between p-2 rounded-md bg-yellow-50">
+                    <span class="text-sm font-medium text-gray-700">Pending</span>
+                    <span class="text-sm font-bold text-yellow-600">{{ summary_stats.pending | default(0) }}</span>
+                </div>
+                <div class="flex items-center justify-between p-2 rounded-md bg-green-50">
+                    <span class="text-sm font-medium text-gray-700">Processed</span>
+                    <span class="text-sm font-bold text-green-600">{{ summary_stats.processed_today | default(0) }}</span>
+                </div>
+                <div class="flex items-center justify-between p-2 rounded-md bg-orange-50">
+                    <span class="text-sm font-medium text-gray-700">Partial</span>
+                    <span class="text-sm font-bold text-orange-600">{{ summary_stats.partial | default(0) }}</span>
+                </div>
+                <div class="flex items-center justify-between p-2 rounded-md bg-red-50">
+                    <span class="text-sm font-medium text-gray-700">Errors</span>
+                    <span class="text-sm font-bold text-red-600">{{ summary_stats.errors | default(0) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="overflow-x-auto">
+            <table class="w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        {% set next_order = 'asc' if sort_order == 'desc' else 'desc' %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <a href="?platform={{ platform_filter or '' }}&change_type={{ change_type_filter or '' }}&status={{ status_filter or '' }}&sort=event&order={{ next_order if sort_by == 'event' else 'desc' }}">
+                                Event Status
+                                {% if sort_by == 'event' %}{{ '▾' if sort_order == 'desc' else '▴' }}{% endif %}
+                            </a>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <a href="?platform={{ platform_filter or '' }}&change_type={{ change_type_filter or '' }}&status={{ status_filter or '' }}&sort=change_type&order={{ next_order if sort_by == 'change_type' else 'desc' }}">
+                                Change Type
+                                {% if sort_by == 'change_type' %}{{ '▾' if sort_order == 'desc' else '▴' }}{% endif %}
+                            </a>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                           <a href="?platform={{ platform_filter or '' }}&change_type={{ change_type_filter or '' }}&status={{ status_filter or '' }}&sort=product&order={{ next_order if sort_by == 'product' else 'desc' }}">
+                                Product Details
+                                {% if sort_by == 'product' %}{{ '▾' if sort_order == 'desc' else '▴' }}{% endif %}
+                            </a>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Change Data</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            <a href="?platform={{ platform_filter or '' }}&change_type={{ change_type_filter or '' }}&status={{ status_filter or '' }}&sort=detected_at&order={{ next_order if sort_by == 'detected_at' else 'desc' }}">
+                                Detected
+                                {% if sort_by == 'detected_at' %}{{ '▾' if sort_order == 'desc' else '▴' }}{% endif %}
+                            </a>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for event in sync_events %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4">
+                            {% set status_color = 'bg-gray-100 text-gray-800' %}
+                            {% if event.status == 'pending' %}{% set status_color = 'bg-yellow-100 text-yellow-800' %}{% endif %}
+                            {% if event.status == 'processed' %}{% set status_color = 'bg-green-100 text-green-800' %}{% endif %}
+                            {% if event.status == 'partial' %}{% set status_color = 'bg-orange-100 text-orange-800' %}{% endif %}
+                            {% if event.status == 'error' %}{% set status_color = 'bg-red-100 text-red-800' %}{% endif %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {{ status_color }}">
+                                {{ event.status.title() }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% set type_color = 'bg-gray-100 text-gray-800' %}
+                            {% if event.change_type == 'new_listing' %}{% set type_color = 'bg-blue-100 text-blue-800' %}{% endif %}
+                            {% if event.change_type == 'price' %}{% set type_color = 'bg-green-100 text-green-800' %}{% endif %}
+                            {% if event.change_type == 'price_change' %}{% set type_color = 'bg-green-100 text-green-800' %}{% endif %}
+                            {% if event.change_type == 'status' %}{% set type_color = 'bg-purple-100 text-purple-800' %}{% endif %}
+                            {% if event.change_type == 'status_change' %}{% set type_color = 'bg-purple-100 text-purple-800' %}{% endif %}
+                            {% if event.change_type == 'removed_listing' %}{% set type_color = 'bg-red-100 text-red-800' %}{% endif %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {{ type_color }}">
+                                {{ event.change_type.replace('_', ' ').title() }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if event.product_id %}
+                                <div class="text-sm font-medium text-gray-900">{{ event.platform_name.title() }}</div>
+                                <div class="text-sm text-gray-500">Product ID: {{ event.product_id }}</div>
+                            {% else %}
+                                <div class="text-sm font-medium text-gray-900">{{ event.platform_name.title() }}</div>
+                                <div class="text-sm text-gray-500">External ID: {{ event.external_id }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-700">
+                            {% if event.change_type == 'new_listing' %}
+                                <div class="font-semibold">{{ event.change_data.title if event.change_data.title else 'Untitled' }}</div>
+                                <div class="text-xs text-gray-500">
+                                    {% if event.change_data.price %}
+                                        Price: £{{ "{:,.0f}".format(event.change_data.price) }}
+                                    {% endif %}
+                                    {% if event.change_data.status %}
+                                        {% if event.change_data.price %}, {% endif %}Status: {{ event.change_data.status }}
+                                    {% endif %}
+                                </div>
+                                {% if event.external_id %}
+                                    {% if event.platform_name == 'reverb' %}
+                                        <a href="https://reverb.com/uk/item/{{ event.external_id }}" target="_blank" class="inline-flex items-center mt-1 text-xs text-blue-600 hover:text-blue-800">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                            </svg>
+                                            View on Reverb
+                                        </a>
+                                    {% elif event.platform_name == 'ebay' %}
+                                        <a href="https://www.ebay.co.uk/itm/{{ event.external_id }}" target="_blank" class="inline-flex items-center mt-1 text-xs text-blue-600 hover:text-blue-800">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                            </svg>
+                                            View on eBay
+                                        </a>
+                                    {% elif event.platform_name == 'shopify' %}
+                                        <a href="https://londonvintageguitars.com/products/{{ event.external_id }}" target="_blank" class="inline-flex items-center mt-1 text-xs text-blue-600 hover:text-blue-800">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                            </svg>
+                                            View on Shopify
+                                        </a>
+                                    {% elif event.platform_name == 'vr' %}
+                                        <a href="https://www.vintageandrare.com/product/{{ event.external_id }}" target="_blank" class="inline-flex items-center mt-1 text-xs text-blue-600 hover:text-blue-800">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                            </svg>
+                                            View on V&R
+                                        </a>
+                                    {% endif %}
+                                {% endif %}
+                            {% elif event.change_type == 'price' or event.change_type == 'price_change' %}
+                                <div>
+                                    <span class="text-gray-500">Old:</span> 
+                                    <strong class="text-gray-800">
+                                        {% if event.change_data.old is defined and event.change_data.old is not none %}
+                                            £{{ "{:,.0f}".format(event.change_data.old) }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </strong>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">New:</span> 
+                                    <strong class="text-red-600">
+                                        {% if event.change_data.new is defined and event.change_data.new is not none %}
+                                            £{{ "{:,.0f}".format(event.change_data.new) }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </strong>
+                                </div>
+                            {% elif event.change_type == 'status' or event.change_type == 'status_change' %}
+                                <div>
+                                    <span class="text-gray-500">Old:</span> <strong class="text-gray-800">{{ event.change_data.old if event.change_data and event.change_data.old else 'N/A' }}</strong>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">New:</span> <strong class="text-blue-600">{{ event.change_data.new if event.change_data and event.change_data.new else 'N/A' }}</strong>
+                                </div>
+                            {% else %}
+                                <div class="text-xs overflow-auto font-mono bg-gray-50 p-2 rounded">{{ event.change_data | tojson(indent=2) }}</div>
+                            {% endif %}
+                            {% if event.notes %}
+                                <div class="mt-2 text-xs text-red-600 border-t border-gray-200 pt-2">
+                                    <strong>Notes:</strong> {{ event.notes }}
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-500">
+                            {{ event.detected_at.strftime('%Y-%m-%d %H:%M') }}
+                        </td>
+                        <td class="px-6 py-4 text-sm whitespace-nowrap">
+                            <div class="flex flex-col space-y-1">
+                                {% if event.product_id %}
+                                <a href="/inventory/product/{{ event.product_id }}" class="text-blue-600 hover:text-blue-800">View Product</a>
+                                {% endif %}
+                                
+                                {% if event.status == 'pending' and event.change_type == 'status_change' %}
+                                    {% if event.change_data and event.change_data.new in ['sold', 'ended'] %}
+                                    <button class="px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors" 
+                                            title="Remove from all platforms"
+                                            onclick="processSyncEvent({{ event.id }}, 'Remove / End')"
+                                            data-event-id="{{ event.id }}">
+                                        <span>Remove / End</span>
+                                    </button>
+                                    {% endif %}
+                                {% endif %}
+                                
+                                {% if event.status == 'pending' and event.change_type == 'removed_listing' %}
+                                <button class="px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors" 
+                                        title="Mark this removal as processed"
+                                        onclick="processSyncEvent({{ event.id }}, 'Confirm Removal')"
+                                        data-event-id="{{ event.id }}">
+                                    <span>Confirm</span>
+                                </button>
+                                {% endif %}
+                                
+                                {% if event.status == 'pending' and event.change_type == 'new_listing' %}
+                                <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors" 
+                                        title="Create listing on other platforms"
+                                        onclick="processSyncEvent({{ event.id }}, 'Create Listings')"
+                                        data-event-id="{{ event.id }}">
+                                    <span>Create</span>
+                                </button>
+                                {% endif %}
+                                
+                                {% if event.status == 'pending' and event.change_type == 'price_change' %}
+                                <button class="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors" 
+                                        title="Update price on all platforms"
+                                        onclick="processSyncEvent({{ event.id }}, 'Update Price')"
+                                        data-event-id="{{ event.id }}">
+                                    <span>Update</span>
+                                </button>
+                                {% endif %}
+                                
+                                {% if not event.product_id and event.status != 'pending' %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-12">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                            <h3 class="mt-2 text-lg font-medium text-gray-900">No Sync Events Found</h3>
+                            <p class="mt-1 text-gray-500">No events match your current filter criteria.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('filter-form');
+        const selects = form.querySelectorAll('select');
+        
+        selects.forEach(select => {
+            select.addEventListener('change', function() {
+                form.submit();
+            });
+        });
+    });
+    
+    // Function to process sync events
+    async function processSyncEvent(eventId, actionName) {
+        if (!confirm(`Are you sure you want to ${actionName}? This will process the event and any related events for the same product.`)) {
+            return;
+        }
+        
+        // Disable the button to prevent double-clicks
+        const button = document.querySelector(`button[data-event-id="${eventId}"]`);
+        if (button) {
+            button.disabled = true;
+            const originalContent = button.innerHTML;
+            button.innerHTML = '<svg class="animate-spin h-3 w-3 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+            
+            try {
+                const response = await fetch(`/reports/sync-events/process/${eventId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert(`Success: ${result.message}`);
+                    // Reload the page to show updated statuses
+                    window.location.reload();
+                } else if (result.status === 'warning') {
+                    alert(`Warning: ${result.message}`);
+                    // Re-enable button
+                    button.disabled = false;
+                    button.innerHTML = originalContent;
+                } else {
+                    alert(`Error: ${result.message}`);
+                    // Re-enable button
+                    button.disabled = false;
+                    button.innerHTML = originalContent;
+                }
+            } catch (error) {
+                alert(`Failed to process event: ${error.message}`);
+                // Re-enable button
+                button.disabled = false;
+                button.innerHTML = originalContent;
+            }
+        }
+    }
+    
+    // Make function globally accessible
+    window.processSyncEvent = processSyncEvent;
+</script>
+{% endblock %}

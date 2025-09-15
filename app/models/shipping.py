@@ -88,6 +88,8 @@ class ShippingProfile(Base):
     __tablename__ = "shipping_profiles"
     
     id = Column(Integer, primary_key=True)
+    reverb_profile_id = Column(String, nullable=True, index=True)  # Reverb's profile ID
+    ebay_profile_id = Column(String, nullable=True)  # Mapped eBay profile ID
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     is_default = Column(Boolean, default=False, nullable=True) # Explicitly nullable if desired, default implies nullable usually
@@ -96,7 +98,7 @@ class ShippingProfile(Base):
     dimensions = Column(JSONB, nullable=True)  # Using JSONB for dimensions (length, width, height)
     carriers = Column(JSONB, nullable=True)    # Stores array of carrier codes
     options = Column(JSONB, nullable=True)     # Stores insurance, signature, etc.
-    rates = Column(JSONB, nullable=True)       # Stores regional rates
+    rates = Column(JSONB, nullable=True)       # Stores regional rates (uk, europe, usa, row)
     # created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)
     # updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), server_default=UTC_NOW)   
 

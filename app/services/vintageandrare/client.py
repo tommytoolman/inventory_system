@@ -1,9 +1,15 @@
+"""
+We also have CLI scripts set up in scripts/vr/ with optional argparses to run these.
+"""
+
 import asyncio
 import logging
 import requests
 import re
 import io
 import json
+import time
+import random
 import html
 import tempfile
 import os
@@ -13,6 +19,14 @@ import shutil # Added for MediaHandler cleanup
 from typing import Dict, Any, Optional, List # Added List
 from datetime import datetime, timezone
 from pathlib import Path
+
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 
 from app.core.utils import ImageTransformer, ImageQuality
 
@@ -70,11 +84,22 @@ class VintageAndRareClient:
         self.db_session = db_session
 
         # Default headers for requests
+        # self.headers = {
+        #     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7', # Updated Accept
+        #     'Accept-Language': 'en-US,en;q=0.9',
+        #     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+        # }
         self.headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7', # Updated Accept
+            'Accept': '*/*',  # ← Change from text/html to */*
             'Accept-Language': 'en-US,en;q=0.9',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+            'Content-type': 'application/x-www-form-urlencoded',  # ← Add this (lowercase 't')
+            'X-Requested-With': 'XMLHttpRequest',  # ← Add this for AJAX
+            'Referer': 'https://www.vintageandrare.com/instruments/show',  # ← Change referer
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
         }
+        
+        self._selenium_session = None  # ✅ Add this line
+        self._selenium_driver = None   # ✅ Add this line
         
         # Initialize mapping service if DB session is provided
         if CategoryMappingService:
@@ -84,7 +109,6 @@ class VintageAndRareClient:
 
         # Temporary files tracking (for saved inventory CSV)
         self.temp_files = []
-
 
     async def authenticate(self) -> bool:
         """
@@ -135,7 +159,6 @@ class VintageAndRareClient:
             self.authenticated = False
             return False
 
-
     # --- Inventory Download Methods (from VRInventoryManager) ---
 
     async def download_inventory_dataframe(self, save_to_file: bool = False, output_path: Optional[str] = None) -> Optional[pd.DataFrame]:
@@ -150,23 +173,34 @@ class VintageAndRareClient:
 
         Returns:
             pandas.DataFrame: Processed inventory data, or None if any step failed.
+            str: "RETRY_NEEDED" if download exceeded timeout limit.
         """
         logger.info("Attempting to download V&R inventory CSV...")
         print("Starting V&R inventory download...")
+        
+        # Clean any existing temp files before starting
+        self.cleanup_temp_files()
+        logger.info("Cleaned up any existing temp files before download")
+        
         if not self.authenticated:
             print("Not authenticated. Attempting authentication first.")
             if not await self.authenticate():
                 print("Authentication failed. Cannot download inventory.")
                 return None
-                
+        
+        # Configure timeout - 3 minutes max for inventory download
+        INVENTORY_TIMEOUT = 180  # 180 seconds = 3 minutes
+        
         try:
             # Download the inventory file using the authenticated session
             print(f"Requesting inventory CSV from {self.EXPORT_URL}")
+            print(f"Timeout set to {INVENTORY_TIMEOUT} seconds")
             response = self.session.get(
                 self.EXPORT_URL,
                 headers=self.headers,
                 allow_redirects=True,
-                stream=True
+                stream=True,
+                timeout=INVENTORY_TIMEOUT
             )
             print(f"Inventory export response status: {response.status_code}")
             
@@ -214,6 +248,11 @@ class VintageAndRareClient:
             
             return df
             
+        except requests.exceptions.Timeout:
+            logger.error(f"VR inventory download exceeded {INVENTORY_TIMEOUT}s timeout limit")
+            print(f"ERROR: Download exceeded {INVENTORY_TIMEOUT} second timeout")
+            print("This download should be queued for retry during off-peak hours")
+            return "RETRY_NEEDED"
         except pd.errors.EmptyDataError:
             print("Error: CSV data is empty")
             return None
@@ -383,12 +422,13 @@ class VintageAndRareClient:
                     'model_name': product_data.get('model', ''), # Assuming 'model' is the field in product_data
                     'price': str(product_data.get('price', 0)), # V&R expects string
 
-                    'year': str(product_data.get('year', '')) if product_data.get('year') else None, # V&R might expect string or handle None
-                    'decade': str(product_data.get('decade', '')) if product_data.get('decade') else None, # V&R might expect string or handle None
+                    'year': str(product_data.get('year', '')) if product_data.get('year') else None, # V&R expects a number
+                    # 'decade': str(product_data.get('decade', '')) if product_data.get('decade') else None, # V&R option box ❌ REMOVED
 
                     'finish_color': str(product_data.get('finish', '') or ''),
                     # 'description': str(product_data.get('description', '') or ''),
-                    'description': html.unescape(str(product_data.get('description', '') or '')),
+                    # 'description': html.unescape(str(product_data.get('description', '') or '')),
+                    'description': product_data.get('description', ''),
                     'external_id': str(product_data.get('sku', '') or ''), # Send our SKU as V&R external_id
 
                     # Optional V&R specific fields - get from product_data if stored, else use defaults
@@ -543,6 +583,53 @@ class VintageAndRareClient:
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
 
+    # Batch method - deprecated as cannot get to work
+    # async def create_listing_selenium_batch(
+    #     self, 
+    #     product_data_list: List[Dict[str, Any]], 
+    #     test_mode: bool = True,
+    #     from_scratch: bool = False,
+    #     db_session=None
+    # ) -> List[Dict[str, Any]]:
+    #     """
+    #     Create multiple listings with a single browser session (EFFICIENT)
+        
+    #     Args:
+    #         product_data_list: List of product dictionaries
+    #         test_mode: If True, forms will be filled but not submitted
+    #         from_scratch: Category mapping mode
+    #         db_session: Database session for operations
+            
+    #     Returns:
+    #         List of result dictionaries for each listing
+    #     """
+    #     logger.info(f"Creating {len(product_data_list)} V&R listings with shared browser session")
+        
+    #     if not login_and_navigate:
+    #         return [{"status": "error", "message": "Selenium automation module not loaded"}] * len(product_data_list)
+        
+    #     results = []
+        
+    #     try:
+    #         # Run the batch operation in executor thread
+    #         loop = asyncio.get_event_loop()
+            
+    #         results = await loop.run_in_executor(
+    #             None,
+    #             lambda: self._run_selenium_batch_automation(product_data_list, test_mode, from_scratch, db_session)
+    #         )
+            
+    #         return results
+            
+    #     except Exception as e:
+    #         logger.error(f"Error in batch listing creation: {str(e)}")
+    #         error_result = {
+    #             "status": "error",
+    #             "message": f"Batch creation failed: {str(e)}",
+    #             "timestamp": datetime.now(timezone.utc).isoformat()
+    #         }
+    #         return [error_result] * len(product_data_list)
+
     def _run_selenium_automation(self, form_data: Dict[str, Any], test_mode: bool, db_session=None) -> Dict[str, Any]:
         """
         Wrapper function to execute the blocking Selenium login_and_navigate function.
@@ -588,6 +675,277 @@ class VintageAndRareClient:
                 "message": f"Selenium automation failed: {str(e)}",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
+
+    # Batch method - deprecated as cannot get to work
+    # def _run_selenium_batch_automation(self, product_data_list: List[Dict[str, Any]], test_mode: bool, from_scratch: bool, db_session=None) -> List[Dict[str, Any]]:
+    #     """
+    #     Run batch Selenium automation with single browser session
+    #     """
+    #     from selenium import webdriver
+    #     from selenium.webdriver.chrome.service import Service
+    #     from selenium.webdriver.common.by import By
+    #     from selenium.webdriver.support.ui import WebDriverWait
+    #     from selenium.webdriver.support import expected_conditions as EC
+    #     from webdriver_manager.chrome import ChromeDriverManager
+    #     import requests
+    #     import time
+        
+    #     results = []
+    #     driver = None
+        
+    #     try:
+    #         logger.info("🚀 Starting batch Selenium automation with single session")
+            
+    #         # Step 1: Set up browser session (ONE TIME)
+    #         options = webdriver.ChromeOptions()
+    #         options.add_experimental_option('useAutomationExtension', False)
+    #         options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    #         options.add_argument("--disable-blink-features=AutomationControlled")
+    #         options.add_argument("--headless=new")
+    #         options.add_argument("--window-size=1920,1080")
+            
+    #         driver = webdriver.Chrome(
+    #             service=Service(ChromeDriverManager().install()),
+    #             options=options
+    #         )
+            
+    #         # Step 2: Login ONCE
+    #         logger.info("🔑 Logging in to V&R (ONE TIME)")
+    #         self._selenium_login_once(driver)
+            
+    #         # Step 3: Process each item using the same session
+    #         for i, product_data in enumerate(product_data_list, 1):
+    #             try:
+    #                 logger.info(f"📦 Processing item {i}/{len(product_data_list)}: {product_data.get('brand')} {product_data.get('model')}")
+                    
+    #                 # Prepare form data (same as your existing method)
+    #                 form_data = self._prepare_form_data(product_data, from_scratch)
+                    
+    #                 # Navigate to add item page
+    #                 driver.get('https://www.vintageandrare.com/instruments/add_edit_item')
+    #                 time.sleep(2)
+                    
+    #                 # Import and use your existing fill_item_form function
+    #                 from .inspect_form import fill_item_form
+    #                 result = fill_item_form(driver, form_data, test_mode, None)
+                    
+    #                 if result.get("status") == "success":
+    #                     logger.info(f"✅ Item {i} completed successfully")
+    #                 else:
+    #                     logger.warning(f"⚠️ Item {i} had issues: {result.get('message')}")
+                    
+    #                 results.append(result)
+                    
+    #                 # Small delay between items
+    #                 time.sleep(2)
+                    
+    #             except Exception as e:
+    #                 logger.error(f"❌ Error processing item {i}: {str(e)}")
+    #                 results.append({
+    #                     "status": "error",
+    #                     "message": f"Item {i} failed: {str(e)}",
+    #                     "timestamp": datetime.now(timezone.utc).isoformat()
+    #                 })
+                    
+    #                 if result.get("status") == "success":
+    #                     logger.info(f"✅ Item {i} completed successfully")
+    #                 else:
+    #                     logger.warning(f"⚠️ Item {i} had issues: {result.get('message')}")
+                    
+    #                 results.append(result)
+                    
+    #                 # Small delay between items
+    #                 time.sleep(2)
+                    
+    #             except Exception as e:
+    #                 logger.error(f"❌ Error processing item {i}: {str(e)}")
+    #                 results.append({
+    #                     "status": "error",
+    #                     "message": f"Item {i} failed: {str(e)}",
+    #                     "timestamp": datetime.now(timezone.utc).isoformat()
+    #                 })
+            
+    #         logger.info(f"🎉 Batch processing complete: {len(results)} items processed")
+    #         return results
+            
+    #     except Exception as e:
+    #         logger.error(f"❌ Critical error in batch automation: {str(e)}")
+    #         error_result = {
+    #             "status": "error",
+    #             "message": f"Batch automation failed: {str(e)}",
+    #             "timestamp": datetime.now(timezone.utc).isoformat()
+    #         }
+    #         return [error_result] * len(product_data_list)
+            
+    #     finally:
+    #         if driver:
+    #             driver.quit()
+    #             logger.info("🔒 Browser session closed")
+
+    # Batch method - deprecated as cannot get to work
+    # def _selenium_login_once(self, driver):
+    #     """Login to V&R using Selenium (called once per batch)"""
+    #     from selenium.webdriver.common.by import By
+    #     # Go DIRECTLY to the form page since we're already authenticated
+        
+    #     driver.get('https://www.vintageandrare.com/instruments/add_edit_item')
+    #     time.sleep(2)
+        
+    #     # Transfer the authenticated cookies
+    #     for cookie in self.session.cookies:
+    #         try:
+    #             driver.add_cookie({
+    #                 'name': cookie.name,
+    #                 'value': cookie.value,
+    #                 'domain': '.vintageandrare.com',
+    #                 'path': '/'
+    #             })
+    #         except:
+    #             pass
+        
+    #     # Refresh to apply cookies on the form page
+    #     driver.refresh()
+    #     time.sleep(2)
+        
+    #     # Handle cookie consent if needed
+    #     try:
+    #         cookie_button = driver.find_element(By.CLASS_NAME, "cc-nb-okagree")
+    #         cookie_button.click()
+    #         time.sleep(1)
+    #     except:
+    #         pass
+        
+    #     logger.info("✅ Selenium session authenticated and ready for form filling")
+
+    # Batch method - deprecated as cannot get to work
+    # def _prepare_form_data(self, product_data: Dict[str, Any], from_scratch: bool) -> Dict[str, Any]:
+    #     """Extract form data preparation logic from create_listing_selenium"""
+    #     import html
+
+    #     # 🔍 DEBUG: Log the raw product_data
+    #     logger.info(f"🔍 RAW PRODUCT_DATA: {product_data}")
+
+    #     # Debug the description before and after processing
+    #     raw_description = product_data.get('description', '')
+    #     logger.info(f"RAW DESCRIPTION: {raw_description[:200]}...")
+        
+    #     # Try different processing approaches
+    #     decoded_description = html.unescape(str(raw_description))
+    #     logger.info(f"HTML DECODED: {decoded_description[:200]}...")
+        
+    #     # 2. Prepare Form Data (Translate internal product_data to V&R form field names)
+    #     form_data = {
+    #         'brand': product_data.get('brand', ''),
+    #         'model_name': product_data.get('model', ''), # Assuming 'model' is the field in product_data
+    #         'price': str(product_data.get('price', 0)), # V&R expects string
+    #         'year': str(product_data.get('year', '')) if product_data.get('year') else None, # V&R expects a number
+    #         'finish_color': str(product_data.get('finish', '') or ''),
+    #         'description': product_data.get('description', ''),
+    #         'external_id': str(product_data.get('sku', '') or ''), # Send our SKU as V&R external_id
+            
+    #         # Optional V&R specific fields - get from product_data if stored, else use defaults
+    #         'show_vat': product_data.get('vr_show_vat', True),
+    #         'call_for_price': product_data.get('vr_call_for_price', False),
+    #         'discounted_price': product_data.get('discounted_price', None), # Allow nulls
+    #         'in_collective': product_data.get('vr_in_collective', False),
+    #         'in_inventory': product_data.get('vr_in_inventory', True),
+    #         'in_reseller': product_data.get('vr_in_reseller', False),
+    #         'collective_discount': str(product_data.get('vr_collective_discount','')) if product_data.get('vr_collective_discount') else None,
+    #         'buy_now': product_data.get('vr_buy_now', False), # Check V&R template if needed
+            
+    #         # Processing Time
+    #         'processing_time': str(product_data.get('processing_time', '3') or '3'), # Default to 3 if not provided
+    #         'time_unit': product_data.get('time_unit', 'Days'), # Default to Days
+            
+    #         # Shipping info
+    #         'shipping': product_data.get('available_for_shipment', True),
+    #         'local_pickup': product_data.get('local_pickup', False),
+    #         'shipping_fees': {
+    #             # Get these from product_data or global settings
+    #             'europe': str(product_data.get('shipping_europe_fee', '50') or '50'),
+    #             'usa': str(product_data.get('shipping_usa_fee', '100') or '100'),
+    #             'uk': str(product_data.get('shipping_uk_fee', '75') or '75'), # Example fee
+    #             'world': str(product_data.get('shipping_world_fee', '150') or '150')
+    #         },
+            
+    #         # Media
+    #         'images': [], # Initialize empty list
+    #         'youtube_url': str(product_data.get('video_url', '') or ''),
+    #         'external_url': str(product_data.get('external_link', '') or '') # External link to product page?
+    #     }
+        
+    #     logger.info(f"FORM DATA DESCRIPTION: {form_data['description'][:200]}...")
+        
+    #     # Add category fields based on from_scratch parameter
+    #     if from_scratch:
+    #         # Use mapped category IDs from the mapping service - this would need the mapping logic
+    #         raise NotImplementedError("from_scratch=True mapping not implemented in batch mode yet")
+    #     else:
+    #         # Use category strings directly from mapped data
+    #         form_data['category'] = product_data.get('Category')
+    #         form_data['subcategory'] = product_data.get('SubCategory1')
+    #         form_data['sub_subcategory'] = product_data.get('SubCategory2')
+    #         form_data['sub_sub_subcategory'] = product_data.get('SubCategory3')
+            
+    #         # 🔍 DEBUG: Log the category mapping
+    #         logger.info(f"🔍 CATEGORY MAPPING:")
+    #         logger.info(f"   Category: {form_data['category']}")
+    #         logger.info(f"   SubCategory1: {form_data['subcategory']}")
+    #         logger.info(f"   SubCategory2: {form_data['sub_subcategory']}")
+    #         logger.info(f"   SubCategory3: {form_data['sub_sub_subcategory']}")
+        
+    #     # Add primary image URL
+    #     primary_image = product_data.get('primary_image')
+    #     if primary_image:
+    #         # Transform to max resolution for V&R
+    #         from app.core.utils import ImageTransformer, ImageQuality
+    #         max_res_primary = ImageTransformer.transform_reverb_url(primary_image, ImageQuality.MAX_RES)
+    #         form_data['images'].append(max_res_primary)
+    #         logger.info(f"Transformed primary image: {primary_image} -> {max_res_primary}")
+        
+    #     # Add additional image URLs (handle list or JSON string)
+    #     additional_images = product_data.get('additional_images')
+    #     if additional_images:
+    #         if isinstance(additional_images, list):
+    #             # Transform each additional image to max resolution
+    #             for img_url in additional_images:
+    #                 max_res_img = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
+    #                 form_data['images'].append(max_res_img)
+    #                 logger.info(f"Transformed additional image: {img_url} -> {max_res_img}")
+    #         elif isinstance(additional_images, str):
+    #             try:
+    #                 # Try to parse as JSON array first
+    #                 import json
+    #                 image_list = json.loads(additional_images)
+    #                 if isinstance(image_list, list):
+    #                     for img_url in image_list:
+    #                         max_res_img = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
+    #                         form_data['images'].append(max_res_img)
+    #                         logger.info(f"Transformed additional image from JSON: {img_url} -> {max_res_img}")
+    #                 else:
+    #                     # Single image in JSON format
+    #                     max_res_img = ImageTransformer.transform_reverb_url(str(image_list), ImageQuality.MAX_RES)
+    #                     form_data['images'].append(max_res_img)
+    #             except json.JSONDecodeError:
+    #                 # Assume it's a single URL string if JSON parsing fails
+    #                 max_res_img = ImageTransformer.transform_reverb_url(additional_images, ImageQuality.MAX_RES)
+    #                 form_data['images'].append(max_res_img)
+    #                 logger.info(f"Transformed single additional image: {additional_images} -> {max_res_img}")
+    #                 logger.warning("additional_images field was a string but not valid JSON, treated as single URL.")
+    #             except Exception as e:
+    #                 logger.error(f"Error processing additional_images string: {e}")
+        
+    #     # Log image transformation summary
+    #     logger.info(f"Image transformation complete: {len(form_data['images'])} total images prepared for V&R")
+        
+    #     # Limit images (V&R might have a limit, e.g., 20)
+    #     MAX_VR_IMAGES = 20
+    #     if len(form_data['images']) > MAX_VR_IMAGES:
+    #         logger.warning(f"Too many images ({len(form_data['images'])}). Truncating to {MAX_VR_IMAGES}.")
+    #         form_data['images'] = form_data['images'][:MAX_VR_IMAGES]
+        
+    #     logger.debug(f"Prepared form data for V&R Selenium: {form_data}")
+    #     return form_data
 
 
     async def _get_newly_created_item_id_via_export_service(self, db_session):
@@ -861,6 +1219,656 @@ class VintageAndRareClient:
             except:
                 pass
     
+    async def mark_item_as_sold(self, item_id: str) -> dict:
+        """Mark a single V&R item as sold using AJAX"""
+        if not self.authenticated:
+            return {"success": False, "error": "Not authenticated"}
+            
+        try:
+            print(f"💰 Marking item as sold ID: {item_id}")
+            
+            # Generate random number for cache busting (like V&R does)
+            random_num = random.random()
+            
+            # AJAX mark as sold request (exact endpoint from your discovery)
+            mark_sold_data = f'product_id={item_id}'
+            
+            response = self.session.post(
+                f'https://www.vintageandrare.com/ajax/mark_as_sold/{random_num}',
+                data=mark_sold_data,
+                headers=self.headers
+            )
+            
+            print(f"📡 Mark sold response status: {response.status_code}")
+            print(f"📝 Response content: '{response.text}'")
+            print(f"📏 Response length: {len(response.text)} characters")
+            
+            if response.status_code == 200:
+                response_text = response.text.strip()
+                
+                # Handle different response types
+                if not response_text:
+                    # Empty response - V&R often returns empty on successful operations
+                    print(f"✅ Empty response (likely successful mark as sold) for {item_id}")
+                    return {"success": True, "response": "empty_success", "item_id": item_id}
+                
+                # Try to parse JSON response
+                try:
+                    result = response.json()
+                    print(f"✅ JSON response for {item_id}: {result}")
+                    
+                    # ✅ ADD: Handle the new 'false' response
+                    if result is False:
+                        print(f"❌ V&R returned 'false' - operation likely failed for {item_id}")
+                        return {"success": False, "response": result, "item_id": item_id}
+                                    
+                    return {"success": True, "response": result, "item_id": item_id}
+                except:
+                    # If not JSON, check for success indicators in text
+                    response_lower = response_text.lower()
+                    if any(keyword in response_lower for keyword in ['success', 'sold', 'marked', 'ok', '1', 'true']):
+                        print(f"✅ Text indicates success for {item_id}")
+                        return {"success": True, "response": response_text, "item_id": item_id}
+                    elif any(keyword in response_lower for keyword in ['error', 'failed', 'not found', 'invalid']):
+                        print(f"❌ Text indicates failure for {item_id}: {response_text}")
+                        return {"success": False, "error": f"Server error: {response_text}", "item_id": item_id}
+                    else:
+                        print(f"⚠️  Unknown response for {item_id}: '{response_text}'")
+                        # For now, assume success if we got a 200 status
+                        return {"success": True, "response": f"unknown_success: {response_text}", "item_id": item_id}
+            else:
+                print(f"❌ Mark sold failed for {item_id}: HTTP {response.status_code}")
+                return {"success": False, "error": f"HTTP {response.status_code}: {response.text}", "item_id": item_id}
+                
+        except Exception as e:
+            print(f"❌ Error marking {item_id} as sold: {str(e)}")
+            return {"success": False, "error": str(e), "item_id": item_id}
+
+    # Next 2 are for debugging
+    async def debug_mark_as_sold(self, item_id: str) -> dict:
+        """Debug version to compare our request with browser behavior"""
+        if not self.authenticated:
+            return {"success": False, "error": "Not authenticated"}
+            
+        try:
+            print(f"🔍 DEBUGGING mark-as-sold for item {item_id}")
+            
+            # Generate the same random number format as browser
+            random_num = random.random()
+            url = f'https://www.vintageandrare.com/ajax/mark_as_sold/{random_num}'
+            
+            print(f"📍 URL: {url}")
+            print(f"🎲 Random: {random_num}")
+            
+            # Show our request details
+            data = f'product_id={item_id}'
+            print(f"📦 Data: '{data}'")
+            print(f"🍪 Cookies: {len(self.session.cookies)} cookies")
+            
+            # Show our headers
+            print(f"📋 Headers:")
+            for key, value in self.headers.items():
+                print(f"  {key}: {value}")
+            
+            # Show cookies
+            print(f"🍪 Cookie details:")
+            for cookie in self.session.cookies:
+                print(f"  {cookie.name}: {cookie.value[:20]}...")
+            
+            # Make the actual request
+            print(f"\n📡 Making request...")
+            response = self.session.post(url, data=data, headers=self.headers)
+            
+            print(f"📊 Response:")
+            print(f"  Status: {response.status_code}")
+            print(f"  Content: '{response.text}'")
+            print(f"  Content-Type: {response.headers.get('Content-Type', 'Not set')}")
+            print(f"  Content-Length: {len(response.text)}")
+            
+            # Show response headers
+            print(f"📋 Response Headers:")
+            for key, value in response.headers.items():
+                print(f"  {key}: {value}")
+            
+            return {
+                "success": False, 
+                "debug": True,
+                "status_code": response.status_code,
+                "response_text": response.text,
+                "item_id": item_id
+            }
+            
+        except Exception as e:
+            print(f"❌ Debug error: {str(e)}")
+            return {"success": False, "error": str(e), "item_id": item_id}
+
+    async def test_mark_as_sold_variations(self, item_id: str) -> dict:
+        """Test different ways to mark as sold"""
+        if not self.authenticated:
+            return {"success": False, "error": "Not authenticated"}
+        
+        tests = []
+        
+        try:
+            print(f"🧪 Testing different mark-as-sold approaches for {item_id}")
+            
+            # Test 1: Current approach (string data)
+            random_num = random.random()
+            response1 = self.session.post(
+                f'https://www.vintageandrare.com/ajax/mark_as_sold/{random_num}',
+                data=f'product_id={item_id}',
+                headers=self.headers
+            )
+            tests.append(("String data", response1.status_code, response1.text))
+            
+            # Test 2: Dict data
+            random_num = random.random()
+            response2 = self.session.post(
+                f'https://www.vintageandrare.com/ajax/mark_as_sold/{random_num}',
+                data={'product_id': item_id},
+                headers=self.headers
+            )
+            tests.append(("Dict data", response2.status_code, response2.text))
+            
+            # Test 3: JSON data
+            random_num = random.random()
+            headers_json = {**self.headers, 'Content-Type': 'application/json'}
+            response3 = self.session.post(
+                f'https://www.vintageandrare.com/ajax/mark_as_sold/{random_num}',
+                json={'product_id': item_id},
+                headers=headers_json
+            )
+            tests.append(("JSON data", response3.status_code, response3.text))
+            
+            # Test 4: No random number
+            response4 = self.session.post(
+                'https://www.vintageandrare.com/ajax/mark_as_sold',
+                data=f'product_id={item_id}',
+                headers=self.headers
+            )
+            tests.append(("No random", response4.status_code, response4.text))
+            
+            # Report results
+            print(f"\n📊 Test Results:")
+            for i, (method, status, text) in enumerate(tests, 1):
+                print(f"  Test {i} ({method}): {status} - '{text}'")
+            
+            return {"success": False, "debug": True, "tests": tests, "item_id": item_id}
+            
+        except Exception as e:
+            print(f"❌ Test error: {str(e)}")
+            return {"success": False, "error": str(e), "item_id": item_id}
+
+    async def delete_item(self, item_id: str) -> dict:
+        """Delete a single V&R item using AJAX"""
+        if not self.authenticated:
+            return {"success": False, "error": "Not authenticated"}
+            
+        try:
+            print(f"🗑️  Deleting item ID: {item_id}")
+            
+            # AJAX delete request
+            delete_data = {
+                'product_id': str(item_id)
+            }
+            
+            response = self.session.post(
+                'https://www.vintageandrare.com/ajax/delete_item',
+                data=delete_data,
+                headers=self.headers
+            )
+            
+            print(f"📡 Delete response status: {response.status_code}")
+            print(f"📝 Response content: '{response.text}'")
+            print(f"📏 Response length: {len(response.text)} characters")
+            
+            if response.status_code == 200:
+                response_text = response.text.strip()
+                
+                # Handle different response types
+                if not response_text:
+                    # Empty response - V&R often returns empty on successful delete
+                    print(f"✅ Empty response (likely successful delete) for {item_id}")
+                    return {"success": True, "response": "empty_success", "item_id": item_id}
+                
+                # Try to parse JSON response
+                try:
+                    result = response.json()
+                    print(f"✅ JSON response for {item_id}: {result}")
+                    return {"success": True, "response": result, "item_id": item_id}
+                except:
+                    # If not JSON, check for success indicators in text
+                    response_lower = response_text.lower()
+                    if any(keyword in response_lower for keyword in ['success', 'deleted', 'removed', 'ok']):
+                        print(f"✅ Text indicates success for {item_id}")
+                        return {"success": True, "response": response_text, "item_id": item_id}
+                    elif any(keyword in response_lower for keyword in ['error', 'failed', 'not found', 'invalid']):
+                        print(f"❌ Text indicates failure for {item_id}: {response_text}")
+                        return {"success": False, "error": f"Server error: {response_text}", "item_id": item_id}
+                    else:
+                        print(f"⚠️  Unknown response for {item_id}: '{response_text}'")
+                        return {"success": True, "response": f"unknown_success: {response_text}", "item_id": item_id}
+            else:
+                print(f"❌ Delete failed for {item_id}: HTTP {response.status_code}")
+                return {"success": False, "error": f"HTTP {response.status_code}: {response.text}", "item_id": item_id}
+                
+        except Exception as e:
+            print(f"❌ Error deleting {item_id}: {str(e)}")
+            return {"success": False, "error": str(e), "item_id": item_id}
+
+    async def process_items(self, item_ids: list, action: str, verify: bool = False, update_data: dict = None) -> dict:
+        """Process multiple V&R items (delete or mark as sold)"""
+        results = {
+            "total": len(item_ids),
+            "successful": 0,
+            "failed": 0,
+            "verified": 0,
+            "details": []
+        }
+        
+        for item_id in item_ids:
+            if action == "delete":
+                result = await self.delete_item(item_id)
+            elif action == "mark-sold":
+                result = await self.mark_item_as_sold(item_id)
+            elif action == "edit":
+                    if update_data:
+                        result = await self.update_listing_selenium(item_id, update_data, test_mode=True)
+                    else:
+                        result = {"success": False, "error": "No update data provided", "item_id": item_id}
+                
+            else:
+                result = {"success": False, "error": f"Unknown action: {action}", "item_id": item_id}
+            
+            # ✅ FIX: Handle both success formats
+            is_successful = (
+                result.get("success") is True or  # For delete/mark-sold
+                result.get("status") == "success"  # For edit operations
+            )
+            
+            # If verification requested and action seemed successful, verify
+            if verify and is_successful:
+                await asyncio.sleep(2)  # Wait a bit for V&R to process as server is SLOW
+                if await self.verify_item_status(item_id, action):
+                    result["verified"] = True
+                    results["verified"] += 1
+                else:
+                    result["verified"] = False
+                    is_successful = False
+                    
+            results["details"].append(result)
+            
+            if is_successful:
+                results["successful"] += 1
+            else:
+                results["failed"] += 1
+                
+            # Small delay between operations to be nice to the server
+            await asyncio.sleep(1)
+        
+        return results
+
+    async def verify_item_status(self, item_id: str, action: str) -> bool:
+        """Verify if an action was successful"""
+        try:
+            # Try to access the item's page
+            response = self.session.get(f'https://www.vintageandrare.com/instruments/{item_id}')
+            
+            if action == "delete":
+                if response.status_code == 404:
+                    print(f"✅ Verified: Item {item_id} is deleted (404)")
+                    return True
+                elif 'not found' in response.text.lower() or 'does not exist' in response.text.lower():
+                    print(f"✅ Verified: Item {item_id} is deleted (not found)")
+                    return True
+                else:
+                    print(f"⚠️  Item {item_id} may still exist (status: {response.status_code})")
+                    return False
+            
+            elif action == "mark-sold":
+                if response.status_code == 200:
+                    # For mark as sold, we'd need to check the page content for "sold" indicators
+                    # This is more complex to verify automatically
+                    print(f"⚠️  Item {item_id} verification for 'mark-sold' not implemented")
+                    return True  # Assume success for now
+                else:
+                    print(f"⚠️  Cannot verify {item_id} mark-sold status")
+                    return False
+                    
+        except Exception as e:
+            print(f"❌ Error verifying {item_id}: {str(e)}")
+            return False
+
+    async def update_item_details(self, item_id: str, update_data: Dict[str, Any]) -> Dict:
+        """
+        Logs into V&R and updates specific fields for an existing item using Selenium.
+        'update_data' can contain keys like 'product_price', 'product_model_name', etc.
+        """
+        logger.info(f"Attempting to update V&R item {item_id} with data: {update_data}")
+        loop = asyncio.get_running_loop()
+        
+        result = await loop.run_in_executor(
+            None,
+            self._execute_selenium_update, # Directly call the synchronous worker
+            item_id,
+            update_data
+        )
+        return result
+
+    def _execute_selenium_update(self, item_id: str, update_data: Dict[str, Any]) -> Dict:
+        """
+        Use the EXACT same login method as inspect_form.py which works
+        """
+        import requests
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+        from webdriver_manager.chrome import ChromeDriverManager
+        
+        # Step 1: Authenticate with requests first (like inspect_form does)
+        session = requests.Session()
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': 'https://www.vintageandrare.com',
+            'Referer': 'https://www.vintageandrare.com/',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+        }
+        
+        # Get initial cookies
+        session.get('https://www.vintageandrare.com', headers=headers)
+        
+        # Login via requests
+        login_data = {
+            'username': self.username,
+            'pass': self.password,
+            'open_where': 'header'
+        }
+        
+        response = session.post(
+            'https://www.vintageandrare.com/do_login',
+            data=login_data,
+            headers=headers,
+            allow_redirects=True
+        )
+        
+        if 'account' not in response.url:
+            logger.error("Requests login failed")
+            return {"success": False, "message": "Authentication failed"}
+        
+        logger.info("Authenticated via requests")
+        
+        # Step 2: Set up Selenium
+        options = webdriver.ChromeOptions()
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        
+        # Check for headless mode from environment variable
+        import os
+        headless_mode = os.environ.get('VR_HEADLESS', 'true').lower() == 'true'
+        if headless_mode:
+            options.add_argument("--headless=new")
+            logger.info("Running V&R browser in HEADLESS mode")
+        else:
+            logger.info("Running V&R browser in VISIBLE mode for debugging")
+        
+        options.add_argument("--window-size=1920,1080")
+        
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()),
+            options=options
+        )
+        
+        try:
+            # Step 3: Go to main site first
+            driver.get('https://www.vintageandrare.com')
+            time.sleep(2)
+            
+            # Step 4: Delete all cookies and add session cookies
+            driver.delete_all_cookies()
+            
+            for cookie in session.cookies:
+                cookie_dict = {
+                    'name': cookie.name,
+                    'value': cookie.value,
+                    'domain': '.vintageandrare.com',
+                    'path': '/'
+                }
+                driver.add_cookie(cookie_dict)
+            
+            # Step 5: Navigate DIRECTLY to edit page (no refresh)
+            edit_url = f'https://www.vintageandrare.com/instruments/add_edit_item/{item_id}'
+            logger.info(f"Navigating to: {edit_url}")
+            driver.get(edit_url)
+            time.sleep(3)
+            
+            # Handle cookie consent
+            try:
+                cookie_button = driver.find_element(By.CLASS_NAME, "cc-nb-okagree")
+                cookie_button.click()
+                time.sleep(1)
+            except:
+                pass
+            
+            # Check current URL and page content
+            current_url = driver.current_url
+            logger.info(f"Current URL: {current_url}")
+            
+            if "forbidden" in driver.page_source.lower():
+                logger.error("Got forbidden page - item may not belong to this account")
+                
+                # Try alternative: Navigate to items list first, then to edit
+                driver.get('https://www.vintageandrare.com/instruments/show')
+                time.sleep(2)
+                
+                # Now try edit page again
+                driver.get(edit_url)
+                time.sleep(3)
+                
+                if "forbidden" in driver.page_source.lower():
+                    return {"success": False, "message": f"Access forbidden to item {item_id}"}
+            
+            # Try to find price field
+            try:
+                price_field = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "price"))
+                )
+                
+                price_field.clear()
+                price_field.send_keys(str(update_data['product_price']))
+                logger.info(f"Updated price to {update_data['product_price']}")
+                
+                # Submit
+                submit_button = driver.find_element(By.ID, "submit_step_1")
+                submit_button.click()
+                time.sleep(5)
+                
+                return {"success": True, "message": "Price updated"}
+                
+            except TimeoutException:
+                logger.error("Could not find price field")
+                driver.save_screenshot("vr_forbidden_debug.png")
+                
+                # Log page content
+                body_text = driver.find_element(By.TAG_NAME, "body").text[:500]
+                logger.error(f"Page content: {body_text}")
+                
+                return {"success": False, "message": "Could not access edit form"}
+                
+        except Exception as e:
+            logger.error(f"Error: {str(e)}")
+            return {"success": False, "message": str(e)}
+        finally:
+            driver.quit()
+
+    
+    # --- Edit product methods ---
+    
+    async def update_listing_selenium(
+        self, 
+        item_id: str,
+        product_data: Dict[str, Any], 
+        test_mode: bool = False,
+        db_session=None
+    ) -> Dict[str, Any]:
+        """
+        Update an existing V&R listing using Selenium automation
+        
+        Args:
+            item_id: V&R item ID to edit
+            product_data: Dictionary containing the updated product details
+            test_mode: If True, the form will be filled but not submitted
+            db_session: Optional database session
+            
+        Returns:
+            Dict with status, message, and result info
+        """
+        
+        logger.info(f"Updating V&R listing ID: {item_id}")
+        
+        if not login_and_navigate:
+            logger.error("inspect_form.login_and_navigate not available. Cannot update listing.")
+            return {"status": "error", "message": "Selenium automation module not loaded"}
+
+        try:
+            # Prepare form data for editing (similar to create but with item_id)
+            form_data = self._prepare_form_data_for_edit(product_data, item_id)
+            
+            logger.debug(f"Prepared edit form data for V&R item {item_id}: {form_data}")
+
+            # Run Selenium automation for editing
+            loop = asyncio.get_event_loop()
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._run_selenium_edit_automation(form_data, item_id, test_mode, db_session)
+            )
+
+            logger.info(f"V&R Selenium listing update result: {result}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error updating V&R listing {item_id}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                "status": "error",
+                "message": f"Failed to update V&R listing: {str(e)}",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+    def _prepare_form_data_for_edit(self, product_data: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+        """Prepare form data for editing (includes item_id and edit-specific fields)"""
+        
+        # Start with regular form data
+        form_data = {
+            'brand': product_data.get('brand', ''),
+            'model_name': product_data.get('model', ''),
+            'price': str(product_data.get('price', 0)),
+            'year': str(product_data.get('year', '')) if product_data.get('year') else None,
+            'finish_color': str(product_data.get('finish', '') or ''),
+            'description': product_data.get('description', ''),
+            'external_url': str(product_data.get('external_link', '') or ''),
+            
+            # Categories
+            'category': product_data.get('Category', '51'),
+            'subcategory': product_data.get('SubCategory1', '83'),
+            
+            # V&R specific fields
+            'show_vat': product_data.get('vr_show_vat', True),
+            'call_for_price': product_data.get('vr_call_for_price', False),
+            'discounted_price': str(product_data.get('vr_discounted_price','')) if product_data.get('vr_discounted_price') else None,
+            'processing_time': str(product_data.get('processing_time', '3') or '3'),
+            'time_unit': product_data.get('time_unit', 'Days'),
+            'shipping': product_data.get('available_for_shipment', True),
+            'local_pickup': product_data.get('local_pickup', False),
+            'shipping_fees': {
+                'europe': str(product_data.get('shipping_europe_fee', '50') or '50'),
+                'usa': str(product_data.get('shipping_usa_fee', '100') or '100'),
+                'uk': str(product_data.get('shipping_uk_fee', '75') or '75'),
+                'world': str(product_data.get('shipping_world_fee', '150') or '150')
+            },
+            
+            # ✅ EDIT-SPECIFIC FIELDS (from your payload analysis)
+            'product_id': item_id,
+            'owner_id': '6784',  # Your user ID - you might want to make this configurable
+            'offer_id': '0',
+            'added_completed': 'yes',
+            'version': 'v4',
+            'unique_id': self._generate_unique_id(),  # Generate security token
+            
+            # Images (will be handled by MediaHandler)
+            'images': [],
+            'youtube_url': str(product_data.get('video_url', '') or ''),
+        }
+        
+        # Add images
+        primary_image = product_data.get('primary_image')
+        if primary_image:
+            form_data['images'].append(primary_image)
+        
+        additional_images = product_data.get('additional_images')
+        if additional_images:
+            if isinstance(additional_images, list):
+                form_data['images'].extend(additional_images)
+            elif isinstance(additional_images, str):
+                try:
+                    import json
+                    parsed_images = json.loads(additional_images)
+                    if isinstance(parsed_images, list):
+                        form_data['images'].extend(parsed_images)
+                except:
+                    form_data['images'].append(additional_images)
+        
+        return form_data
+
+    def _generate_unique_id(self) -> str:
+        """Generate unique security token like V&R uses"""
+        import hashlib
+        import random
+        import time
+        
+        random_data = f"{time.time()}{random.random()}{self.username}"
+        return hashlib.md5(random_data.encode()).hexdigest()
+
+    def _run_selenium_edit_automation(self, form_data: Dict[str, Any], item_id: str, test_mode: bool, db_session=None) -> Dict[str, Any]:
+        """Run Selenium automation for editing - simplified approach"""
+        
+        try:
+            logger.info(f"Starting Selenium edit automation for item {item_id}")
+            
+            # Reuse the SAME login pattern as create, just call edit_item_form instead
+            from .inspect_form import login_and_navigate
+            
+            # But we need a way to tell it to edit instead of create
+            # Option 1: Add edit mode to existing function
+            result = login_and_navigate(
+                username=self.username,
+                password=self.password,
+                item_data=form_data,
+                test_mode=test_mode,
+                edit_mode=True,  # New parameter
+                edit_item_id=item_id,  # New parameter
+                db_session=None
+            )
+            
+            return {
+                "status": "success",
+                "message": "Listing updated successfully" if not test_mode else "Test mode: edit form filled but not submitted",
+                "vr_listing_id": item_id,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Edit automation failed: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Edit failed: {str(e)}",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+    
     # --- Cleanup Methods ---
 
     def cleanup_temp_files(self):
@@ -876,7 +1884,22 @@ class VintageAndRareClient:
             except Exception as e:
                 logger.error(f"Error removing temporary file {temp_file_path}: {str(e)}")
         self.temp_files = [] # Clear the list
+    
+    def cleanup_selenium(self):
+        """Ensure Selenium browser is properly closed and resources are freed."""
+        if self._selenium_driver:
+            try:
+                logger.info("Closing Selenium browser...")
+                self._selenium_driver.quit()
+                logger.info("Selenium browser closed successfully")
+            except Exception as e:
+                logger.error(f"Error closing Selenium browser: {e}")
+            finally:
+                self._selenium_driver = None
+                self._selenium_session = None
 
     def __del__(self):
-        """Destructor to ensure cleanup of temporary files."""
+        """Destructor to ensure cleanup of temporary files and browser instances."""
         self.cleanup_temp_files()
+        self.cleanup_selenium()
+        

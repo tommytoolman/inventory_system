@@ -27,6 +27,17 @@ This application allows music gear sellers to manage their inventory through a u
 - **Frontend**: Jinja2 Templates, TailwindCSS, JavaScript
 - **Deployment**: Docker support (containerized deployment)
 
+## UI Configuration
+
+### Inventory List Dropdowns
+The category and brand dropdowns in the inventory list can be sorted either alphabetically or by count (most common first). Configure this in `app/routes/inventory.py`:
+
+```python
+# Configuration for dropdown sort order - Options: 'alphabetical' or 'count'
+CATEGORY_DROPDOWN_SORT = 'count'  # Sort by most common first
+BRAND_DROPDOWN_SORT = 'alphabetical'  # Sort alphabetically
+```
+
 ## Architecture
 
 The system follows a modular architecture:
@@ -280,11 +291,40 @@ Setting up the conflict resolution logic?
 Building the flagging reports?
 
 
-app/integrations/
-├── base.py             🗃️ ARCHIVE - PlatformInterface abstraction (unused)
-├── setup.py            🗃️ ARCHIVE - Platform registration system (unused)
-└── platforms/          🗃️ ARCHIVE - All stub implementations
-    ├── ebay.py         🗃️ ARCHIVE - Empty stub
-    ├── reverb.py       🗃️ ARCHIVE - Empty stub
-    ├── shopify.py      🗃️ ARCHIVE - Empty stub
-    └── vintageandrare/ 🗃️ ARCHIVE - Empty stubs
+## Architecture Decision History
+
+### Direct Services vs Abstraction Layer
+
+This project initially explored an abstraction layer pattern (`app/integrations/`) with a `PlatformInterface` and `StockManager` orchestrator. This approach was **abandoned** in favor of direct service implementations (`app/services/`) for the following reasons:
+
+**Why the Abstraction Layer was Abandoned:**
+1. **Platform Heterogeneity**: Each platform has fundamentally different APIs:
+   - eBay uses XML Trading API with complex OAuth
+   - Reverb uses REST with different terminology
+   - Shopify uses GraphQL with inventory quantities
+   - Vintage & Rare requires Selenium browser automation
+
+2. **Forced Conformity**: The common interface couldn't accommodate platform-specific features without becoming a "leaky abstraction"
+
+3. **Maintenance Overhead**: The abstraction layer added complexity without sufficient benefit for only 4 platforms
+
+**Current Architecture (Direct Services):**
+- Each platform has its own service class with platform-specific methods
+- Services can evolve independently to match their API's capabilities
+- Clear, direct code paths from routes → services → external APIs
+- No artificial constraints from a common interface
+
+**Legacy Code Status:**
+```
+app/integrations/           ⚠️ PARTIALLY USED - Needs cleanup
+├── events.py              ✅ KEEP - StockUpdateEvent actively used
+├── base.py                🗃️ REMOVE - Abandoned abstraction
+├── setup.py               🗃️ REMOVE - Unused orchestrator
+├── stock_manager.py       🗃️ REMOVE - Replaced by direct services
+└── platforms/             🗃️ REMOVE - Replaced by app/services/
+```
+
+**Migration TODO:**
+1. Extract `StockUpdateEvent` to a more appropriate location
+2. Fix `webhook_processor.py` to remove StockManager references
+3. Delete the `app/integrations/` folder

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 # Import the service and client to be tested/mocked
-from app.services.vintageandrare_service import VintageAndRareService
+from app.services.vr_service import VRService
 from app.services.vintageandrare.client import VintageAndRareClient
 
 # Import models used by the service
@@ -50,7 +50,7 @@ def mock_vr_client(mocker):
 @pytest.fixture
 def vr_service(db_session): # Use the real DB session fixture from conftest
     """Provides a VintageAndRareService instance with a real test DB session."""
-    return VintageAndRareService(db=db_session)
+    return VRService(db=db_session)
 
 # --- Test Cases ---
 

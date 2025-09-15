@@ -9,26 +9,36 @@ This service coordinates:
 4. Reconciliation of detected changes from all platforms.
 """
 
+import asyncio
 import logging
 
-from typing import Dict, List, Any, Optional, Set, NamedTuple
+from typing import Dict, List, Any, Optional, Set, NamedTuple, Tuple, Union
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update, cast, or_
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.product import Product
+from app.models.product import Product, ProductCondition, ProductStatus
 from app.models.platform_common import PlatformCommon
+from app.models.reverb import ReverbListing
+from app.models.ebay import EbayListing
+from app.models.shopify import ShopifyListing
+from app.models.vr import VRListing
 from app.models.sync_event import SyncEvent
 from app.core.enums import SyncStatus, ListingStatus
+from app.services.sync_stats_service import SyncStatsService
+from app.core.events import StockUpdateEvent
+from app.core.config import get_settings
 
-# Import platform services for outbound actions
-from app.services.vintageandrare_service import VintageAndRareService
-# from app.services.ebay_service import EbayService
-# from app.services.reverb_service import ReverbService
-from app.integrations.events import StockUpdateEvent
+from app.services.ebay_service import EbayService
+from app.services.reverb_service import ReverbService
+from app.services.shopify_service import ShopifyService
+from app.services.vr_service import VRService
 
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Add these data structures after your imports
@@ -65,111 +75,950 @@ class SyncReport:
             counts[change.change_type] = counts.get(change.change_type, 0) + 1
         return counts
 
-class SyncService:
-    """
-    Coordinates synchronization between inventory system and external platforms.
+@dataclass
+class ReconciliationReport:
+    """A comprehensive report for a sync reconciliation run (the Action Phase)."""
+    sync_run_id: str
+    dry_run: bool
+    summary: Dict[str, int]
+    actions_taken: List[str]
+    detected_changes: List[Dict]
     
-    This service:
-    1. Acts as a facade over the StockManager
-    2. Maintains platform sync status data
-    3. Handles platform-specific synchronization logic
-    """
+    def print_summary(self):
+        """Prints a formatted report to the console."""
+        print("\n" + "="*50)
+        print("RECONCILIATION REPORT")
+        print("="*50)
+        print(f"Sync Run ID: {self.sync_run_id}")
+        print(f"Mode         : {'Dry Run' if self.dry_run else 'Live Run'}")
+        
+        summary = self.summary
+        print("\n## Summary ##")
+        print(f"- Events Processed : {summary.get('processed', 0)}")
+        print(f"- Sale Events      : {summary.get('sales', 0)}")
+        print(f"- Other Changes    : {summary.get('non_sale_changes', 0)}")
+        print(f"- Actions Taken    : {summary.get('actions_taken', 0)}")
+        print(f"- Errors           : {summary.get('errors', 0)}")
+        
+        if self.actions_taken:
+            print("\n## Detailed Actions Log ##")
+            for action in self.actions_taken:
+                print(f"- {action}")
+        else:
+            print("\n## No Detailed Actions Were Taken ##")
+        
+        print("\n--- End of Report ---")
+
+class SyncService:
+    
+    """Coordinates synchronization between inventory system and external platforms."""
     
     def __init__(self, db: AsyncSession, stock_manager=None):
-        """
-        Initialize the sync service with database session and optional stock manager.
-        
-        Args:
-            db: AsyncSession for database operations
-            stock_manager: StockManager instance from app state
-        """
         self.db = db
         self.stock_manager = stock_manager
-        
-        # Instantiate other services for outbound actions. This makes SyncService a true orchestrator.
+        settings = get_settings()
         self.platform_services = {
-            "vr": VintageAndRareService(db),
-            # "ebay": EbayService(db),
-            # "reverb": ReverbService(db),
+            "reverb": ReverbService(db, settings),
+            "shopify": ShopifyService(db, settings),
+            "ebay": EbayService(db, settings),
+            "vr": VRService(db),
         }
 
-    async def reconcile_sync_run(self, sync_run_id: str) -> Dict[str, Any]:
-        """
-        Phase 2 of the sync process.
-        Processes all 'pending' SyncEvent records for a given run, resolves conflicts,
-        and triggers the necessary cross-platform actions.
-        """
-        logger.info(f"Starting reconciliation for sync_run_id: {sync_run_id}")
-        report = {"processed": 0, "actions_taken": 0, "errors": 0}
-
-        # 1. Fetch all pending events for this run
-        stmt = select(SyncEvent).where(
-            SyncEvent.sync_run_id == sync_run_id,
-            SyncEvent.status == 'pending'
-        ).order_by(SyncEvent.detected_at)
-        
-        result = await self.db.execute(stmt)
-        events = result.scalars().all()
-        logger.info(f"Found {len(events)} pending events to reconcile.")
-        
-        # 2. Group events by product_id to handle conflicts (e.g., sold on two platforms at once)
-        events_by_product: Dict[int, List[SyncEvent]] = {}
+    async def _group_events_by_product(self, events: List[SyncEvent]) -> Dict[int, List[SyncEvent]]:
+        """Group sync events by product_id for coordinated processing."""
+        grouped = {}
         for event in events:
             if event.product_id:
-                events_by_product.setdefault(event.product_id, []).append(event)
+                if event.product_id not in grouped:
+                    grouped[event.product_id] = []
+                grouped[event.product_id].append(event)
+        return grouped
 
-        # 3. Process events product by product
-        for product_id, product_events in events_by_product.items():
-            try:
-                # Find the "winning" event. For sales, the first one detected wins.
-                sold_event = next((e for e in product_events if e.change_type == 'status' and e.change_data.get('new', '').upper() == 'SOLD'), None)
-
-                if sold_event:
-                    logger.info(f"Processing 'sold' event for product {sold_event.product_id} from {sold_event.platform_name}")
-                    
-                    # To propagate the sale, we need the external_ids for this product on OTHER platforms.
-                    platform_links_stmt = select(PlatformCommon).where(
-                        PlatformCommon.product_id == product_id,
-                        PlatformCommon.platform_name != sold_event.platform_name # Exclude the source platform
-                    )
-                    platform_links_result = await self.db.execute(platform_links_stmt)
-                    other_platform_links = platform_links_result.scalars().all()
-
-                    # Propagate the 'sold' status to all other platforms
-                    for link in other_platform_links:
-                        service = self.platform_services.get(link.platform_name)
-                        if service and hasattr(service, 'mark_item_as_sold'):
-                            logger.info(f"Telling {link.platform_name.upper()} to mark item {link.external_id} as sold.")
-                            try:
-                                success = await service.mark_item_as_sold(link.external_id)
-                                if not success:
-                                    logger.error(f"Failed to mark item {link.external_id} as sold on {link.platform_name.upper()}.")
-                                    # You might want to log this failure to the event notes
-                            except Exception as service_exc:
-                                logger.error(f"Exception calling mark_item_as_sold for {link.platform_name.upper()}: {service_exc}", exc_info=True)
-                        else:
-                            logger.warning(f"No 'mark_item_as_sold' method found for service '{link.platform_name}'.")
-
-                    report["actions_taken"] += 1
-                
-                # Mark all events for this product as processed
-                for e in product_events:
-                    e.status = 'processed'
-                    e.processed_at = datetime.now(timezone.utc)
-                    report["processed"] += 1
-
-            except Exception as e:
-                logger.error(f"Error reconciling events for product {product_id}: {e}", exc_info=True)
-                for e_event in product_events:
-                    e_event.status = 'error'
-                    e_event.notes = str(e)
-                    e_event.processed_at = datetime.now(timezone.utc)
-                report["errors"] += 1
+    async def _handle_coordinated_events(self, product_events: List[SyncEvent], summary: Dict, actions: List, dry_run: bool) -> bool:
+        """
+        Handle multiple related events for the same product as a coordinated action.
         
-        await self.db.commit()
-        logger.info(f"Reconciliation complete for {sync_run_id}. Report: {report}")
-        return report
+        Common patterns:
+        - Reverb status_change (ended) + VR removed_listing = offline/private sale
+        - Multiple platform status_change to sold/ended = item sold
+        """
+        logger.info(f"Handling {len(product_events)} coordinated events for product {product_events[0].product_id}")
+        
+        # Analyze the events to determine the action
+        status_changes = [e for e in product_events if e.change_type == 'status_change']
+        removed_listings = [e for e in product_events if e.change_type == 'removed_listing']
+        
+        # Get the product
+        product = await self.db.get(Product, product_events[0].product_id)
+        if not product:
+            for event in product_events:
+                event.notes = "Product not found in database"
+                event.status = 'error'
+            return False
+        
+        # Determine if this is a sale or just an ending
+        is_sold = False
+        sale_platform = None
+        
+        for sc in status_changes:
+            change_data = sc.change_data or {}
+            if change_data.get('new') == 'sold' or change_data.get('is_sold'):
+                is_sold = True
+                sale_platform = sc.platform_name
+                break
+        
+        # If not explicitly sold but we have ended + removed, treat as offline sale
+        if not is_sold and status_changes and removed_listings:
+            # Check if any status_change is to "ended"
+            for sc in status_changes:
+                if sc.change_data.get('new') == 'ended':
+                    is_sold = True
+                    sale_platform = 'offline'
+                    break
+        
+        # Log the coordinated action
+        action_desc = f"[COORDINATED] Product #{product.id} ({product.sku}): "
+        if is_sold:
+            action_desc += f"SOLD ({sale_platform})"
+            summary["sales"] += 1
+        else:
+            action_desc += "ENDED/REMOVED"
+            summary["non_sale_changes"] += 1
+        
+        action_desc += f" - Processing {len(product_events)} events across platforms: "
+        platforms_summary = ", ".join([f"{e.platform_name}:{e.change_type}" for e in product_events])
+        action_desc += platforms_summary
+        
+        if dry_run:
+            action_desc += " (DRY RUN)"
+        
+        actions.append(action_desc)
+        logger.info(action_desc)
+        
+        if not dry_run:
+            try:
+                # Update product status
+                if is_sold:
+                    if product.is_stocked_item and product.quantity > 0:
+                        product.quantity -= 1
+                        if product.quantity == 0:
+                            product.status = ProductStatus.SOLD
+                    else:
+                        product.status = ProductStatus.SOLD
+                else:
+                    product.status = ProductStatus.ENDED
+                
+                self.db.add(product)
+                
+                # Update platform_common status for source platforms
+                source_platforms = {e.platform_name for e in product_events}
+                for event in product_events:
+                    # Find the platform_common record
+                    stmt = select(PlatformCommon).where(
+                        PlatformCommon.product_id == product.id,
+                        PlatformCommon.platform_name == event.platform_name
+                    )
+                    platform_link = (await self.db.execute(stmt)).scalar_one_or_none()
+                    
+                    if platform_link:
+                        # For status_change events, mark as sold/ended
+                        if event.change_type == 'status_change':
+                            change_data = event.change_data or {}
+                            if change_data.get('is_sold') or change_data.get('new') == 'sold':
+                                platform_link.status = ListingStatus.SOLD.value
+                            else:
+                                platform_link.status = ListingStatus.ENDED.value
+                        # For removed_listing events, mark as removed
+                        elif event.change_type == 'removed_listing':
+                            platform_link.status = ListingStatus.REMOVED.value
+                        
+                        self.db.add(platform_link)
+                        logger.info(f"Updated {event.platform_name} platform_common status to {platform_link.status}")
+                
+                # Propagate ending to other platforms
+                success_platforms, action_log, failed_count = await self._propagate_end_listing(
+                    product, 
+                    source_platforms,  # Pass set of platforms as source
+                    dry_run
+                )
+                
+                actions.extend(action_log)
+                
+                # Update platform_common status for successfully propagated platforms
+                if not dry_run and success_platforms:
+                    for platform in success_platforms:
+                        stmt = select(PlatformCommon).where(
+                            PlatformCommon.product_id == product.id,
+                            PlatformCommon.platform_name == platform
+                        )
+                        platform_link = (await self.db.execute(stmt)).scalar_one_or_none()
+                        if platform_link:
+                            # Mark as ended (propagated from sale elsewhere)
+                            platform_link.status = ListingStatus.ENDED.value
+                            self.db.add(platform_link)
+                            logger.info(f"Updated {platform} platform_common status to ENDED (propagated)")
+                
+                # Update each event based on propagation success
+                all_success = failed_count == 0
+                for event in product_events:
+                    if all_success:
+                        event.status = 'processed'
+                        event.processed_at = datetime.now(timezone.utc)
+                        event.notes = f"Processed as coordinated {sale_platform if is_sold else 'ending'}"
+                    else:
+                        event.status = 'partial'
+                        event.notes = f"Coordinated action partially failed. Failed platforms: {failed_count}"
+                
+                await self.db.commit()
+                summary["actions_taken"] += len(product_events)
+                return all_success
+                
+            except Exception as e:
+                logger.error(f"Error in coordinated event handling: {e}", exc_info=True)
+                await self.db.rollback()
+                for event in product_events:
+                    event.status = 'error'
+                    event.notes = f"Error during coordinated processing: {str(e)}"
+                summary["errors"] += len(product_events)
+                return False
+        else:
+            # Dry run - mark all events as would be processed
+            summary["actions_taken"] += len(product_events)
+            return True
+
+    async def _process_single_event(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
+        """Process a single event (extracted from the original for loop logic)."""
+        success = False
+        
+        try:
+            if event.change_type == 'status_change':
+                success = await self._handle_status_change(event, summary, actions, dry_run)
+            elif event.change_type == 'new_listing':
+                success = await self._process_new_listing(event, summary, actions, dry_run)
+            elif event.change_type in ['price_change', 'price']:
+                success = await self._handle_price_change(event, summary, actions, dry_run)
+            elif event.change_type == 'removed_listing':
+                success = await self._handle_removed_listing(event, summary, actions, dry_run)
+            
+            if success:
+                event.status = 'processed'
+                event.processed_at = datetime.now(timezone.utc)
+            else:
+                event.status = 'error'
+                summary["errors"] += 1
+                
+        except Exception as e:
+            logger.error(f"Error processing event {event.id}: {e}", exc_info=True)
+            event.status = 'error'
+            event.notes = str(e)
+            summary["errors"] += 1
+            
+        return success
+
+    async def reconcile_sync_run(self, sync_run_id: str, dry_run: bool = True, event_type: str = 'all', sku: Optional[str] = None) -> ReconciliationReport:
+            logger.info(f"Starting reconciliation for sync_run_id: {sync_run_id} (Dry Run: {dry_run}, Type: {event_type})")
+            
+            summary = {"processed": 0, "sales": 0, "non_sale_changes": 0, "actions_taken": 0, "errors": 0}
+            actions = []
+            detected_changes = []
+
+            # Step 1: Fetch the initial, known events
+            stmt = select(SyncEvent).where(
+                SyncEvent.status == 'pending'
+            ).order_by(SyncEvent.detected_at)
+            
+            # If SKU is provided, get ALL pending events for that product regardless of sync_run_id
+            if sku:
+                stmt = stmt.join(Product, SyncEvent.product_id == Product.id).where(Product.sku.ilike(sku))
+                logger.info(f"Searching for ALL pending events for SKU: {sku}")
+            else:
+                # Otherwise, filter by sync_run_id as usual
+                stmt = stmt.where(SyncEvent.sync_run_id == sync_run_id)
+
+            if event_type != 'all':
+                # For coordinated processing, include both status_change and removed_listing
+                if event_type == 'status_change':
+                    stmt = stmt.where(or_(
+                        SyncEvent.change_type == 'status_change',
+                        SyncEvent.change_type == 'removed_listing'
+                    ))
+                else:
+                    stmt = stmt.where(SyncEvent.change_type == event_type)
+            
+            initial_events = (await self.db.execute(stmt)).scalars().all()
+            
+            # Step 2: Search for rogue new_listing events
+            rogue_events = []
+            # Skip rogue search when SKU is provided (we already got ALL events for that SKU)
+            if sku and event_type == 'new_listing':
+                logger.info(f"Searching for unlinked 'new_listing' events matching SKU: {sku}")
+                
+                # --- THIS IS THE FINAL CORRECTED QUERY ---
+                change_data_as_jsonb = cast(SyncEvent.change_data, JSONB)
+                
+                # Build the path to the SKU using standard index operators
+                shopify_sku_path = change_data_as_jsonb['raw_data']['variants']['nodes'][0]['sku']
+                
+                # Convert the final JSON value to a string for comparison
+                shopify_sku_as_text = shopify_sku_path.as_string()
+
+                rogue_stmt = select(SyncEvent).where(
+                    SyncEvent.sync_run_id == sync_run_id,
+                    SyncEvent.status == 'pending',
+                    SyncEvent.product_id == None,
+                    SyncEvent.change_type == 'new_listing',
+                    or_(
+                        change_data_as_jsonb.op('->>')('sku').ilike(sku),
+                        shopify_sku_as_text.ilike(sku)
+                    )
+                )
+                # --- END OF QUERY CORRECTION ---
+
+                rogue_events = (await self.db.execute(rogue_stmt)).scalars().all()
+                if rogue_events:
+                    logger.info(f"Found {len(rogue_events)} additional rogue listing event(s).")
+
+            # Combine and de-duplicate the event lists
+            all_events_dict = {event.id: event for event in initial_events}
+            all_events_dict.update({event.id: event for event in rogue_events})
+            events = sorted(all_events_dict.values(), key=lambda e: e.detected_at)
+
+            logger.info(f"Found {len(events)} total pending events to reconcile.")
+            
+            # Check for products with partially processed events
+            if event_type == 'status_change' and events:
+                # Get all product_ids from pending events
+                product_ids = {e.product_id for e in events if e.product_id}
+                
+                if product_ids:
+                    # Look for any other pending events for these products
+                    logger.info(f"Checking for additional pending events for {len(product_ids)} products...")
+                    
+                    additional_stmt = select(SyncEvent).where(
+                        SyncEvent.product_id.in_(product_ids),
+                        SyncEvent.status == 'pending',
+                        SyncEvent.id.notin_([e.id for e in events])  # Exclude already found events
+                    )
+                    
+                    additional_events = (await self.db.execute(additional_stmt)).scalars().all()
+                    if additional_events:
+                        logger.info(f"Found {len(additional_events)} additional pending events for the same products")
+                        events.extend(additional_events)
+                        events = sorted(events, key=lambda e: e.detected_at)
+            
+            # Group events by product for coordinated processing
+            grouped_events = await self._group_events_by_product(events)
+            
+            # Also collect events without product_id for individual processing
+            orphan_events = [e for e in events if not e.product_id]
+            
+            # Process coordinated events first
+            for product_id, product_events in grouped_events.items():
+                # Check if we should process these together
+                event_types = {e.change_type for e in product_events}
+                
+                if len(product_events) > 1 and ('status_change' in event_types or 'removed_listing' in event_types):
+                    # Multiple events for same product - process together
+                    success = await self._handle_coordinated_events(product_events, summary, actions, dry_run)
+                    summary["processed"] += len(product_events)
+                    for event in product_events:
+                        detected_changes.append(event.change_data)
+                else:
+                    # Single event - process individually
+                    for event in product_events:
+                        detected_changes.append(event.change_data)
+                        success = await self._process_single_event(event, summary, actions, dry_run)
+                        summary["processed"] += 1
+            
+            # Process orphan events individually
+            for event in orphan_events:
+                detected_changes.append(event.change_data)
+                success = await self._process_single_event(event, summary, actions, dry_run)
+                summary["processed"] += 1
+
+            if not dry_run:
+                await self.db.commit()
+                logger.info("LIVE RUN: Database changes were committed.")
+                
+                # Update sync stats silently
+                try:
+                    stats_service = SyncStatsService(self.db)
+                    await stats_service.update_stats(
+                        summary=summary,
+                        sync_run_id=sync_run_id
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to update sync stats: {e}")
+                    # Don't fail the whole operation if stats update fails
+            else:
+                logger.info("DRY RUN: Database changes were rolled back.")
+                await self.db.rollback()
+
+            logger.info(f"Reconciliation complete. Summary: {summary}")
+            return ReconciliationReport(
+                sync_run_id=sync_run_id, 
+                dry_run=dry_run, 
+                summary=summary, 
+                actions_taken=actions, 
+                detected_changes=detected_changes
+            )
+
+    async def _handle_new_listing(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
+        logger.info(f"Handling 'new_listing' event for {event.platform_name} item {event.external_id}")
+        
+        # NEW CODE - For Reverb new_listings, construct SKU from external_id
+        # This gives us REV-xxxxx format for Reverb-sourced products
+        if event.platform_name == 'reverb':
+            sku = f"REV-{event.external_id}"
+            logger.info(f"Using Reverb external_id as SKU: {sku}")
+        else:
+            # For other platforms, still try to get from change_data
+            change_data = event.change_data or {}
+            sku = change_data.get('sku')
+            # Handle case where SKU might be nested (for Shopify)
+            if not sku and 'raw_data' in change_data:
+                try:
+                    sku = change_data['raw_data']['variants']['nodes'][0]['sku']
+                except (KeyError, IndexError):
+                    pass # SKU remains None if path doesn't exist
+            
+            if not sku:
+                event.status = 'error'
+                event.notes = "New listing event is missing SKU in change_data. Cannot process."
+                summary['errors'] += 1
+                return False
+
+        # Find the master product using a case-insensitive lookup
+        product_stmt = select(Product).where(Product.sku.ilike(sku))
+        product = (await self.db.execute(product_stmt)).scalar_one_or_none()
+        
+        # --- NEW STATE-AWARE LOGIC ---
+        if product and product.status == ProductStatus.SOLD:
+            logger.warning(f"Rogue active listing {event.platform_name} ID {event.external_id} found for a product that is already SOLD (Product #{product.id}).")
+            
+            # --- GET OR CREATE LOGIC ---
+            # First, try to find an existing link for this rogue listing.
+            stmt = select(PlatformCommon).where(
+                PlatformCommon.platform_name == event.platform_name,
+                PlatformCommon.external_id == event.external_id
+            )
+            platform_common = (await self.db.execute(stmt)).scalar_one_or_none()
+            
+            if not platform_common:
+                # If it doesn't exist, create it.
+                logger.info(f"Creating new platform_common link for rogue {event.platform_name} listing.")
+                platform_common = PlatformCommon(
+                    product_id=product.id,
+                    platform_name=event.platform_name,
+                    external_id=event.external_id,
+                    status=ListingStatus.ACTIVE, # It's currently active on the platform
+                    sync_status=SyncStatus.PENDING 
+                )
+                self.db.add(platform_common)
+                await self.db.flush() # Ensure it's in the session before ending
+            else:
+                logger.info(f"Found existing platform_common link for rogue {event.platform_name} listing.")
+            # --- END GET OR CREATE LOGIC ---
+            
+            # Directly end the rogue listing on its own platform
+            action_desc = f"[DRY RUN][ACTION] Rogue listing on {event.platform_name.upper()} for sold Product #{product.id}. Would end listing."
+            action_was_successful = True # Assume success for dry run
+
+            if not dry_run:
+                service = self.platform_services.get(event.platform_name)
+                if service and hasattr(service, 'mark_item_as_sold'):
+                    success = await service.mark_item_as_sold(event.external_id)
+                    if success:
+                        # --- THIS BLOCK WAS MISSING ---
+                        platform_common.status = ListingStatus.ENDED.value
+                        platform_common.sync_status = SyncStatus.SYNCED.value
+                        self.db.add(platform_common)
+                        # --- END MISSING BLOCK ---
+                        action_desc = f"[SUCCESS] Rogue listing on {event.platform_name.upper()} for sold Product #{product.id} -> Listing ended successfully."
+                    else:
+                        action_was_successful = False
+                        action_desc = f"[ERROR] Rogue listing on {event.platform_name.upper()} for sold Product #{product.id} -> FAILED to end."
+                else:
+                    action_was_successful = False
+                    action_desc = f"[ERROR] No service available to end listing on {event.platform_name.upper()}."
+
+            actions.append(action_desc)
+            summary['actions_taken'] += 1
+            event.notes = f"Rogue listing for sold product #{product.id} processed. End action triggered."
+            # The boolean return now signals success/failure to the main loop
+            return action_was_successful
+        
+        # --- ORIGINAL LOGIC (for when product is active or doesn't exist yet) ---
+        if event.platform_name != 'reverb':
+            event.status = 'needs_review'
+            event.notes = f"Automated creation from {event.platform_name} not supported yet."
+            return False
+
+        reverb_service = self.platform_services['reverb']
+        try:
+            details = await reverb_service.client.get_listing_details(event.external_id)
+        except Exception as e:
+            event.status, event.notes = 'error', f"Failed to fetch source details from Reverb API: {e}"
+            summary['errors'] += 1
+            return False
+        
+        # This will use the existing product if found (and not sold), or create a new one.
+        master_product = product
+        if not master_product:
+            try:
+                master_product = Product(
+                    sku=sku, brand=details.get('make'), model=details.get('model'),
+                    description=details.get('description'), base_price=float(details.get('price', {}).get('amount', 0)),
+                    condition=ProductCondition.GOOD, status=ProductStatus.ACTIVE)
+                self.db.add(master_product)
+                await self.db.flush()
+            except Exception as e:
+                event.status, event.notes = 'error', f"Failed to create master product in database: {e}"
+                summary['errors'] += 1
+                return False
+        else:
+            logger.warning(f"Product with SKU {sku} already exists (ID: {master_product.id}). Will link instead of creating a duplicate.")
+
+        # Update the event with the product_id
+        event.product_id = master_product.id
+        logger.info(f"Updated event {event.id} with product_id: {master_product.id}")
+
+        source_platform_common = PlatformCommon(
+            product_id=master_product.id, platform_name='reverb', external_id=event.external_id,
+            status=ListingStatus.ACTIVE, sync_status=SyncStatus.SYNCED)
+        self.db.add(source_platform_common)
+        
+        platforms_to_create_on = ['shopify', 'ebay', 'vr']
+        for platform in platforms_to_create_on:
+            service = self.platform_services.get(platform)
+            if service and hasattr(service, 'create_listing_from_product'):
+                action_desc = f"[ACTION] New item #{master_product.id} from Reverb. Creating listing on {platform.upper()}."
+                if dry_run:
+                    action_desc += " (DRY RUN)"
+                else:
+                    try:
+                        if platform == 'ebay':
+                            logger.info("=== EBAY LISTING CREATION FROM SYNC SERVICE ===")
+                            logger.info(f"Product: {master_product.sku} - {master_product.brand} {master_product.model}")
+                            
+                            # Get policies - matching what inventory route does
+                            policies = {
+                                'shipping_profile_id': '252277357017',  # Default shipping profile (corrected)
+                                'payment_profile_id': '252544577017',   # Default payment profile (corrected)
+                                'return_profile_id': '252277356017'     # Default return profile
+                            }
+                            
+                            # Check if product has specific eBay policies in platform_data
+                            if hasattr(master_product, 'platform_data') and master_product.platform_data and 'ebay' in master_product.platform_data:
+                                ebay_data = master_product.platform_data['ebay']
+                                logger.info(f"Found eBay platform data: {ebay_data}")
+                                # Override with product-specific policies if they exist
+                                if ebay_data.get('shipping_policy'):
+                                    policies['shipping_profile_id'] = ebay_data.get('shipping_policy')
+                                    logger.info(f"Using product-specific shipping policy: {policies['shipping_profile_id']}")
+                                if ebay_data.get('payment_policy'):
+                                    policies['payment_profile_id'] = ebay_data.get('payment_policy')
+                                    logger.info(f"Using product-specific payment policy: {policies['payment_profile_id']}")
+                                if ebay_data.get('return_policy'):
+                                    policies['return_profile_id'] = ebay_data.get('return_policy')
+                                    logger.info(f"Using product-specific return policy: {policies['return_profile_id']}")
+                            else:
+                                logger.info("No product-specific eBay policies found, using defaults")
+                            
+                            logger.info(f"Final eBay policies to use: {policies}")
+                            logger.info(f"use_shipping_profile=True (Business Policies mode)")
+                            
+                            # Pass Reverb API data as reverb_api_data parameter
+                            result = await service.create_listing_from_product(
+                                product=master_product,
+                                reverb_api_data=details,
+                                use_shipping_profile=True,  # Use Business Policies like inventory route
+                                **policies  # Pass the policies like inventory route does
+                            )
+                        else:
+                            result = await service.create_listing_from_product(master_product)
+                        
+                        if result.get('status') == 'success':
+                            action_desc += f" -> SUCCESS (New ID: {result.get('external_id')})"
+                        else:
+                            action_desc += f" -> FAILED: {result.get('message')}"
+                            summary['errors'] += 1
+                    except Exception as e:
+                        action_desc += f" -> FAILED: {e}"
+                        summary['errors'] += 1
+                actions.append(action_desc)
+                summary['actions_taken'] += 1
+        
+        event.notes = f"Processed new master product #{master_product.id}."
+        return True
+
+    async def _handle_status_change(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
+        """
+        Handles a 'status_change' event, differentiating between sales and other changes.
+        This version ensures propagation/consistency and updates both manager and specialist tables.
+        """
+        if not event.product_id:
+            event.notes = "Event is missing product_id, cannot process status change."
+            return False
+
+        product = await self.db.get(Product, event.product_id)
+        if not product:
+            event.notes = f"Product with ID {event.product_id} not found."
+            return False
+
+        # Determine the EXACT new status ('sold' or 'ended') from the event data.
+        is_sale_signal = self._is_sale_event(event.platform_name, event.change_data)
+        new_status = event.change_data.get('new', 'ended').lower()
+        
+        # This handler should only process sale/ended signals.
+        if not is_sale_signal:
+            event.notes = f"Acknowledged non-sale status change '{new_status}' with no action."
+            return True
+
+        # Update the master product based on whether it's a stocked item
+        if product.is_stocked_item:
+            # For stocked items, decrement quantity
+            if product.quantity > 0:
+                product.quantity -= 1
+                self.db.add(product)
+                logger.info(f"Sale signal from {event.platform_name}. Decremented quantity for stocked Product #{product.id}. New quantity: {product.quantity}")
+                
+                # Mark as SOLD only when quantity reaches 0
+                if product.quantity == 0:
+                    product.status = ProductStatus.SOLD
+                    logger.info(f"Stocked Product #{product.id} quantity reached 0. Marking as SOLD.")
+                    summary['sales'] += 1
+            else:
+                logger.warning(f"Stocked Product #{product.id} already at 0 quantity. Received redundant signal from {event.platform_name}.")
+        else:
+            # For non-stocked items (one-off items), mark as SOLD immediately
+            if product.status != ProductStatus.SOLD:
+                summary['sales'] += 1
+                product.status = ProductStatus.SOLD
+                self.db.add(product)
+                logger.info(f"First sale signal from {event.platform_name}. Marking one-off Product #{product.id} as SOLD.")
+            else:
+                logger.info(f"Product #{product.id} is already SOLD. Received redundant signal from {event.platform_name}. Verifying consistency...")
+
+        # Perform the TWO-STAGE local update for the source platform of the event.
+        await self._update_local_platform_status(
+            product_id=product.id,
+            platform_name=event.platform_name,
+            new_status=new_status
+        )
+
+        # Propagate the change to other active platforms.
+        # For non-stocked items: always propagate when sold
+        # For stocked items: only propagate when quantity reaches 0
+        should_propagate = False
+        if not product.is_stocked_item:
+            should_propagate = True
+        elif product.is_stocked_item and product.quantity == 0:
+            should_propagate = True
+            
+        if should_propagate:
+            successful_platforms, action_log, failed_count = await self._propagate_end_listing(product, event.platform_name, dry_run)
+            actions.extend(action_log)
+            summary['actions_taken'] += len(action_log)
+            
+            if not dry_run and successful_platforms:
+                logger.info(f"Updating local status for successfully ended platforms: {successful_platforms}")
+                for platform in successful_platforms:
+                    # Perform the two-stage update for each propagated platform.
+                    await self._update_local_platform_status(
+                        product_id=product.id,
+                        platform_name=platform,
+                        new_status=ListingStatus.ENDED.value # When propagating, 'ended' is the correct universal status.
+                    )
+            
+            if failed_count > 0:
+                event.notes = f"Consistency check failed to end listings on {failed_count} platform(s)."
+                return False
+
+        event.notes = "Sale signal processed and platform consistency enforced."
+        return True   
+
+    async def _handle_price_change_old(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool):
+        """Handles a 'price_change' event by updating the master product and propagating the change."""
+        logger.info(f"Handling 'price_change' event for {event.platform_name} item {event.external_id}")
+        
+        if not event.product_id:
+            event.notes = "Event is missing product_id, cannot process price change."
+            summary["errors"] += 1
+            return
+
+        product = await self.db.get(Product, event.product_id)
+        if not product:
+            event.notes = f"Product with ID {event.product_id} not found."
+            summary["errors"] += 1
+            return
+
+        try:
+            new_price = float(event.change_data.get('new', 0.0))
+            old_price = float(product.base_price)
+
+            # Step 1: Update the Master Product's base_price
+            product.base_price = new_price
+            self.db.add(product)
+            
+            action_desc = f"Updated master price for Product #{product.id} (SKU: {product.sku}) from £{old_price} to £{new_price}."
+            actions.append(action_desc)
+            logger.info(action_desc)
+
+            # Auto propagate is currently disabled to avoid unintended price changes. Review later.
+            # Step 2: Propagate the price change to other active platforms
+            # successful_platforms, action_log, failed_count = await self._propagate_price_update(product, event.platform_name, new_price, dry_run)
+            # actions.extend(action_log)
+
+            # if failed_count > 0:
+            #     summary["errors"] += failed_count
+            #     event.notes = f"Failed to propagate price update to {failed_count} platform(s)."
+            
+            # summary["actions_taken"] += 1 + len(action_log)
+            summary["actions_taken"] += 1
+
+        except (ValueError, TypeError) as e:
+            logger.error(f"Could not parse price from event data: {event.change_data}. Error: {e}")
+            event.notes = f"Invalid price data in event: {e}"
+            summary["errors"] += 1
+
+    async def _handle_price_change(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool):
+        """
+        Handles a 'price_change' event by updating the specialist table to log the anomaly for review.
+        This does NOT change the master product.base_price.
+        """
+        logger.info(f"Handling 'price_change' event for {event.platform_name} item {event.external_id}")
+
+        if not event.product_id or not event.platform_common_id:
+            event.notes = "Event is missing product_id or platform_common_id, cannot log price anomaly."
+            summary["errors"] += 1
+            return
+
+        specialist_tables = {
+            "reverb": {"table": ReverbListing, "price_col": "price_display"},
+            "ebay": {"table": EbayListing, "price_col": "price"},
+            "shopify": {"table": ShopifyListing, "price_col": "price"},
+            "vr": {"table": VRListing, "price_col": "price_notax"}
+        }
+
+        platform_config = specialist_tables.get(event.platform_name)
+        if not platform_config:
+            event.notes = f"No specialist table configuration for platform: {event.platform_name}"
+            summary["errors"] += 1
+            return
+
+        try:
+            new_price = float(event.change_data.get('new', 0.0))
+            
+            # Construct a dynamic SQLAlchemy update statement
+            stmt = (
+                update(platform_config["table"])
+                .where(getattr(platform_config["table"], 'platform_id') == event.platform_common_id)
+                .values({platform_config["price_col"]: new_price})
+            )
+            
+            if not dry_run:
+                await self.db.execute(stmt)
+
+            action_desc = f"Logged price anomaly for {event.platform_name.upper()} Product #{event.product_id}. Specialist table price set to £{new_price} for review."
+            actions.append(action_desc)
+            logger.info(action_desc)
+            summary["actions_taken"] += 1
+
+        except (ValueError, TypeError) as e:
+            logger.error(f"Could not parse price from event data: {event.change_data}. Error: {e}")
+            event.notes = f"Invalid price data in event: {e}"
+            summary["errors"] += 1
+
+    async def _handle_removed_listing(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
+        """Handles a 'removed_listing' event by updating the local status."""
+        logger.info(f"Handling 'removed_listing' event for {event.platform_name} item {event.external_id}")
+        
+        if not event.product_id:
+            event.notes = f"Event {event.id} is missing product_id, cannot process removed_listing."
+            return False
+
+        # Find the corresponding platform_common record
+        stmt = select(PlatformCommon).where(
+            PlatformCommon.product_id == event.product_id,
+            PlatformCommon.platform_name == event.platform_name
+        )
+        platform_link = (await self.db.execute(stmt)).scalar_one_or_none()
+
+        if platform_link:
+            # CHANGE 1: Use the correct status
+            platform_link.status = ListingStatus.REMOVED.value
+            platform_link.sync_status = SyncStatus.SYNCED.value
+            self.db.add(platform_link)
+            
+            # Log a more specific message that includes the new status
+            log_message = f"Updated platform_common for {event.platform_name} (Product #{event.product_id}) to status '{ListingStatus.REMOVED.value}'."
+            logger.info(log_message)
+            
+            # CHANGE 2: Add a user-friendly message to the report's action log
+            action_desc = f"Acknowledged listing removed from {event.platform_name.upper()} and updated local status to REMOVED for Product #{event.product_id}."
+            actions.append(action_desc)
+            summary["actions_taken"] += 1
+            
+            event.notes = "Acknowledged removed listing from platform and updated local status."
+            return True
+        else:
+            event.notes = f"Could not find matching platform_common record to mark as removed."
+            return False
     
+    async def _propagate_end_listing(self, product: Product, source_platforms: Union[str, Set[str]], dry_run: bool) -> Tuple[List[str], List[str], int]:
+        """
+        Ends listings on other platforms.
+        
+        Args:
+            product: The product to end listings for
+            source_platforms: Either a single platform name (str) or set of platform names
+            dry_run: Whether to simulate the action
+            
+        Returns:
+            Tuple of (successful_platforms, action_log, failed_count)
+        """
+        # Convert single platform to set for consistent handling
+        if isinstance(source_platforms, str):
+            source_platforms = {source_platforms}
+            
+        action_log = []
+        successful_platforms = []
+        failed_count = 0
+        all_platform_links = (await self.db.execute(select(PlatformCommon).where(PlatformCommon.product_id == product.id))).scalars().all()
+
+        tasks, task_map = [], {}
+        for link in all_platform_links:
+            if link.platform_name in source_platforms or link.status != ListingStatus.ACTIVE.value:
+                continue
+            
+            service = self.platform_services.get(link.platform_name)
+            if service and hasattr(service, 'mark_item_as_sold'):
+                if dry_run:
+                    action_desc = f"[DRY RUN][ACTION] Product #{product.id} (SKU: {product.sku}) sold on {'/'.join(sorted(source_platforms)).upper()}. Would end listing on {link.platform_name.upper()} (ID: {link.external_id})."
+                    action_log.append(action_desc)
+                    logger.info(action_desc)
+                    successful_platforms.append(link.platform_name)
+                else:
+                    tasks.append(service.mark_item_as_sold(link.external_id))
+                    task_map[len(tasks)-1] = (link.platform_name, link.external_id, product.sku)
+        
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, res in enumerate(results):
+                platform_name, external_id, sku = task_map.get(i, ("Unknown", "N/A", "N/A"))
+                
+                if isinstance(res, Exception) or res is False:
+                    failed_count += 1
+                    error_msg = f"[ERROR] Product #{product.id} (SKU: {sku}) on {platform_name.upper()} (ID: {external_id}) -> FAILED to end. Reason: {res}"
+                    action_log.append(error_msg)
+                    logger.error(error_msg)
+                else:
+                    success_msg = f"[SUCCESS] Product #{product.id} (SKU: {sku}) on {platform_name.upper()} (ID: {external_id}) -> Listing ended successfully."
+                    action_log.append(success_msg)
+                    logger.info(success_msg)
+                    successful_platforms.append(platform_name)
+        
+        return successful_platforms, action_log, failed_count
+
+    async def _get_current_specialist_prices(self, product_id: int) -> Dict[str, Optional[float]]:
+        """Fetches the current price for a product from each specialist table."""
+        query = text("""
+            SELECT
+                pc.platform_name,
+                COALESCE(
+                    rl.list_price,
+                    el.price,
+                    sl.price,
+                    vl.price_notax
+                ) AS specialist_price
+            FROM
+                platform_common pc
+            LEFT JOIN
+                reverb_listings rl ON pc.platform_name = 'reverb' AND pc.id = rl.platform_id
+            LEFT JOIN
+                ebay_listings el ON pc.platform_name = 'ebay' AND pc.id = el.platform_id
+            LEFT JOIN
+                shopify_listings sl ON pc.platform_name = 'shopify' AND pc.id = sl.platform_id
+            LEFT JOIN
+                vr_listings vl ON pc.platform_name = 'vr' AND pc.id = vl.platform_id
+            WHERE
+                pc.product_id = :product_id
+        """)
+        result = await self.db.execute(query, {"product_id": product_id})
+        return {row.platform_name: row.specialist_price for row in result.fetchall()}
+    
+    async def propagate_price_update_from_master(self, product: Product, new_price: float, platforms_to_update: List[str], dry_run: bool) -> Tuple[List[str], List[str], int]:
+        """Pushes the master price to specified active platform listings, checking first if an update is needed."""
+        action_log = []
+        successful_platforms = []
+        failed_count = 0
+        
+        # Get all current specialist prices from the DB
+        current_prices = await self._get_current_specialist_prices(product.id)
+        
+        all_platform_links = (await self.db.execute(select(PlatformCommon).where(PlatformCommon.product_id == product.id))).scalars().all()
+
+        for link in all_platform_links:
+            # Skip if not in the requested list of platforms (unless 'all' is specified)
+            if 'all' not in platforms_to_update and link.platform_name not in platforms_to_update:
+                continue
+                
+            if link.status != ListingStatus.ACTIVE.value:
+                action_log.append(f"[INFO] Skipped {link.platform_name.upper()} listing {link.external_id} (not active).")
+                continue
+            
+            # --- THE NEW PRE-CHECK ---
+            current_specialist_price = current_prices.get(link.platform_name)
+            if current_specialist_price is not None and abs(float(current_specialist_price) - new_price) < 0.01:
+                action_log.append(f"[INFO] Skipped {link.platform_name.upper()} listing {link.external_id} (price already matches master).")
+                continue
+            # --- END OF PRE-CHECK ---
+            
+            service = self.platform_services.get(link.platform_name)
+            if service and hasattr(service, 'update_listing_price'):
+                action_desc = f"[DRY RUN][ACTION] Would push master price £{new_price:.2f} to {link.platform_name.upper()} listing {link.external_id}."
+                
+                if not dry_run:
+                    try:
+                        success = await service.update_listing_price(link.external_id, new_price)
+                        if success:
+                            action_desc = f"[SUCCESS] Pushed master price £{new_price:.2f} to {link.platform_name.upper()} listing {link.external_id}."
+                            successful_platforms.append(link.platform_name)
+                        else:
+                            failed_count += 1
+                            action_desc = f"[ERROR] FAILED to push master price to {link.platform_name.upper()} listing {link.external_id}."
+                    except Exception as e:
+                        failed_count += 1
+                        action_desc = f"[ERROR] EXCEPTION pushing master price to {link.platform_name.upper()} listing {link.external_id}: {e}"
+                
+                action_log.append(action_desc)
+            else:
+                action_log.append(f"[WARNING] No 'update_listing_price' method found for service: {link.platform_name}")
+                
+        return successful_platforms, action_log, failed_count
+    
+    def _is_sale_event(self, platform_name: str, change_data: dict) -> bool:
+        """
+        Determines if a status change constitutes a sale or an equivalent event
+        that requires ending listings on other platforms.
+        """
+        new_status = str(change_data.get('new', '')).lower()
+        
+        # A listing is considered "off the market" if it's sold OR ended.
+        if platform_name == 'reverb':
+            return new_status in ['sold', 'ended']
+        if platform_name == 'shopify':
+            # 'archived' is Shopify's typical status for a completed/sold order's product.
+            return new_status == 'archived'
+        if platform_name == 'ebay':
+            return new_status in ['completed', 'endedwithsales', 'ended']
+        if platform_name == 'vr':
+            # V&R uses 'sold', but we can treat an ended listing as a sale too.
+            return new_status in ['sold', 'ended']
+            
+        return False    
+
     async def sync_product_to_platforms(
         self, 
         product_id: int, 
@@ -373,6 +1222,57 @@ class SyncService:
             await db.rollback()
             logger.exception(f"Error updating platform_common: {str(e)}")
             return None
+
+    async def _update_local_platform_status(self, product_id: int, platform_name: str, new_status: str):
+        """
+        Performs a two-stage update of a listing's status on both the manager (platform_common)
+        and specialist tables.
+        """
+        logger.info(f"Updating local status for Product #{product_id} on {platform_name} to '{new_status}'.")
+        
+        # Stage 1: Update the Manager (platform_common)
+        pc_stmt = (
+            update(PlatformCommon)
+            .where(PlatformCommon.product_id == product_id)
+            .where(PlatformCommon.platform_name == platform_name)
+            .values(status=new_status, sync_status=SyncStatus.SYNCED.value)
+        )
+        await self.db.execute(pc_stmt)
+
+        # Stage 2: Update the Specialist table
+        # We need to import the specialist models at the top of the file for this to work
+        from app.models.reverb import ReverbListing
+        from app.models.ebay import EbayListing
+        from app.models.shopify import ShopifyListing
+        from app.models.vr import VRListing
+        
+        specialist_tables = {
+            "reverb": {"table": ReverbListing, "status_col": "reverb_state"},
+            "ebay": {"table": EbayListing, "status_col": "listing_status"},
+            "shopify": {"table": ShopifyListing, "status_col": "status"},
+            "vr": {"table": VRListing, "status_col": "vr_state"},
+        }
+
+        if platform_name in specialist_tables:
+            config = specialist_tables[platform_name]
+            pc_id_stmt = select(PlatformCommon.id).where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == platform_name
+            )
+            platform_common_id = (await self.db.execute(pc_id_stmt)).scalar_one_or_none()
+
+            if platform_common_id:
+                # Use a dictionary for the values to set the column name dynamically
+                values_to_update = {config["status_col"]: new_status}
+                specialist_stmt = (
+                    update(config["table"])
+                    .where(getattr(config["table"], 'platform_id') == platform_common_id)
+                    .values(**values_to_update)
+                )
+                await self.db.execute(specialist_stmt)
+            else:
+                logger.warning(f"Could not find platform_common_id for Product #{product_id} on {platform_name} to update specialist table.")
+
 
 
 class ChangeDetector:
@@ -773,8 +1673,8 @@ class InboundSyncScheduler:
             return products
             
         elif platform == "vr":
-            from app.services.vintageandrare_service import VintageAndRareService
-            vr_service = VintageAndRareService(self.db)
+            from app.services.vr_service import VRService
+            vr_service = VRService(self.db)
             # Use existing CSV download method
             df = await vr_service.download_inventory_dataframe()
             return df.to_dict('records') if df is not None else []

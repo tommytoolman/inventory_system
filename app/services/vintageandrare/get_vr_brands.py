@@ -1,12 +1,19 @@
-# Revised content for get_vr_brands.py (Focus: "XY " search terms, HTML parsing)
+"""
+Revised content for get_vr_brands.py (Focus: "XY " search terms, HTML parsing)
 
+Because the Vintage & Rare (V&R) website uses AJAX to suggest brand names, this script fetches brand suggestions based on user input, 
+parses the HTML response, and refines the search process iteratively. 
+It handles both initial brand loading and gap-filling for brand names that may not have been captured in previous runs.
+
+"""
+
+import re
 import requests
 import json
 import time
 import string
 from pathlib import Path
 from bs4 import BeautifulSoup # For HTML parsing
-import re # For regular expressions
 import getpass
 
 # URL for the AJAX endpoint
@@ -430,5 +437,4 @@ if __name__ == "__main__":
             print("\nSample of first 30 refined brands (Name - ID):")
             for i, brand_info in enumerate(mined_brands[:30]):
                 print(f"{i+1}. {brand_info['name']} - (ID: {brand_info.get('id', 'N/A')})")
-
 

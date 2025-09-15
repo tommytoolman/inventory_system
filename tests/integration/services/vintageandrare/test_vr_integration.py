@@ -22,9 +22,9 @@ from app.models.platform_common import PlatformCommon
 from app.models.vr import VRListing
 from app.core.enums import ProductStatus, ProductCondition, ListingStatus, SyncStatus
 from app.services.vintageandrare.client import VintageAndRareClient
-from app.services.vintageandrare_service import VintageAndRareService
-from app.integrations.stock_manager import StockManager
-from app.integrations.events import StockUpdateEvent
+from app.services.vr_service import VRService
+from app.core.events import StockUpdateEvent
+# StockManager removed - integration layer deprecated
 
 
 @pytest.mark.asyncio
@@ -162,7 +162,7 @@ async def test_vr_import_process(db_session, mocker):
     # Patch the VintageAndRareClient constructor to return our mock
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create VintageAndRareService with the DB session
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Run the import process
         import_results = await vr_service.run_import_process(
@@ -212,7 +212,7 @@ async def test_vr_import_process(db_session, mocker):
 
 @pytest.mark.asyncio
 async def test_vr_stock_update_integration(db_session, mocker):
-    """Test integration between VR stock changes and StockManager"""
+    """Test integration between VR stock changes and sync services"""
     # Create a product in the database with VR listing
     product = Product(
         sku="VR-TEST-123",
@@ -278,7 +278,7 @@ async def test_vr_stock_update_integration(db_session, mocker):
     # Patch the VintageAndRareClient constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Replace the cleanup method with our no-op version
         original_cleanup = vr_service._cleanup_vr_data
@@ -328,7 +328,7 @@ async def test_vr_error_handling(db_session, mocker):
     # Patch the client constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Run import and expect it to handle the auth failure
         result = await vr_service.run_import_process(
@@ -347,7 +347,7 @@ async def test_vr_error_handling(db_session, mocker):
     # Patch the client constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Run import and expect it to handle the download failure
         result = await vr_service.run_import_process(
@@ -366,7 +366,7 @@ async def test_vr_error_handling(db_session, mocker):
     # Patch the client constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Run import and expect it to catch the exception
         result = await vr_service.run_import_process(
@@ -396,7 +396,7 @@ async def test_vr_save_only_mode(db_session, mocker):
     # Patch the client constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Run import in save-only mode
         result = await vr_service.run_import_process(
@@ -490,7 +490,7 @@ async def test_vr_price_description_changes(db_session, mocker):
     # Patch the VintageAndRareClient constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Replace the cleanup method with our no-op version
         original_cleanup = vr_service._cleanup_vr_data
@@ -593,7 +593,7 @@ async def test_vr_media_sync(db_session, mocker):
     # Patch the VintageAndRareClient constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Replace the cleanup method with our no-op version
         original_cleanup = vr_service._cleanup_vr_data
@@ -702,7 +702,7 @@ async def test_vr_category_mapping(db_session, mocker):
     # Patch the VintageAndRareClient constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Replace the cleanup method with our no-op version
         original_cleanup = vr_service._cleanup_vr_data
@@ -834,7 +834,7 @@ async def test_vr_sync_multiple_products(db_session, mocker):
     # Patch the VintageAndRareClient constructor
     with patch('app.services.vintageandrare_service.VintageAndRareClient', return_value=mock_client):
         # Create service
-        vr_service = VintageAndRareService(db_session)
+        vr_service = VRService(db_session)
         
         # Replace the cleanup method with our no-op version
         original_cleanup = vr_service._cleanup_vr_data

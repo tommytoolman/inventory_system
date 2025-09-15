@@ -55,7 +55,20 @@ async def process_website_sale(payload: dict, db: AsyncSession):
 
 async def sync_stock_to_platforms(product):
     """Synchronize product stock levels across all platforms"""
-    from app.integrations.stock_manager import StockManager  # Import here to avoid circular imports
-
-    stock_manager = StockManager()
-    await stock_manager.sync_product(product)
+    from app.core.events import StockUpdateEvent
+    from app.services.sync_services import SyncService
+    from sqlalchemy.ext.asyncio import AsyncSession
+    
+    # Create a stock update event for the product
+    event = StockUpdateEvent(
+        product_id=product.id,
+        platform="website",
+        new_quantity=product.quantity,
+        old_quantity=product.quantity + 1,  # Since we just decremented it
+        event_type="sale",
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    # TODO: Implement actual platform sync using SyncService
+    # This would require the database session and proper service initialization
+    # For now, this is a placeholder showing the correct approach

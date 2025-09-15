@@ -20,16 +20,31 @@
                     </div>
                     <div class="flex-1">
                         <h1 class="text-2xl font-bold text-gray-900">
-                            {{ product.brand }} {{ product.model }}
+                            {{ product.brand|title }} {{ product.model }}
                         </h1>
                     </div>
                     
                     <!-- Status badges moved next to title -->
                     <div class="flex items-center space-x-3 mr-4">
                         <!-- Product Status -->
-                        <span class="px-3 py-1 text-sm rounded-full {% if product.status.value|upper == 'SOLD' %}bg-red-100 text-red-800{% elif product.status.value|upper == 'DRAFT' %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">
-                            {{ product.status.value|upper }}
-                        </span>
+                        {% set status_val = product.status.value|upper if product.status else '' %}
+                        {% if status_val == 'SOLD' %}
+                            <span class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800">
+                                Sold
+                            </span>
+                        {% elif status_val == 'DRAFT' %}
+                            <span class="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800">
+                                Draft
+                            </span>
+                        {% elif status_val == 'ARCHIVED' %}
+                            <span class="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800">
+                                Archived
+                            </span>
+                        {% else %}
+                            <span class="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800">
+                                {{ status_val|title }}
+                            </span>
+                        {% endif %}
                     </div>
                 </div>
                 
@@ -43,48 +58,99 @@
         </div>
 
         <!-- Product Details -->
-        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             <!-- Basic Info -->
             <div>
-                <h2 class="text-lg font-semibold mb-4">Product Information</h2>
-                <dl class="grid grid-cols-2 gap-4">
-                    <dt class="text-gray-600">SKU</dt>
-                    <dd>{{ product.sku or 'N/A' }}</dd>
-
-                    <dt class="text-gray-600">Category</dt>
-                    <dd>{{ product.category or 'N/A' }}</dd>
-                    
-                    <dt class="text-gray-600">Year</dt>
-                    <dd>{{ product.year or 'N/A' }}</dd>
-                    
-                    <dt class="text-gray-600">Condition</dt>
-                    <dd>{{ product.condition.value|title if product.condition else 'N/A' }}</dd>
-                    
-                    <dt class="text-gray-600">Base Price</dt>
-                    <dd>
-                        {% if product.base_price and product.base_price > 0 %}
-                            £{{ "{:,.0f}".format(product.base_price) }}
-                        {% else %}
-                            <span class="text-gray-500">-</span>
-                        {% endif %}
-                    </dd>
-
-                    {% if product.cost_price %}
-                    <dt class="text-gray-600">Cost Price</dt>
-                    <dd>£{{ "{:,.0f}".format(product.base_price) }}</dd>
-                    {% endif %}
-                </dl>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-semibold">Product Information</h2>
+                    <a href="/inventory/products/{{ product.id }}/edit" 
+                       class="inline-flex items-center justify-center w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full text-gray-600 hover:text-gray-800 transition-colors"
+                       title="Edit Product">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                        </svg>
+                    </a>
+                </div>
+                <div class="border rounded p-4">
+                    <dl class="space-y-2">
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Category</dt>
+                            <dd class="text-right">{{ product.category or 'N/A' }}</dd>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Brand</dt>
+                            <dd class="text-right">{{ product.brand|title or 'N/A' }}</dd>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Model</dt>
+                            <dd class="text-right">{{ product.model or 'N/A' }}</dd>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Finish</dt>
+                            <dd class="text-right">{{ product.finish or 'N/A' }}</dd>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Year</dt>
+                            <dd class="text-right">
+                                {% if product.year %}
+                                    {{ product.year }}
+                                {% elif product.decade %}
+                                    {{ product.decade }}s
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </dd>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Condition</dt>
+                            <dd class="text-right">{{ product.condition.value|title if product.condition else 'N/A' }}</dd>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Base Price</dt>
+                            <dd class="text-right">
+                                {% if product.base_price and product.base_price > 0 %}
+                                    £{{ "{:,.0f}".format(product.base_price) }}
+                                {% else %}
+                                    <span class="text-gray-500">-</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">SKU</dt>
+                            <dd class="text-right">{{ product.sku or 'N/A' }}</dd>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Quantity Available</dt>
+                            <dd class="text-right">
+                                {% if product.is_stocked_item %}
+                                    {{ product.quantity or 0 }}
+                                {% else %}
+                                    1
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
             </div>
 
             <!-- Platform Listings -->
             <div>
                 <h2 class="text-lg font-semibold mb-4">Platform Listings</h2>
-                <div class="space-y-4">
+                <div class="border rounded p-4 pb-3 h-full">
+                    <div class="space-y-3">
                     {% if all_platforms_status %}
                         {% for platform_entry in all_platforms_status %}
-                        <div class="border rounded p-4">
+                        <div class="border rounded p-3 bg-gray-50">
                             <!-- 🔍 DEBUG: Show all available data -->
-                            <div class="text-xs text-red-500 mb-2 p-2 bg-red-50 border border-red-200 rounded">
+                            <!-- <div class="text-xs text-red-500 mb-2 p-2 bg-red-50 border border-red-200 rounded">
                                 <strong>DEBUG DATA:</strong><br>
                                 Platform: {{ platform_entry.name }}<br>
                                 Is Listed: {{ platform_entry.is_listed }}<br>
@@ -96,66 +162,88 @@
                                     Last Sync: "{{ platform_entry.details.last_sync or 'NONE' }}"<br>
                                     Details Keys: {{ platform_entry.details.keys() if platform_entry.details is mapping else 'Not a dict' }}
                                 {% endif %}
-                            </div>
+                            </div> -->
 
-                            <!-- Line 1: Platform Name + Status/Action -->
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-medium">{{ platform_entry.name|title }}</span>
-                                <div class="flex items-center space-x-2">
-                                    {% if platform_entry.is_listed and platform_entry.details %}
-                                        {# Show actual platform status instead of sync_status #}
-                                        {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
-                                        {% set status_color_class = 'bg-gray-100 text-gray-800' %} {# Default #}
-                                        {% if platform_status in ['ACTIVE', 'LIVE'] %}
-                                            {% set status_color_class = 'bg-green-100 text-green-800' %}
-                                        {% elif platform_status in ['SOLD', 'ENDED', 'SOLD_OUT'] %}
-                                            {% set status_color_class = 'bg-red-100 text-red-800' %}
-                                        {% elif platform_status in ['DRAFT'] %}
-                                            {% set status_color_class = 'bg-yellow-100 text-yellow-800' %}
+                            {% if platform_entry.is_listed and platform_entry.details %}
+                                <!-- Listed state -->
+                                <!-- Line 1: Platform Name + Status -->
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="font-medium">
+                                        {% if platform_entry.name|lower == 'vr' %}
+                                            Vintage & Rare
+                                        {% else %}
+                                            {{ platform_entry.name|title }}
                                         {% endif %}
-                                        <span class="px-2 py-1 text-xs rounded {{ status_color_class }}">
-                                            {{ platform_status }}
+                                    </span>
+                                    {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
+                                    {% if platform_status in ['SOLD', 'ENDED', 'SOLD_OUT'] %}
+                                        <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                                            Sold
+                                        </span>
+                                    {% elif platform_status in ['DRAFT'] %}
+                                        <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                                            Draft
+                                        </span>
+                                    {% elif platform_status in ['ARCHIVED'] %}
+                                        <span class="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+                                            Archived
+                                        </span>
+                                    {% elif platform_status in ['ACTIVE', 'LIVE'] %}
+                                        <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                                            Active
                                         </span>
                                     {% else %}
-                                        <!-- Not Listed + List Item button on same line -->
-                                        <span class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-700">
-                                            Not Listed
+                                        <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
+                                            {{ platform_status|title }}
                                         </span>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Line 2: ID + Show Listing button -->
+                                <div class="flex justify-between items-center text-sm text-gray-600 mb-1">
+                                    <span>ID: {{ platform_entry.details.external_id or 'N/A' }}</span>
+                                    {% if platform_entry.details.listing_url %}
+                                        <a href="{{ platform_entry.details.listing_url }}" target="_blank" 
+                                        class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
+                                            Show Listing
+                                        </a>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Line 3: Last Sync -->
+                                <div class="text-sm text-gray-600">
+                                    Last Sync: {{ platform_entry.details.last_sync.strftime('%Y-%m-%d %H:%M') if platform_entry.details.last_sync else 'Never' }}
+                                </div>
+                            {% else %}
+                                <!-- Not Listed state -->
+                                <!-- Line 1: Platform Name + Status -->
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="font-medium">
+                                        {% if platform_entry.name|lower == 'vr' %}
+                                            Vintage & Rare
+                                        {% else %}
+                                            {{ platform_entry.name|title }}
+                                        {% endif %}
+                                    </span>
+                                    <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600">
+                                        Not Listed
+                                    </span>
+                                </div>
+                                
+                                <!-- Line 2: List Item button -->
+                                <div class="flex justify-end">
+                                    {% set product_status = product.status.value|upper if product.status else '' %}
+                                    {% if product_status not in ['SOLD', 'ARCHIVED'] %}
                                         <form action="{{ url_for('create_platform_listing_from_detail', product_id=product.id, platform_slug=platform_entry.slug) }}" method="POST" class="inline">
                                             <button type="submit" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
                                                 List Item
                                             </button>
                                         </form>
+                                    {% else %}
+                                        <button disabled class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-400 cursor-not-allowed">
+                                            List Item
+                                        </button>
                                     {% endif %}
-                                </div>
-                            </div>
-
-                            {% if platform_entry.is_listed and platform_entry.details %}
-                                <!-- Line 2: ID + Show Listing button -->
-                                <div class="flex justify-between items-center text-sm text-gray-600 mb-1">
-                                    <span>ID: {{ platform_entry.details.external_id or 'N/A' }}</span>
-                                    
-                                    <!-- 🔍 DEBUG: Force show the button with debug info -->
-                                    <div class="flex items-center space-x-2">
-                                        {% if platform_entry.details.listing_url %}
-                                            <a href="{{ platform_entry.details.listing_url }}" target="_blank" 
-                                            class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
-                                                Show Listing
-                                            </a>
-                                        {% else %}
-                                            <span class="text-xs text-red-500">NO URL FOUND</span>
-                                        {% endif %}
-                                        
-                                        <!-- Force show button regardless -->
-                                        <!-- <a href="https://www.vintageandrare.com/product/{{ platform_entry.details.external_id }}" target="_blank" 
-                                        class="px-2 py-1 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200 focus:outline-none focus:ring-1 focus:ring-green-300">
-                                            Force Open
-                                        </a> -->
-                                    </div>
-                                </div>
-                                <!-- Line 3: Last Sync -->
-                                <div class="text-sm text-gray-600">
-                                    Last Sync: {{ platform_entry.details.last_sync.strftime('%Y-%m-%d %H:%M:%S') if platform_entry.details.last_sync else 'Never' }}
                                 </div>
                             {% endif %}
                         </div>
@@ -165,6 +253,7 @@
                             No platform information available or platforms not configured.
                         </div>
                     {% endif %}
+                    </div>
                 </div>
             </div>
 

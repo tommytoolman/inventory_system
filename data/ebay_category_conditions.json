@@ -1,0 +1,163 @@
+{
+  "33034": {
+    "name": "Electric Guitars / Solid Body",
+    "enabled": "Required",
+    "conditions": [
+      {
+        "ID": "1000",
+        "DisplayName": "New"
+      },
+      {
+        "ID": "1500",
+        "DisplayName": "Opened \u2013 never used"
+      },
+      {
+        "ID": "2500",
+        "DisplayName": "Seller refurbished"
+      },
+      {
+        "ID": "3000",
+        "DisplayName": "Used"
+      },
+      {
+        "ID": "7000",
+        "DisplayName": "For parts or not working"
+      }
+    ]
+  },
+  "33021": {
+    "name": "Acoustic Guitars",
+    "enabled": "Required",
+    "conditions": [
+      {
+        "ID": "1000",
+        "DisplayName": "New"
+      },
+      {
+        "ID": "1500",
+        "DisplayName": "Opened \u2013 never used"
+      },
+      {
+        "ID": "2500",
+        "DisplayName": "Seller refurbished"
+      },
+      {
+        "ID": "3000",
+        "DisplayName": "Used"
+      },
+      {
+        "ID": "7000",
+        "DisplayName": "For parts or not working"
+      }
+    ]
+  },
+  "4713": {
+    "name": "Bass Guitars",
+    "enabled": "Required",
+    "conditions": [
+      {
+        "ID": "1000",
+        "DisplayName": "New"
+      },
+      {
+        "ID": "1500",
+        "DisplayName": "Opened \u2013 never used"
+      },
+      {
+        "ID": "3000",
+        "DisplayName": "Used"
+      },
+      {
+        "ID": "7000",
+        "DisplayName": "For parts or not working"
+      }
+    ]
+  },
+  "38072": {
+    "name": "Guitar Amplifiers",
+    "enabled": "Required",
+    "conditions": [
+      {
+        "ID": "1000",
+        "DisplayName": "New"
+      },
+      {
+        "ID": "1500",
+        "DisplayName": "Opened \u2013 never used"
+      },
+      {
+        "ID": "2500",
+        "DisplayName": "Seller refurbished"
+      },
+      {
+        "ID": "3000",
+        "DisplayName": "Used"
+      },
+      {
+        "ID": "7000",
+        "DisplayName": "For parts or not working"
+      }
+    ]
+  },
+  "619": {
+    "name": "Musical Instruments & Gear (root)",
+    "enabled": "Disabled",
+    "conditions": []
+  },
+  "176984": {
+    "name": "Microphones & Wireless Systems",
+    "enabled": "Required",
+    "conditions": [
+      {
+        "ID": "1000",
+        "DisplayName": "New"
+      },
+      {
+        "ID": "2750",
+        "DisplayName": "Like New"
+      },
+      {
+        "ID": "4000",
+        "DisplayName": "Very Good"
+      },
+      {
+        "ID": "5000",
+        "DisplayName": "Good"
+      },
+      {
+        "ID": "6000",
+        "DisplayName": "Acceptable"
+      }
+    ]
+  },
+  "180015": {
+    "name": "Vintage Guitars & Basses",
+    "enabled": "Disabled",
+    "conditions": []
+  },
+  "181162": {
+    "name": "Guitar Effects Pedals",
+    "enabled": "Disabled",
+    "conditions": []
+  },
+  "23786": {
+    "name": "Pro Audio Equipment",
+    "enabled": "Disabled",
+    "conditions": []
+  },
+  "175695": {
+    "name": "Mixing Consoles",
+    "enabled": "Disabled",
+    "conditions": []
+  },
+  "1305": {
+    "name": "Music Memorabilia",
+    "enabled": "Disabled",
+    "conditions": []
+  },
+  "104085": {
+    "name": "Autographs-Original",
+    "enabled": "Disabled",
+    "conditions": []
+  }
+}

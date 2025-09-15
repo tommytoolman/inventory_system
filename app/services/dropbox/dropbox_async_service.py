@@ -89,6 +89,9 @@ class AsyncDropboxClient:
         self.folder_structure = {}  # Cached folder structure
         self.cursor_cache = {}      # Cache for listing cursors by path
         
+        # Load cached data on initialization
+        self.load_caches()
+        
     def _get_headers(self) -> Dict[str, str]:
         """Get headers with current access token"""
         return {
@@ -96,6 +99,55 @@ class AsyncDropboxClient:
             # Note: We don't set 'Content-Type': 'application/json' here
             # because it will be set per request as needed
         }
+    
+    def load_caches(self):
+        """Load cached data from disk"""
+        # Load temp links cache
+        if os.path.exists(self.temp_links_cache_file):
+            try:
+                with open(self.temp_links_cache_file, 'r') as f:
+                    cached_data = json.load(f)
+                    # Convert back to the expected format
+                    for path, (link, expiry_str) in cached_data.items():
+                        expiry = datetime.fromisoformat(expiry_str)
+                        self.file_links_cache[path] = (link, expiry)
+                logger.info(f"Loaded {len(self.file_links_cache)} cached temp links")
+            except Exception as e:
+                logger.error(f"Error loading temp links cache: {e}")
+        
+        # Load folder structure cache
+        if os.path.exists(self.folder_structure_cache_file):
+            try:
+                with open(self.folder_structure_cache_file, 'r') as f:
+                    self.folder_structure = json.load(f)
+                logger.info(f"Loaded cached folder structure")
+            except Exception as e:
+                logger.error(f"Error loading folder structure cache: {e}")
+    
+    def load_temp_links_cache(self) -> Dict[str, Tuple[str, str]]:
+        """Load temporary links cache from disk"""
+        if os.path.exists(self.temp_links_cache_file):
+            try:
+                with open(self.temp_links_cache_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading temp links cache: {e}")
+        return {}
+    
+    def save_temp_links_cache(self, temp_links: Dict[str, str]):
+        """Save temporary links cache to disk"""
+        try:
+            # Convert to storable format with expiry times
+            cache_data = {}
+            expiry = datetime.now() + timedelta(hours=3)  # Links are valid for ~4 hours, cache for 3
+            for path, link in temp_links.items():
+                cache_data[path] = (link, expiry.isoformat())
+            
+            with open(self.temp_links_cache_file, 'w') as f:
+                json.dump(cache_data, f)
+            logger.info(f"Saved {len(cache_data)} temp links to cache")
+        except Exception as e:
+            logger.error(f"Error saving temp links cache: {e}")
 
     async def refresh_access_token(self) -> bool:
         """
@@ -357,17 +409,49 @@ class AsyncDropboxClient:
             logger.info(f"Step 3: Found {len(image_paths)} image files in {path_time:.2f} seconds")
             
             # Step 4: Get temporary links for images in parallel batches
-            # Only process up to 500 images to keep initial scan fast
-            if len(image_paths) > 500:
-                logger.info(f"Limiting initial scan to 500 of {len(image_paths)} images")
-                processing_paths = image_paths[:500]
-            else:
-                processing_paths = image_paths
+            # Load cached links first
+            cached_links = self.load_temp_links_cache()
+            valid_cached_links = {}
+            paths_needing_links = []
+            
+            # Check which links are still valid
+            now = datetime.now()
+            for path in image_paths:
+                if path in cached_links:
+                    link, expiry_str = cached_links[path]
+                    expiry = datetime.fromisoformat(expiry_str)
+                    if expiry > now:
+                        valid_cached_links[path] = link
+                    else:
+                        paths_needing_links.append(path)
+                else:
+                    paths_needing_links.append(path)
+            
+            logger.info(f"Found {len(valid_cached_links)} valid cached links, need to fetch {len(paths_needing_links)} new links")
+            
+            # Initialize processing_paths for stats
+            processing_paths = []
+            
+            # Only fetch links we don't have cached
+            if paths_needing_links:
+                # Limit to reasonable number for initial load
+                if len(paths_needing_links) > 1000:
+                    logger.info(f"Limiting initial fetch to 1000 of {len(paths_needing_links)} images")
+                    processing_paths = paths_needing_links[:1000]
+                else:
+                    processing_paths = paths_needing_links
+                    
+                new_links = await self.get_temporary_links_async(processing_paths)
+                temp_links = {**valid_cached_links, **new_links}
                 
-            temp_links = await self.get_temporary_links_async(processing_paths)
+                # Save to cache
+                self.save_temp_links_cache(temp_links)
+            else:
+                temp_links = valid_cached_links
+            
             step4_time = datetime.now()
             link_time = (step4_time - step3_time).total_seconds()
-            logger.info(f"Step 4: Generated {len(temp_links)} temp links in {link_time:.2f} seconds")
+            logger.info(f"Step 4: Have {len(temp_links)} temp links ready in {link_time:.2f} seconds")
             
             # Build the final map
             dropbox_map = {
@@ -764,59 +848,61 @@ class AsyncDropboxClient:
             logger.error(f"Final error getting link for {file_path}: {str(e)}")
             return file_path, None
     
-    async def get_temporary_links_async(self, file_paths: List[str], batch_size: int = 20, max_retries=3) -> Dict[str, str]:
+    async def get_temporary_links_async(self, file_paths: List[str], batch_size: int = 50, max_retries=3) -> Dict[str, str]:
         """
-        Get temporary links for multiple files with parallel processing.
+        Get temporary links for multiple files with PARALLEL processing.
         
         Args:
             file_paths: List of file paths to get links for
-            batch_size: Number of files to process in each batch
+            batch_size: Number of files to process in parallel in each batch (increased to 50)
             max_retries: Number of retry attempts for rate-limited requests
             
         Returns:
             Dict mapping file paths to temporary links
         """
         results = {}
-        logger.info(f"Getting temporary links for {len(file_paths)} files in batches of {batch_size}...")
+        logger.info(f"Getting temporary links for {len(file_paths)} files in parallel batches of {batch_size}...")
+        
+        async def get_link_with_retry(session, path, max_retries=3):
+            """Helper function to get a single link with retry logic"""
+            for retry in range(max_retries + 1):
+                try:
+                    file_path, link = await self.get_temporary_link(session, path)
+                    return (file_path, link)
+                except aiohttp.ClientResponseError as e:
+                    if e.status == 429 and retry < max_retries:  # Rate limit
+                        delay = 2 ** retry + 1  # Exponential backoff
+                        logger.debug(f"Rate limit for {path}, retry {retry+1}/{max_retries} in {delay}s")
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.error(f"Error getting link for {path}: {e.status}")
+                        return (path, None)
+                except Exception as e:
+                    logger.error(f"Exception getting link for {path}: {str(e)}")
+                    return (path, None)
+            return (path, None)
         
         # Process in batches to avoid overwhelming the API
-        for i in range(0, len(file_paths), batch_size):
-            batch = file_paths[i:i+batch_size]
-            logger.info(f"Processing batch {i//batch_size + 1}/{(len(file_paths) + batch_size - 1)//batch_size}")
-            
-            async with aiohttp.ClientSession() as session:
-                # Process each file in the batch
-                for path in batch:
-                    # Try with retries for each file
-                    for retry in range(max_retries + 1):
-                        try:
-                            # Get temporary link
-                            link = await self.get_temporary_link(session, path)
-                            if link[1]:  # If link was successful
-                                results[link[0]] = link[1]
-                            # Success - break retry loop
-                            break
-                        except aiohttp.ClientResponseError as e:
-                            if e.status == 429:  # Rate limit exceeded
-                                if retry < max_retries:
-                                    # Calculate exponential backoff delay
-                                    delay = 2 ** retry + 1  # 1, 3, 7 seconds
-                                    logger.info(f"Rate limit hit for {path}, retrying in {delay}s (retry {retry+1}/{max_retries})")
-                                    await asyncio.sleep(delay)
-                                else:
-                                    logger.error(f"Rate limit exceeded for {path} after {max_retries} retries")
-                            else:
-                                # Other error - log and continue
-                                logger.error(f"Error getting link for {path}: {e.status} - {str(e)}")
-                                break
-                        except Exception as e:
-                            # General error - log and continue
-                            logger.error(f"Exception getting link for {path}: {str(e)}")
-                            break
+        async with aiohttp.ClientSession() as session:
+            for i in range(0, len(file_paths), batch_size):
+                batch = file_paths[i:i+batch_size]
+                batch_num = i//batch_size + 1
+                total_batches = (len(file_paths) + batch_size - 1)//batch_size
                 
-            # Add a significant delay between batches to avoid rate limits
-            if i + batch_size < len(file_paths):
-                await asyncio.sleep(1.0)  # 1 second between batches
+                logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch)} files)")
+                
+                # Process all files in the batch IN PARALLEL
+                batch_tasks = [get_link_with_retry(session, path, max_retries) for path in batch]
+                batch_results = await asyncio.gather(*batch_tasks)
+                
+                # Collect results
+                for file_path, link in batch_results:
+                    if link:
+                        results[file_path] = link
+                
+                # Small delay between batches to be nice to the API
+                if i + batch_size < len(file_paths):
+                    await asyncio.sleep(0.5)  # Reduced to 0.5s since we're being more efficient
 
         logger.info(f"Successfully obtained {len(results)} temporary links")
         return results

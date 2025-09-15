@@ -1,3 +1,6 @@
+# THIS IS POSSIBLY REDUNDANT AND THINK WE SHOULD BE USING reverb_service.py in /services/
+
+
 # app/services/reverb/importer.py
 import os
 import json
@@ -37,13 +40,13 @@ class ReverbImporter:
         - Data Handling: Includes various private helper methods (_extract_brand, _map_condition, _parse_timestamp, 
             _prepare_extended_attributes, etc.) to map and clean data from the Reverb API format to the local database model structure. 
             Uses iso8601 for parsing dates.
-   """
+    """
     
     def __init__(self, db: AsyncSession):
         self.db = db
         self.api_key = os.environ.get("REVERB_API_KEY")
         self.client = ReverbClient(self.api_key)
-  
+
     async def import_all_listings(self, include_all_states: bool = True) -> Dict[str, int]:
         """
         Import all listings from Reverb and create corresponding database records
@@ -76,13 +79,23 @@ class ReverbImporter:
             stats["total"] = len(listings)
             logger.info(f"Retrieved {stats['total']} listings from Reverb API")
 
-            # Track listings by their individual states
+            # Track listings by their individual states (state can be dict or string)
             for listing in listings:
-                listing_state = listing.get('state', 'unknown')
-                if listing_state not in stats["by_state"]:
-                    stats["by_state"][listing_state] = 0
-                stats["by_state"][listing_state] += 1
-                
+                if not isinstance(listing, dict):
+                    continue
+                raw_state = listing.get('state', 'unknown')
+                if isinstance(raw_state, dict):
+                    listing_state = (
+                        raw_state.get('slug')
+                        or raw_state.get('value')
+                        or raw_state.get('display_name')
+                        or next((v for v in raw_state.values() if isinstance(v, str)), 'unknown')
+                    )
+                else:
+                    listing_state = raw_state or 'unknown'
+                listing_state = str(listing_state).lower()
+                stats["by_state"][listing_state] = stats["by_state"].get(listing_state, 0) + 1
+
             # Log the breakdown
             logger.info(f"Listings by state: {stats['by_state']}")
 
@@ -129,6 +142,10 @@ class ReverbImporter:
                     # Filter out exceptions and invalid responses
                     valid_details = []
                     for j, detail_result in enumerate(details_results):
+                        if isinstance(detail_result, dict):
+                            base_listing = batch[j] if j < len(batch) and isinstance(batch[j], dict) else {}
+                            if 'slug' not in detail_result and base_listing.get('slug'):
+                                detail_result['slug'] = base_listing['slug']
                         if isinstance(detail_result, Exception):
                             stats["errors"] += 1
                             listing_id = valid_listings[j] if j < len(valid_listings) else "unknown"
@@ -367,7 +384,7 @@ class ReverbImporter:
                         is_auction=listing_data.get('auction', False),
                         list_price=self._safe_float(self._extract_price(listing_data)),
                         listing_currency=listing_data.get('listing_currency', 'USD'),
-                        shipping_profile_id=listing_data.get('shipping_profile_id'),
+                        shipping_profile_id=self._safe_get(listing_data, 'shipping_profile', 'id', default=None),
                         shop_policies_id=listing_data.get('shop_policies_id'),
                         reverb_state=state,
                         view_count=view_count,
@@ -416,6 +433,28 @@ class ReverbImporter:
         title = listing_data.get('title', '')
         parts = title.split(' ', 1)
         return parts[1] if len(parts) > 1 else ""
+
+    def _extract_slug(self, listing_data: Dict[str, Any]) -> str:
+        """Robustly extract the Reverb listing slug."""
+        # Direct
+        slug = listing_data.get('slug')
+        if slug:
+            return str(slug)
+        # Nested common patterns
+        for key in ('listing', 'data'):
+            nested = listing_data.get(key)
+            if isinstance(nested, dict) and nested.get('slug'):
+                return str(nested['slug'])
+        # Derive from web URL
+        web_url = self._safe_get(listing_data, '_links', 'web', 'href', default=None)
+        if isinstance(web_url, str) and web_url:
+            # Strip query + fragment
+            core = web_url.split('?', 1)[0].rstrip('/')
+            last = core.rsplit('/', 1)[-1]
+            if last and all(c.isalnum() or c in ('-', '_') for c in last):
+                return last
+        # Fallback to ID
+        return str(listing_data.get('id', ''))
 
 
     def _extract_price(self, listing_data: Dict[str, Any]) -> Optional[float]:
@@ -763,7 +802,8 @@ class ReverbImporter:
                 reverb_listing = ReverbListing(
                     platform_id=platform_common.id,
                     reverb_listing_id=listing_id,
-                    reverb_slug=listing_data.get('slug', ''),
+                    # reverb_slug=listing_data.get('slug', ''), THIS WAS NOT WORKING FOR AGES SO TRYING FIX BELOW
+                    reverb_slug=self._extract_slug(listing_data),
                     reverb_category_uuid=self._safe_get(listing_data, 'categories', 0, 'uuid', default=''),
                     condition_rating=self._safe_float(self._extract_condition_rating(listing_data)),
                     inventory_quantity=0,  # Sold items have 0 inventory

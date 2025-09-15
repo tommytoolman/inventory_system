@@ -53,3 +53,11 @@ class ReverbAPIError(ReverbServiceError):
 class DatabaseError(Exception):
     """Exception raised for database-related errors."""
     pass
+
+class ShopifyServiceError(PlatformServiceError):
+    """Base exception for Reverb-specific errors."""
+    pass
+
+class ShopifyAPIError(ShopifyServiceError):
+    """Raised when Reverb API calls fail."""
+    pass

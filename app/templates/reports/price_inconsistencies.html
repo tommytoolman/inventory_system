@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Price Inconsistencies - RIFF{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Price Inconsistencies</h1>
+        <p class="text-gray-600">Detect products with significant price differences between platforms</p>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <form method="get" class="flex flex-wrap gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Threshold (%)</label>
+                <input type="number" name="threshold" value="{{ threshold }}" min="0" max="100" step="0.1"
+                       class="w-24 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select name="status_filter" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="ALL" {% if status_filter == "ALL" %}selected{% endif %}>All Statuses</option>
+                    <option value="ACTIVE" {% if status_filter == "ACTIVE" %}selected{% endif %}>Active</option>
+                    <option value="SOLD" {% if status_filter == "SOLD" %}selected{% endif %}>Sold</option>
+                    <option value="INACTIVE" {% if status_filter == "INACTIVE" %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+                <select name="sort_by" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="max_diff" {% if sort_by == "max_diff" %}selected{% endif %}>Price Difference %</option>
+                    <option value="sku" {% if sort_by == "sku" %}selected{% endif %}>SKU</option>
+                    <option value="brand" {% if sort_by == "brand" %}selected{% endif %}>Brand</option>
+                    <option value="model" {% if sort_by == "model" %}selected{% endif %}>Model</option>
+                    <option value="base_price" {% if sort_by == "base_price" %}selected{% endif %}>Base Price</option>
+                    <option value="platforms" {% if sort_by == "platforms" %}selected{% endif %}>Platform Count</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Order</label>
+                <select name="sort_order" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="desc" {% if sort_order == "desc" %}selected{% endif %}>Highest First</option>
+                    <option value="asc" {% if sort_order == "asc" %}selected{% endif %}>Lowest First</option>
+                </select>
+            </div>
+            
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                Update
+            </button>
+        </form>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="bg-white rounded-lg shadow mb-6">
+        <div class="px-6 py-4 border-b">
+            <h2 class="text-xl font-semibold">Summary</h2>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 p-6">
+            <div class="text-center">
+                <div class="text-3xl font-bold text-gray-900">{{ "{:,}".format(summary_stats.total_products or 0) }}</div>
+                <div class="text-sm text-gray-500">Total Products</div>
+            </div>
+            <div class="text-center">
+                <div class="text-3xl font-bold text-red-600">{{ "{:,}".format(summary_stats.products_above_threshold or 0) }}</div>
+                <div class="text-sm text-gray-500">Above {{ threshold }}% Threshold</div>
+            </div>
+            <div class="text-center">
+                <div class="text-3xl font-bold text-orange-600">{{ "{:.1f}%".format(summary_stats.avg_price_diff_pct or 0) }}</div>
+                <div class="text-sm text-gray-500">Avg Difference</div>
+            </div>
+            <div class="text-center">
+                <div class="text-3xl font-bold text-red-700">{{ "{:.1f}%".format(summary_stats.max_price_diff_pct or 0) }}</div>
+                <div class="text-sm text-gray-500">Max Difference</div>
+            </div>
+            <div class="text-center">
+                <div class="text-3xl font-bold text-blue-600">£{{ "{:,.0f}".format(summary_stats.total_price_variance or 0) }}</div>
+                <div class="text-sm text-gray-500">Total Variance</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Price Inconsistencies Table -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b flex justify-between items-center">
+            <h2 class="text-xl font-semibold">Price Inconsistencies</h2>
+            <div class="flex space-x-2">
+                <button onclick="exportToCSV()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export CSV
+                </button>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Base Price</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Platform Prices</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Price Range</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Difference</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for item in inconsistencies %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                {% if item.primary_image %}
+                                <img class="h-12 w-12 rounded object-cover mr-3" 
+                                     src="{{ item.primary_image }}" 
+                                     alt="{{ item.brand }} {{ item.model }}">
+                                {% endif %}
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ item.brand }} {{ item.model }}
+                                        {% if item.year %}<span class="text-gray-500">({{ item.year }})</span>{% endif %}
+                                    </div>
+                                    <div class="text-sm text-gray-500">{{ item.sku }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <div class="text-sm font-semibold text-gray-900">£{{ "{:,.0f}".format(item.base_price) }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex flex-wrap gap-2 justify-center">
+                                {% for detail in item.platform_details %}
+                                <div class="inline-flex items-center px-2 py-1 rounded text-xs 
+                                           {% if detail.price == item.max_price %}bg-red-100 text-red-800
+                                           {% elif detail.price == item.min_price %}bg-green-100 text-green-800
+                                           {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    <span class="font-semibold">{{ detail.platform|upper }}:</span>
+                                    <span class="ml-1">£{{ "{:,.0f}".format(detail.price) }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <div class="text-sm">
+                                <span class="text-green-600">£{{ "{:,.0f}".format(item.min_price) }}</span>
+                                <span class="text-gray-500 mx-1">-</span>
+                                <span class="text-red-600">£{{ "{:,.0f}".format(item.max_price) }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <div>
+                                <div class="text-lg font-bold {% if item.max_price_diff_pct > 20 %}text-red-600{% elif item.max_price_diff_pct > 10 %}text-orange-600{% else %}text-yellow-600{% endif %}">
+                                    {{ "{:.1f}%".format(item.max_price_diff_pct) }}
+                                </div>
+                                <div class="text-sm text-gray-500">£{{ "{:,.0f}".format(item.price_diff) }}</div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <button onclick="openPriceModal('{{ item.sku }}', {{ item.platform_details|tojson|safe }})" 
+                                    class="text-blue-600 hover:text-blue-900 text-sm font-medium">
+                                Adjust Prices
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            {% if not inconsistencies %}
+            <div class="text-center py-8 text-gray-500">
+                No price inconsistencies found above {{ threshold }}% threshold
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Price Adjustment Modal -->
+<div id="priceModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Adjust Platform Prices</h3>
+            <p class="text-sm text-gray-500 mb-4">SKU: <span id="modalSku"></span></p>
+            <div id="priceInputs" class="space-y-3">
+                <!-- Price inputs will be inserted here -->
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button onclick="closeModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
+                    Cancel
+                </button>
+                <button onclick="savePrices()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function exportToCSV() {
+    // TODO: Implement CSV export for price inconsistencies
+    alert('CSV export coming soon!');
+}
+
+function openPriceModal(sku, platformDetails) {
+    document.getElementById('modalSku').textContent = sku;
+    const container = document.getElementById('priceInputs');
+    container.innerHTML = '';
+    
+    platformDetails.forEach(detail => {
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <label class="block text-sm font-medium text-gray-700">${detail.platform.toUpperCase()}</label>
+            <input type="number" 
+                   id="price_${detail.platform}" 
+                   value="${detail.price}" 
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+        `;
+        container.appendChild(div);
+    });
+    
+    document.getElementById('priceModal').classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('priceModal').classList.add('hidden');
+}
+
+function savePrices() {
+    // TODO: Implement price update API call
+    alert('Price update functionality coming soon!');
+    closeModal();
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('priceModal');
+    if (event.target == modal) {
+        closeModal();
+    }
+}
+</script>
+
+{% endblock %}

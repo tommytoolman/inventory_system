@@ -1,4 +1,3 @@
-# Standard library imports
 import os
 import json
 import asyncio
@@ -12,7 +11,6 @@ from urllib.parse import quote_plus
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any, Union
 
-# FastAPI imports
 from fastapi import (
     APIRouter, 
     Depends, 
@@ -31,25 +29,24 @@ from sqlalchemy import select, or_, distinct, func, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-# App imports
 from app.core.config import Settings, get_settings
-from app.core.enums import PlatformName, ProductCondition   
-# from app.models import User as UserModel
+from app.core.enums import PlatformName, ProductCondition
+from app.core.events import StockUpdateEvent
 from app.core.exceptions import ProductCreationError, PlatformIntegrationError
 from app.dependencies import get_db, templates
-from app.integrations.events import StockUpdateEvent
 from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.shipping import ShippingProfile
 from app.models.vr import VRListing
 from app.models.shopify import ShopifyListing
+from app.models.reverb import ReverbListing
 from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
 from app.services.category_mapping_service import CategoryMappingService
 from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
 from app.services.shopify_service import ShopifyService
-from app.services.vintageandrare_service import VintageAndRareService
+from app.services.vr_service import VRService
 from app.services.vintageandrare.brand_validator import VRBrandValidator
 from app.services.vintageandrare.client import VintageAndRareClient
 from app.services.vintageandrare.export import VRExportService
@@ -71,6 +68,7 @@ logger = logging.getLogger(__name__)
 _reverb_to_platforms_map_cache = None
 _ebay_to_platforms_map_cache = None
 _vr_to_platforms_map_cache = None
+_shopify_to_platforms_map_cache = None
 
 def get_reverb_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
     """Loads the Reverb to other platforms category mapping file."""
@@ -569,22 +567,35 @@ async def list_products(
     result = await db.execute(query)
     products = result.scalars().all()
     
-    # Get unique categories and brands for filters (keep existing logic)
+    # Get unique categories and brands for filters
+    # Configuration for dropdown sort order - Options: 'alphabetical' or 'count'
+    CATEGORY_DROPDOWN_SORT = 'count'  # Sort by most common first
+    BRAND_DROPDOWN_SORT = 'alphabetical'  # Sort alphabetically
+    
+    # Build categories query
     categories_query = (
         select(Product.category, func.count(Product.id).label("count"))
         .filter(Product.category.isnot(None))
         .group_by(Product.category)
-        .order_by(Product.category)
     )
+    if CATEGORY_DROPDOWN_SORT == 'count':
+        categories_query = categories_query.order_by(desc(func.count(Product.id)))
+    else:  # 'alphabetical'
+        categories_query = categories_query.order_by(Product.category)
+    
     categories_result = await db.execute(categories_query)
     categories_with_counts = [(c[0], c[1]) for c in categories_result.all() if c[0]]
     
+    # Build brands query
     brands_query = (
         select(Product.brand, func.count(Product.id).label("count"))
         .filter(Product.brand.isnot(None))
         .group_by(Product.brand)
-        .order_by(Product.brand)
     )
+    if BRAND_DROPDOWN_SORT == 'count':
+        brands_query = brands_query.order_by(desc(func.count(Product.id)))
+    else:  # 'alphabetical'
+        brands_query = brands_query.order_by(Product.brand)
     brands_result = await db.execute(brands_query)
     brands_with_counts = [(b[0], b[1]) for b in brands_result.all() if b[0]]
     
@@ -835,7 +846,146 @@ async def handle_create_platform_listing_from_detail(
             
             logger.info(f"V&R processing result for {product.sku}: {message}")
         
-        # ... (elif for other platforms like ebay, reverb) ...
+        elif platform_slug == "shopify":
+            logger.info(f"=== SINGLE PLATFORM LISTING: SHOPIFY ===")
+            logger.info(f"Product ID: {product.id}, SKU: {product.sku}")
+            logger.info(f"Product: {product.brand} {product.model}")
+            
+            try:
+                # Initialize Shopify service
+                shopify_service = ShopifyService(db, settings)
+                
+                # Prepare enriched data similar to what would come from Reverb
+                enriched_data = {
+                    "title": f"{product.year} {product.brand} {product.model}" if product.year else f"{product.brand} {product.model}",
+                    "description": product.description,
+                    "photos": [],
+                    "cloudinary_photos": [],
+                    "condition": {"display_name": product.condition},
+                    "price": {"amount": str(product.base_price), "currency": "GBP"},
+                    "inventory": product.quantity if product.quantity else 1,
+                    "finish": product.finish,
+                    "year": str(product.year) if product.year else None,
+                    "model": product.model,
+                    "brand": product.brand
+                }
+                
+                # Add images
+                if product.primary_image:
+                    enriched_data["cloudinary_photos"].append({"preview_url": product.primary_image, "url": product.primary_image})
+                if product.additional_images:
+                    for img_url in product.additional_images:
+                        enriched_data["cloudinary_photos"].append({"preview_url": img_url, "url": img_url})
+                
+                result = await shopify_service.create_listing_from_product(product, enriched_data)
+                
+                if result.get("status") == "success":
+                    message = f"Successfully created Shopify listing with ID: {result.get('shopify_product_id')}"
+                    message_type = "success"
+                else:
+                    message = f"Failed to create Shopify listing: {result.get('message', 'Unknown error')}"
+                    message_type = "error"
+                    
+            except Exception as e:
+                logger.error(f"Error creating Shopify listing: {str(e)}")
+                message = f"Error creating Shopify listing: {str(e)}"
+                message_type = "error"
+        
+        elif platform_slug == "ebay":
+            logger.info(f"=== SINGLE PLATFORM LISTING: EBAY ===")
+            logger.info(f"Product ID: {product.id}, SKU: {product.sku}")
+            logger.info(f"Product: {product.brand} {product.model}")
+            logger.warning("⚠️  NOTE: eBay requires proper shipping profiles to be configured")
+            
+            try:
+                # Initialize eBay service
+                ebay_service = EbayService(db, settings)
+                
+                # Prepare enriched data
+                enriched_data = {
+                    "title": f"{product.year} {product.brand} {product.model}" if product.year else f"{product.brand} {product.model}",
+                    "description": product.description,
+                    "photos": [],
+                    "condition": {"display_name": product.condition},
+                    "categories": [],  # Will be populated with Reverb category UUID if available
+                    "price": {"amount": str(product.base_price), "currency": "GBP"},
+                    "inventory": product.quantity if product.quantity else 1,
+                    "finish": product.finish,
+                    "year": str(product.year) if product.year else None,
+                    "model": product.model,
+                    "brand": product.brand
+                }
+                
+                # Add images
+                if product.primary_image:
+                    enriched_data["photos"].append({"url": product.primary_image})
+                if product.additional_images:
+                    for img_url in product.additional_images:
+                        enriched_data["photos"].append({"url": img_url})
+                
+                # Get Reverb category UUID if the product has a Reverb listing
+                reverb_uuid = None
+                if product.sku.startswith('REV-'):
+                    # Check if we have a Reverb listing with category info
+                    reverb_listing_query = select(ReverbListing).join(
+                        PlatformCommon
+                    ).where(
+                        PlatformCommon.product_id == product.id,
+                        PlatformCommon.platform_name == 'reverb'
+                    )
+                    reverb_result = await db.execute(reverb_listing_query)
+                    reverb_listing = reverb_result.scalar_one_or_none()
+                    
+                    if reverb_listing and reverb_listing.extended_attributes:
+                        categories = reverb_listing.extended_attributes.get('categories', [])
+                        if categories and len(categories) > 0:
+                            reverb_uuid = categories[0].get('uuid')
+                            logger.info(f"Found Reverb UUID from listing: {reverb_uuid}")
+                
+                # Add category UUID to enriched data if found
+                if reverb_uuid:
+                    enriched_data["categories"] = [{"uuid": reverb_uuid}]
+                
+                # Get policies from product's platform data if available
+                # Default to Business Policies with the profile IDs from existing listings
+                policies = {
+                    'shipping_profile_id': '252277357017',
+                    'payment_profile_id': '252544577017',
+                    'return_profile_id': '252277356017'
+                }
+                if hasattr(product, 'platform_data') and product.platform_data and 'ebay' in product.platform_data:
+                    ebay_data = product.platform_data['ebay']
+                    # Override with product-specific policies if they exist
+                    if ebay_data.get('shipping_policy'):
+                        policies['shipping_profile_id'] = ebay_data.get('shipping_policy')
+                    if ebay_data.get('payment_policy'):
+                        policies['payment_profile_id'] = ebay_data.get('payment_policy')
+                    if ebay_data.get('return_policy'):
+                        policies['return_profile_id'] = ebay_data.get('return_policy')
+                
+                result = await ebay_service.create_listing_from_product(
+                    product=product,
+                    reverb_api_data=enriched_data,
+                    use_shipping_profile=True,  # Always use Business Policies
+                    **policies
+                )
+                
+                if result.get("status") == "success":
+                    message = f"Successfully created eBay listing with ID: {result.get('external_id', result.get('ItemID'))}"
+                    message_type = "success"
+                else:
+                    message = f"Failed to create eBay listing: {result.get('message', result.get('error', 'Unknown error'))}"
+                    message_type = "error"
+                    
+            except Exception as e:
+                logger.error(f"Error creating eBay listing: {str(e)}")
+                message = f"Error creating eBay listing: {str(e)}"
+                message_type = "error"
+        
+        elif platform_slug == "reverb":
+            logger.info(f"Processing Reverb listing for product {product.sku}")
+            message = "Reverb listing creation is not yet implemented"
+            message_type = "info"
         
         else:
             message = f"Listing on platform '{platform_slug}' is not yet implemented."
@@ -865,19 +1015,21 @@ async def add_product_form(
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings)
 ):
-    # Get existing brands for dropdown
+    # Get existing brands for dropdown (alphabetically sorted)
     existing_brands = await db.execute(
         select(Product.brand)
         .distinct()
         .filter(Product.brand.isnot(None))
+        .order_by(Product.brand)
     )
     existing_brands = [b[0] for b in existing_brands.all() if b[0]]
 
-    # Get existing categories for dropdown
+    # Get existing categories for dropdown (alphabetically sorted)
     categories_result = await db.execute(
         select(Product.category)
         .distinct()
         .filter(Product.category.isnot(None))
+        .order_by(Product.category)
     )
     categories = [c[0] for c in categories_result.all() if c[0]]
 
@@ -936,13 +1088,18 @@ async def add_product(
     show_vat: Optional[bool] = Form(True),
     local_pickup: Optional[bool] = Form(False),
     available_for_shipment: Optional[bool] = Form(True),
+    is_stocked_item: Optional[bool] = Form(False),
+    quantity: Optional[int] = Form(None),
     # Media fields
     primary_image_file: Optional[UploadFile] = File(None),
     primary_image_url: Optional[str] = Form(None),
     additional_images_files: List[UploadFile] = File([]),
     additional_images_urls: Optional[str] = Form(None),
     video_url: Optional[str] = Form(None),
-    external_link: Optional[str] = Form(None)
+    external_link: Optional[str] = Form(None),
+    # Platform sync fields
+    sync_all: Optional[str] = Form("true"),
+    sync_platforms: Optional[List[str]] = Form(None)
 ):
     """
     Creates a new product from form data and optionally sets up platform listings.
@@ -978,11 +1135,12 @@ async def add_product(
     form_data = await request.form()
     print("Form data received:", dict(form_data))
 
-    # Get existing brands - needed for error responses
+    # Get existing brands - needed for error responses (alphabetically sorted)
     existing_brands = await db.execute(
         select(Product.brand)
         .distinct()
         .filter(Product.brand.isnot(None))
+        .order_by(Product.brand)
     )
     existing_brands = [b[0] for b in existing_brands.all() if b[0]]
 
@@ -990,6 +1148,7 @@ async def add_product(
         select(Product.category)
         .distinct()
         .filter(Product.category.isnot(None))
+        .order_by(Product.category)
     )
     categories = [c[0] for c in categories_result.all() if c[0]]
     
@@ -1125,6 +1284,8 @@ async def add_product(
             show_vat=show_vat,
             local_pickup=local_pickup,
             available_for_shipment=available_for_shipment,
+            is_stocked_item=is_stocked_item,
+            quantity=quantity if is_stocked_item else None,
             processing_time=processing_time,
             primary_image=primary_image,
             additional_images=additional_images,
@@ -1137,118 +1298,183 @@ async def add_product(
         product = await product_service.create_product(product_data)
         print(f"Product created successfully: {product.id}")
 
-        # Step 2: Handle platform integrations in parallel
-        platform_tasks = []
+        # Step 2: Determine which platforms to sync
+        platforms_to_sync = []
+        if sync_all == "true":
+            platforms_to_sync = ["shopify", "ebay", "vr", "reverb"]
+        elif sync_platforms:
+            platforms_to_sync = sync_platforms
         
-        # Step 2.1: eBay Integration
-        if platform_data.get("ebay"):
+        logger.info(f"=== PLATFORM SYNC CONFIGURATION ===")
+        logger.info(f"Sync all: {sync_all}")
+        logger.info(f"Selected platforms: {platforms_to_sync}")
+        logger.info(f"Product created: ID={product.id}, SKU={product.sku}")
+        
+        # Step 3: Create platform listings based on selection
+        # Prepare enriched data that mimics what would come from Reverb
+        enriched_data = {
+            "title": f"{year} {brand} {model}" if year else f"{brand} {model}",
+            "description": description,
+            "photos": [],  # Will be populated with images
+            "cloudinary_photos": [],  # For high-res images
+            "condition": {"display_name": condition},
+            "categories": [{"uuid": platform_data.get("reverb", {}).get("primary_category")}] if platform_data.get("reverb") else [],
+            "price": {"amount": str(base_price), "currency": "GBP"},
+            "inventory": quantity if is_stocked_item else 1,
+            "shipping": {},
+            "finish": finish,
+            "year": str(year) if year else None,
+            "model": model,
+            "brand": brand
+        }
+        
+        # Add images to enriched data
+        if primary_image:
+            enriched_data["photos"].append({"url": primary_image})
+            enriched_data["cloudinary_photos"].append({"preview_url": primary_image, "url": primary_image})
+        
+        if additional_images:
+            for img_url in additional_images:
+                enriched_data["photos"].append({"url": img_url})
+                enriched_data["cloudinary_photos"].append({"preview_url": img_url, "url": img_url})
+        
+        # Create listings on each selected platform
+        if "shopify" in platforms_to_sync:
+            logger.info(f"=== CREATING SHOPIFY LISTING ===")
+            logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
             try:
-                # Prepare eBay data
-                ebay_integration_data = {
-                    "category_id": platform_data["ebay"].get("category_id"),
-                    "condition_id": condition_enum.value,
-                    "format": platform_data["ebay"].get("format", "FixedPrice"),
-                    "price": base_price,
-                    "duration": platform_data["ebay"].get("duration", "GTC"),
-                    "item_specifics": {
-                        "Brand": brand,
-                        "Model": model,
-                        "Year": str(year) if year else None,
-                        "Finish": finish,
-                        "Condition": condition
-                    }
-                }
+                # Initialize Shopify service if not already done
+                if 'shopify_service' not in locals():
+                    shopify_service = ShopifyService(db, settings)
                 
-                # Find the eBay platform listing
-                if product.platform_listings:
-                    ebay_listing = next((listing for listing in product.platform_listings 
-                                        if listing.platform_name.lower() == "ebay"), None)
-                    
-                    if ebay_listing:
-                        await ebay_service.create_draft_listing(
-                            ebay_listing.id,
-                            ebay_integration_data
-                        )
-                        platform_statuses["ebay"] = {
-                            "status": "success", 
-                            "message": "Draft listing created"
-                        }
-                    else:
-                        platform_statuses["ebay"] = {
-                            "status": "error", 
-                            "message": "No eBay platform listing found"
-                        }
+                logger.info("Calling shopify_service.create_listing_from_product()...")
+                result = await shopify_service.create_listing_from_product(product, enriched_data)
+                logger.info(f"Shopify result: {result}")
+                
+                if result.get("status") == "success":
+                    platform_statuses["shopify"] = {
+                        "status": "success",
+                        "message": f"Listed on Shopify with ID: {result.get('shopify_product_id')}"
+                    }
+                    logger.info(f"✅ Shopify listing created successfully: ID={result.get('shopify_product_id')}")
+                else:
+                    platform_statuses["shopify"] = {
+                        "status": "error",
+                        "message": result.get("message", "Failed to create Shopify listing")
+                    }
+                    logger.warning(f"❌ Shopify listing failed: {result.get('message')}")
+            except Exception as e:
+                logger.error(f"Shopify listing error: {str(e)}", exc_info=True)
+                platform_statuses["shopify"] = {
+                    "status": "error",
+                    "message": f"Error: {str(e)}"
+                }
+        
+        if "ebay" in platforms_to_sync:
+            logger.info(f"=== CREATING EBAY LISTING ===")
+            logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
+            logger.warning("⚠️  NOTE: eBay listing creation may fail due to shipping profile requirements")
+            logger.warning("⚠️  eBay requires business policies to be configured properly")
+            try:
+                # Get policies from platform data
+                ebay_policies = {
+                    "shipping_profile_id": platform_data.get("ebay", {}).get("shipping_policy"),
+                    "payment_profile_id": platform_data.get("ebay", {}).get("payment_policy"),
+                    "return_profile_id": platform_data.get("ebay", {}).get("return_policy")
+                }
+                logger.info(f"eBay policies: {ebay_policies}")
+                
+                logger.info("Calling ebay_service.create_listing_from_product()...")
+                result = await ebay_service.create_listing_from_product(
+                    product=product,
+                    reverb_api_data=enriched_data,
+                    use_shipping_profile=True,
+                    **ebay_policies
+                )
+                logger.info(f"eBay result: {result}")
+                
+                if result.get("status") == "success":
+                    platform_statuses["ebay"] = {
+                        "status": "success",
+                        "message": f"Listed on eBay with ID: {result.get('item_id')}"
+                    }
+                    logger.info(f"✅ eBay listing created successfully: ID={result.get('item_id')}")
                 else:
                     platform_statuses["ebay"] = {
-                        "status": "error", 
-                        "message": "No platform listings created"
+                        "status": "error",
+                        "message": result.get("error", "Failed to create eBay listing")
                     }
+                    logger.warning(f"❌ eBay listing failed: {result.get('error')}")
             except Exception as e:
-                print(f"eBay integration error: {str(e)}")
+                logger.error(f"eBay listing error: {str(e)}", exc_info=True)
                 platform_statuses["ebay"] = {
-                    "status": "error", 
+                    "status": "error",
                     "message": f"Error: {str(e)}"
                 }
         
-        # Step 2.2: Reverb Integration
-        if platform_data.get("reverb"):
+        if "vr" in platforms_to_sync:
+            logger.info(f"=== CREATING V&R LISTING ===")
+            logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
             try:
-                # Implement Reverb integration 
-                reverb_integration_data = {
-                    "product_type": platform_data["reverb"].get("product_type"),
-                    "primary_category": platform_data["reverb"].get("primary_category"),
-                    "shipping_profile": platform_data["reverb"].get("shipping_profile"),
-                    "offers_enabled": platform_data["reverb"].get("offers_enabled", True)
-                }
+                # Initialize VR service if not already done
+                if 'vr_service' not in locals():
+                    vr_service = VRService(db, settings)
                 
-                # This is a placeholder - implement actual Reverb integration
-                platform_statuses["reverb"] = {
-                    "status": "success", 
-                    "message": "Draft listing queued"
-                }
+                logger.info("Calling vr_service.create_listing_from_product()...")
+                result = await vr_service.create_listing_from_product(product, enriched_data)
+                logger.info(f"V&R result: {result}")
+                
+                if result.get("status") == "success":
+                    platform_statuses["vr"] = {
+                        "status": "success",
+                        "message": "Successfully created V&R listing"
+                    }
+                    logger.info("✅ V&R listing created successfully")
+                else:
+                    platform_statuses["vr"] = {
+                        "status": "error",
+                        "message": result.get("message", "Failed to create V&R listing")
+                    }
+                    logger.warning(f"❌ V&R listing failed: {result.get('message')}")
             except Exception as e:
-                print(f"Reverb integration error: {str(e)}")
-                platform_statuses["reverb"] = {
-                    "status": "error", 
+                logger.error(f"V&R listing error: {str(e)}", exc_info=True)
+                platform_statuses["vr"] = {
+                    "status": "error",
                     "message": f"Error: {str(e)}"
                 }
         
-        # Step 2.3: V&R Integration
-        if platform_data.get("vr"):
+        if "reverb" in platforms_to_sync:
+            logger.info(f"=== CREATING REVERB LISTING ===")
+            logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
+            logger.warning("⚠️  NOTE: Reverb listing creation from form is not yet implemented")
             try:
-                # Implement V&R integration
-                # This is a placeholder - implement actual V&R integration
-                platform_statuses["vr"] = {
-                    "status": "success", 
-                    "message": "Listing prepared for export"
+                # For now, Reverb creation from form is pending implementation
+                platform_statuses["reverb"] = {
+                    "status": "info",
+                    "message": "Reverb listing creation from form is pending implementation"
                 }
+                logger.info("ℹ️  Reverb listing creation skipped - not implemented yet")
             except Exception as e:
-                print(f"V&R integration error: {str(e)}")
-                platform_statuses["vr"] = {
-                    "status": "error", 
+                logger.error(f"Reverb listing error: {str(e)}", exc_info=True)
+                platform_statuses["reverb"] = {
+                    "status": "error",
                     "message": f"Error: {str(e)}"
                 }
         
-        # Step 2.4: Shopify Integration
-        if platform_data.get("shopify"):
-            try:
-                # Implement shopify integration
-                # This is a placeholder - implement actual shopify integration
-                platform_statuses["shopify"] = {
-                    "status": "success", 
-                    "message": "Product published to shopify"
-                }
-            except Exception as e:
-                print(f"shopify integration error: {str(e)}")
-                platform_statuses["shopify"] = {
-                    "status": "error", 
-                    "message": f"Error: {str(e)}"
-                }
+        # Log final summary
+        logger.info(f"=== PLATFORM SYNC SUMMARY ===")
+        for platform, status in platform_statuses.items():
+            if status["status"] == "success":
+                logger.info(f"✅ {platform}: {status['message']}")
+            elif status["status"] == "error":
+                logger.error(f"❌ {platform}: {status['message']}")
+            else:
+                logger.info(f"ℹ️  {platform}: {status['message']}")
 
-        # Step 3: Queue for platform sync
+        # Step 4: Queue for platform sync (if stock manager is available)
         try:
             print("About to queue product")
-            if hasattr(request.app.state.stock_manager, 'queue_product'):
+            if hasattr(request.app.state, 'stock_manager') and hasattr(request.app.state.stock_manager, 'queue_product'):
                 print("queue_product method exists, calling it")
                 await request.app.state.stock_manager.queue_product(product.id)
                 print("Product queued successfully")
@@ -1259,7 +1485,7 @@ async def add_product(
 
         print("About to return redirect response")
 
-        # Step 4: Redirect to product detail page
+        # Step 5: Redirect to product detail page
         return RedirectResponse(
             url=f"/inventory/product/{product.id}",
             status_code=303
@@ -1343,6 +1569,466 @@ async def add_product(
             status_code=400
         )
 
+
+@router.post("/inspect-payload")
+async def inspect_payload(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    brand: str = Form(...),
+    model: str = Form(...),
+    sku: str = Form(...),
+    category: str = Form(...),
+    condition: str = Form(...),
+    base_price: float = Form(...),
+    quantity: int = Form(1),
+    description: str = Form(""),
+    decade: Optional[str] = Form(None),
+    year: Optional[int] = Form(None),
+    finish: Optional[str] = Form(None),
+    processing_time: int = Form(3),
+    primary_image: Optional[str] = Form(None),
+    additional_images: Optional[str] = Form(None),
+    # Platform-specific fields - accept strings and convert to bool
+    sync_ebay: str = Form("false"),
+    sync_reverb: str = Form("false"),
+    sync_vr: str = Form("false"),
+    sync_shopify: str = Form("false"),
+    # eBay fields
+    ebay_category: Optional[str] = Form(None),
+    ebay_category_name: Optional[str] = Form(None),
+    ebay_price: Optional[float] = Form(None),
+    ebay_payment_policy: Optional[str] = Form(None),
+    ebay_return_policy: Optional[str] = Form(None),
+    ebay_shipping_policy: Optional[str] = Form(None),
+    ebay_location: Optional[str] = Form(None),
+    ebay_country: Optional[str] = Form("GB"),
+    ebay_postal_code: Optional[str] = Form(None),
+    # Reverb fields
+    reverb_product_type: Optional[str] = Form(None),
+    reverb_primary_category: Optional[str] = Form(None),
+    reverb_price: Optional[float] = Form(None),
+    shipping_profile: Optional[str] = Form(None),
+    # V&R fields
+    vr_category_id: Optional[str] = Form(None),
+    vr_subcategory_id: Optional[str] = Form(None),
+    vr_sub_subcategory_id: Optional[str] = Form(None),
+    vr_sub_sub_subcategory_id: Optional[str] = Form(None),
+    vr_price: Optional[float] = Form(None),
+    # Shopify fields
+    shopify_category_gid: Optional[str] = Form(None),
+    shopify_price: Optional[float] = Form(None),
+    shopify_product_type: Optional[str] = Form(None)
+):
+    """Generate platform payloads without creating the product"""
+    
+    # Log all received form data
+    print("=== INSPECT PAYLOAD FORM DATA ===")
+    print(f"Brand: {brand}")
+    print(f"Model: {model}")
+    print(f"SKU: {sku}")
+    print(f"Category: {category}")
+    print(f"Condition: {condition}")
+    print(f"Base Price: {base_price}")
+    print(f"Quantity: {quantity}")
+    print(f"Description: {description[:100] if description else 'None'}...")
+    print(f"Sync Shopify: {sync_shopify}")
+    print(f"Sync eBay: {sync_ebay}")
+    print(f"Sync V&R: {sync_vr}")
+    print(f"Sync Reverb: {sync_reverb}")
+    print(f"Reverb Primary Category: {reverb_primary_category}")
+    print(f"eBay Category: {ebay_category}")
+    print(f"Primary Image: {primary_image}")
+    print(f"Additional Images: {additional_images}")
+    print("=================================")
+    
+    # Convert string booleans to actual booleans
+    sync_shopify = sync_shopify.lower() == 'true'
+    sync_ebay = sync_ebay.lower() == 'true'
+    sync_vr = sync_vr.lower() == 'true'
+    sync_reverb = sync_reverb.lower() == 'true'
+    
+    # Process images
+    images_array = []
+    if primary_image:
+        images_array.append(primary_image)
+    if additional_images:
+        try:
+            additional = json.loads(additional_images)
+            images_array.extend(additional)
+        except:
+            pass
+    
+    # Add standard footer to description if not already present
+    standard_footer = '''<br/><br/>
+<p><strong>ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID</strong></p>
+<p>All purchases include EU Taxes / Duties paid, i.e., nothing further is due on receipt of goods to any EU State.</p>
+<br/>
+<p><strong>WHY BUY FROM US</strong></p>
+<p>We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping, each item will be fully serviced and professionally packed.</p>
+<br/>
+<p><strong>SELL - TRADE - CONSIGN</strong></p>
+<p>If you are looking to sell, trade, or consign any of your classic gear, please contact us by message.</p>
+<br/>
+<p><strong>WORLDWIDE COLLECTION - DELIVERY</strong></p>
+<p>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam, and Chicago.</p>
+<br/>
+<p><strong>VALUATION SERVICE</strong></p>
+<p>If you require a valuation of any of your classic gear, please forward a brief description and pictures, and we will come back to you ASAP.</p>'''
+    
+    if description and standard_footer not in description:
+        description_with_footer = description + standard_footer
+    else:
+        description_with_footer = description or ""
+    
+    # Map condition to Reverb condition UUID
+    condition_map = {
+        "MINT": "7c3f45de-2ae0-4c81-b78a-de7b49b542b6",        # Mint
+        "NEAR MINT": "f74aa0f9-ff8f-455f-bafd-8f70971b50f5",   # Excellent  
+        "EXCELLENT+": "f74aa0f9-ff8f-455f-bafd-8f70971b50f5",  # Excellent
+        "EXCELLENT": "f74aa0f9-ff8f-455f-bafd-8f70971b50f5",   # Excellent
+        "VERY GOOD+": "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d",  # Very Good
+        "VERY GOOD": "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d",   # Very Good
+        "GOOD+": "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d",       # Good (using Very Good)
+        "GOOD": "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d",        # Good (using Very Good)
+        "FAIR": "b2ebefcc-b577-460c-af8d-892514bbf140",        # Fair
+        "POOR": "91eee233-6c3f-421e-b677-5b66b6e07b05",        # Poor
+    }
+    reverb_condition_uuid = condition_map.get(condition, "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d")
+    
+    # Build response with payloads for each platform
+    payloads = {}
+    
+    # Shopify payload
+    if sync_shopify:
+        # Build title with year if available
+        title_parts = []
+        if year:
+            title_parts.append(str(year))
+        title_parts.extend([brand, model])
+        if finish:
+            title_parts.append(finish)
+        title = " ".join(filter(None, title_parts))
+        
+        shopify_payload = {
+            "platform": "shopify",
+            "product_data": {
+                "title": title,
+                "descriptionHtml": description_with_footer,  # Changed from body_html
+                "vendor": brand,
+                "productType": shopify_product_type or category,  # Changed from product_type
+                "status": "ACTIVE",  # Changed from "active" to uppercase
+                "tags": [condition, category, brand],
+                # Note: variants and images are added via separate API calls in the actual service
+                "images": [{"src": url} for url in images_array],
+            },
+            "category_gid": shopify_category_gid
+        }
+        
+        # Add metafields if needed (these are added via separate API calls in the actual service)
+        metafields = []
+        if decade:
+            metafields.append({
+                "namespace": "custom",
+                "key": "decade",
+                "value": decade,
+                "type": "single_line_text_field"
+            })
+        if year:
+            metafields.append({
+                "namespace": "custom",
+                "key": "year",
+                "value": str(year),
+                "type": "number_integer"
+            })
+        if metafields:
+            shopify_payload["product_data"]["metafields"] = metafields
+        
+        payloads["shopify"] = shopify_payload
+    
+    # eBay payload
+    if sync_ebay:
+        # Build title with year if available
+        title_parts = []
+        if year:
+            title_parts.append(str(year))
+        title_parts.extend([brand, model])
+        if finish:
+            title_parts.append(finish)
+        title = " ".join(filter(None, title_parts))
+        
+        ebay_payload = {
+            "platform": "ebay",
+            "listing_data": {
+                "Title": title,
+                "Description": description_with_footer,
+                "CategoryID": ebay_category,  # Changed from nested PrimaryCategory
+                "Price": str(ebay_price or base_price),  # Changed from StartPrice
+                "Currency": "GBP",
+                "CurrencyID": "GBP",  # Added CurrencyID
+                "Country": ebay_country,
+                "Location": ebay_location or "United Kingdom",
+                "PostalCode": ebay_postal_code,
+                "Quantity": str(quantity),
+                "ConditionID": "3000",  # Used condition
+                "PictureDetails": {
+                    "PictureURL": images_array[:12]  # eBay supports max 12 images
+                },
+                "ListingType": "FixedPriceItem",
+                "ListingDuration": "GTC",
+                "DispatchTimeMax": str(processing_time),
+                "SKU": sku
+            },
+            "policies": {
+                "payment": ebay_payment_policy if ebay_payment_policy else None,
+                "return": ebay_return_policy if ebay_return_policy else None,
+                "shipping": ebay_shipping_policy if ebay_shipping_policy else None
+            }
+        }
+        
+        # Add item specifics in the format expected by the trading API
+        item_specifics = {}
+        if brand:
+            item_specifics["Brand"] = brand
+        if model:
+            item_specifics["Model"] = model
+        if year:
+            item_specifics["Year"] = str(year)
+        if finish:
+            item_specifics["Finish"] = finish
+        
+        if item_specifics:
+            ebay_payload["listing_data"]["ItemSpecifics"] = item_specifics
+        
+        payloads["ebay"] = ebay_payload
+    
+    # V&R payload
+    if sync_vr:
+        # Build title with year if available
+        title_parts = []
+        if year:
+            title_parts.append(str(year))
+        title_parts.extend([brand, model])
+        if finish:
+            title_parts.append(finish)
+        title = " ".join(filter(None, title_parts))
+        
+        vr_payload = {
+            "platform": "vr",
+            "listing_data": {
+                # Category mapping - using the expected field names
+                "Category": vr_category_id,
+                "SubCategory1": vr_subcategory_id,
+                "SubCategory2": vr_sub_subcategory_id,
+                "SubCategory3": vr_sub_sub_subcategory_id,
+                
+                # Product details
+                "title": title,
+                "description": description_with_footer,
+                "price": vr_price or base_price,
+                "brand": brand,
+                "model": model,
+                "year": str(year) if year else "",  # V&R expects string
+                "finish": finish or "",
+                "condition": condition,
+                
+                # Images in the correct format
+                "primary_image": images_array[0] if images_array else "",
+                "additional_images": images_array[1:] if len(images_array) > 1 else [],
+                
+                # Shipping fees
+                "shipping_fees": {
+                    "uk": "45",
+                    "europe": "50",
+                    "usa": "100",
+                    "world": "150"
+                },
+                
+                # Options
+                "in_collective": False,
+                "in_inventory": True,
+                "buy_now": False,
+                "processing_time": str(processing_time),
+                "time_unit": "Days",
+                "shipping": True,
+                "local_pickup": False,
+                "quantity": quantity
+            }
+        }
+        payloads["vr"] = vr_payload
+    
+    # Reverb payload (more complex, needs more fields)
+    if sync_reverb:
+        reverb_payload = {
+            "platform": "reverb",
+            "listing_data": {
+                "title": f"{brand} {model}",
+                "description": description_with_footer,
+                "condition": {
+                    "uuid": reverb_condition_uuid
+                },
+                "price": {
+                    "amount": str(reverb_price or base_price),
+                    "currency": "GBP"
+                },
+                "categories": [{"uuid": reverb_primary_category}] if reverb_primary_category else [],
+                "make": brand,
+                "model": model,
+                "year": year,
+                "finish": finish,
+                "has_inventory": True,
+                "inventory": quantity,
+                "shipping": {
+                    "local": True,
+                    "rates": []
+                },
+                "photos": images_array,
+                "sku": sku,
+                "upc_does_not_apply": True,
+                "publish": True,
+                "state": {
+                    "slug": "live"
+                }
+            }
+        }
+        
+        # Add shipping profile if provided
+        if shipping_profile:
+            reverb_payload["shipping_profile_id"] = shipping_profile
+        payloads["reverb"] = reverb_payload
+    
+    return {
+        "status": "success",
+        "message": "Payloads generated successfully",
+        "payloads": payloads,
+        "summary": {
+            "product": {
+                "brand": brand,
+                "model": model,
+                "sku": sku,
+                "price": base_price,
+                "quantity": quantity
+            },
+            "platforms_selected": {
+                "shopify": sync_shopify,
+                "ebay": sync_ebay,
+                "vr": sync_vr,
+                "reverb": sync_reverb
+            }
+        }
+    }
+
+
+@router.get("/products/{product_id}/edit")
+async def edit_product_form(
+    request: Request,
+    product_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Show product edit form"""
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Get platform statuses
+    platform_links = await db.execute(
+        select(PlatformCommon).where(PlatformCommon.product_id == product_id)
+    )
+    platform_links = platform_links.scalars().all()
+    
+    platforms = {
+        link.platform_name: {
+            'status': link.status,
+            'external_id': link.external_id,
+            'url': link.listing_url
+        }
+        for link in platform_links
+    }
+    
+    return templates.TemplateResponse(
+        "inventory/edit.html",
+        {
+            "request": request,
+            "product": product,
+            "platforms": platforms,
+            "conditions": ProductCondition,
+            "statuses": ProductStatus
+        }
+    )
+
+@router.post("/products/{product_id}/edit")
+async def update_product(
+    request: Request,
+    product_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update product details"""
+    form_data = await request.form()
+    
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Update product fields with validation
+    product.title = form_data.get('title') or product.title
+    product.brand = form_data.get('brand') or product.brand
+    product.model = form_data.get('model') or product.model
+    
+    # Handle year - can be empty
+    year_str = form_data.get('year', '').strip()
+    if year_str:
+        try:
+            product.year = int(year_str)
+        except ValueError:
+            pass  # Keep existing year if invalid
+    
+    product.finish = form_data.get('finish') or product.finish
+    product.category = form_data.get('category') or product.category
+    product.description = form_data.get('description') or product.description
+    
+    # Handle price with validation
+    try:
+        product.base_price = float(form_data.get('base_price', product.base_price))
+    except (ValueError, TypeError):
+        pass  # Keep existing price if invalid
+    
+    # Handle quantity with validation
+    try:
+        product.quantity = int(form_data.get('quantity', product.quantity))
+    except (ValueError, TypeError):
+        pass  # Keep existing quantity if invalid
+    
+    product.is_stocked_item = form_data.get('is_stocked_item') == 'on'
+    
+    # Update condition if changed
+    if form_data.get('condition'):
+        try:
+            product.condition = ProductCondition(form_data.get('condition'))
+        except ValueError:
+            # If invalid condition value, keep existing
+            pass
+    
+    await db.commit()
+    
+    # For now, skip platform sync as it needs proper implementation
+    # This can be added later when sync methods are properly implemented
+    message = "Product updated successfully."
+    
+    # Check if any platforms were selected for sync
+    sync_platforms = []
+    for platform in ['reverb', 'ebay', 'shopify', 'vr']:
+        if form_data.get(f'sync_{platform}'):
+            sync_platforms.append(platform)
+    
+    if sync_platforms:
+        message += f" (Note: Platform sync for {', '.join(sync_platforms)} is pending implementation)"
+    
+    # Redirect back to detail page
+    return RedirectResponse(
+        url=f"/inventory/product/{product_id}",
+        status_code=303
+    )
+
 @router.put("/products/{product_id}/stock")
 async def update_product_stock(
     product_id: int,
@@ -1363,26 +2049,30 @@ async def update_product_stock(
 
 @router.get("/api/next-sku", response_model=dict)
 async def get_next_sku(db: AsyncSession = Depends(get_db)):
-    """Generate the next available SKU in format DSG-000-001"""
+    """Generate the next available SKU in format RIFF-1xxxxxxx (8 digit number starting with 1)"""
     try:
-        # Get the highest existing SKU with this pattern
-        query = select(func.max(Product.sku)).where(Product.sku.like('DSG-%'))
+        # Get the highest existing SKU with RIFF- pattern
+        query = select(func.max(Product.sku)).where(Product.sku.like('RIFF-%'))
         result = await db.execute(query)
         highest_sku = result.scalar_one_or_none()
         
-        if not highest_sku or not highest_sku.startswith('DSG-'):
-            # If no existing SKUs with this pattern, start from 1
-            next_num = 1
+        if not highest_sku or not highest_sku.startswith('RIFF-'):
+            # If no existing SKUs with this pattern, start from RIFF-10000001
+            next_num = 10000001
         else:
-            # Extract the numeric part from the end
+            # Extract the numeric part after RIFF-
             try:
-                last_part = highest_sku.split('-')[-1]
-                next_num = int(last_part) + 1
+                numeric_part = highest_sku.replace('RIFF-', '')
+                next_num = int(numeric_part) + 1
+                # Ensure it stays within 8 digits starting with 1
+                if next_num >= 20000000:
+                    # If we somehow exceed the range, find a gap
+                    next_num = 10000001
             except (ValueError, IndexError):
-                next_num = 1
+                next_num = 10000001
         
         # Format the new SKU
-        new_sku = f"DSG-000-{next_num:03d}"
+        new_sku = f"RIFF-{next_num}"
         return {"sku": new_sku}
     except Exception as e:
         import traceback
@@ -2499,6 +3189,50 @@ async def direct_dropbox_scan(
             "traceback": traceback_str.split("\n")[-10:] if len(traceback_str) > 0 else []
         }
 
+@router.get("/api/dropbox/sync-status")
+async def get_dropbox_sync_status(request: Request):
+    """Get current Dropbox sync status and statistics"""
+    try:
+        from app.services.dropbox.scheduled_sync import DropboxSyncScheduler
+        
+        if not hasattr(request.app.state, 'dropbox_scheduler'):
+            request.app.state.dropbox_scheduler = DropboxSyncScheduler(request.app.state)
+        
+        scheduler = request.app.state.dropbox_scheduler
+        return scheduler.get_sync_status()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@router.post("/api/dropbox/sync-now")
+async def trigger_dropbox_sync(
+    request: Request,
+    force: bool = False,
+    background_tasks: BackgroundTasks = None
+):
+    """Manually trigger a Dropbox sync"""
+    try:
+        from app.services.dropbox.scheduled_sync import DropboxSyncScheduler
+        
+        if not hasattr(request.app.state, 'dropbox_scheduler'):
+            request.app.state.dropbox_scheduler = DropboxSyncScheduler(request.app.state)
+        
+        scheduler = request.app.state.dropbox_scheduler
+        
+        # Run sync in background
+        if background_tasks:
+            background_tasks.add_task(scheduler.full_sync, force=force)
+            return {
+                "status": "started",
+                "message": "Sync started in background"
+            }
+        else:
+            # Run sync directly
+            result = await scheduler.full_sync(force=force)
+            return result
+            
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @router.get("/api/dropbox/refresh-token")
 async def force_refresh_dropbox_token(
     request: Request,
@@ -2780,7 +3514,10 @@ async def get_shipping_profiles(
     return [
         {
             "id": profile.id,
+            "reverb_profile_id": profile.reverb_profile_id,
+            "ebay_profile_id": profile.ebay_profile_id,
             "name": profile.name,
+            "display_name": f"{profile.name} ({profile.reverb_profile_id})" if profile.reverb_profile_id else profile.name,
             "description": profile.description,
             "package_type": profile.package_type,
             "dimensions": profile.dimensions,  # Return dimensions as JSONB 
@@ -2792,6 +3529,277 @@ async def get_shipping_profiles(
         }
         for profile in result
     ]
+
+@router.get("/platform-categories/{platform}")
+async def get_platform_categories(
+    platform: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all available categories for a specific platform."""
+    from sqlalchemy import text
+    
+    if platform == "ebay":
+        # Get eBay categories from mappings table
+        query = text("""
+            SELECT DISTINCT target_category_id, target_category_name
+            FROM platform_category_mappings
+            WHERE target_platform = 'ebay'
+            AND target_category_id IS NOT NULL
+            ORDER BY target_category_name
+        """)
+        
+        result = await db.execute(query)
+        categories = [
+            {"id": row[0], "name": row[1]}
+            for row in result.fetchall()
+        ]
+        
+    elif platform == "shopify":
+        # Get Shopify categories from mappings table
+        query = text("""
+            SELECT DISTINCT shopify_gid, merchant_type, target_category_name
+            FROM platform_category_mappings
+            WHERE target_platform = 'shopify'
+            AND shopify_gid IS NOT NULL
+            ORDER BY merchant_type
+        """)
+        
+        result = await db.execute(query)
+        categories = [
+            {
+                "id": row[0], 
+                "name": row[1],  # merchant_type as display name
+                "full_name": row[2]  # full category path
+            }
+            for row in result.fetchall()
+        ]
+        
+    elif platform == "vr":
+        # Load V&R category names
+        import json
+        from pathlib import Path
+        vr_names_file = Path(__file__).parent.parent.parent / "scripts" / "mapping_work" / "vr_category_map.json"
+        vr_names = {}
+        if vr_names_file.exists():
+            with open(vr_names_file, 'r') as f:
+                vr_names = json.load(f)
+        
+        # Get V&R categories - need to build hierarchy
+        query = text("""
+            SELECT DISTINCT 
+                vr_category_id,
+                vr_subcategory_id,
+                vr_sub_subcategory_id,
+                vr_sub_sub_subcategory_id
+            FROM platform_category_mappings
+            WHERE target_platform = 'vintageandrare'
+            AND vr_category_id IS NOT NULL
+            ORDER BY vr_category_id, vr_subcategory_id
+        """)
+        
+        result = await db.execute(query)
+        categories = []
+        for row in result.fetchall():
+            # Build the ID path and name
+            id_parts = [str(row[0])]
+            name_parts = []
+            
+            # Get category name
+            if str(row[0]) in vr_names:
+                name_parts.append(vr_names[str(row[0])].get('name', f'Category {row[0]}'))
+                
+                # Get subcategory name
+                if row[1] and str(row[1]) in vr_names[str(row[0])].get('subcategories', {}):
+                    id_parts.append(str(row[1]))
+                    name_parts.append(vr_names[str(row[0])]['subcategories'][str(row[1])].get('name', f'Subcategory {row[1]}'))
+                    
+                    # Get sub-subcategory name if exists
+                    if row[2] and str(row[2]) in vr_names[str(row[0])]['subcategories'][str(row[1])].get('subcategories', {}):
+                        id_parts.append(str(row[2]))
+                        name_parts.append(vr_names[str(row[0])]['subcategories'][str(row[1])]['subcategories'][str(row[2])].get('name', f'Sub-subcategory {row[2]}'))
+                elif row[1]:
+                    id_parts.append(str(row[1]))
+                    name_parts.append(f'Subcategory {row[1]}')
+            else:
+                name_parts.append(f'Category {row[0]}')
+                if row[1]:
+                    id_parts.append(str(row[1]))
+                    name_parts.append(f'Subcategory {row[1]}')
+            
+            categories.append({
+                "id": "/".join(id_parts),
+                "name": " > ".join(name_parts) if name_parts else f"Category {'/'.join(id_parts)}"
+            })
+    else:
+        return {"error": f"Unknown platform: {platform}"}
+    
+    return {"categories": categories}
+
+@router.get("/category-mappings/{reverb_category:path}")
+async def get_category_mappings(
+    reverb_category: str,
+    sku: Optional[str] = None,
+    uuid: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get platform category mappings for a Reverb category.
+    
+    Can be called with either:
+    1. A category name (legacy support)
+    2. A SKU parameter to look up the UUID from reverb_listings
+    """
+    from sqlalchemy import text
+    
+    # URL decode the category name
+    from urllib.parse import unquote
+    reverb_category = unquote(reverb_category)
+    
+    print(f"Looking up category: {reverb_category}, SKU: {sku}, UUID: {uuid}")
+    
+    # If we have a UUID directly, use it
+    reverb_uuid = uuid
+    
+    # If no direct UUID but we have a SKU, try to get UUID from database
+    if not reverb_uuid and sku and sku.upper().startswith('REV-'):
+        # Extract reverb ID from SKU
+        reverb_id = sku.upper().replace('REV-', '')
+        
+        # Look up the UUID from reverb_listings
+        uuid_query = text("""
+            SELECT rl.reverb_category_uuid
+            FROM products p
+            JOIN platform_common pc ON p.id = pc.product_id
+            JOIN reverb_listings rl ON pc.id = rl.platform_id
+            WHERE p.sku = :sku
+        """)
+        
+        result = await db.execute(uuid_query, {"sku": sku})
+        row = result.fetchone()
+        if row and row.reverb_category_uuid:
+            reverb_uuid = row.reverb_category_uuid
+            print(f"Found UUID from SKU: {reverb_uuid}")
+    
+    # Query using the new normalized tables
+    if reverb_uuid:
+        # Use UUID for precise lookup
+        query = text("""
+            SELECT 
+                rc.id as reverb_cat_id,
+                rc.name as reverb_cat_name,
+                -- eBay mapping
+                ec.ebay_category_id,
+                ec.ebay_category_name,
+                -- Shopify mapping
+                sc.shopify_gid,
+                sc.shopify_category_name,
+                sc.merchant_type,
+                -- VR mapping
+                vc.vr_category_id,
+                vc.vr_category_name,
+                vc.vr_subcategory_id,
+                vc.vr_subcategory_name,
+                vc.vr_sub_subcategory_id,
+                vc.vr_sub_sub_subcategory_id
+            FROM reverb_categories rc
+            LEFT JOIN ebay_category_mappings ec ON rc.id = ec.reverb_category_id
+            LEFT JOIN shopify_category_mappings sc ON rc.id = sc.reverb_category_id
+            LEFT JOIN vr_category_mappings vc ON rc.id = vc.reverb_category_id
+            WHERE rc.uuid = :uuid
+        """)
+        
+        result = await db.execute(query, {"uuid": reverb_uuid})
+        row = result.fetchone()
+    else:
+        # Fallback: Try exact match on reverb category name
+        query = text("""
+            SELECT 
+                rc.id as reverb_cat_id,
+                rc.name as reverb_cat_name,
+                -- eBay mapping
+                ec.ebay_category_id,
+                ec.ebay_category_name,
+                -- Shopify mapping
+                sc.shopify_gid,
+                sc.shopify_category_name,
+                sc.merchant_type,
+                -- VR mapping
+                vc.vr_category_id,
+                vc.vr_category_name,
+                vc.vr_subcategory_id,
+                vc.vr_subcategory_name,
+                vc.vr_sub_subcategory_id,
+                vc.vr_sub_sub_subcategory_id
+            FROM reverb_categories rc
+            LEFT JOIN ebay_category_mappings ec ON rc.id = ec.reverb_category_id
+            LEFT JOIN shopify_category_mappings sc ON rc.id = sc.reverb_category_id
+            LEFT JOIN vr_category_mappings vc ON rc.id = vc.reverb_category_id
+            WHERE rc.name = :category
+        """)
+        
+        result = await db.execute(query, {"category": reverb_category})
+        row = result.fetchone()
+    
+    if row:
+        print(f"Found mappings for Reverb category: {row.reverb_cat_name} (ID: {row.reverb_cat_id})")
+        if row.ebay_category_id:
+            print(f"  eBay: {row.ebay_category_id} - {row.ebay_category_name}")
+        if row.shopify_gid:
+            print(f"  Shopify: {row.shopify_gid} - {row.merchant_type}")
+        if row.vr_category_id:
+            print(f"  VR: {row.vr_category_id}/{row.vr_subcategory_id}")
+    
+    # Build response with mappings for each platform
+    mappings = {
+        "ebay": None,
+        "shopify": None,
+        "vr": None
+    }
+    
+    if row:
+        # eBay mapping
+        if row.ebay_category_id:
+            mappings['ebay'] = {
+                "id": row.ebay_category_id,
+                "name": row.ebay_category_name
+            }
+        
+        # Shopify mapping
+        if row.shopify_gid:
+            mappings['shopify'] = {
+                "gid": row.shopify_gid,
+                "name": row.merchant_type or row.shopify_category_name,  # Prefer merchant_type
+                "full_name": row.shopify_category_name
+            }
+        
+        # VR mapping
+        if row.vr_category_id:
+            # Build the V&R category hierarchy
+            vr_ids = []
+            vr_ids.append(row.vr_category_id)
+            if row.vr_subcategory_id:
+                vr_ids.append(row.vr_subcategory_id)
+            if row.vr_sub_subcategory_id:
+                vr_ids.append(row.vr_sub_subcategory_id)
+            if row.vr_sub_sub_subcategory_id:
+                vr_ids.append(row.vr_sub_sub_subcategory_id)
+            
+            # Get VR names if available
+            vr_name = row.vr_category_name
+            if row.vr_subcategory_name:
+                vr_name = f"{vr_name} / {row.vr_subcategory_name}"
+            
+            mappings['vr'] = {
+                "id": "/".join(vr_ids),
+                "category_id": row.vr_category_id,
+                "subcategory_id": row.vr_subcategory_id,
+                "sub_subcategory_id": row.vr_sub_subcategory_id,
+                "sub_sub_subcategory_id": row.vr_sub_sub_subcategory_id,
+                "name": vr_name
+            }
+    
+    print(f"Returning mappings: {mappings}")
+    return {"mappings": mappings}
 
 async def perform_dropbox_scan(app, access_token=None):
     """Background task to scan Dropbox with token refresh support"""

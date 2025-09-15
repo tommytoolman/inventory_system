@@ -121,14 +121,16 @@ class ImageTransformer:
             quality: Desired image quality/size
             
         Returns:
-            str: Transformed URL for the specified quality
+            str: Transformed URL for the specified quality, or None if input is None/empty
             
         Example:
             Original: https://rvb-img.reverb.com/image/upload/s--k5jtQgjw--/a_0/f_auto,t_large/v1748246175/image.jpg
             Max res: https://rvb-img.reverb.com/image/upload/s--k5jtQgjw--/v1748246175/image.jpg
         """
-        if not url or 'reverb.com' not in url:
-            return url
+        if not url:
+            return None  # Explicitly return None for empty/None URLs
+        if 'reverb.com' not in url:
+            return url  # Return original if not Reverb (best we have)
         
         # Cloudinary transformation mapping
         transformations = {
@@ -139,10 +141,27 @@ class ImageTransformer:
             ImageQuality.MAX_RES: ""  # No transformation = max resolution
         }
         
-        # Remove any existing transformation
-        # Pattern matches: /a_0/f_auto,t_large or /a_0/t_card-square etc.
-        pattern = r'/a_0/[^/]*'
-        base_url = re.sub(pattern, '', url)
+        # For MAX_RES, we want to remove ALL transformations between /upload/ and /v{numbers}/
+        if quality == ImageQuality.MAX_RES:
+            # Pattern to match everything between /upload/ and /v{numbers}/
+            # This handles both patterns:
+            # - /upload/s--xyz--/f_auto,t_large/v123/
+            # - /upload/a_0/f_auto,t_large/v123/
+            pattern = r'/upload/.*?(/v\d+/)'
+            match = re.search(pattern, url)
+            if match:
+                # Replace with just /upload/v{numbers}/
+                return url[:url.find('/upload/')] + '/upload' + match.group(1) + url[match.end():]
+            else:
+                # Fallback if no version pattern found
+                return url
+        
+        # For other qualities, remove existing transformations and add new ones
+        # First remove any existing transformation patterns
+        # Pattern 1: /s--xyz--/anything/
+        url = re.sub(r'/s--[^/]+--/[^/]*/', '/s--\g<0>--/', url)
+        # Pattern 2: /a_0/anything/
+        url = re.sub(r'/a_0/[^/]*/', '/', url)
         
         # Add new transformation
         transformation = transformations.get(quality, transformations[ImageQuality.LARGE])
@@ -151,14 +170,13 @@ class ImageTransformer:
             # Insert transformation before the version number
             # Pattern: /v1748246175/ -> /TRANSFORMATION/v1748246175/
             version_pattern = r'(/v\d+/)'
-            if re.search(version_pattern, base_url):
-                return re.sub(version_pattern, f'{transformation}\\1', base_url)
+            if re.search(version_pattern, url):
+                return re.sub(version_pattern, f'{transformation}\\1', url)
             else:
                 # Fallback: add transformation before filename
-                return base_url.replace('/image/upload/', f'/image/upload{transformation}/')
+                return url.replace('/image/upload/', f'/image/upload{transformation}/')
         else:
-            # Max resolution - return base URL without transformations
-            return base_url
+            return url
     
     @staticmethod
     def transform_images_for_platform(image_urls: List[str], platform: str) -> List[str]:

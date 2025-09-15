@@ -5,10 +5,13 @@ from sqlalchemy import text
 from typing import Optional, List, Dict, Any
 from app.database import get_session
 from app.core.templates import templates
+from app.core.config import Settings, get_settings
+from app.services.reconciliation_service import process_reconciliation
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 @router.get("/", response_class=HTMLResponse)
 async def reports_index(request: Request):
@@ -16,6 +19,7 @@ async def reports_index(request: Request):
     return templates.TemplateResponse("reports/index.html", {
         "request": request
     })
+
 
 @router.get("/status-mismatches", response_class=HTMLResponse)
 async def status_mismatches_report(
@@ -172,6 +176,7 @@ async def get_status_mismatch_summary(db: AsyncSession) -> List[Dict]:
     result = await db.execute(query)
     return [dict(row._mapping) for row in result.fetchall()]
 
+
 async def get_detailed_status_mismatches(db: AsyncSession, platform_a: str, platform_b: str) -> List[Dict]:
     """Get detailed status mismatches for specific platform pair"""
     
@@ -232,6 +237,7 @@ async def get_detailed_status_mismatches(db: AsyncSession, platform_a: str, plat
     result = await db.execute(query, {"platform_a": platform_a, "platform_b": platform_b})
     return [dict(row._mapping) for row in result.fetchall()]
 
+
 @router.get("/non-performing-inventory", response_class=HTMLResponse)
 async def non_performing_inventory_report(
     request: Request,
@@ -254,29 +260,29 @@ async def non_performing_inventory_report(
                     p.year,
                     p.base_price,
                     
-                    -- Extract data from extended_attributes JSON
-                    (rl.extended_attributes->>'created_at')::timestamp as listing_date,
-                    (rl.extended_attributes->'buyer_price'->>'amount')::decimal as reverb_price,
-                    (rl.extended_attributes->'stats'->>'views')::int as views,
-                    (rl.extended_attributes->'stats'->>'watches')::int as watches,
-                    (rl.extended_attributes->>'offer_count')::int as offers,
+                    -- Extract data - use table columns directly
+                    rl.reverb_created_at as listing_date,
+                    COALESCE((rl.extended_attributes->'buyer_price'->>'amount')::decimal, 0) as reverb_price,
+                    COALESCE(rl.view_count, 0) as views,
+                    COALESCE(rl.watch_count, 0) as watches,
+                    COALESCE((rl.extended_attributes->>'offer_count')::int, 0) as offers,
                     
                     -- Calculate engagement metrics (NO DECIMALS)
                     ROUND(
-                        (rl.extended_attributes->'stats'->>'views')::decimal / 
-                        GREATEST(EXTRACT(days FROM (CURRENT_DATE - (rl.extended_attributes->>'created_at')::timestamp)) / 30, 1), 0
+                        COALESCE(rl.view_count::decimal, 0) / 
+                        GREATEST(COALESCE(EXTRACT(days FROM (CURRENT_DATE - rl.reverb_created_at)), 30) / 30, 1), 0
                     ) as views_per_month,
                     
                     -- Red flags
                     CASE 
-                        WHEN (rl.extended_attributes->'stats'->>'views')::int = 0 
-                            AND (rl.extended_attributes->'stats'->>'watches')::int = 0 
-                            AND (rl.extended_attributes->>'offer_count')::int = 0 
+                        WHEN COALESCE(rl.view_count, 0) = 0 
+                            AND COALESCE(rl.watch_count, 0) = 0 
+                            AND COALESCE((rl.extended_attributes->>'offer_count')::int, 0) = 0 
                         THEN 'DEAD_STOCK'
-                        WHEN (rl.extended_attributes->'stats'->>'views')::int > 50 
-                            AND (rl.extended_attributes->>'offer_count')::int = 0 
+                        WHEN COALESCE(rl.view_count, 0) > 50 
+                            AND COALESCE((rl.extended_attributes->>'offer_count')::int, 0) = 0 
                         THEN 'HIGH_INTEREST_NO_OFFERS'
-                        WHEN (rl.extended_attributes->>'offer_count')::int > 3 
+                        WHEN COALESCE((rl.extended_attributes->>'offer_count')::int, 0) > 3 
                         THEN 'MULTIPLE_OFFERS_UNSOLD'
                         ELSE 'NORMAL'
                     END as performance_flag,
@@ -307,8 +313,7 @@ async def non_performing_inventory_report(
                 JOIN platform_common pc ON rl.reverb_listing_id = pc.external_id
                 JOIN products p ON pc.product_id = p.id
                 WHERE rl.reverb_state = 'live'
-                AND rl.extended_attributes->>'created_at' IS NOT NULL
-                AND (rl.extended_attributes->>'inventory')::int = 1
+                AND rl.reverb_created_at IS NOT NULL
                 AND pc.platform_name = 'reverb'
             )
 
@@ -452,33 +457,40 @@ async def non_performing_inventory_report(
                     p.primary_image,
                     p.id as product_id,
                     
-                    -- Extract data from extended_attributes JSON
-                    (rl.extended_attributes->>'created_at')::timestamp as listing_date,
-                    (rl.extended_attributes->'buyer_price'->>'amount')::decimal as reverb_price,
-                    (rl.extended_attributes->'stats'->>'views')::int as views,
-                    (rl.extended_attributes->'stats'->>'watches')::int as watches,
-                    (rl.extended_attributes->>'offer_count')::int as offers,
-                    (rl.extended_attributes->>'inventory')::int as inventory_quantity,
+                    -- Extract data - use table columns directly
+                    rl.reverb_created_at as listing_date,
+                    COALESCE((rl.extended_attributes->'buyer_price'->>'amount')::decimal, 0) as reverb_price,
+                    COALESCE(rl.view_count, 0) as views,
+                    COALESCE(rl.watch_count, 0) as watches,
+                    COALESCE((rl.extended_attributes->>'offer_count')::int, 0) as offers,
+                    1 as inventory_quantity,
                     
-                    -- Calculate days on market
-                    EXTRACT(days FROM (CURRENT_DATE - (rl.extended_attributes->>'created_at')::timestamp)) as days_on_market,
+                    -- Calculate days on market using reverb_created_at
+                    COALESCE(
+                        EXTRACT(days FROM (CURRENT_DATE - rl.reverb_created_at)), 
+                        0
+                    ) as days_on_market,
                     
                     -- Calculate engagement metrics
                     ROUND(
-                        (rl.extended_attributes->'stats'->>'views')::decimal / 
-                        GREATEST(EXTRACT(days FROM (CURRENT_DATE - (rl.extended_attributes->>'created_at')::timestamp)) / 30, 1), 0
+                        COALESCE(rl.view_count::decimal, 0) / 
+                        GREATEST(
+                            COALESCE(EXTRACT(days FROM (CURRENT_DATE - rl.reverb_created_at)), 30) / 30, 
+                            1
+                        ), 
+                        0
                     ) as views_per_month,
                     
                     -- Red flags
                     CASE 
-                        WHEN (rl.extended_attributes->'stats'->>'views')::int = 0 
-                            AND (rl.extended_attributes->'stats'->>'watches')::int = 0 
-                            AND (rl.extended_attributes->>'offer_count')::int = 0 
+                        WHEN COALESCE(rl.view_count, 0) = 0 
+                            AND COALESCE(rl.watch_count, 0) = 0 
+                            AND COALESCE((rl.extended_attributes->>'offer_count')::int, 0) = 0 
                         THEN 'DEAD_STOCK'
-                        WHEN (rl.extended_attributes->'stats'->>'views')::int > 50 
-                            AND (rl.extended_attributes->>'offer_count')::int = 0 
+                        WHEN COALESCE(rl.view_count, 0) > 50 
+                            AND COALESCE((rl.extended_attributes->>'offer_count')::int, 0) = 0 
                         THEN 'HIGH_INTEREST_NO_OFFERS'
-                        WHEN (rl.extended_attributes->>'offer_count')::int > 3 
+                        WHEN COALESCE((rl.extended_attributes->>'offer_count')::int, 0) > 3 
                         THEN 'MULTIPLE_OFFERS_UNSOLD'
                         ELSE 'NORMAL'
                     END as performance_flag,
@@ -498,10 +510,9 @@ async def non_performing_inventory_report(
                 LEFT JOIN platform_common pc_vr ON p.id = pc_vr.product_id AND pc_vr.platform_name = 'vr'
                 
                 WHERE rl.reverb_state = 'live'
-                AND rl.extended_attributes->>'created_at' IS NOT NULL
-                AND (rl.extended_attributes->>'inventory')::int = 1
+                AND rl.reverb_created_at IS NOT NULL
                 AND pc.platform_name = 'reverb'
-                AND (rl.extended_attributes->>'created_at')::timestamp < (CURRENT_DATE - INTERVAL '{interval}')
+                AND rl.reverb_created_at < (CURRENT_DATE - INTERVAL '{interval}')
             )
             SELECT * FROM inventory_base
             ORDER BY {sort_column} {order_direction}
@@ -552,3 +563,916 @@ async def non_performing_inventory_report(
                 "sort_by": sort_by,
                 "sort_order": sort_order
             })
+
+
+@router.get("/sync-events", response_class=HTMLResponse)
+async def sync_events_report(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+    platform_filter: Optional[str] = Query(None, alias="platform"),
+    change_type_filter: Optional[str] = Query(None, alias="change_type"),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    sort_by: Optional[str] = Query("detected_at", alias="sort"),
+    sort_order: Optional[str] = Query("desc", alias="order")
+):
+    """
+    Report for viewing and filtering unprocessed synchronization events.
+    """
+    async with get_session() as db:
+        # --- 1. Fetch Summary Statistics ---
+        summary_query = text("""
+        SELECT
+            COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+            COUNT(*) FILTER (WHERE status = 'processed' AND processed_at >= CURRENT_DATE) AS processed_today,
+            COUNT(*) FILTER (WHERE status = 'partial') AS partial,
+            COUNT(*) FILTER (WHERE status = 'error') AS errors
+        FROM sync_events;
+        """)
+        summary_result = await db.execute(summary_query)
+        summary_stats = dict(summary_result.fetchone()._mapping)
+
+        # --- 2. Fetch Platform Summary ---
+        platform_summary_query = text("""
+        SELECT platform_name, COUNT(*) as event_count
+        FROM sync_events
+        GROUP BY platform_name
+        ORDER BY event_count DESC;
+        """)
+        platform_summary_result = await db.execute(platform_summary_query)
+        platform_summary = [dict(row._mapping) for row in platform_summary_result.fetchall()]
+
+        # --- 3. Build and Fetch Detailed Events List ---
+        params = {}
+        where_clauses = []
+
+        if platform_filter:
+            where_clauses.append("platform_name = :platform")
+            params["platform"] = platform_filter
+        if change_type_filter:
+            where_clauses.append("change_type = :change_type")
+            params["change_type"] = change_type_filter
+        if status_filter:
+            where_clauses.append("status = :status")
+            params["status"] = status_filter
+            
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+        # **NEW**: Whitelist sortable columns for security
+        sortable_columns = {
+            "event": "status",
+            "change_type": "change_type",
+            "product": "product_id",
+            "detected_at": "detected_at",
+            "status": "status"
+        }
+        sort_column = sortable_columns.get(sort_by, "detected_at")
+        sort_direction = "ASC" if sort_order == "asc" else "DESC"
+
+        detailed_query = text(f"""
+        SELECT 
+            id,
+            platform_name,
+            product_id,
+            external_id,
+            change_type,
+            change_data,
+            status,
+            detected_at,
+            notes
+        FROM sync_events
+        WHERE {where_sql}
+        ORDER BY {sort_column} {sort_direction}, id DESC
+        LIMIT 500;
+        """)
+
+        detailed_result = await db.execute(detailed_query, params)
+        sync_events = [dict(row._mapping) for row in detailed_result.fetchall()]
+
+    available_platforms = ["reverb", "ebay", "shopify", "vr"]
+    available_change_types = [
+        "new_listing", "price_change", "status_change", "removed_listing", "title", "description"
+    ]
+
+    return templates.TemplateResponse("reports/sync_events_report.html", {
+        "request": request,
+        "sync_events": sync_events,
+        "summary_stats": summary_stats,
+        "platform_summary": platform_summary,
+        "platform_filter": platform_filter,
+        "change_type_filter": change_type_filter,
+        "status_filter": status_filter,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
+        "platforms": available_platforms,
+        "change_types": available_change_types
+    })
+
+
+@router.get("/platform-coverage", response_class=HTMLResponse)
+async def platform_coverage_report(
+    request: Request,
+    status_filter: Optional[str] = Query("ACTIVE", description="Filter by product status"),
+    sort_by: Optional[str] = Query("missing_count", description="Sort by column"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc/desc)")
+):
+    """
+    Platform Coverage Report: Identify products missing from certain platforms.
+    Enhanced with filtering by status and sortable columns.
+    """
+    async with get_session() as db:
+        # Build WHERE clause for status filter
+        status_clause = ""
+        params = {}
+        
+        if status_filter and status_filter != "ALL":
+            status_clause = "WHERE p.status = :status_filter"
+            params["status_filter"] = status_filter
+        elif status_filter != "ALL":
+            # Default to ACTIVE if no filter specified
+            status_clause = "WHERE p.status = 'ACTIVE'"
+        
+        # Map sort columns to SQL
+        sort_column_map = {
+            "sku": "sku",
+            "brand": "brand",
+            "model": "model",
+            "base_price": "base_price",
+            "missing_count": "missing_count",
+            "platform_count": "platform_count"
+        }
+        
+        # Validate sort column
+        sort_col = sort_column_map.get(sort_by, "missing_count")
+        sort_dir = "DESC" if sort_order == "desc" else "ASC"
+        
+        query = text(f"""
+        WITH platform_coverage AS (
+            SELECT 
+                p.id AS product_id,
+                p.sku,
+                p.brand,
+                p.model,
+                p.base_price,
+                p.status,
+                COALESCE(ARRAY_AGG(pc.platform_name) FILTER (WHERE pc.platform_name IS NOT NULL), ARRAY[]::text[]) AS platforms
+            FROM products p
+            LEFT JOIN platform_common pc ON p.id = pc.product_id 
+                AND (pc.status NOT IN ('SOLD', 'ENDED') OR pc.status IS NULL)
+            {status_clause}
+            GROUP BY p.id, p.sku, p.brand, p.model, p.base_price, p.status
+        ),
+        coverage_data AS (
+            SELECT 
+                product_id,
+                sku,
+                brand,
+                model,
+                base_price,
+                status,
+                platforms,
+                CASE 
+                    WHEN ARRAY_LENGTH(platforms, 1) IS NULL THEN 0 
+                    ELSE ARRAY_LENGTH(platforms, 1) 
+                END AS platform_count,
+                ARRAY(
+                    SELECT unnest(ARRAY['shopify', 'ebay', 'reverb', 'vr']) 
+                    EXCEPT 
+                    SELECT unnest(platforms)
+                ) AS missing_platforms,
+                CASE 
+                    WHEN ARRAY_LENGTH(platforms, 1) IS NULL THEN 4
+                    ELSE 4 - ARRAY_LENGTH(platforms, 1)
+                END AS missing_count
+            FROM platform_coverage
+            WHERE ARRAY_LENGTH(platforms, 1) IS NULL OR ARRAY_LENGTH(platforms, 1) < 4
+        )
+        SELECT * FROM coverage_data
+        ORDER BY {sort_col} {sort_dir}, 
+                 ARRAY_TO_STRING(missing_platforms, ',') ASC,
+                 sku ASC;
+        """)
+        
+        result = await db.execute(query, params)
+        coverage_data = [dict(row._mapping) for row in result.fetchall()]
+        
+        # Get available statuses for filter
+        status_query = text("SELECT DISTINCT status FROM products WHERE status IS NOT NULL ORDER BY status")
+        status_result = await db.execute(status_query)
+        available_statuses = ["ALL"] + [row[0] for row in status_result.fetchall()]
+        
+        return templates.TemplateResponse("reports/platform_coverage.html", {
+            "request": request,
+            "coverage_data": coverage_data,
+            "status_filter": status_filter,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "available_statuses": available_statuses
+        })
+
+@router.post("/sync-events/process/{event_id}")
+async def process_sync_event(
+    event_id: int,
+    settings: Settings = Depends(get_settings)
+):
+    """Process a single sync event or related events for the same product."""
+    try:
+        async with get_session() as db:
+            # Use the common reconciliation service
+            report = await process_reconciliation(
+                db=db,
+                event_id=event_id,
+                dry_run=False  # Always live mode from UI
+            )
+            
+            # Format the response
+            if report.summary['errors'] > 0:
+                return {
+                    "status": "error",
+                    "message": f"Processed with errors: {report.summary['errors']} errors",
+                    "summary": report.summary,
+                    "actions": report.actions_taken
+                }
+            elif report.summary['processed'] == 0:
+                return {
+                    "status": "warning",
+                    "message": "No events were processed",
+                    "summary": report.summary
+                }
+            else:
+                return {
+                    "status": "success",
+                    "message": f"Successfully processed {report.summary['processed']} event(s)",
+                    "summary": report.summary,
+                    "actions": report.actions_taken
+                }
+            
+    except Exception as e:
+        logger.error(f"Error processing sync event {event_id}: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/sync-stats", response_class=HTMLResponse)
+async def sync_stats_report(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+    platform_filter: Optional[str] = Query(None, alias="platform"),
+    days_filter: Optional[int] = Query(30, alias="days")
+):
+    """
+    Sync Statistics Report: View comprehensive sync performance metrics.
+    """
+    async with get_session() as db:
+        from app.services.sync_stats_service import SyncStatsService
+        from sqlalchemy import desc
+        from app.models import SyncStats
+        from datetime import datetime, timedelta
+        
+        stats_service = SyncStatsService(db)
+        
+        # Get cumulative stats
+        cumulative_stats = await stats_service.get_current_stats(platform_filter)
+        
+        # Get recent sync runs
+        cutoff_date = datetime.now() - timedelta(days=days_filter)
+        
+        stmt = text("""
+            SELECT 
+                created_at,
+                sync_run_id,
+                platform,
+                run_events_processed,
+                run_sales,
+                run_listings_created,
+                run_listings_updated,
+                run_listings_removed,
+                run_errors,
+                run_duration_seconds,
+                metadata_json
+            FROM sync_stats
+            WHERE sync_run_id IS NOT NULL
+            AND created_at >= :cutoff_date
+            ORDER BY created_at DESC
+            LIMIT 100
+        """)
+        
+        result = await db.execute(stmt, {"cutoff_date": cutoff_date})
+        recent_runs = [dict(row._mapping) for row in result.fetchall()]
+        
+        # Get daily aggregates for chart
+        daily_stats_query = text("""
+            SELECT 
+                DATE(created_at) as date,
+                SUM(run_events_processed) as events,
+                SUM(run_sales) as sales,
+                SUM(run_listings_created) as created,
+                SUM(run_errors) as errors
+            FROM sync_stats
+            WHERE sync_run_id IS NOT NULL
+            AND created_at >= :cutoff_date
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+        """)
+        
+        daily_result = await db.execute(daily_stats_query, {"cutoff_date": cutoff_date})
+        daily_stats = [dict(row._mapping) for row in daily_result.fetchall()]
+        
+        # Get platform breakdown
+        platform_query = text("""
+            SELECT 
+                platform,
+                COUNT(*) as sync_count,
+                SUM(run_events_processed) as total_events,
+                SUM(run_errors) as total_errors,
+                AVG(run_duration_seconds) as avg_duration
+            FROM sync_stats
+            WHERE sync_run_id IS NOT NULL
+            AND platform IS NOT NULL
+            AND created_at >= :cutoff_date
+            GROUP BY platform
+            ORDER BY total_events DESC
+        """)
+        
+        platform_result = await db.execute(platform_query, {"cutoff_date": cutoff_date})
+        platform_breakdown = [dict(row._mapping) for row in platform_result.fetchall()]
+        
+        return templates.TemplateResponse("reports/sync_stats.html", {
+            "request": request,
+            "cumulative_stats": cumulative_stats,
+            "recent_runs": recent_runs,
+            "daily_stats": daily_stats,
+            "platform_breakdown": platform_breakdown,
+            "platform_filter": platform_filter,
+            "days_filter": days_filter
+        })
+
+
+@router.get("/sales", response_class=HTMLResponse)
+async def sales_report(
+    request: Request,
+    platform_filter: Optional[str] = Query(None, alias="platform"),
+    days_filter: Optional[int] = Query(30, alias="days"),
+    sort_by: Optional[str] = Query("sale_date", alias="sort"),
+    sort_order: Optional[str] = Query("desc", alias="order")
+):
+    """
+    Sales & Ended Listings Report: Track sold items and intelligently determine sale platforms.
+    """
+    async with get_session() as db:
+        from datetime import datetime, timedelta
+        
+        # Calculate cutoff date
+        cutoff_date = datetime.now() - timedelta(days=days_filter) if days_filter else None
+        
+        # Build WHERE clause
+        where_clauses = []
+        params = {}
+        
+        if cutoff_date:
+            where_clauses.append("se.detected_at >= :cutoff_date")
+            params["cutoff_date"] = cutoff_date
+            
+        if platform_filter:
+            where_clauses.append("se.platform_name = :platform")
+            params["platform"] = platform_filter
+            
+        where_sql = " AND " + " AND ".join(where_clauses) if where_clauses else ""
+        
+        # Map sort columns (these are used in the final SELECT, not in CTEs)
+        sort_column_map = {
+            "sale_date": "sale_date",
+            "sku": "sku",
+            "brand": "brand",
+            "model": "model",
+            "price": "base_price",
+            "platform": "sale_platform"
+        }
+        
+        sort_col = sort_column_map.get(sort_by, "sale_date")
+        sort_dir = "DESC" if sort_order == "desc" else "ASC"
+        
+        # Query for sold/ended items with platform detection logic
+        sales_query = text(f"""
+            WITH ranked_sales AS (
+                SELECT 
+                    p.id as product_id,
+                    p.sku,
+                    p.brand,
+                    p.model,
+                    p.year,
+                    p.base_price,
+                    p.primary_image,
+                    p.status,
+                    se.platform_name as reporting_platform,
+                    se.detected_at as sale_date,
+                    se.change_data->>'new' as change_type,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY p.id, DATE(se.detected_at) 
+                        ORDER BY se.detected_at DESC
+                    ) as rn
+                FROM sync_events se
+                JOIN products p ON se.product_id = p.id
+                WHERE se.change_type = 'status_change'
+                AND se.change_data->>'new' IN ('sold', 'ended')
+                {" AND " + " AND ".join(where_clauses) if where_clauses else ""}
+            ),
+            sales_data AS (
+                SELECT 
+                    rs.*,
+                    
+                    -- Count active platforms at time of sale
+                    (SELECT COUNT(DISTINCT pc2.platform_name) 
+                     FROM platform_common pc2 
+                     WHERE pc2.product_id = rs.product_id 
+                     AND pc2.status IN ('ACTIVE', 'DRAFT')
+                    ) as active_platform_count,
+                    
+                    -- Get all platforms that had this product
+                    (SELECT ARRAY_AGG(DISTINCT pc.platform_name)
+                     FROM platform_common pc
+                     WHERE pc.product_id = rs.product_id
+                    ) as all_platforms,
+                    
+                    -- Determine sale platform
+                    CASE 
+                        -- If only one platform had it active, it sold there
+                        WHEN (SELECT COUNT(DISTINCT pc2.platform_name) 
+                              FROM platform_common pc2 
+                              WHERE pc2.product_id = rs.product_id 
+                              AND pc2.status IN ('ACTIVE', 'DRAFT')
+                             ) = 1 
+                        THEN rs.reporting_platform
+                        
+                        -- If multiple platforms but only one reports sold, it sold there
+                        WHEN (SELECT COUNT(DISTINCT se2.platform_name)
+                              FROM sync_events se2
+                              WHERE se2.product_id = rs.product_id
+                              AND se2.change_type = 'status_change'
+                              AND se2.change_data->>'new' IN ('sold', 'ended')
+                             ) = 1
+                        THEN rs.reporting_platform
+                        
+                        -- If all platforms report ended/sold, it was removed offline
+                        WHEN (SELECT COUNT(DISTINCT pc2.platform_name) 
+                              FROM platform_common pc2 
+                              WHERE pc2.product_id = rs.product_id
+                             ) = 
+                             (SELECT COUNT(DISTINCT se2.platform_name)
+                              FROM sync_events se2
+                              WHERE se2.product_id = rs.product_id
+                              AND se2.change_type = 'status_change'
+                              AND se2.change_data->>'new' IN ('sold', 'ended')
+                             )
+                        THEN 'offline'
+                        
+                        -- Otherwise, use the reporting platform
+                        ELSE rs.reporting_platform
+                    END as sale_platform,
+                    
+                    -- Sale confidence score
+                    CASE 
+                        WHEN rs.change_type = 'sold' THEN 'confirmed'
+                        WHEN rs.change_type = 'ended' THEN 'likely'
+                        ELSE 'uncertain'
+                    END as sale_confidence
+                    
+                FROM ranked_sales rs
+                WHERE rs.rn = 1
+            )
+            SELECT * FROM sales_data
+            ORDER BY {sort_col} {sort_dir}
+            LIMIT 500
+        """)
+        
+        sales_result = await db.execute(sales_query, params)
+        sales_data = [dict(row._mapping) for row in sales_result.fetchall()]
+        
+        # Get summary statistics
+        summary_where_clauses = ["se.change_type = 'status_change'", "se.change_data->>'new' IN ('sold', 'ended')"]
+        if cutoff_date:
+            summary_where_clauses.append("se.detected_at >= :cutoff_date")
+        if platform_filter:
+            summary_where_clauses.append("se.platform_name = :platform")
+        summary_where_sql = " WHERE " + " AND ".join(summary_where_clauses)
+        
+        summary_query = text(f"""
+            SELECT 
+                COUNT(DISTINCT p.id) as total_sold,
+                SUM(p.base_price) as total_value,
+                COUNT(DISTINCT p.id) FILTER (WHERE se.platform_name = 'reverb') as reverb_sales,
+                COUNT(DISTINCT p.id) FILTER (WHERE se.platform_name = 'ebay') as ebay_sales,
+                COUNT(DISTINCT p.id) FILTER (WHERE se.platform_name = 'shopify') as shopify_sales,
+                COUNT(DISTINCT p.id) FILTER (WHERE se.platform_name = 'vr') as vr_sales,
+                AVG(p.base_price) as avg_sale_price
+            FROM sync_events se
+            JOIN products p ON se.product_id = p.id
+            {summary_where_sql}
+        """)
+        
+        summary_result = await db.execute(summary_query, params)
+        summary_stats = dict(summary_result.fetchone()._mapping)
+        
+        # Get daily sales trend
+        trend_query = text(f"""
+            SELECT 
+                DATE(se.detected_at) as sale_date,
+                COUNT(DISTINCT p.id) as items_sold,
+                SUM(p.base_price) as daily_revenue
+            FROM sync_events se
+            JOIN products p ON se.product_id = p.id
+            {summary_where_sql}
+            GROUP BY DATE(se.detected_at)
+            ORDER BY sale_date DESC
+            LIMIT 30
+        """)
+        
+        trend_result = await db.execute(trend_query, params)
+        sales_trend = [dict(row._mapping) for row in trend_result.fetchall()]
+        
+        return templates.TemplateResponse("reports/sales.html", {
+            "request": request,
+            "sales_data": sales_data,
+            "summary_stats": summary_stats,
+            "sales_trend": sales_trend,
+            "platform_filter": platform_filter,
+            "days_filter": days_filter,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "platforms": ["reverb", "ebay", "shopify", "vr"]
+        })
+
+
+@router.get("/sales/export/csv")
+async def export_sales_csv(
+    platform_filter: Optional[str] = Query(None, alias="platform"),
+    days_filter: Optional[int] = Query(30, alias="days"),
+    sort_by: Optional[str] = Query("sale_date", alias="sort"),
+    sort_order: Optional[str] = Query("desc", alias="order")
+):
+    """
+    Export sales report data as CSV.
+    """
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+    
+    async with get_session() as db:
+        from datetime import datetime, timedelta
+        
+        # Calculate cutoff date
+        cutoff_date = datetime.now() - timedelta(days=days_filter) if days_filter else None
+        
+        # Build WHERE clause
+        where_clauses = []
+        params = {}
+        
+        if cutoff_date:
+            where_clauses.append("se.detected_at >= :cutoff_date")
+            params["cutoff_date"] = cutoff_date
+            
+        if platform_filter:
+            where_clauses.append("se.platform_name = :platform")
+            params["platform"] = platform_filter
+            
+        # Map sort columns (these are used in the final SELECT, not in CTEs)
+        sort_column_map = {
+            "sale_date": "sale_date",
+            "sku": "sku",
+            "brand": "brand",
+            "model": "model",
+            "price": "base_price",
+            "platform": "sale_platform"
+        }
+        
+        sort_col = sort_column_map.get(sort_by, "sale_date")
+        sort_dir = "DESC" if sort_order == "desc" else "ASC"
+        
+        # Use the same query as the main sales report
+        sales_query = text(f"""
+            WITH ranked_sales AS (
+                SELECT 
+                    p.id as product_id,
+                    p.sku,
+                    p.brand,
+                    p.model,
+                    p.year,
+                    p.base_price,
+                    p.primary_image,
+                    p.status,
+                    se.platform_name as reporting_platform,
+                    se.detected_at as sale_date,
+                    se.change_data->>'new' as change_type,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY p.id, DATE(se.detected_at) 
+                        ORDER BY se.detected_at DESC
+                    ) as rn
+                FROM sync_events se
+                JOIN products p ON se.product_id = p.id
+                WHERE se.change_type = 'status_change'
+                AND se.change_data->>'new' IN ('sold', 'ended')
+                {" AND " + " AND ".join(where_clauses) if where_clauses else ""}
+            ),
+            sales_data AS (
+                SELECT 
+                    rs.*,
+                    
+                    -- Count active platforms at time of sale
+                    (SELECT COUNT(DISTINCT pc2.platform_name) 
+                     FROM platform_common pc2 
+                     WHERE pc2.product_id = rs.product_id 
+                     AND pc2.status IN ('ACTIVE', 'DRAFT')
+                    ) as active_platform_count,
+                    
+                    -- Get all platforms that had this product
+                    (SELECT ARRAY_AGG(DISTINCT pc.platform_name)
+                     FROM platform_common pc
+                     WHERE pc.product_id = rs.product_id
+                    ) as all_platforms,
+                    
+                    -- Determine sale platform
+                    CASE 
+                        -- If only one platform had it active, it sold there
+                        WHEN (SELECT COUNT(DISTINCT pc2.platform_name) 
+                              FROM platform_common pc2 
+                              WHERE pc2.product_id = rs.product_id 
+                              AND pc2.status IN ('ACTIVE', 'DRAFT')
+                             ) = 1 
+                        THEN rs.reporting_platform
+                        
+                        -- If multiple platforms but only one reports sold, it sold there
+                        WHEN (SELECT COUNT(DISTINCT se2.platform_name)
+                              FROM sync_events se2
+                              WHERE se2.product_id = rs.product_id
+                              AND se2.change_type = 'status_change'
+                              AND se2.change_data->>'new' IN ('sold', 'ended')
+                             ) = 1
+                        THEN rs.reporting_platform
+                        
+                        -- If all platforms report ended/sold, it was removed offline
+                        WHEN (SELECT COUNT(DISTINCT pc2.platform_name) 
+                              FROM platform_common pc2 
+                              WHERE pc2.product_id = rs.product_id
+                             ) = 
+                             (SELECT COUNT(DISTINCT se2.platform_name)
+                              FROM sync_events se2
+                              WHERE se2.product_id = rs.product_id
+                              AND se2.change_type = 'status_change'
+                              AND se2.change_data->>'new' IN ('sold', 'ended')
+                             )
+                        THEN 'offline'
+                        
+                        -- Otherwise, use the reporting platform
+                        ELSE rs.reporting_platform
+                    END as sale_platform,
+                    
+                    -- Sale confidence score
+                    CASE 
+                        WHEN rs.change_type = 'sold' THEN 'confirmed'
+                        WHEN rs.change_type = 'ended' THEN 'likely'
+                        ELSE 'uncertain'
+                    END as sale_confidence
+                    
+                FROM ranked_sales rs
+                WHERE rs.rn = 1
+            )
+            SELECT * FROM sales_data
+            ORDER BY {sort_col} {sort_dir}
+        """)
+        
+        sales_result = await db.execute(sales_query, params)
+        sales_data = [dict(row._mapping) for row in sales_result.fetchall()]
+        
+        # Create CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write headers
+        writer.writerow([
+            'SKU', 'Brand', 'Model', 'Year', 'Price (£)', 'Sale Date', 
+            'Reporting Platform', 'Sale Platform', 'Confidence', 'Status', 'All Platforms'
+        ])
+        
+        # Write data
+        for sale in sales_data:
+            writer.writerow([
+                sale['sku'],
+                sale['brand'],
+                sale['model'],
+                sale['year'] or '',
+                f"{sale['base_price']:.2f}",
+                sale['sale_date'].strftime('%Y-%m-%d %H:%M'),
+                sale['reporting_platform'].upper(),
+                sale['sale_platform'].upper(),
+                sale['sale_confidence'],
+                sale['status'],
+                ', '.join(sale['all_platforms']) if sale['all_platforms'] else ''
+            ])
+        
+        output.seek(0)
+        
+        # Return CSV file
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=sales_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+        )
+
+
+@router.get("/sales/export/pdf") 
+async def export_sales_pdf(
+    platform_filter: Optional[str] = Query(None, alias="platform"),
+    days_filter: Optional[int] = Query(30, alias="days")
+):
+    """
+    Export sales report data as a simple PDF.
+    For now, redirect to CSV export as PDF generation requires additional setup.
+    """
+    # TODO: Implement proper PDF export using reportlab or weasyprint
+    # For now, redirect to CSV which can be opened in Excel and saved as PDF
+    from fastapi.responses import RedirectResponse
+    
+    # Build query params for CSV export
+    params = []
+    if platform_filter:
+        params.append(f"platform={platform_filter}")
+    if days_filter:
+        params.append(f"days={days_filter}")
+    
+    query_string = "&".join(params) if params else ""
+    redirect_url = f"/reports/sales/export/csv?{query_string}" if query_string else "/reports/sales/export/csv"
+    
+    return RedirectResponse(url=redirect_url)
+
+
+@router.get("/price-inconsistencies", response_class=HTMLResponse)
+async def price_inconsistencies_report(
+    request: Request,
+    threshold: float = Query(10.0, description="Price difference threshold percentage"),
+    status_filter: Optional[str] = Query("ACTIVE", description="Filter by product status"),
+    sort_by: Optional[str] = Query("max_diff", description="Sort by column"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc/desc)")
+):
+    """
+    Price Inconsistencies Report: Detect products with significant price differences across platforms.
+    """
+    async with get_session() as db:
+        # Build WHERE clause for status filter
+        status_clause = ""
+        params = {"threshold": threshold}
+        
+        if status_filter and status_filter != "ALL":
+            status_clause = "WHERE p.status = :status_filter"
+            params["status_filter"] = status_filter
+        elif status_filter != "ALL":
+            # Default to ACTIVE if no filter specified
+            status_clause = "WHERE p.status = 'ACTIVE'"
+        
+        # Map sort columns
+        sort_column_map = {
+            "sku": "p.sku",
+            "brand": "p.brand",
+            "model": "p.model",
+            "base_price": "p.base_price",
+            "max_diff": "max_price_diff_pct",
+            "platforms": "platform_count"
+        }
+        
+        sort_col = sort_column_map.get(sort_by, "max_price_diff_pct")
+        sort_dir = "DESC" if sort_order == "desc" else "ASC"
+        
+        # Query to find price inconsistencies
+        query = text(f"""
+            WITH platform_prices AS (
+                SELECT 
+                    p.id,
+                    p.sku,
+                    p.brand,
+                    p.model,
+                    p.year,
+                    p.base_price,
+                    p.primary_image,
+                    p.status,
+                    pc.platform_name,
+                    pc.status as platform_status,
+                    CASE 
+                        WHEN pc.platform_name = 'reverb' THEN 
+                            COALESCE((rl.extended_attributes->>'price')::float, rl.list_price, p.base_price)
+                        WHEN pc.platform_name = 'ebay' THEN 
+                            COALESCE(el.price, p.base_price)
+                        WHEN pc.platform_name = 'shopify' THEN 
+                            COALESCE((sl.extended_attributes->>'price')::float, p.base_price)
+                        WHEN pc.platform_name = 'vr' THEN 
+                            COALESCE(vl.price_notax, p.base_price)
+                        ELSE p.base_price
+                    END as platform_price
+                FROM products p
+                JOIN platform_common pc ON p.id = pc.product_id
+                LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id AND pc.platform_name = 'reverb'
+                LEFT JOIN ebay_listings el ON pc.id = el.platform_id AND pc.platform_name = 'ebay'
+                LEFT JOIN shopify_listings sl ON pc.id = sl.platform_id AND pc.platform_name = 'shopify'
+                LEFT JOIN vr_listings vl ON pc.id = vl.platform_id AND pc.platform_name = 'vr'
+                {status_clause}
+                {"AND" if status_clause else "WHERE"} pc.status IN ('ACTIVE', 'DRAFT')
+            ),
+            price_analysis AS (
+                SELECT 
+                    id,
+                    sku,
+                    brand,
+                    model,
+                    year,
+                    base_price,
+                    primary_image,
+                    status,
+                    COUNT(DISTINCT platform_name) as platform_count,
+                    MIN(platform_price) as min_price,
+                    MAX(platform_price) as max_price,
+                    AVG(platform_price) as avg_price,
+                    MAX(platform_price) - MIN(platform_price) as price_diff,
+                    CASE 
+                        WHEN MIN(platform_price) > 0 THEN 
+                            ((MAX(platform_price) - MIN(platform_price)) / MIN(platform_price) * 100)
+                        ELSE 0
+                    END as max_price_diff_pct,
+                    ARRAY_AGG(
+                        json_build_object(
+                            'platform', platform_name,
+                            'price', platform_price,
+                            'status', platform_status
+                        ) ORDER BY platform_price DESC
+                    ) as platform_details
+                FROM platform_prices
+                GROUP BY id, sku, brand, model, year, base_price, primary_image, status
+                HAVING COUNT(DISTINCT platform_name) > 1
+                AND MAX(platform_price) > MIN(platform_price)
+            )
+            SELECT * FROM price_analysis
+            WHERE max_price_diff_pct >= :threshold
+            ORDER BY {sort_col} {sort_dir}
+            LIMIT 500
+        """)
+        
+        result = await db.execute(query, params)
+        inconsistencies = [dict(row._mapping) for row in result.fetchall()]
+        
+        # Get summary statistics
+        summary_query = text(f"""
+            WITH platform_prices AS (
+                SELECT 
+                    p.id,
+                    pc.platform_name,
+                    CASE 
+                        WHEN pc.platform_name = 'reverb' THEN 
+                            COALESCE((rl.extended_attributes->>'price')::float, rl.list_price, p.base_price)
+                        WHEN pc.platform_name = 'ebay' THEN 
+                            COALESCE(el.price, p.base_price)
+                        WHEN pc.platform_name = 'shopify' THEN 
+                            COALESCE((sl.extended_attributes->>'price')::float, p.base_price)
+                        WHEN pc.platform_name = 'vr' THEN 
+                            COALESCE(vl.price_notax, p.base_price)
+                        ELSE p.base_price
+                    END as platform_price
+                FROM products p
+                JOIN platform_common pc ON p.id = pc.product_id
+                LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id AND pc.platform_name = 'reverb'
+                LEFT JOIN ebay_listings el ON pc.id = el.platform_id AND pc.platform_name = 'ebay'
+                LEFT JOIN shopify_listings sl ON pc.id = sl.platform_id AND pc.platform_name = 'shopify'
+                LEFT JOIN vr_listings vl ON pc.id = vl.platform_id AND pc.platform_name = 'vr'
+                {status_clause}
+                {"AND" if status_clause else "WHERE"} pc.status IN ('ACTIVE', 'DRAFT')
+            ),
+            price_stats AS (
+                SELECT 
+                    id,
+                    COUNT(DISTINCT platform_name) as platform_count,
+                    MAX(platform_price) - MIN(platform_price) as price_diff,
+                    CASE 
+                        WHEN MIN(platform_price) > 0 THEN 
+                            ((MAX(platform_price) - MIN(platform_price)) / MIN(platform_price) * 100)
+                        ELSE 0
+                    END as price_diff_pct
+                FROM platform_prices
+                GROUP BY id
+                HAVING COUNT(DISTINCT platform_name) > 1
+                AND MAX(platform_price) > MIN(platform_price)
+            )
+            SELECT 
+                COUNT(DISTINCT id) as total_products,
+                COUNT(DISTINCT CASE WHEN price_diff_pct >= :threshold THEN id END) as products_above_threshold,
+                AVG(price_diff_pct) as avg_price_diff_pct,
+                MAX(price_diff_pct) as max_price_diff_pct,
+                SUM(price_diff) as total_price_variance
+            FROM price_stats
+        """)
+        
+        summary_result = await db.execute(summary_query, params)
+        summary_stats = dict(summary_result.fetchone()._mapping)
+        
+        return templates.TemplateResponse("reports/price_inconsistencies.html", {
+            "request": request,
+            "inconsistencies": inconsistencies,
+            "summary_stats": summary_stats,
+            "threshold": threshold,
+            "status_filter": status_filter,
+            "sort_by": sort_by,
+            "sort_order": sort_order
+        })

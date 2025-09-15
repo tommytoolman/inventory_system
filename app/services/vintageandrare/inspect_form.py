@@ -1,4 +1,6 @@
-
+"""
+This is a script to look at the webform for V&R to inspect elements we need to interact with to automate listings.
+"""
 
 import os
 import re
@@ -208,8 +210,10 @@ def map_category_options(driver):
         driver.save_screenshot("category_map_error.png")
         raise e
 
-def login_and_navigate(username, password, item_data=None, test_mode=True, map_categories=False, db_session=None):
-    # First use requests to get valid cookies
+def login_and_navigate(username, password, item_data=None, test_mode=True, map_categories=False, db_session=None, edit_mode=False, edit_item_id=None):
+    """
+    Unified function for both create and edit operations ed. 31/07/2025
+    """
     session = requests.Session()
     
     headers = {
@@ -313,7 +317,7 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
                 print("No cookie consent needed on new page")
             
             print(f"11. Final URL: {driver.current_url}")
-            driver.save_screenshot("final_page.png")
+            driver.save_screenshot("data/final_page.png")
             
             if map_categories:
                 print("\n12. Mapping category hierarchy...")
@@ -335,6 +339,18 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
         print("Response content:")
         print(response.text[:500])
 
+    if edit_mode and edit_item_id:
+        print(f"\n12. Editing item {edit_item_id}...")
+        result = edit_item_form(driver, edit_item_id, item_data, test_mode, db_session)
+        return result
+    elif item_data:
+        print("\n12. Filling create form...")
+        result = fill_item_form(driver, item_data, test_mode, db_session)
+        return result
+    else:
+        print("\n12. Analyzing form elements...")
+        analyze_form_elements(driver)
+
 def handle_year_decade(driver, year=None, decade=None):
     """
     Handle year and decade fields with auto-population logic
@@ -342,24 +358,30 @@ def handle_year_decade(driver, year=None, decade=None):
     wait = WebDriverWait(driver, 10)
     
     if year:
-        year_field = wait.until(
-            EC.element_to_be_clickable((By.ID, "year"))
-        )
+        print(f"Filling year: {year}")
+        year_field = wait.until(EC.element_to_be_clickable((By.ID, "year")))
         year_field.clear()
         year_field.send_keys(str(year))
-        time.sleep(1)  # Wait for decade to auto-populate
+        
+        # ✅ CRUCIAL: Trigger blur event to activate V&R's decade calculation
+        print("Triggering blur event to calculate decade...")
+        year_field.send_keys(Keys.TAB)  # Tab to trigger blur
+        time.sleep(2)  # Wait for V&R's JavaScript to calculate decade
         
         # Verify decade was auto-populated correctly
-        decade_select = Select(driver.find_element(By.ID, "decade"))
-        expected_decade = str(int(str(year)[:3] + '0'))
-        actual_decade = decade_select.first_selected_option.get_attribute('value')
-        
-        if actual_decade != expected_decade:
-            print(f"Warning: Decade didn't auto-populate as expected. Manual selection may be needed.")
+        try:
+            decade_select = Select(driver.find_element(By.ID, "decade"))
+            selected_value = decade_select.first_selected_option.get_attribute('value')
+            selected_text = decade_select.first_selected_option.text
+            
+            print(f"✅ Decade auto-populated: {selected_text} (value: {selected_value})")
+            
+        except Exception as e:
+            print(f"❌ Error verifying decade auto-population: {str(e)}")
+            
     elif decade:
-        decade_select = Select(wait.until(
-            EC.element_to_be_clickable((By.ID, "decade"))
-        ))
+        print(f"Manually setting decade: {decade}")
+        decade_select = Select(wait.until(EC.element_to_be_clickable((By.ID, "decade"))))
         decade_select.select_by_value(str(decade))
 
 def handle_shipping_fees(driver, item_data):
@@ -902,7 +924,12 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None):
     """
     Fill in the add/edit item form with the provided data
     """
+    
+    import time
+    form_start_time = time.time()  # ✅ ADD TIMING HERE
+    
     try:
+        print(f"🕐 Starting form fill at {time.strftime('%H:%M:%S')}")
         print("Starting to fill form...")
         project_root = Path(__file__).resolve().parent.parent.parent.parent / 'inventory_system'
         wait = WebDriverWait(driver, 10)
@@ -923,7 +950,6 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None):
                         item_data.get('subcategory'), 
                         item_data.get('sub_subcategory'),
                         item_data.get('sub_sub_subcategory'))
-
 
     # --- Basic Information ---
         
@@ -948,19 +974,81 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None):
                 EC.element_to_be_clickable((By.ID, "model_name"))
             )
             model_field.send_keys(item_data['model_name'])
-
-        # Handle year (which auto-populates decade)
-        handle_year_decade(driver, 
-                        year=item_data.get('year'),
-                        decade=item_data.get('decade'))
         
-        # In fill_item_form, around the year handling section:
+        # Year and decade handling - CORRECTED VERSION BASED ON ACTUAL HTML
         if 'year' in item_data and item_data['year'] is not None:
-            print(f"Filling year: {item_data['year']}")
-            handle_year_decade(driver, year=item_data.get('year'))
+            print(f"Processing year: {item_data['year']}")
+            year_field = wait.until(EC.element_to_be_clickable((By.ID, "year")))
+            year_field.clear()
+            year_field.send_keys(str(item_data['year']))
+            
+            # ✅ CORRECTED: Call the exact JavaScript function from the onBlur attribute
+            print("Triggering V&R's check_decade() function...")
+            
+            # Method 1: Execute the exact onBlur JavaScript function
+            driver.execute_script("check_decade();")
+            
+            # Method 2: Trigger the actual blur event (as backup)
+            driver.execute_script("arguments[0].onblur();", year_field)
+            
+            # Method 3: Traditional blur trigger (as backup)
+            year_field.send_keys(Keys.TAB)
+            
+            time.sleep(2)  # Wait for JavaScript to execute
+            
+            # Enhanced verification
+            try:
+                decade_dropdown = driver.find_element(By.ID, "decade")
+                decade_select = Select(decade_dropdown)
+                
+                selected_value = decade_select.first_selected_option.get_attribute('value')
+                selected_text = decade_select.first_selected_option.text
+                
+                print(f"Decade dropdown state after JavaScript:")
+                print(f"  Selected value: '{selected_value}'")
+                print(f"  Selected text: '{selected_text}'")
+                
+                if selected_value and selected_value != "":
+                    print(f"✅ Decade auto-populated: {selected_text} (value: {selected_value})")
+                    
+                    # Validate the decade calculation
+                    try:
+                        year_int = int(str(item_data['year']))
+                        expected_decade = str((year_int // 10) * 10)  # e.g., 1965 -> "1960"
+                        if selected_value == expected_decade:
+                            print(f"✅ Decade correctly calculated: {expected_decade}s")
+                        else:
+                            print(f"⚠️  Warning: Expected decade {expected_decade} but got {selected_value}")
+                    except ValueError:
+                        print(f"⚠️  Could not validate decade for year: {item_data['year']}")
+                else:
+                    print("❌ Decade not auto-populated (empty value)")
+                    
+                # Debug all dropdown options
+                all_options = decade_dropdown.find_elements(By.TAG_NAME, "option")
+                print(f"🔍 DEBUG: All decade options:")
+                for i, option in enumerate(all_options):
+                    is_selected = option.is_selected()
+                    value = option.get_attribute('value')
+                    text = option.text
+                    print(f"   {i}: '{text}' (value='{value}') - Selected: {is_selected}")
+                
+                # Force visual selection if needed
+                if selected_value == "2000":
+                    driver.execute_script("document.getElementById('decade').value = '2000';")
+                    print("✅ Forced decade selection via JavaScript")
+                    
+            except Exception as e:
+                print(f"⚠️  Error verifying decade: {str(e)}")
+
         elif 'decade' in item_data and item_data['decade'] is not None:
-            print(f"Filling decade: {item_data['decade']}")
-            handle_year_decade(driver, decade=item_data.get('decade'))
+            print(f"Manually setting decade: {item_data['decade']}")
+            try:
+                decade_select = Select(wait.until(EC.element_to_be_clickable((By.ID, "decade"))))
+                decade_select.select_by_value(str(item_data['decade']))
+                print(f"✅ Manually set decade to: {item_data['decade']}")
+            except Exception as e:
+                print(f"❌ Error manually setting decade: {str(e)}")
         else:
             print("No year or decade data provided")
         
@@ -979,51 +1067,99 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None):
             )
             url_field.send_keys(item_data['external_url'])
 
-        # For Description (TinyMCE) - UPDATED VERSION
+        # For Description (TinyMCE) - UPDATED VERSION with proper processing
         if 'description' in item_data:
             print("Filling description...")
             try:
                 description_html = item_data['description']
-                print(f"Setting TinyMCE content with HTML: {description_html[:100]}...")
+                
+                # ✅ Process line breaks: AFTER first header, BEFORE+AFTER subsequent headers
+                processed_description = description_html
+
+                # Find all headers in the content
+                header_pattern = r'<p><strong><strong>([^<]+)</strong></strong></p>'
+                headers = re.findall(header_pattern, processed_description)
+
+                if headers:
+                    # The first header is the title - don't add space before it
+                    title_header = headers[0]
+                    
+                    # Add empty paragraph before all OTHER headers (not the title)
+                    for header_text in headers[1:]:  # Skip first header (title)
+                        # Don't add space before standard footer headers
+                        if header_text not in ['ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID']:
+                            old_pattern = f'<p><strong><strong>{re.escape(header_text)}</strong></strong></p>'
+                            new_pattern = f'<p></p><p><strong><strong>{header_text}</strong></strong></p>'
+                            processed_description = processed_description.replace(old_pattern, new_pattern)
+                    
+                    # ✅ ADD: Empty paragraphs AFTER all headers (including the first one)
+                    for header_text in headers:
+                        old_pattern = f'<p><strong><strong>{re.escape(header_text)}</strong></strong></p>'
+                        new_pattern = f'<p><strong><strong>{header_text}</strong></strong></p><p></p>'
+                        processed_description = processed_description.replace(old_pattern, new_pattern)
+
+                print("✅ Added empty paragraphs before and after bold headers")
+                
+                print(f"Setting TinyMCE content: {processed_description[:100]}...")
                 
                 # Method 1: Use TinyMCE API to set HTML content
                 try:
-                    # First, try using TinyMCE API directly
                     driver.execute_script(f"""
                         var editor = tinymce.get('item_desc');
                         if (editor) {{
-                            editor.setContent(`{description_html.replace('`', '\\`')}`);
+                            editor.setContent(`{processed_description.replace('`', '\\`')}`);
                             console.log('TinyMCE content set via API');
                         }} else {{
                             console.log('TinyMCE editor not found, trying iframe method');
                             throw new Error('Editor not found');
                         }}
                     """)
-                    print("Description set via TinyMCE API")
+                    print("✅ Description set via TinyMCE API with line breaks")
                     
                 except Exception as api_error:
                     print(f"TinyMCE API method failed: {api_error}, trying iframe method...")
                     
-                    # Method 2: Fallback to iframe method with innerHTML
-                    # First switch to TinyMCE iframe
-                    iframe = wait.until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "#item_desc_ifr"))
-                    )
+                    # Fallback to iframe method
+                    iframe = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#item_desc_ifr")))
                     driver.switch_to.frame(iframe)
                     
-                    # Set innerHTML instead of send_keys to preserve HTML formatting
                     driver.execute_script(f"""
-                        document.getElementById('tinymce').innerHTML = `{description_html.replace('`', '\\`')}`;
+                        document.getElementById('tinymce').innerHTML = `{processed_description.replace('`', '\\`')}`;
                     """)
                     
-                    # Switch back to main content
                     driver.switch_to.default_content()
-                    print("Description set via iframe innerHTML method")
+                    print("✅ Description set via iframe innerHTML method with line breaks")
+                    
+                # ADD THIS DEBUG BLOCK RIGHT HERE (after line 1089)
+                # After setting TinyMCE content, verify what was actually set:
+                try:
+                    # Get the actual content from TinyMCE
+                    actual_content = driver.execute_script("return tinymce.get('item_desc').getContent();")
+                    print(f"🔍 DEBUG: Actual TinyMCE content after setting:")
+                    print(f"   First 200 chars: {actual_content[:200]}...")
+                    
+                    # Check if our <br> tags are present
+                    br_count = actual_content.count('<br>')
+                    print(f"   Number of <br> tags found: {br_count}")
+                    
+                    # Check for our specific patterns (updated for TinyMCE's HTML conversion)
+                    if '</strong></strong></p><p>&nbsp;</p>' in actual_content:
+                        print("   ✅ Found line breaks AFTER headers")
+                    else:
+                        print("   ❌ Missing line breaks AFTER headers")
+
+                    if '<p>&nbsp;</p><p><strong><strong>' in actual_content:
+                        print("   ✅ Found line breaks BEFORE headers")  
+                    else:
+                        print("   ❌ Missing line breaks BEFORE headers")
+                        
+                except Exception as e:
+                    print(f"TinyMCE debug error: {str(e)}")
                     
             except Exception as e:
-                print(f"Error filling description: {str(e)}")
+                print(f"❌ Error filling description: {str(e)}")
                 driver.save_screenshot("desc_error.png")
-                driver.switch_to.default_content()  # Always switch back
+                driver.switch_to.default_content()
                 raise
 
         # Basic Pricing
@@ -1215,34 +1351,105 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None):
         
         print("Form filled successfully!")
         
-        # if test_mode:
-        #     print("Test mode: Form will not be submitted")
-        #     time.sleep(5)
-        #     print("Test complete - closing in 5 seconds...")
-        # else:
-        #     input("Review the form and press Enter to submit, or Ctrl+C to cancel...")
-        #     submit_button = wait.until(
-        #         EC.element_to_be_clickable((By.NAME, "submit_form"))
-        #     )
-        #     submit_button.click()
-        #     time.sleep(3)
-        #     print(f"Form submitted. Current URL: {driver.current_url}")
+        # ✅ ADD TIMING SUMMARY HERE (still inside the try block)
+        form_end_time = time.time()
+        form_duration = form_end_time - form_start_time
+        
+        print(f"\n⏱️  **FORM FILL TIMING**")
+        print(f"Form fill duration: {form_duration:.1f} seconds")
+        print(f"🎯 Estimated time for 400 items: {form_duration * 400:.1f} seconds ({(form_duration * 400)/60:.1f} minutes)")
         
         if test_mode:
             print("TEST MODE: Form filled. You can manually submit or wait for timeout.")
-            result = wait_for_manual_submission_and_capture_result(driver, db_session)  # Pass db_session
+            result = wait_for_manual_submission_and_capture_result(driver, db_session)
         else:
             print("LIVE MODE: Auto-submitting form and capturing response...")
-            result = submit_form_and_capture_response(driver, db_session)  # Pass db_session
+            result = submit_form_and_capture_response(driver, db_session)
+        
+        # ✅ ADD TIMING TO RESULT
+        if isinstance(result, dict):
+            result["form_timing"] = {
+                "form_fill_duration": form_duration,
+                "estimated_400_items_seconds": form_duration * 400,
+                "estimated_400_items_minutes": (form_duration * 400) / 60
+            }
         
         return result
         
-        
     except Exception as e:
+        # ✅ ADD TIMING TO ERROR CASE TOO
+        form_end_time = time.time()
+        form_duration = form_end_time - form_start_time
+        print(f"❌ Form fill failed after {form_duration:.1f} seconds")
+        
         print(f"Error filling form: {str(e)}")
         driver.save_screenshot("form_error.png")
         print("ERROR: Keeping browser open for debugging...")
         input("Press Enter to close the browser after reviewing the form...")
+        raise e
+
+def edit_item_form(driver, item_id, item_data, test_mode=True, db_session=None):
+    """
+    Edit an existing V&R listing using an already authenticated Selenium driver
+    
+    Args:
+        driver: Authenticated Selenium WebDriver instance
+        item_id: V&R item ID to edit
+        item_data: Dictionary containing updated item details
+        test_mode: If True, form is filled but not submitted
+        db_session: Optional database session
+    """
+    wait = WebDriverWait(driver, 10)
+    
+    try:
+        print(f"🔧 **EDITING V&R ITEM {item_id}**")
+        
+        # Step 1: Navigate to EDIT page (key difference from create)
+        edit_url = f'https://www.vintageandrare.com/instruments/add_edit_item/{item_id}'
+        print(f"1. Navigating to edit page: {edit_url}")
+        driver.get(edit_url)
+        time.sleep(3)
+        
+        # Handle cookie consent if it appears
+        try:
+            cookie_button = driver.find_element(By.CSS_SELECTOR, ".cc-nb-okagree")
+            cookie_button.click()
+            time.sleep(1)
+        except:
+            pass
+        
+        print(f"2. Current URL after navigation: {driver.current_url}")
+        
+        # Step 2: Extract the existing unique_id from the form (more reliable than generating)
+        try:
+            unique_id_field = driver.find_element(By.NAME, "unique_id")
+            existing_unique_id = unique_id_field.get_attribute('value')
+            print(f"3. Found existing unique_id: {existing_unique_id}")
+            
+            # Update item_data with the real unique_id and edit-specific fields
+            item_data_copy = item_data.copy()  # Don't modify the original
+            item_data_copy['unique_id'] = existing_unique_id
+            item_data_copy['product_id'] = item_id
+            item_data_copy['added_completed'] = 'yes'  # Edit flag
+            item_data_copy['version'] = 'v4'
+            
+        except Exception as e:
+            print(f"⚠️ Could not extract unique_id: {str(e)}")
+            item_data_copy = item_data.copy()
+            item_data_copy['product_id'] = item_id
+            item_data_copy['added_completed'] = 'yes'
+            item_data_copy['version'] = 'v4'
+        
+        # Step 3: Fill the form (reuse existing fill_item_form logic)
+        print("4. Filling edit form...")
+        result = fill_item_form(driver, item_data_copy, test_mode, db_session)
+        
+        print(f"✅ Edit form completed for item {item_id}")
+        return result
+        
+    except Exception as e:
+        print(f"❌ Error during edit form processing: {str(e)}")
+        driver.save_screenshot(f"edit_error_{item_id}.png")
         raise e
 
 def submit_form_and_capture_response(driver, db_session=None):
@@ -1648,52 +1855,6 @@ def analyze_vr_response_with_export_fallback(driver, db_session):
     except Exception as e:
         print(f"Error in export fallback analysis: {str(e)}")
         return None
-
-# async def get_newly_created_item_id_via_export_service(db_session):
-#     """
-#     Use the existing VRExportService to get the most recent V&R item ID
-#     """
-#     try:
-#         print("Getting newly created item ID via VRExportService...")
-        
-#         # Import from your app structure
-#         import sys
-#         import os
-#         sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        
-#         from app.services.vintageandrare.export import VRExportService
-        
-#         export_service = VRExportService(db_session)
-#         products_data = await export_service.get_products_for_export()
-        
-#         # Get items with V&R IDs, sorted by most recent
-#         vr_items = []
-#         for product_data in products_data:
-#             vr_id = product_data.get('product id', '').strip()
-#             if vr_id and vr_id.isdigit():
-#                 vr_items.append({
-#                     'vr_id': vr_id,
-#                     'brand': product_data.get('brand name', ''),
-#                     'model': product_data.get('product model name', ''),
-#                     'year': product_data.get('product year', '')
-#                 })
-        
-#         # Sort by V&R ID (newest should have highest ID)
-#         vr_items.sort(key=lambda x: int(x['vr_id']), reverse=True)
-        
-#         if vr_items:
-#             newest_item = vr_items[0]
-#             newest_id = newest_item['vr_id']
-#             print(f"✅ Most recent V&R item ID: {newest_id}")
-#             print(f"   Brand: {newest_item['brand']}, Model: {newest_item['model']}")
-#             return newest_id
-#         else:
-#             print("No V&R items found in export")
-#             return None
-            
-#     except Exception as e:
-#         print(f"Error getting item ID via VRExportService: {str(e)}")
-#         return None
 
 
 # Modify the main section to accept all parameters

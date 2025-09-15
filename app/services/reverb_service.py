@@ -1,6 +1,7 @@
 # app.services.reverb_service.py
 import json
 import time
+import uuid
 import logging
 import iso8601
 
@@ -9,6 +10,7 @@ from fastapi import HTTPException
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
 from sqlalchemy import update, text
 
@@ -16,6 +18,7 @@ from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.product import Product
 from app.models.reverb import ReverbListing
+from app.models.sync_event import SyncEvent
 from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
@@ -44,9 +47,9 @@ class ReverbService:
         
         # Use sandbox API for testing if enabled in settings
         use_sandbox = self.settings.REVERB_USE_SANDBOX
-        api_key = self.settings.REVERB_SANDBOX_API_KEY if use_sandbox else self.settings.REVERB_API_KEY
+        # api_key = self.settings.REVERB_SANDBOX_API_KEY if use_sandbox else self.settings.REVERB_API_KEY
         
-        self.client = ReverbClient(api_key=api_key, use_sandbox=use_sandbox)
+        self.client = ReverbClient(api_key=self.settings.REVERB_API_KEY, use_sandbox=use_sandbox)
     
     async def get_categories(self) -> Dict:
         """
@@ -360,78 +363,68 @@ class ReverbService:
                 raise
             raise ReverbAPIError(f"Failed to end listing: {str(e)}")
 
-    async def run_import_process(self, api_key: str, save_only=False):
-        """Run the Reverb inventory import process."""
-        try:
-            print("Starting Reverb.run_import_process")
-            print(f"API key provided: {'Yes' if api_key else 'No'}")
-            
-            # Initialize client
-            client = ReverbClient(api_key)  # Reverb uses API key, not username/password
-            
-            # Get all listings from Reverb
-            print("Downloading listings from Reverb API...")
-            start_time = time.time()
-            listings = await client.get_all_listings_detailed(max_concurrent=10)
-            end_time = time.time()
-            print(f"Downloaded {len(listings)} detailed listings in {end_time - start_time:.1f} seconds")
-            
-            if not listings:
-                print("Reverb listings download failed - received None or empty")
-                return {"status": "error", "message": "No Reverb listings data received"}
-            
-            print(f"Successfully downloaded inventory with {len(listings)} items")
-            print(f"Sample data: {listings[0] if listings else 'None'}")
-            
-            if save_only:
-                # Save to file for testing
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                json_path = Path(f"data/reverb_{timestamp}.json")
-                json_path.parent.mkdir(parents=True, exist_ok=True)
-                
-                with open(json_path, 'w') as f:
-                    json.dump(listings, f, indent=2)
-                
-                print(f"Saved Reverb data to: {json_path}")
-                return {
-                    "status": "success", 
-                    "message": f"Reverb inventory saved with {len(listings)} records",
-                    "count": len(listings),
-                    "saved_to": str(json_path)
-                }
-            
-            # Process inventory updates
-            print("Processing inventory updates...")
-            # Fix: Call the correct Reverb methods
-            removed_stats = await self._mark_removed_reverb_products(listings)
-            update_stats = await self._process_reverb_listings(listings)
-
-            # Combine results
-            result = {
-                **update_stats,
-                **removed_stats,
-                "import_type": "UPDATE-BASED (No deletions)",
-                "total_processed": len(listings)
-            }
-            
-            print(f"Inventory update processing complete: {result}")
-            return {
-                "status": "success",
-                "message": f"Reverb inventory processed successfully",
-                "processed": len(listings),
-                "created": result.get("created", 0),
-                "updated": result.get("updated", 0),
-                "errors": result.get("errors", 0),
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
+    # Commented out 16/08/25 ... depcrecated in favour of new process
+    # async def run_import_process(self, api_key: str, sync_run_id: uuid.UUID, use_cache: bool = False, cache_file: str = "reverb_data.json"):
+    #     """
+    #     Run the Reverb inventory import process, with optional caching.
         
-        except Exception as e:
-            import traceback
-            error_traceback = traceback.format_exc()
-            print(f"Exception in ReverbService.run_import_process: {str(e)}")
-            print(f"Traceback: {error_traceback}")
-            return {"status": "error", "message": str(e)}
+    #     Args:
+    #         api_key: The Reverb API key.
+    #         sync_run_id: The UUID for this synchronization run.
+    #         use_cache: If True, tries to load data from cache_file instead of the API.
+    #         cache_file: The path to the cache file.
+    #     """
+    #     listings = []
+    #     cache_path = Path(cache_file)
 
+    #     try:
+    #         print(f"Starting Reverb.run_import_process (Caching {'enabled' if use_cache else 'disabled'})")
+
+    #         # --- CACHING LOGIC ---
+    #         if use_cache and cache_path.exists():
+    #             print(f"Loading listings from cache file: {cache_path}")
+    #             with open(cache_path, 'r') as f:
+    #                 listings = json.load(f)
+    #             print(f"Loaded {len(listings)} listings from cache.")
+    #         else:
+    #             print("Cache not used or not found. Downloading listings from Reverb API...")
+    #             client = ReverbClient(api_key)
+    #             start_time = time.time()
+    #             listings = await client.get_all_listings_detailed(max_concurrent=10)
+    #             end_time = time.time()
+    #             print(f"Downloaded {len(listings)} detailed listings in {end_time - start_time:.1f} seconds")
+
+    #             # Save the fresh download to the cache file for future runs
+    #             print(f"Saving fresh API data to cache file: {cache_path}")
+    #             cache_path.parent.mkdir(parents=True, exist_ok=True)
+    #             with open(cache_path, 'w') as f:
+    #                 json.dump(listings, f, indent=2)
+    #         # --- END CACHING LOGIC ---
+
+    #         if not listings:
+    #             print("Reverb listings download failed or cache was empty.")
+    #             return {"status": "error", "message": "No Reverb listings data received"}
+            
+    #         print(f"Successfully loaded inventory with {len(listings)} items.")
+            
+    #         # Process inventory updates using differential sync
+    #         # NOTE: We can now switch back to the clean sync_reverb_inventory function
+    #         print("Processing inventory updates using differential sync...")
+    #         sync_stats = await self.sync_reverb_inventory(listings, sync_run_id)
+
+    #         print(f"Inventory sync process complete: {sync_stats}")
+    #         return {
+    #             "status": "success",
+    #             "message": "Reverb inventory synced successfully.",
+    #             **sync_stats
+    #         }
+        
+    #     except Exception as e:
+    #         import traceback
+    #         error_traceback = traceback.format_exc()
+    #         print(f"Exception in ReverbService.run_import_process: {str(e)}")
+    #         print(f"Traceback: {error_traceback}")
+    #         return {"status": "error", "message": str(e)}
 
     # Private helper methods
     
@@ -452,6 +445,15 @@ class ReverbService:
         query = select(ReverbListing).where(ReverbListing.id == listing_id)
         result = await self.db.execute(query)
         return result.scalars().first()
+
+    async def _get_all_listings_from_api(self, state: str) -> List[Dict]:
+        """
+        Fetches all listings for a given state by paginating through results
+        using the service's own client.
+        """
+        logger.info(f"Fetching all listings from Reverb API with state: '{state}'...")
+        # This now correctly uses the service's own configured client
+        return await self.client.get_all_listings(state=state)
     
     def _prepare_listing_data(self, listing: ReverbListing, product: Product) -> Dict[str, Any]:
         """
@@ -519,6 +521,7 @@ class ReverbService:
         # Default to "Excellent" condition if not found
         return condition_map.get(condition_name, "df268ad1-c462-4ba6-b6db-e007e23922ea")
     
+    # Replaced by _fetch_existing_reverb_data for new sync sats 14/07
     async def _process_reverb_listings(self, listings: List[Dict]) -> Dict[str, int]:
         """Process Reverb listings (update existing, create new)"""
         stats = {"total": len(listings), "created": 0, "updated": 0, "errors": 0}
@@ -556,6 +559,344 @@ class ReverbService:
             logger.error(f"Error in _process_reverb_listings: {e}")
             raise
 
+    # Fixed query to mirror eBay/V&R/Shopify pattern
+    async def _fetch_existing_reverb_data_old(self) -> List[Dict]:
+        """Fetches all Reverb-related data from the local database."""
+        query = text("""
+            WITH reverb_data AS (
+                -- Get all Reverb listings with their platform_common records
+                SELECT DISTINCT ON (rl.reverb_listing_id)
+                    p.id as product_id, 
+                    p.sku, 
+                    p.base_price, 
+                    p.description, 
+                    p.status as product_status,
+                    pc.id as platform_common_id, 
+                    pc.external_id, 
+                    pc.status as platform_common_status,
+                    rl.id as reverb_listing_id, 
+                    rl.reverb_state, 
+                    rl.list_price
+                FROM reverb_listings rl
+                JOIN platform_common pc ON pc.id = rl.platform_id AND pc.platform_name = 'reverb'
+                LEFT JOIN products p ON p.id = pc.product_id
+                ORDER BY rl.reverb_listing_id, rl.id DESC
+            )
+            SELECT 
+                product_id, sku, base_price, description, product_status,
+                platform_common_id, external_id, platform_common_status,
+                reverb_listing_id, reverb_state, list_price
+            FROM reverb_data
+            
+            UNION ALL
+            
+            -- Also get platform_common records without reverb_listings (orphaned records)
+            SELECT 
+                p.id as product_id, 
+                p.sku, 
+                p.base_price, 
+                p.description, 
+                p.status as product_status,
+                pc.id as platform_common_id, 
+                pc.external_id, 
+                pc.status as platform_common_status,
+                NULL as reverb_listing_id, 
+                NULL as reverb_state, 
+                NULL as list_price
+            FROM platform_common pc
+            LEFT JOIN products p ON p.id = pc.product_id
+            WHERE pc.platform_name = 'reverb'
+            AND NOT EXISTS (
+                SELECT 1 FROM reverb_listings rl 
+                WHERE rl.platform_id = pc.id
+            )
+        """)
+        result = await self.db.execute(query)
+        return [row._asdict() for row in result.fetchall()]
+
+    async def _fetch_existing_reverb_data(self) -> List[Dict]:
+        """Fetches all Reverb-related data from the local database, focusing on the source of truth."""
+        query = text("""
+            SELECT 
+                p.id as product_id, 
+                p.sku, 
+                p.base_price, -- For price comparison
+                pc.id as platform_common_id, 
+                pc.external_id, 
+                pc.status as platform_common_status -- This is our source of truth
+            FROM platform_common pc
+            LEFT JOIN products p ON p.id = pc.product_id
+            WHERE pc.platform_name = 'reverb'
+        """)
+        result = await self.db.execute(query)
+        return [row._asdict() for row in result.fetchall()]
+
+    # Remove the diagnostic version and replace with clean sync
+    async def sync_reverb_inventory(self, listings: List[Dict], sync_run_id: uuid.UUID) -> Dict[str, Any]:
+        """Main sync method - compares API data with DB and applies only necessary changes."""
+        stats = {
+            "total_from_reverb": len(listings), 
+            "events_logged": 0, 
+            "created": 0, 
+            "updated": 0, 
+            "removed": 0, 
+            "unchanged": 0, 
+            "errors": 0
+        }
+        
+        try:
+            # Step 1: Fetch all existing Reverb data from DB
+            existing_data = await self._fetch_existing_reverb_data()
+            
+            # Step 2: Convert data to lookup dictionaries for O(1) access
+            api_items = self._prepare_api_data(listings)
+            db_items = self._prepare_db_data(existing_data)
+            
+            # Step 3: Calculate differences (remove pending_ids logic for simplicity)
+            changes = self._calculate_changes(api_items, db_items)
+            
+            # Step 4: Apply changes in batches
+            logger.info(f"Applying changes: {len(changes['create'])} new, "
+                        f"{len(changes['update'])} updates, {len(changes['remove'])} removals")
+            
+            if changes['create']:
+                stats['created'], events_created = await self._batch_create_products(changes['create'], sync_run_id)
+                stats['events_logged'] += events_created
+            if changes['update']:
+                stats['updated'], events_updated = await self._batch_update_products(changes['update'], sync_run_id)
+                stats['events_logged'] += events_updated
+            if changes['remove']:
+                stats['removed'], events_removed = await self._batch_mark_removed(changes['remove'], sync_run_id)
+                stats['events_logged'] += events_removed
+        
+            stats['unchanged'] = len(api_items) - stats['created'] - stats['updated']
+            await self.db.commit()
+            
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Sync failed: {str(e)}", exc_info=True)
+            stats['errors'] += 1
+            
+        return stats
+    
+    # Fixed batch methods to only log events (no DB updates)
+    async def _batch_create_products(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
+        """Log rogue listings to sync_events only - no database records created."""
+        created_count, events_logged = 0, 0
+        
+        # Prepare all events first
+        events_to_create = []
+        for item in items:
+            try:
+                logger.warning(f"Rogue SKU Detected: Reverb item {item['reverb_id']} ('{item.get('title')}') not found in local DB. Logging to sync_events for later processing.")
+                
+                event_data = {
+                    'sync_run_id': sync_run_id,
+                    'platform_name': 'reverb',
+                    'product_id': None,
+                    'platform_common_id': None,
+                    'external_id': item['reverb_id'],
+                    'change_type': 'new_listing',
+                    'change_data': {
+                        'title': item['title'],
+                        'price': item['price'],
+                        'state': item['state'],
+                        'sku': item['sku'],
+                        'brand': item['brand'],
+                        'model': item['model'],
+                        'raw_data': item['_raw']
+                    },
+                    'status': 'pending'
+                }
+                events_to_create.append(event_data)
+                created_count += 1
+            except Exception as e:
+                logger.error(f"Failed to prepare event for Reverb item {item['reverb_id']}: {e}", exc_info=True)
+        
+        # Bulk insert with ON CONFLICT DO NOTHING to handle duplicates gracefully
+        if events_to_create:
+            try:
+                stmt = insert(SyncEvent).values(events_to_create)
+                stmt = stmt.on_conflict_do_nothing(
+                    constraint='sync_events_platform_external_change_unique'
+                )
+                result = await self.db.execute(stmt)
+                events_logged = len(events_to_create)
+                logger.info(f"Attempted to log {len(events_to_create)} new listing events (duplicates ignored)")
+            except Exception as e:
+                logger.error(f"Failed to bulk insert new listing events: {e}", exc_info=True)
+        
+        return created_count, events_logged
+
+    async def _batch_update_products_old(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
+        """SYNC PHASE: Only log changes to sync_events - NO database table updates."""
+        updated_count, events_logged = 0, 0
+        
+        # Collect all events to insert
+        all_events = []
+        
+        for item in items:
+            try:
+                api_data, db_data = item['api_data'], item['db_data']
+                
+                # Price change event
+                db_price_for_compare = float(db_data.get('list_price') or 0.0)
+                if abs(api_data['price'] - db_price_for_compare) > 0.01:
+                    all_events.append({
+                        'sync_run_id': sync_run_id,
+                        'platform_name': 'reverb',
+                        'product_id': db_data['product_id'],
+                        'platform_common_id': db_data['platform_common_id'],
+                        'external_id': api_data['reverb_id'],
+                        'change_type': 'price',
+                        'change_data': {
+                            'old': db_data.get('list_price'),
+                            'new': api_data['price'],
+                            'reverb_id': api_data['reverb_id']
+                        },
+                        'status': 'pending'
+                    })
+                
+                # Status change event
+                if api_data['state'] != str(db_data.get('reverb_state', '')).lower():
+                    all_events.append({
+                        'sync_run_id': sync_run_id,
+                        'platform_name': 'reverb',
+                        'product_id': db_data['product_id'],
+                        'platform_common_id': db_data['platform_common_id'],
+                        'external_id': api_data['reverb_id'],
+                        'change_type': 'status_change',
+                        'change_data': {
+                            'old': db_data.get('reverb_state'),
+                            'new': api_data['state'],
+                            'reverb_id': api_data['reverb_id'],
+                            'is_sold': api_data['is_sold']
+                        },
+                        'status': 'pending'
+                    })
+                
+                updated_count += 1
+                
+            except Exception as e:
+                logger.error(f"Failed to prepare events for Reverb item {item['api_data']['reverb_id']}: {e}", exc_info=True)
+        
+        # Bulk insert all events with duplicate handling
+        if all_events:
+            try:
+                stmt = insert(SyncEvent).values(all_events)
+                stmt = stmt.on_conflict_do_nothing(
+                    constraint='sync_events_platform_external_change_unique'
+                )
+                result = await self.db.execute(stmt)
+                events_logged = len(all_events)
+                logger.info(f"Attempted to log {len(all_events)} update events (duplicates ignored)")
+            except Exception as e:
+                logger.error(f"Failed to bulk insert update events: {e}", exc_info=True)
+        
+        return updated_count, events_logged
+
+    async def _batch_update_products(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
+        """Logs price and status changes to sync_events, using the correct data keys."""
+        updated_count, events_logged = 0, 0
+        all_events = []
+        
+        for item in items:
+            try:
+                api_data, db_data = item['api_data'], item['db_data']
+                
+                # Price change event check
+                db_price_for_compare = float(db_data.get('base_price') or 0.0)
+                if abs(api_data['price'] - db_price_for_compare) > 0.01:
+                    all_events.append({
+                        'sync_run_id': sync_run_id, 'platform_name': 'reverb',
+                        'product_id': db_data['product_id'], 'platform_common_id': db_data['platform_common_id'],
+                        'external_id': api_data['external_id'], 'change_type': 'price',
+                        'change_data': {'old': db_data.get('base_price'), 'new': api_data['price']},
+                        'status': 'pending'
+                    })
+                
+                # Status change event check
+                api_status = api_data.get('status')
+                db_status = db_data.get('platform_common_status')
+                off_market_statuses = ['sold', 'ended', 'archived']
+                statuses_match = (api_status in off_market_statuses and db_status in off_market_statuses) or (api_status == db_status)
+
+                if not statuses_match:
+                    all_events.append({
+                        'sync_run_id': sync_run_id, 'platform_name': 'reverb',
+                        'product_id': db_data['product_id'], 'platform_common_id': db_data['platform_common_id'],
+                        'external_id': api_data['external_id'], 'change_type': 'status_change',
+                        'change_data': {'old': db_status, 'new': api_status},
+                        'status': 'pending'
+                    })
+                
+                updated_count += 1
+            except Exception as e:
+                logger.error(f"Failed to prepare events for Reverb item {item['api_data']['external_id']}: {e}", exc_info=True)
+        
+        if all_events:
+            stmt = insert(SyncEvent).values(all_events)
+            stmt = stmt.on_conflict_do_nothing(
+                index_elements=['platform_name', 'external_id', 'change_type'],
+                index_where=(SyncEvent.status == 'pending')
+            )
+            await self.db.execute(stmt)
+            events_logged = len(all_events)
+
+        return updated_count, events_logged
+
+    async def _batch_mark_removed(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
+        """SYNC PHASE: Only log removal events to sync_events - NO database table updates."""
+        removed_count, events_logged = 0, 0
+        
+        # Prepare all removal events
+        events_to_create = []
+        for item in items:
+            try:
+                events_to_create.append({
+                    'sync_run_id': sync_run_id,
+                    'platform_name': 'reverb',
+                    'product_id': item['product_id'],
+                    'platform_common_id': item['platform_common_id'],
+                    'external_id': item['external_id'],
+                    'change_type': 'removed_listing',
+                    'change_data': {
+                        'sku': item['sku'],
+                        'reverb_id': item['external_id'],
+                        'reason': 'not_found_in_api'
+                    },
+                    'status': 'pending'
+                })
+                removed_count += 1
+            except Exception as e:
+                logger.error(f"Failed to prepare removal event for Reverb item {item['external_id']}: {e}", exc_info=True)
+        
+        # Bulk insert with duplicate handling
+        if events_to_create:
+            try:
+                stmt = insert(SyncEvent).values(events_to_create)
+                stmt = stmt.on_conflict_do_nothing(
+                    constraint='sync_events_platform_external_change_unique'
+                )
+                result = await self.db.execute(stmt)
+                events_logged = len(events_to_create)
+                logger.info(f"Attempted to log {len(events_to_create)} removal events (duplicates ignored)")
+            except Exception as e:
+                logger.error(f"Failed to bulk insert removal events: {e}", exc_info=True)
+        
+        return removed_count, events_logged
+
+    async def _fetch_pending_new_listings(self) -> set[str]:
+            """Fetch external_ids for Reverb listings that are already pending creation."""
+            query = text("""
+                SELECT external_id FROM sync_events
+                WHERE platform_name = 'reverb'
+                AND change_type = 'new_listing'
+                AND status = 'pending'
+            """)
+            result = await self.db.execute(query)
+            return {row[0] for row in result.fetchall()}
+    
     async def _mark_removed_reverb_products(self, listings: List[Dict]) -> Dict[str, int]:
         """Mark products that are no longer on Reverb as removed"""
         stats = {"marked_removed": 0}
@@ -583,6 +924,31 @@ class ReverbService:
         
         logger.info(f"Marked {stats['marked_removed']} Reverb products as removed")
         return stats
+
+    async def update_listing_price(self, external_id: str, new_price: float) -> bool:
+        """Outbound action to update the price of a listing on Reverb."""
+        logger.info(f"Received request to update Reverb listing {external_id} to price £{new_price:.2f}.")
+        try:
+            # Reverb's API expects the price as an object with amount and currency
+            price_data = {
+                "price": {
+                    "amount": f"{new_price:.2f}",
+                    "currency": "GBP"
+                }
+            }
+            
+            response = await self.client.update_listing(external_id, price_data)
+            
+            # A successful update returns the updated listing object.
+            if response and 'id' in response.get('listing', {}):
+                logger.info(f"Successfully sent price update for Reverb listing {external_id}.")
+                return True
+            
+            logger.error(f"API call to update price for Reverb listing {external_id} failed. Response: {response}")
+            return False
+        except Exception as e:
+            logger.error(f"Exception while updating price for Reverb listing {external_id}: {e}", exc_info=True)
+            return False
 
     async def _update_existing_product(self, product_id: int, listing: Dict):
         """Update an existing product with new Reverb data"""
@@ -623,128 +989,352 @@ class ReverbService:
             "status": platform_status.value
         })
 
-    async def _create_new_product(self, listing: Dict, sku: str):
-        """Create a new product from Reverb listing data"""
-        # Extract data from listing
-        brand = listing.get('make', 'Unknown')
-        model = listing.get('model', 'Unknown')
-        
-        # Get price
-        price = 0.0
-        if listing.get('price') and listing.get('price', {}).get('amount'):
-            price = float(listing.get('price', {}).get('amount', 0))
-        
-        # Get year
-        year = None
-        if listing.get('year'):
-            try:
-                year = int(listing.get('year'))
-            except:
-                pass
-        
-        # Extract images from listing - ADD THIS SECTION
-        primary_image = None
-        additional_images = []
-        
-        # Get primary image (first photo)
-        photos = listing.get('photos', [])
-        if photos and len(photos) > 0:
-            primary_image = photos[0].get('_links', {}).get('full', {}).get('href')
-        
-        # Get additional images (remaining photos)
-        if photos and len(photos) > 1:
-            for photo in photos[1:]:
-                img_url = photo.get('_links', {}).get('full', {}).get('href')
-                if img_url:
-                    additional_images.append(img_url)
-        
-        # Determine condition
-        condition = ProductCondition.GOOD  # Default
-        if listing.get('condition', {}).get('display_name'):
-            condition_name = listing.get('condition', {}).get('display_name', '').lower()
-            condition_map = {
-                'mint': ProductCondition.EXCELLENT,
-                'excellent': ProductCondition.EXCELLENT,
-                'very good': ProductCondition.VERYGOOD,
-                'good': ProductCondition.GOOD,
-                'fair': ProductCondition.FAIR,
-                'poor': ProductCondition.POOR
-            }
-            condition = condition_map.get(condition_name, ProductCondition.GOOD)
-        
-        reverb_created_at = None
-        reverb_published_at = None
-        if listing.get('created_at'):
-            # reverb_created_at = datetime.fromisoformat(listing['created_at'].replace('Z', '+00:00'))
-            self._convert_api_timestamp_to_naive_utc(listing.get('created_at'))
-        if listing.get('published_at'):
-            # reverb_published_at = datetime.fromisoformat(listing['published_at'].replace('Z', '+00:00'))
-            self._convert_api_timestamp_to_naive_utc(listing.get('published_at'))
+    async def run_import_process_old(self, sync_run_id: uuid.UUID) -> Dict[str, Any]:
+        """
+        Runs the differential sync for Reverb using a single, consistently
+        configured client for all API calls.
+        """
+        stats = {"api_live_count": 0, "db_live_count": 0, "events_logged": 0, "rogue_listings": 0, "status_changes": 0, "errors": 0}
+        logger.info(f"=== ReverbService: STARTING SYNC (run_id: {sync_run_id}) ===")
 
-        extended_attributes = {}
-        # Copy all listing data except fields we store directly
-        excluded_fields = ['id', 'make', 'model', 'description', 'price', 'condition', 'state', 'year']
-        for key, value in listing.items():
-            if key not in excluded_fields:
-                extended_attributes[key] = value
+        try:
+            # --- REFACTORED: No longer imports or calls the external script ---
+            live_listings_api = await self._get_all_listings_from_api(state='live')
+            
+            api_live_ids = {str(item['id']) for item in live_listings_api}
+            stats['api_live_count'] = len(api_live_ids)
+            logger.info(f"Found {stats['api_live_count']} live listings on Reverb API.")
+
+            # (The rest of the method remains exactly the same as before)
+            # ...
+            local_live_ids_map = await self._fetch_local_live_reverb_ids()
+            local_live_ids = set(local_live_ids_map.keys())
+            stats['db_live_count'] = len(local_live_ids)
+            logger.info(f"Found {stats['db_live_count']} live listings in local DB for Reverb.")
+
+            new_rogue_ids = api_live_ids - local_live_ids
+            missing_live_ids = local_live_ids - api_live_ids
+            
+            logger.info(f"Detected {len(new_rogue_ids)} potential new listings and {len(missing_live_ids)} status changes.")
+            stats['rogue_listings'] = len(new_rogue_ids)
+            stats['status_changes'] = len(missing_live_ids)
+            
+            events_to_log = []
+
+            for reverb_id in new_rogue_ids:
+                events_to_log.append(self._prepare_sync_event(
+                    sync_run_id, 'new_listing', external_id=reverb_id,
+                    change_data={'reason': 'Live on Reverb but not in local DB'}
+                ))
+
+            for reverb_id in missing_live_ids:
+                db_item = local_live_ids_map[reverb_id]
+                try:
+                    details = await self.client.get_listing_details(reverb_id)
+                    new_status = details.get('state', {}).get('slug', 'unknown')
+                    
+                    events_to_log.append(self._prepare_sync_event(
+                        sync_run_id, 'status_change', 
+                        external_id=reverb_id,
+                        product_id=db_item['product_id'],
+                        platform_common_id=db_item['platform_common_id'],
+                        change_data={'old': 'live', 'new': new_status, 'reverb_id': reverb_id}
+                    ))
+                except ReverbAPIError:
+                    logger.warning(f"Logging item {reverb_id} as 'deleted' due to API error (Not Found).")
+                    events_to_log.append(self._prepare_sync_event(
+                        sync_run_id, 'status_change',
+                        external_id=reverb_id,
+                        product_id=db_item['product_id'],
+                        platform_common_id=db_item['platform_common_id'],
+                        change_data={'old': 'live', 'new': 'deleted', 'reverb_id': reverb_id, 'reason': 'API Not Found'}
+                    ))
+                    stats['errors'] += 1
+
+            if events_to_log:
+                await self._batch_log_events(events_to_log)
+                stats['events_logged'] = len(events_to_log)
+            
+            await self.db.commit()
+            logger.info(f"=== ReverbService: FINISHED SYNC === Final Stats: {stats}")
+            return {"status": "success", "message": "Reverb sync complete.", **stats}
+
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Reverb sync failed: {e}", exc_info=True)
+            stats['errors'] += 1
+            return {"status": "error", "message": str(e), **stats}
+
+    async def run_import_process(self, sync_run_id: uuid.UUID) -> Dict[str, Any]:
+        """
+        Runs the sync for Reverb. This method detects new live listings on Reverb
+        and status changes for existing listings (e.g., live -> sold).
+        """
+        stats = {"api_live_count": 0, "db_live_count": 0, "events_logged": 0, "errors": 0}
+        logger.info(f"=== ReverbService: STARTING SYNC (run_id: {sync_run_id}) ===")
+
+        try:
+            # 1. Fetch all LIVE listings from the Reverb API.
+            live_listings_api = await self._get_all_listings_from_api(state='live')
+            api_live_ids = {str(item['id']) for item in live_listings_api}
+            stats['api_live_count'] = len(api_live_ids)
+            logger.info(f"Found {stats['api_live_count']} live listings on Reverb API.")
+
+            # 2. Fetch all Reverb listings marked as 'live' in our local DB.
+            local_live_ids_map = await self._fetch_local_live_reverb_ids()
+            local_live_ids = set(local_live_ids_map.keys())
+            stats['db_live_count'] = len(local_live_ids)
+            logger.info(f"Found {stats['db_live_count']} live listings in local DB for Reverb.")
+
+            # 3. Compare the sets of IDs to find differences.
+            new_rogue_ids = api_live_ids - local_live_ids
+            missing_from_api_ids = local_live_ids - api_live_ids
+            
+            logger.info(f"Detected {len(new_rogue_ids)} new 'rogue' listings and {len(missing_from_api_ids)} potential status changes.")
+
+            events_to_log = []
+
+            # 4. Create 'new_listing' events for rogue items.
+            for reverb_id in new_rogue_ids:
+                events_to_log.append(self._prepare_sync_event(
+                    sync_run_id, 'new_listing', external_id=reverb_id,
+                    change_data={'reason': 'Live on Reverb but not in local DB'}
+                ))
+
+            # 5. For items no longer 'live' on the API, fetch their details to find out WHY.
+            for reverb_id in missing_from_api_ids:
+                db_item = local_live_ids_map[reverb_id]
+                try:
+                    # This second API call is crucial to get the new status (e.g., 'sold', 'ended').
+                    details = await self.client.get_listing_details(reverb_id)
+                    new_status = details.get('state', {}).get('slug', 'unknown')
+                    
+                    events_to_log.append(self._prepare_sync_event(
+                        sync_run_id, 'status_change', 
+                        external_id=reverb_id,
+                        product_id=db_item['product_id'],
+                        platform_common_id=db_item['platform_common_id'],
+                        change_data={'old': 'live', 'new': new_status, 'reverb_id': reverb_id}
+                    ))
+                except ReverbAPIError:
+                    # If the API gives a 'Not Found' error, the listing was likely deleted.
+                    logger.warning(f"Logging item {reverb_id} as 'deleted' due to API error (Not Found).")
+                    events_to_log.append(self._prepare_sync_event(
+                        sync_run_id, 'status_change',
+                        external_id=reverb_id,
+                        product_id=db_item['product_id'],
+                        platform_common_id=db_item['platform_common_id'],
+                        change_data={'old': 'live', 'new': 'deleted', 'reverb_id': reverb_id, 'reason': 'API Not Found'}
+                    ))
+                    stats['errors'] += 1
+
+            # 6. Log all generated events to the database.
+            if events_to_log:
+                await self._batch_log_events(events_to_log)
+                stats['events_logged'] = len(events_to_log)
+            
+            await self.db.commit()
+            logger.info(f"=== ReverbService: FINISHED SYNC === Final Stats: {stats}")
+            return {"status": "success", "message": "Reverb sync complete.", **stats}
+
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Reverb sync failed: {e}", exc_info=True)
+            stats['errors'] += 1
+            return {"status": "error", "message": str(e), **stats}
+
+    # Ensure these helper methods are in your ReverbService class
+    
+    def _prepare_api_data_old(self, listings: List[Dict]) -> Dict[str, Dict]:
+        """Convert API data to lookup dict by Reverb ID."""
+        api_items = {}
+        for listing in listings:
+            reverb_id = str(listing.get('id', ''))
+            if not reverb_id:
+                continue
+            
+            state_obj = listing.get('state', {})
+            state_slug = state_obj.get('slug', 'unknown') if isinstance(state_obj, dict) else 'unknown'
+            
+            api_items[reverb_id] = {
+                'reverb_id': reverb_id,
+                'sku': f"REV-{reverb_id}",
+                'price': float(listing.get('price', {}).get('amount', 0)) if listing.get('price') else 0,
+                'is_sold': state_slug == 'sold',
+                'state': state_slug,
+                'title': listing.get('title', ''),
+                'brand': listing.get('make', 'Unknown'),
+                'model': listing.get('model', 'Unknown'),
+                'description': listing.get('description', ''),
+                '_raw': listing
+            }
+        return api_items
+
+    def _prepare_api_data(self, listings: List[Dict]) -> Dict[str, Dict]:
+        """Convert API data to a lookup dict and translate statuses."""
+        api_items = {}
+        for listing in listings:
+            reverb_id = str(listing.get('id', ''))
+            if not reverb_id:
+                continue
+            
+            state_slug = str(listing.get('state', {}).get('slug', 'unknown')).lower()
+
+            # Translate Reverb's 'live' to our universal 'active'
+            universal_status = 'active' if state_slug == 'live' else state_slug
+            
+            api_items[reverb_id] = {
+                'external_id': reverb_id,
+                'status': universal_status, # Use the translated status
+                'price': float(listing.get('price', {}).get('amount', 0)),
+                '_raw': listing
+            }
+        return api_items
+
+    def _prepare_db_data(self, existing_data: List[Dict]) -> Dict[str, Dict]:
+        """Convert DB data to lookup dict by external ID."""
+        return {str(row['external_id']): row for row in existing_data if row.get('external_id')}
+
+    def _calculate_changes(self, api_items: Dict, db_items: Dict) -> Dict[str, List]:
+        """Calculate what needs to be created, updated, or removed."""
+        changes = {'create': [], 'update': [], 'remove': []}
         
-        # Check if sold
-        is_sold = listing.get('state', {}).get('slug') == 'sold'
+        api_ids = set(api_items.keys())
+        db_ids = set(db_items.keys())
         
+        for reverb_id in api_ids - db_ids:
+            changes['create'].append(api_items[reverb_id])
         
-        # Create product
-        product = Product(
-            sku=sku,
-            brand=brand,
-            model=model,
-            year=year,
-            description=listing.get('description', ''),
-            condition=condition,
-            category=listing.get('categories', [{}])[0].get('full_name', '') if listing.get('categories') else '',
-            base_price=price,
-            status=ProductStatus.SOLD if is_sold else ProductStatus.ACTIVE,
-            primary_image=primary_image,
-            additional_images=additional_images
-        )
-        self.db.add(product)
-        await self.db.flush()
+        for reverb_id in api_ids & db_ids:
+            if self._has_changed(api_items[reverb_id], db_items[reverb_id]):
+                changes['update'].append({'api_data': api_items[reverb_id], 'db_data': db_items[reverb_id]})
         
-        # Create platform_common entry
-        platform_common = PlatformCommon(
-            product_id=product.id,
-            platform_name="reverb",
-            external_id=str(listing.get('id')),
-            status=ListingStatus.SOLD if is_sold else ListingStatus.ACTIVE,
-            sync_status=SyncStatus.SYNCED,
-            last_sync=datetime.now(),
-            listing_url=listing.get('_links', {}).get('web', {}).get('href', '')
-        )
-        self.db.add(platform_common)
-        await self.db.flush()
+        for reverb_id in db_ids - api_ids:
+            changes['remove'].append(db_items[reverb_id])
+            
+        return changes
+
+    def _has_changed_old(self, api_item: Dict, db_item: Dict) -> bool:
+        """Check if an item has meaningful changes."""
+        # Price check
+        db_price = float(db_item.get('list_price') or 0)
+        if abs(api_item['price'] - db_price) > 0.01:
+            return True
         
-        # Create ReverbListing entry (you already have this model)
-        reverb_listing = ReverbListing(
-            platform_id=platform_common.id,
-            reverb_listing_id=str(listing.get('id')),
-            reverb_slug=listing.get('slug', ''),
-            reverb_category_uuid=listing.get('categories', [{}])[0].get('uuid', '') if listing.get('categories') else '',
-            condition_rating=listing.get('condition_rating', 3.5),
-            inventory_quantity=listing.get('inventory', 1),
-            has_inventory=listing.get('has_inventory', True),
-            offers_enabled=listing.get('offers_enabled', True),
-            is_auction=listing.get('auction', False),
-            list_price=price,
-            listing_currency=listing.get('listing_currency', 'USD'),
-            reverb_state=listing.get('state', {}).get('slug', 'live'),
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-            reverb_created_at=reverb_created_at,
-            reverb_published_at=reverb_published_at,
-            extended_attributes=extended_attributes,
-            last_synced_at=datetime.now()
-        )
-        self.db.add(reverb_listing)
+        # Status check
+        api_state = api_item['state']
+        db_state = str(db_item.get('reverb_state', '')).lower()
+        if api_state != db_state:
+            return True
         
+        return False
+
+    def _has_changed(self, api_item: Dict, db_item: Dict) -> bool:
+        """Compares API data against the new, correct fields from our database query."""
+        api_status = api_item.get('status')
+        db_status = db_item.get('platform_common_status')
+        
+        off_market_statuses = ['sold', 'ended', 'archived']
+        statuses_match = (api_status in off_market_statuses and db_status in off_market_statuses) or \
+                         (api_status == db_status)
+
+        if not statuses_match:
+            return True
+            
+        db_price = float(db_item.get('base_price') or 0.0)
+        if abs(api_item['price'] - db_price) > 0.01:
+            return True
+
+        return False
+
+    def _prepare_sync_event(self, sync_run_id, change_type, external_id, change_data, product_id=None, platform_common_id=None) -> Dict:
+        """Helper to construct a SyncEvent dictionary for bulk insertion."""
+        return {
+            'sync_run_id': sync_run_id,
+            'platform_name': 'reverb',
+            'product_id': product_id,
+            'platform_common_id': platform_common_id,
+            'external_id': external_id,
+            'change_type': change_type,
+            'change_data': change_data,
+            'status': 'pending'
+        }
+
+    async def _batch_log_events(self, events: List[Dict]):
+        """Bulk inserts a list of sync events."""
+        if not events:
+            return
+        logger.info(f"Logging {len(events)} events to the database.")
+        try:
+            # stmt = insert(SyncEvent).values(events)
+            # stmt = stmt.on_conflict_do_nothing(
+            #     constraint='sync_events_platform_external_change_unique'
+            # )
+            stmt = insert(SyncEvent).values(events)
+            stmt = stmt.on_conflict_do_nothing(
+                index_elements=['platform_name', 'external_id', 'change_type'],
+                index_where=(SyncEvent.status == 'pending')
+            )
+            await self.db.execute(stmt)
+        except Exception as e:
+            logger.error(f"Failed to bulk insert sync events: {e}", exc_info=True)
+            raise
+
+    async def mark_item_as_sold(self, external_id: str) -> bool:
+        """Outbound action to end a listing on Reverb because it sold elsewhere."""
+        logger.info(f"Received request to end Reverb listing {external_id} (sold elsewhere).")
+        try:
+            response = await self.client.end_listing(external_id, reason="not_sold")
+
+            # --- FINAL ROBUST CHECK ---
+
+            # Scenario 1: The response is empty or None. We now treat this as a
+            # likely success for an end_listing call that returns 200 OK but no body.
+            if not response:
+                logger.warning(f"Reverb API returned an empty success response for {external_id}, likely because it was already ended. Treating as success.")
+                return True
+
+            # Scenario 2: The response has a body, so we inspect it for explicit confirmation.
+            listing_info = response.get('listing', {})
+            state_info = listing_info.get('state')
+
+            is_ended_nested = isinstance(state_info, dict) and state_info.get('slug') == 'ended'
+            is_ended_simple = isinstance(state_info, str) and state_info.lower() == 'ended'
+
+            if is_ended_nested or is_ended_simple:
+                logger.info(f"Successfully CONFIRMED Reverb listing {external_id} is ended via response body.")
+                return True
+            else:
+                # This covers the case of a 200 OK but with an unexpected body.
+                logger.error(f"API call to end Reverb listing {external_id} returned a non-empty, unconfirmed response: {response}")
+                return False
+
+        except ReverbAPIError as e:
+            # Scenario 3: The API returns a 422 error because the listing is already ended.
+            error_message = str(e)
+            if "This listing has already ended" in error_message:
+                logger.warning(f"Reverb listing {external_id} is already ended (confirmed via 422 error). Treating as success.")
+                return True 
+            else:
+                logger.error(f"A genuine Reverb API Error occurred for listing {external_id}: {e}", exc_info=True)
+                return False
+        except Exception as e:
+            # Scenario 4: Any other exception (network error, etc.)
+            logger.error(f"A non-API exception occurred while ending Reverb listing {external_id}: {e}", exc_info=True)
+            return False
+
+    async def _fetch_local_live_reverb_ids(self) -> Dict[str, Dict]:
+        """Fetches all Reverb listings marked as 'live' in the local DB."""
+        logger.info("Fetching live Reverb listings from local DB.")
+        query = text("""
+            SELECT pc.external_id, pc.product_id, pc.id as platform_common_id
+            FROM platform_common pc
+            JOIN reverb_listings rl ON pc.id = rl.platform_id
+            WHERE pc.platform_name = 'reverb' AND rl.reverb_state = 'live'
+        """)
+        result = await self.db.execute(query)
+        return {str(row.external_id): row._asdict() for row in result.fetchall()}
+
     def _convert_api_timestamp_to_naive_utc(self, timestamp_str: str | None) -> datetime | None:
         """
         Parses an ISO 8601 timestamp string (which can be offset-aware)
@@ -770,7 +1360,6 @@ class ReverbService:
             
             return dt_utc_naive
         except Exception as e:
-            # logger.warning(f"Could not parse or convert API timestamp '{timestamp_str}': {e}")
-            # Depending on how strict you want to be, you might log this or even raise an error.
-            # For now, returning None if conversion fails.
             return None
+    
+    

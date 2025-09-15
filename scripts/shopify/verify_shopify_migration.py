@@ -176,11 +176,23 @@ class ShopifyCategoryProcessor:
         
     def _load_category_mapping(self):
         """Load the category mapping we built."""
-        mapping_file = Path(__file__).parent.parent / "data" / "csv_category_to_gid_mapping.json"
+        # NOTE: Changed to use the more accurate reverb_to_shopify.json file
+        # The old csv_category_to_gid_mapping.json had incorrect/incomplete GIDs
+        mapping_file = Path(__file__).parent.parent.parent / "app" / "services" / "category_mappings" / "reverb_to_shopify.json"
         
         if mapping_file.exists():
             with open(mapping_file, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Convert the reverb mapping format to simple name->GID format
+                mapping = {}
+                for item in data.get('mappings', {}).values():
+                    merchant_type = item.get('merchant_type', '')
+                    shopify_gid = item.get('shopify_gid', '')
+                    if merchant_type and shopify_gid:
+                        mapping[merchant_type] = shopify_gid
+                return mapping
+        
+        print(f"Warning: reverb_to_shopify.json not found at {mapping_file}")
         return {}
     
     def find_category_gid(self, category_string):

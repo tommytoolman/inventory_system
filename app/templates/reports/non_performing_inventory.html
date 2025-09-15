@@ -34,8 +34,8 @@
                                 <p class="text-sm text-gray-500">items</p>
                             </div>
                             <div class="mt-2">
-                                <p class="text-lg font-semibold text-green-600">£{{ "{:,.0f}".format(stat.total_value) }}</p>
-                                <p class="text-xs text-gray-500">Avg: £{{ "{:,.0f}".format(stat.avg_price) }}</p>
+                                <p class="text-lg font-semibold text-green-600">£{{ "{:,.0f}".format(stat.total_value if stat.total_value else 0) }}</p>
+                                <p class="text-xs text-gray-500">Avg: £{{ "{:,.0f}".format(stat.avg_price if stat.avg_price else 0) }}</p>
                             </div>
                             
                             <!-- Platform Coverage Summary -->
@@ -140,11 +140,11 @@
                     <p class="text-sm text-gray-600">Items Shown</p>
                 </div>
                 <div>
-                    <p class="text-2xl font-bold text-green-600">£{{ "{:,.0f}".format(total_value) }}</p>
+                    <p class="text-2xl font-bold text-green-600">£{{ "{:,.0f}".format(total_value if total_value else 0) }}</p>
                     <p class="text-sm text-gray-600">Total Value</p>
                 </div>
                 <div>
-                    <p class="text-2xl font-bold text-blue-600">£{{ "{:,.0f}".format(total_value / total_items) if total_items > 0 else 0 }}</p>
+                    <p class="text-2xl font-bold text-blue-600">£{{ "{:,.0f}".format((total_value / total_items) if (total_items and total_items > 0 and total_value) else 0) }}</p>
                     <p class="text-sm text-gray-600">Average Value</p>
                 </div>
             </div>
@@ -195,7 +195,7 @@
                 
                 <!-- Summary for filtered items -->
                 <div class="mt-4 text-sm text-gray-600">
-                    Showing {{ total_items }} items with total value of £{{ "{:,.0f}".format(total_value) }}
+                    Showing {{ total_items }} items with total value of £{{ "{:,.0f}".format(total_value if total_value else 0) }}
                 </div>
             </div>
             
@@ -260,9 +260,9 @@
                                 
                                 <!-- Value Column -->
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm font-medium text-gray-900">£{{ "{:,.0f}".format(item.reverb_price) }}</div>
+                                    <div class="text-sm font-medium text-gray-900">£{{ "{:,.0f}".format(item.reverb_price if item.reverb_price else 0) }}</div>
                                     {% if item.base_price and item.base_price != item.reverb_price %}
-                                        <div class="text-xs text-gray-500">Base: £{{ "{:,.0f}".format(item.base_price) }}</div>
+                                        <div class="text-xs text-gray-500">Base: £{{ "{:,.0f}".format(item.base_price if item.base_price else 0) }}</div>
                                     {% endif %}
                                 </td>
                                 

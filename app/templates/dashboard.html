@@ -360,20 +360,25 @@
         <div class="bg-white rounded-lg shadow p-6 mb-6">
             <h3 class="text-lg font-medium mb-4">Sync Status</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {% for platform in ['ebay', 'reverb', 'vr', 'shopify'] %}
+                {% for platform in ['shopify', 'reverb', 'vr','ebay'] %}
                     {% set platform_name = 'Vintage & Rare' if platform == 'vr' else platform.title() %}
                     <div class="flex items-center justify-between">
                         <div>
                             <span class="font-medium">{{ platform_name }}</span>
                             <p class="text-sm text-gray-500" id="{{ platform }}-last-sync-display">
-                                {% if platform == 'ebay' and ebay_last_sync %}
-                                    Last sync: {{ ebay_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                                {% if platform == 'shopify' and ebay_last_sync %}
+                                    Last sync: 
+                                        {% if shopify_last_sync is not none and shopify_last_sync is not string %}
+                                            {{ shopify_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                                        {% else %}
+                                            {{ shopify_last_sync }}
+                                        {% endif %}
                                 {% elif platform == 'reverb' and reverb_last_sync %}
                                     Last sync: {{ reverb_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
                                 {% elif platform == 'vr' and vr_last_sync %}
                                     Last sync: {{ vr_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                                {% elif platform == 'shopify' and shopify_last_sync %}
-                                    Last sync: {{ shopify_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                                {% elif platform == 'ebay' and shopify_last_sync %}
+                                    Last sync: {{ ebay_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
                                 {% else %}
                                     Never synced
                                 {% endif %}
@@ -391,20 +396,20 @@
         <div class="bg-white rounded-lg shadow p-6">
             <h3 class="text-lg font-medium mb-4">Sync Actions</h3>
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <button id="sync-ebay" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('ebay')">
-                    Sync eBay
+                <button id="sync-all" class="bg-green-600 hover:bg-green-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('all')">
+                    Sync All Platforms
+                </button>
+                <button id="sync-shopify" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('shopify')">
+                    Sync Shopify
                 </button>
                 <button id="sync-reverb" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('reverb')">
                     Sync Reverb
                 </button>
                 <button id="sync-vr" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('vr')">
-                    Sync Vintage & Rare
+                    Sync V & R
                 </button>
-                <button id="sync-website" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('website')">
-                    Sync Shopify
-                </button>
-                <button id="sync-all" class="bg-green-600 hover:bg-green-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('all')">
-                    Sync All Platforms
+                <button id="sync-ebay" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('ebay')">
+                    Sync eBay
                 </button>
             </div>
         </div>
@@ -463,7 +468,7 @@ const maxReconnectAttempts = 5;
 
 let syncAllState = {
     isSyncingAll: false,
-    platformsToSync: ['ebay', 'reverb', 'vr'],
+    platformsToSync: ['ebay', 'reverb', 'vr', 'shopify'],
     completedPlatforms: new Set()
 };
 
@@ -494,6 +499,48 @@ function initWebSocket() {
     socket.onerror = function(error) {
         console.error('WebSocket error:', error);
     };
+}
+
+// Commented out 17/07/25 ... this is an old function that was used to handle sync updates ... before All Sync updated. DELETE AFTER TESTING.
+function handleSyncUpdateOld(data) {
+    console.log("WebSocket data received:", data);
+    
+    const platform = data.platform;
+    
+    if (data.type === 'sync_started') {
+        updateSyncStatus(platform, 'SYNCING');
+        updateSyncButton(platform, true);
+    } else if (data.type === 'sync_completed') {
+        if (data.status === 'success') {
+            updateSyncStatus(platform, 'SYNCED');
+            updateLastSyncTime(platform, data.timestamp);
+            if (data.message) {
+                addToRecentActivity('✅', data.message, data.timestamp);
+            }
+        } else {
+            updateSyncStatus(platform, 'FAILED');
+            addToRecentActivity('⚠️', `Error syncing ${platform}: ${data.message || 'Unknown error'}`, data.timestamp);
+        }
+        updateSyncButton(platform, false);
+
+        if (syncAllState.isSyncingAll && syncAllState.platformsToSync.includes(platform)) {
+            syncAllState.completedPlatforms.add(platform);
+            
+            if (syncAllState.completedPlatforms.size === syncAllState.platformsToSync.length) {
+                const allButton = document.getElementById('sync-all');
+                if (allButton) {
+                    allButton.innerText = allButton.dataset.originalText || 'Sync All Platforms';
+                    allButton.disabled = false;
+                }
+                syncAllState.isSyncingAll = false;
+                syncAllState.completedPlatforms.clear();
+            }
+        }
+        
+        setTimeout(() => {
+            updateSyncStatus(platform, 'IDLE');
+        }, 3000);
+    }
 }
 
 function handleSyncUpdate(data) {
@@ -534,6 +581,37 @@ function handleSyncUpdate(data) {
         setTimeout(() => {
             updateSyncStatus(platform, 'IDLE');
         }, 3000);
+    } else if (data.type === 'sync_all_completed') {
+        // Handle sync all completion - refresh the entire dashboard
+        console.log(`Sync All completed with status: ${data.status}`);
+        
+        // Reset the Sync All button
+        const allButton = document.getElementById('sync-all');
+        if (allButton) {
+            allButton.innerText = allButton.dataset.originalText || 'Sync All Platforms';
+            allButton.disabled = false;
+        }
+        
+        // Reset sync all state
+        syncAllState.isSyncingAll = false;
+        syncAllState.completedPlatforms.clear();
+        
+        // Add activity log entry for the overall sync
+        let icon = '✅';
+        let message = data.message;
+        if (data.status === 'error') {
+            icon = '❌';
+        } else if (data.status === 'partial_success') {
+            icon = '⚠️';
+        }
+        
+        addToRecentActivity(icon, `Sync All: ${message}`, data.timestamp);
+        
+        // Refresh the dashboard after a short delay to show final results
+        setTimeout(() => {
+            console.log('Refreshing dashboard after sync all completion...');
+            window.location.reload();
+        }, 2000);
     }
 }
 

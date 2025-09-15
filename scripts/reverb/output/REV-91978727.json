@@ -1,0 +1,520 @@
+{
+  "listing_id": "91978727",
+  "listings_api": {
+    "id": 91978727,
+    "make": "Gibson",
+    "model": "Murphy Aged Custom Shop '59 Les Paul Standard Historic Reissue",
+    "finish": "Sunburst",
+    "year": "1993 - 2020",
+    "title": "Gibson Murphy Aged Custom Shop '59 Les Paul Standard Historic Reissue 2005 - Sunburst",
+    "created_at": "2025-08-28T05:17:45-05:00",
+    "shop_name": "DENMARK STREET GUITARS , LONDON ENGLAND ",
+    "shop": {
+      "feedback_count": 1885,
+      "preferred_seller": true,
+      "rating_percentage": 1.0
+    },
+    "description": "<p><b><strong>THE MURPHY \u201959</strong></b></p><p>We are happy to offer the following Gibson Les Paul \u201959 that has been sympathetically and personally aged by Gibson\u2019s own legendary Tom Murphy. Details as follows:</p><p><b><strong>History</strong></b>&nbsp;</p><p>The following instrument was one of a small number of 59 Reissues that was personally hand &nbsp;aged and reliced by Tom Murphy so to &nbsp;have the look , feel and styling of an original 59 Burst&nbsp;</p><p><b><strong>Gibson 59&nbsp;</strong></b></p><p>2005&nbsp;</p><p>Custom Shop&nbsp;</p><p>Tom Murphy Aged &nbsp;(Personally)&nbsp;</p><p>Cherry Sunburst Highly Figured Top&nbsp;</p><p>Nickel hardware&nbsp;</p><p>Brown Pink Lined Case&nbsp;</p><p>Original Coa , Paperwork Etc&nbsp;</p><p>Weight 8.5lbs</p><p>Condition - Unplayed, Collector Grade&nbsp;</p><p><b><strong>Sound&nbsp;</strong></b></p><p>The instrument is the optimum in sound, tone, feel&nbsp;</p><p><b><strong>Comments&nbsp;</strong></b></p><p>The above instrument is the most desired of all Gibson 59 Reissue as it was &nbsp;one &nbsp;of a limited number that were personally aged by Gibsons own Tom Murphy&nbsp;</p><p><b><strong>WHY BUY FROM US&nbsp;</strong></b><br><br>We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping each item will be fully serviced and professionally packed<br><br><b><strong>SELL - TRADE - CONSIGN&nbsp;</strong></b><br><br>If you are looking to sell, trade or consign any of your classic gear please contact us by message.<br><br><b><strong>WORLDWIDE COLLECTION - DELIVERY&nbsp;</strong></b><br><br>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam and Chicago.<br><br><b><strong>VALUATION SERVICE&nbsp;</strong></b><br><br>If you require a valuation of any of your classic year please forward a brief description and pictures and we will come back to your ASAP.</p>",
+    "condition": {
+      "uuid": "df268ad1-c462-4ba6-b6db-e007e23922ea",
+      "display_name": "Excellent",
+      "slug": "excellent"
+    },
+    "price": {
+      "tax_included": false,
+      "amount": "9699.00",
+      "amount_cents": 969900,
+      "currency": "GBP",
+      "symbol": "\u00a3",
+      "display": "\u00a39,699"
+    },
+    "buyer_price": {
+      "tax_included": false,
+      "amount": "9699.00",
+      "amount_cents": 969900,
+      "currency": "GBP",
+      "symbol": "\u00a3",
+      "display": "\u00a39,699"
+    },
+    "inventory": 1,
+    "has_inventory": false,
+    "offers_enabled": true,
+    "categories": [
+      {
+        "uuid": "e57deb7a-382b-4e18-a008-67d4fbcb2879",
+        "full_name": "Electric Guitars / Solid Body"
+      }
+    ],
+    "listing_currency": "GBP",
+    "published_at": "2025-08-28T05:18:36-05:00",
+    "state": {
+      "slug": "live",
+      "description": "Live"
+    },
+    "auction": false,
+    "shop_id": 46591,
+    "shipping": {
+      "free_expedited_shipping": false,
+      "local": false,
+      "rates": [
+        {
+          "region_code": "GB",
+          "rate": {
+            "amount": "60.00",
+            "amount_cents": 6000,
+            "currency": "GBP",
+            "symbol": "\u00a3",
+            "display": "\u00a360"
+          },
+          "carrier_calculated": false,
+          "regional": false,
+          "destination_postal_code_needed": false
+        },
+        {
+          "region_code": "US",
+          "rate": {
+            "amount": "200.00",
+            "amount_cents": 20000,
+            "currency": "GBP",
+            "symbol": "\u00a3",
+            "display": "\u00a3200"
+          },
+          "carrier_calculated": false,
+          "regional": false,
+          "destination_postal_code_needed": false
+        },
+        {
+          "region_code": "EUR_EU",
+          "rate": {
+            "amount": "200.00",
+            "amount_cents": 20000,
+            "currency": "GBP",
+            "symbol": "\u00a3",
+            "display": "\u00a3200"
+          },
+          "carrier_calculated": false,
+          "regional": false,
+          "destination_postal_code_needed": false
+        },
+        {
+          "region_code": "XX",
+          "rate": {
+            "amount": "200.00",
+            "amount_cents": 20000,
+            "currency": "GBP",
+            "symbol": "\u00a3",
+            "display": "\u00a3200"
+          },
+          "carrier_calculated": false,
+          "regional": false,
+          "destination_postal_code_needed": false
+        }
+      ],
+      "user_region_rate": {
+        "region_code": "GB",
+        "rate": {
+          "amount": "60.00",
+          "amount_cents": 6000,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a360"
+        },
+        "incremental_rate": {
+          "amount": "60.00",
+          "amount_cents": 6000,
+          "currency": "GBP",
+          "symbol": "\u00a3",
+          "display": "\u00a360"
+        },
+        "carrier_calculated": false,
+        "regional": false,
+        "destination_postal_code_needed": false
+      },
+      "initial_offer_rate": {
+        "region_code": "GB",
+        "rate": {
+          "original": {
+            "amount": "60.00",
+            "amount_cents": 6000,
+            "currency": "GBP",
+            "symbol": "\u00a3",
+            "display": "\u00a360"
+          },
+          "display": {
+            "amount": "60.00",
+            "amount_cents": 6000,
+            "currency": "GBP",
+            "symbol": "\u00a3",
+            "display": "\u00a360"
+          }
+        },
+        "carrier_calculated": false,
+        "regional": false,
+        "destination_postal_code_needed": false
+      }
+    },
+    "in_watchlist": false,
+    "us_outlet": false,
+    "_links": {
+      "photo": {
+        "href": "https://rvb-img.reverb.com/image/upload/s--CPMuvjzb--/f_auto,t_large/v1756376273/igyw8nd4rfc93crkv2ru.jpg"
+      },
+      "self": {
+        "href": "https://api.reverb.com/api/listings/91978727-gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst"
+      },
+      "update": {
+        "href": "https://api.reverb.com/api/listings/91978727-gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst",
+        "method": "PUT"
+      },
+      "bump": {
+        "href": "https://api.reverb.com/api/listings/91978727/bump"
+      },
+      "end": {
+        "href": "https://api.reverb.com/api/my/listings/91978727/state/end",
+        "method": "PUT"
+      },
+      "edit": {
+        "href": "https://api.reverb.com/api/listings/91978727-gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst/edit"
+      },
+      "web": {
+        "href": "https://reverb.com/item/91978727-gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst"
+      },
+      "make_offer": {
+        "href": "https://api.reverb.com/api/listings/91978727-gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst/offer",
+        "method": "POST"
+      },
+      "cart": {
+        "href": "https://api.reverb.com/api/cart/91978727"
+      },
+      "watchlist": {
+        "href": "https://api.reverb.com/api/wants/91978727-gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst"
+      },
+      "buy": {
+        "href": "https://reverb.com/uk/cart/add?cart_item%5Baction_source_attributes%5D%5Bdevice%5D=web&cart_item%5Bproduct_id%5D=91978727&token=7c15db2bbe8ef3cdea2ec1d734914597d64651aff6034fd1b86cd2d5b680a373"
+      },
+      "flag": {
+        "href": "https://api.reverb.com/api/listings/91978727-gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst/flag"
+      },
+      "contact_seller": {
+        "web": {
+          "href": "https://reverb.com/uk/my/messages/new?item=91978727-gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst&recipient_uuid=8f5593c2-2e82-4e1a-a20a-5d548493ab36&token=7c15db2bbe8ef3cdea2ec1d734914597d64651aff6034fd1b86cd2d5b680a373"
+        }
+      },
+      "conversations": {
+        "href": "https://api.reverb.com/api/listings/91978727/conversations"
+      },
+      "shop": {
+        "href": "https://api.reverb.com/api/shops/hanks",
+        "web": {
+          "href": "https://reverb.com/uk/shop/hanks"
+        }
+      },
+      "comparison_shopping": {
+        "href": "https://api.reverb.com/api/comparison_shopping_pages/109918"
+      },
+      "sales": {
+        "href": "https://api.reverb.com/api/listings/91978727/sales"
+      },
+      "brand": {
+        "href": "https://api.reverb.com/api/listings?brand_slug=gibson"
+      }
+    },
+    "accepted_payment_methods": [
+      "direct_checkout",
+      "paypal"
+    ],
+    "location": {
+      "region": "ENG",
+      "locality": "London",
+      "country_code": "GB",
+      "display_location": "London, United Kingdom"
+    },
+    "handmade": false,
+    "draft": false,
+    "live": true,
+    "local_pickup_only": false,
+    "cloudinary_photos": [
+      {
+        "id": 271685216,
+        "public_id": "igyw8nd4rfc93crkv2ru",
+        "version": "1756376273",
+        "width": 800,
+        "height": 800,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376273/igyw8nd4rfc93crkv2ru.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--VeYeQZxi--/v1756376273/igyw8nd4rfc93crkv2ru.jpg"
+      },
+      {
+        "id": 271685217,
+        "public_id": "z9mtg4bdtrnvbev4qvht",
+        "version": "1756376277",
+        "width": 800,
+        "height": 800,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376277/z9mtg4bdtrnvbev4qvht.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--WGQAjK7k--/v1756376277/z9mtg4bdtrnvbev4qvht.jpg"
+      },
+      {
+        "id": 271685218,
+        "public_id": "izaipnq50usezlfqjlq2",
+        "version": "1756376279",
+        "width": 800,
+        "height": 800,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376279/izaipnq50usezlfqjlq2.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--GR8EWUjw--/v1756376279/izaipnq50usezlfqjlq2.jpg"
+      },
+      {
+        "id": 271685219,
+        "public_id": "nkpv5o9l1kgyxbhgobba",
+        "version": "1756376281",
+        "width": 800,
+        "height": 800,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376281/nkpv5o9l1kgyxbhgobba.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--feucjrHH--/v1756376281/nkpv5o9l1kgyxbhgobba.jpg"
+      },
+      {
+        "id": 271685220,
+        "public_id": "ak0qtotxejkjquumn3vs",
+        "version": "1756376283",
+        "width": 800,
+        "height": 800,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376283/ak0qtotxejkjquumn3vs.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--MyIEZzLu--/v1756376283/ak0qtotxejkjquumn3vs.jpg"
+      },
+      {
+        "id": 271685221,
+        "public_id": "nf2xr3tepkv3fyyauvcx",
+        "version": "1756376285",
+        "width": 800,
+        "height": 800,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376285/nf2xr3tepkv3fyyauvcx.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--5J8CEBkr--/v1756376285/nf2xr3tepkv3fyyauvcx.jpg"
+      },
+      {
+        "id": 271685222,
+        "public_id": "ji9libedfsimujetk9a0",
+        "version": "1756376287",
+        "width": 800,
+        "height": 800,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376287/ji9libedfsimujetk9a0.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--ZmRMTe1u--/v1756376287/ji9libedfsimujetk9a0.jpg"
+      },
+      {
+        "id": 271685223,
+        "public_id": "rtwccp8ronp4oo1mqghj",
+        "version": "1756376289",
+        "width": 800,
+        "height": 800,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376289/rtwccp8ronp4oo1mqghj.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--xEWQSUR8--/v1756376289/rtwccp8ronp4oo1mqghj.jpg"
+      },
+      {
+        "id": 271685224,
+        "public_id": "fwohbj7pravyww4qvgr6",
+        "version": "1756376291",
+        "width": 800,
+        "height": 586,
+        "format": "jpg",
+        "resource_type": "image",
+        "transformation": null,
+        "path": "v1756376291/fwohbj7pravyww4qvgr6.jpg",
+        "preview_url": "https://rvb-img.reverb.com/image/upload/s--F7KyOMsf--/v1756376291/fwohbj7pravyww4qvgr6.jpg"
+      }
+    ],
+    "photos": [
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--CPMuvjzb--/f_auto,t_large/v1756376273/igyw8nd4rfc93crkv2ru.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Gy4yno8U--/t_card-square/v1756376273/igyw8nd4rfc93crkv2ru.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--CPMuvjzb--/f_auto,t_large/v1756376273/igyw8nd4rfc93crkv2ru.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Gy4yno8U--/t_card-square/v1756376273/igyw8nd4rfc93crkv2ru.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--ExpKVHdT--/f_auto,t_large/v1756376277/z9mtg4bdtrnvbev4qvht.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Jlk8f5F1--/t_card-square/v1756376277/z9mtg4bdtrnvbev4qvht.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--ExpKVHdT--/f_auto,t_large/v1756376277/z9mtg4bdtrnvbev4qvht.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Jlk8f5F1--/t_card-square/v1756376277/z9mtg4bdtrnvbev4qvht.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--xFrYQb_0--/f_auto,t_large/v1756376279/izaipnq50usezlfqjlq2.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Wn6wv3VG--/t_card-square/v1756376279/izaipnq50usezlfqjlq2.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--xFrYQb_0--/f_auto,t_large/v1756376279/izaipnq50usezlfqjlq2.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Wn6wv3VG--/t_card-square/v1756376279/izaipnq50usezlfqjlq2.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--JXhHt9kH--/f_auto,t_large/v1756376281/nkpv5o9l1kgyxbhgobba.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--6P52V4Rh--/t_card-square/v1756376281/nkpv5o9l1kgyxbhgobba.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--JXhHt9kH--/f_auto,t_large/v1756376281/nkpv5o9l1kgyxbhgobba.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--6P52V4Rh--/t_card-square/v1756376281/nkpv5o9l1kgyxbhgobba.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--J7mLsy5A--/f_auto,t_large/v1756376283/ak0qtotxejkjquumn3vs.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--EZJyneJ9--/t_card-square/v1756376283/ak0qtotxejkjquumn3vs.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--J7mLsy5A--/f_auto,t_large/v1756376283/ak0qtotxejkjquumn3vs.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--EZJyneJ9--/t_card-square/v1756376283/ak0qtotxejkjquumn3vs.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--RttM0iyY--/f_auto,t_large/v1756376285/nf2xr3tepkv3fyyauvcx.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Tayp1oSH--/t_card-square/v1756376285/nf2xr3tepkv3fyyauvcx.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--RttM0iyY--/f_auto,t_large/v1756376285/nf2xr3tepkv3fyyauvcx.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--Tayp1oSH--/t_card-square/v1756376285/nf2xr3tepkv3fyyauvcx.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--c6Raj1Bq--/f_auto,t_large/v1756376287/ji9libedfsimujetk9a0.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--xALp2AK5--/t_card-square/v1756376287/ji9libedfsimujetk9a0.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--c6Raj1Bq--/f_auto,t_large/v1756376287/ji9libedfsimujetk9a0.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--xALp2AK5--/t_card-square/v1756376287/ji9libedfsimujetk9a0.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--BXA8G3t5--/f_auto,t_large/v1756376289/rtwccp8ronp4oo1mqghj.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--5KKwRi5e--/t_card-square/v1756376289/rtwccp8ronp4oo1mqghj.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--BXA8G3t5--/f_auto,t_large/v1756376289/rtwccp8ronp4oo1mqghj.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--5KKwRi5e--/t_card-square/v1756376289/rtwccp8ronp4oo1mqghj.jpg"
+          }
+        }
+      },
+      {
+        "_links": {
+          "large_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--uZBQlUE_--/f_auto,t_large/v1756376291/fwohbj7pravyww4qvgr6.jpg"
+          },
+          "small_crop": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--PgL08uHO--/t_card-square/v1756376291/fwohbj7pravyww4qvgr6.jpg"
+          },
+          "full": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--uZBQlUE_--/f_auto,t_large/v1756376291/fwohbj7pravyww4qvgr6.jpg"
+          },
+          "thumbnail": {
+            "href": "https://rvb-img.reverb.com/image/upload/s--PgL08uHO--/t_card-square/v1756376291/fwohbj7pravyww4qvgr6.jpg"
+          }
+        }
+      }
+    ],
+    "stats": {
+      "views": 213,
+      "watches": 14
+    },
+    "offer_count": 0,
+    "shipping_policy": "Please contact us for accurate shipping rates",
+    "sold_as_is": false,
+    "upc_does_not_apply": true,
+    "origin_country_code": "US",
+    "same_day_shipping_ineligible": false,
+    "return_policy": {
+      "description": "This product can be returned within 2 days of receipt."
+    },
+    "has_offer_for_buyer": false,
+    "is_my_listing": true,
+    "shipping_profile": {
+      "name": "Electric Guitars",
+      "id": "15655"
+    },
+    "videos": [],
+    "comparison_shopping_page_id": "109918"
+  },
+  "orders_api": null,
+  "fetch_metadata": {
+    "listing_id": "91978727",
+    "fetch_date": "2025-09-06 12:06:13.780757",
+    "sku": "UNK"
+  }
+}

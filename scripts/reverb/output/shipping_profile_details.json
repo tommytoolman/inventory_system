@@ -1,0 +1,753 @@
+{
+  "analysis_date": "2025-09-06T12:26:16.441347",
+  "shop_name": "DENMARK STREET GUITARS , LONDON ENGLAND ",
+  "shop_id": "46591",
+  "total_profiles": 15,
+  "profiles": {
+    "107308": {
+      "id": "107308",
+      "name": "10kg",
+      "listing_count": 13,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "20.00",
+          "display": "\u00a320",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "150.00",
+          "display": "\u00a3150",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 85388871,
+          "sku": "rev-85388871",
+          "title": "Akai MX73 Midi Master Keyboard 1980s - White"
+        },
+        {
+          "id": 85385906,
+          "sku": "rev-85385906",
+          "title": "Gemini X-01 Power Amp 1990s - Black"
+        },
+        {
+          "id": 85385937,
+          "sku": "rev-85385937",
+          "title": "Sony TC-WE475 Tape Deck Spares or Repairs 1990s - "
+        }
+      ]
+    },
+    "106058": {
+      "id": "106058",
+      "name": "Amp Panels 24",
+      "listing_count": 5,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "12.00",
+          "display": "\u00a312",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "29.00",
+          "display": "\u00a329",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "35.00",
+          "display": "\u00a335",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 83655007,
+          "sku": "rev-83655007",
+          "title": "New Reproduction Plexi front panel for Marshall JM"
+        },
+        {
+          "id": 83654720,
+          "sku": "rev-83654720",
+          "title": "Marshall 1966 JTM45 Panel , Repro/replica - Gold"
+        },
+        {
+          "id": 83654665,
+          "sku": "rev-83654665",
+          "title": "Custom 1968 Bluesbreaker , 18 Watt , Mini Bluesbre"
+        }
+      ]
+    },
+    "106057": {
+      "id": "106057",
+      "name": "Amp Logos",
+      "listing_count": 4,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "12.00",
+          "display": "\u00a312",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "29.00",
+          "display": "\u00a329",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "35.00",
+          "display": "\u00a335",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 85389002,
+          "sku": "rev-85389002",
+          "title": "Wurlitzer Organ Ex RIC RAC STUDIOS SISTERS OF MERC"
+        },
+        {
+          "id": 83654488,
+          "sku": "rev-83654488",
+          "title": "Marshall Reproduction Metal Badge Amplifier Knobs "
+        },
+        {
+          "id": 83651967,
+          "sku": "rev-83651967",
+          "title": "Vintage JTM & JMP SCRIPT LOGO FOR PLEXI AMP OR CAB"
+        }
+      ]
+    },
+    "105662": {
+      "id": "105662",
+      "name": "Production Cases",
+      "listing_count": 4,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "700.00",
+          "display": "\u00a3700",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_NON_EU",
+          "amount": "900.00",
+          "display": "\u00a3900",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "700.00",
+          "display": "\u00a3700",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "JP",
+          "amount": "900.00",
+          "display": "\u00a3900",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "700.00",
+          "display": "\u00a3700",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 88344289,
+          "sku": "rev-88344289",
+          "title": "Hiwatt DR103 Head and SE4123 Cabinet WISHBONE ASH "
+        },
+        {
+          "id": 83652114,
+          "sku": "rev-83652114",
+          "title": "Hammond L122 Organ owned & used by Rick Wakeman of"
+        },
+        {
+          "id": 83652080,
+          "sku": "rev-83652080",
+          "title": "Hammond C3 Organ owned & used by Rick Wakeman of Y"
+        }
+      ]
+    },
+    "103323": {
+      "id": "103323",
+      "name": "Very Large Items",
+      "listing_count": 3,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "500.00",
+          "display": "\u00a3500",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "600.00",
+          "display": "\u00a3600",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 89350675,
+          "sku": "rev-89350675",
+          "title": "Fender Twin EX NOEL GALLAGHER OASIS 2000s - Black"
+        },
+        {
+          "id": 85380948,
+          "sku": "rev-85380948",
+          "title": "Soundcraft 760 24 Channel Multi Track Tape Machine"
+        },
+        {
+          "id": 85380812,
+          "sku": "rev-85380812",
+          "title": "Soundcraft 24 Channel Mixing Desk SISTERS OF MERCY"
+        }
+      ]
+    },
+    "85687": {
+      "id": "85687",
+      "name": "Amp Panels",
+      "listing_count": 5,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "10.00",
+          "display": "\u00a310",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "29.00",
+          "display": "\u00a329",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "AU",
+          "amount": "39.00",
+          "display": "\u00a339",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "CA",
+          "amount": "39.00",
+          "display": "\u00a339",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "FR",
+          "amount": "35.00",
+          "display": "\u00a335",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "DE",
+          "amount": "35.00",
+          "display": "\u00a335",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "ID",
+          "amount": "39.00",
+          "display": "\u00a339",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "JP",
+          "amount": "39.00",
+          "display": "\u00a339",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "RU",
+          "amount": "39.00",
+          "display": "\u00a339",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "39.00",
+          "display": "\u00a339",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 83654632,
+          "sku": "rev-83654632",
+          "title": "JMI Fawn Tolex for AC4 AC15 AC30 AC50 AC100 Amplif"
+        },
+        {
+          "id": 63446679,
+          "sku": "rev-63446679",
+          "title": "Marshall Reproduction JMP Superlead Plexi rear pan"
+        },
+        {
+          "id": 63445077,
+          "sku": "rev-63445077",
+          "title": "Marshall Reproduction JTM45 Front  panel for 1963-"
+        }
+      ]
+    },
+    "15655": {
+      "id": "15655",
+      "name": "Electric Guitars",
+      "listing_count": 180,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "60.00",
+          "display": "\u00a360",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "200.00",
+          "display": "\u00a3200",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "200.00",
+          "display": "\u00a3200",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "200.00",
+          "display": "\u00a3200",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 91990866,
+          "sku": "REV-91990866",
+          "title": "Fender Jazzmaster 1965 - Rare Original Blue Sparkl"
+        },
+        {
+          "id": 91981293,
+          "sku": "REV-91981293",
+          "title": "Fender Custom David Gilmour Signature Relic Strato"
+        },
+        {
+          "id": 91978827,
+          "sku": "REV-91978827",
+          "title": "Fender Cooder-Caster Stratocaster Ex Andy Fairweat"
+        }
+      ]
+    },
+    "59948": {
+      "id": "59948",
+      "name": "New Acoustic",
+      "listing_count": 11,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "25.00",
+          "display": "\u00a325",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "120.00",
+          "display": "\u00a3120",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 83653292,
+          "sku": "rev-83653292",
+          "title": "Guild F30 2000 Natural"
+        },
+        {
+          "id": 83653157,
+          "sku": "rev-83653157",
+          "title": "Martin J40 M 1986 Natural"
+        },
+        {
+          "id": 83653024,
+          "sku": "rev-83653024",
+          "title": "Larrivee JCL Jean Larrivee 40th Anniversary"
+        }
+      ]
+    },
+    "63784": {
+      "id": "63784",
+      "name": "Regular Synth",
+      "listing_count": 2,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "60.00",
+          "display": "\u00a360",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "160.00",
+          "display": "\u00a3160",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "170.00",
+          "display": "\u00a3170",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "220.00",
+          "display": "\u00a3220",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 83653372,
+          "sku": "rev-83653372",
+          "title": "Polivoks Synth Owned and Used by Rick Wakeman of Y"
+        },
+        {
+          "id": 83652155,
+          "sku": "rev-83652155",
+          "title": "Sequential Circuits Prophet Remote owned and used "
+        }
+      ]
+    },
+    "23177": {
+      "id": "23177",
+      "name": "Small Spares",
+      "listing_count": 27,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "10.00",
+          "display": "\u00a310",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "20.00",
+          "display": "\u00a320",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "20.00",
+          "display": "\u00a320",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "40.00",
+          "display": "\u00a340",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 79539551,
+          "sku": "rev-79539551",
+          "title": "Oasis Hand Written Noel Gallagher Lyrics ITS GOOD "
+        },
+        {
+          "id": 79539384,
+          "sku": "rev-79539384",
+          "title": "Oasis Hand Written Printed Noel Gallagher Lyrics T"
+        },
+        {
+          "id": 79285173,
+          "sku": "rev-79285173",
+          "title": "Oasis The Hindu Times A3 Laminated Lyrics 2000s"
+        }
+      ]
+    },
+    "15659": {
+      "id": "15659",
+      "name": "Guitar Cabs",
+      "listing_count": 25,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "60.00",
+          "display": "\u00a360",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "250.00",
+          "display": "\u00a3250",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "300.00",
+          "display": "\u00a3300",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "400.00",
+          "display": "\u00a3400",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 90459746,
+          "sku": "rev-90459746",
+          "title": "Vox AC30 BRIAN MAY 1960s - Black"
+        },
+        {
+          "id": 87557454,
+          "sku": "rev-87557454",
+          "title": "Fender Bandmaster Cabinet ex John Lennon ,  Plasti"
+        },
+        {
+          "id": 87557486,
+          "sku": "rev-87557486",
+          "title": "Fender Tonemaster Head & Cabinet ex Mike Rutherfor"
+        }
+      ]
+    },
+    "15658": {
+      "id": "15658",
+      "name": "Amp Heads",
+      "listing_count": 41,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "40.00",
+          "display": "\u00a340",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "110.00",
+          "display": "\u00a3110",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "140.00",
+          "display": "\u00a3140",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 91823263,
+          "sku": "REV-91823263",
+          "title": "Ludwig Drum Ex The Beatles Video REAL LOVE 1960s -"
+        },
+        {
+          "id": 90953070,
+          "sku": "rev-90953070",
+          "title": "Celestion 12\" Speaker ex Noel Gallagher OASIS 1990"
+        },
+        {
+          "id": 86756088,
+          "sku": "rev-86756088",
+          "title": "Fender Custom Shop Woody Junior ERIC CLAPTON 1990s"
+        }
+      ]
+    },
+    "15656": {
+      "id": "15656",
+      "name": "Acoustic Guitars",
+      "listing_count": 6,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "30.00",
+          "display": "\u00a330",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "75.00",
+          "display": "\u00a375",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "140.00",
+          "display": "\u00a3140",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 91863094,
+          "sku": "REV-91863094",
+          "title": "Takamine 12 String Acoustic  Ex David Bowie 1990s "
+        },
+        {
+          "id": 90149227,
+          "sku": "rev-90149227",
+          "title": "Taylor Swift Custom Built Acoustic Made for the Ar"
+        },
+        {
+          "id": 89151160,
+          "sku": "rev-89151160",
+          "title": "Ovation Adamas II 1980s  - Burst"
+        }
+      ]
+    },
+    "15654": {
+      "id": "15654",
+      "name": "Effects Pedals",
+      "listing_count": 114,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "10.00",
+          "display": "\u00a310",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "30.00",
+          "display": "\u00a330",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "ASIA",
+          "amount": "60.00",
+          "display": "\u00a360",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "40.00",
+          "display": "\u00a340",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "70.00",
+          "display": "\u00a370",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 91672400,
+          "sku": "REV-91672400",
+          "title": "Yamaha Sustain Pedal ex Oasis Touring Collection 1"
+        },
+        {
+          "id": 91672354,
+          "sku": "REV-91672354",
+          "title": "Oasis Custom 9v Splitter Ex Oasis Touring collecti"
+        },
+        {
+          "id": 91672208,
+          "sku": "REV-91672208",
+          "title": "Custom On/Off Amp Footswitch ex Oasis 1990s - Grey"
+        }
+      ]
+    },
+    "15657": {
+      "id": "15657",
+      "name": "Bass Guitars",
+      "listing_count": 4,
+      "shipping_rates": [
+        {
+          "region_code": "GB",
+          "amount": "30.00",
+          "display": "\u00a330",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "US",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "EUR_EU",
+          "amount": "100.00",
+          "display": "\u00a3100",
+          "currency": "GBP"
+        },
+        {
+          "region_code": "XX",
+          "amount": "140.00",
+          "display": "\u00a3140",
+          "currency": "GBP"
+        }
+      ],
+      "sample_listings": [
+        {
+          "id": 85381354,
+          "sku": "rev-85381354",
+          "title": "Vox Lil Nightrain Head & Cab 2000s - Black"
+        },
+        {
+          "id": 83654036,
+          "sku": "rev-83654036",
+          "title": "Zemaitis Custom Bass ex Ronnie Lane - The Small Fa"
+        },
+        {
+          "id": 83143931,
+          "sku": "rev-83143931",
+          "title": "Penta Bass  Bass  2000s  - Pearl White - Alex Greg"
+        }
+      ]
+    }
+  }
+}

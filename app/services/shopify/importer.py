@@ -339,9 +339,12 @@ class ShopifyImporter:
         shopify_status = product_data.get("status", "").upper()
         platform_status = self._map_shopify_status_to_platform_status(shopify_status)
         
-        # Build listing URL from handle
-        handle = product_data.get("handle", "")
-        listing_url = f"https://londonvintageguitars.myshopify.com/products/{handle}" if handle else None
+        # Use onlineStorePreviewUrl if available, otherwise build from handle
+        listing_url = product_data.get("onlineStorePreviewUrl")
+        if not listing_url:
+            # Fallback to building from handle if preview URL not available
+            handle = product_data.get("handle", "")
+            listing_url = f"https://londonvintageguitars.myshopify.com/products/{handle}" if handle else None
             
         # Store price and other data in platform_specific_data
         platform_specific_data = {

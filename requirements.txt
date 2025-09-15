@@ -21,4 +21,4 @@ aiofiles==24.1.0
 
 # Unit Testing
 pytest-mock
-pytest-asyncio
+pytest-asyncioreportlab==4.0.8

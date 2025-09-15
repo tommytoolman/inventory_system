@@ -228,14 +228,14 @@ class DropboxClient:
             print(f"Error getting temporary link for {file_path}: {response.status_code}")
             return None
     
-    def get_temporary_links_batch(self, file_paths, max_workers=10, max_retries=3):
-        """Get temporary links for multiple files using parallel requests"""
+    def get_temporary_links_batch(self, file_paths, max_workers=50, max_retries=3):
+        """Get temporary links for multiple files using parallel requests - OPTIMIZED"""
         # print(f"Getting temporary links for {len(file_paths)} files...")
         start_time = time.time()
         
         results = {}
         
-        # Use ThreadPoolExecutor for parallel processing
+        # Increased max_workers from 10 to 50 for better parallelism
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Create a map of futures to file paths
             future_to_path = {
@@ -244,20 +244,28 @@ class DropboxClient:
             }
             
             # Process as they complete
-            for i, future in enumerate(future_to_path):
+            completed = 0
+            for future in future_to_path:
                 path = future_to_path[future]
                 try:
                     link = future.result()
-                    results[path] = link
+                    if link:  # Only add if we got a valid link
+                        results[path] = link
+                    completed += 1
                     
                     # Print progress every 100 items
-                    if (i + 1) % 200 == 0:
-                        print(f"Processed {i + 1}/{len(file_paths)} links...")
+                    if completed % 100 == 0:
+                        elapsed = time.time() - start_time
+                        rate = completed / elapsed
+                        print(f"Processed {completed}/{len(file_paths)} links ({rate:.1f} links/sec)...")
                         
                 except Exception as e:
                     print(f"Error getting link for {path}: {str(e)}")
+                    completed += 1
         
-        print(f"Completed getting temporary links in {time.time() - start_time:.2f} seconds")
+        elapsed = time.time() - start_time
+        rate = len(results) / elapsed if elapsed > 0 else 0
+        print(f"Completed {len(results)} temporary links in {elapsed:.2f} seconds ({rate:.1f} links/sec)")
         return results
     
     def build_folder_structure(self, entries):

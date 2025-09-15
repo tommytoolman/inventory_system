@@ -96,7 +96,7 @@
             
             <!-- Show Entries Dropdown -->
             <div class="flex items-center">
-                <span class="mr-2 text-sm text-gray-600">Show:</span>
+                <span class="mr-2 text-sm text-blue-600">Show:</span>
                 {% set current_per_page = per_page|default(100)|int %}
                 <select name="per_page" class="p-2 border rounded" onchange="this.form.submit()">
                     {% for count in [10, 25, 50, 100] %}
@@ -106,7 +106,7 @@
                     {% endfor %}
                     <option value="all" {% if per_page == 'all' %}selected{% endif %}>All</option>
                 </select>
-                <span class="ml-2 text-sm text-gray-600">entries</span>
+                <span class="ml-2 text-sm text-blue-600">entries</span>
             </div>
             
             <!-- Search Input -->
@@ -246,8 +246,10 @@
                             {% endif %}
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ product.brand }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    {% set status_val = product.status.value|upper if product.status else '' %}
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">{{ product.brand|title }}</td>
+                    {% set status_val = product.status.value|upper if product.status else '' %}
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">
                         <span title="{{ product.model }}" class="truncate inline-block max-w-xs">
                             {% if product.model and product.model|length > 65 %}
                                 {{ product.model[:65] }}...
@@ -256,8 +258,10 @@
                             {% endif %}
                         </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ product.category }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    {% set status_val = product.status.value|upper if product.status else '' %}
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">{{ product.category }}</td>
+                    {% set status_val = product.status.value|upper if product.status else '' %}
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">
                         {% if product.base_price and product.base_price > 0 %}
                             £{{ "{:,.0f}".format(product.base_price) }}
                             <!-- ${{ "%.2f"|format(product.base_price) }} -->
@@ -266,13 +270,22 @@
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        {% if product.status == 'SOLD' %}
+                        {% set status_val = product.status.value|upper if product.status else '' %}
+                        {% if status_val == 'SOLD' %}
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                                 Sold
                             </span>
+                        {% elif status_val == 'DRAFT' %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                Draft
+                            </span>
+                        {% elif status_val == 'ARCHIVED' %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                                Archived
+                            </span>
                         {% else %}
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                {{ product.status.value if product.status else '' }}
+                                {{ status_val|title }}
                             </span>
                         {% endif %}
                     </td>
@@ -288,7 +301,7 @@
     <!-- Pagination Controls - moved outside table container -->
     <div class="sticky-footer bg-white px-4">
         <div class="flex items-center justify-between">
-            <div class="text-sm text-gray-700">
+            <div class="text-sm text-blue-600">
                 {% if products %}
                     Showing {{ start_item }} to {{ end_item }} of {{ total_products }} entries
                 {% else %}
@@ -298,14 +311,14 @@
             <div class="flex">
                 {% if has_prev %}
                 <a href="?page={{ page - 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}" 
-                class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-gray-50">
                     Previous
                 </a>
                 {% endif %}
                 
                 {% if has_next %}
                 <a href="?page={{ page + 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}"
-                class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-gray-50">
                     Next
                 </a>
                 {% endif %}

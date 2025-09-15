@@ -1,0 +1,891 @@
+{
+  "51": {
+    "name": "Guitars",
+    "subcategories": {
+      "86": {
+        "name": "Archtop",
+        "subcategories": {
+          "195": {
+            "name": "Acoustic",
+            "subcategories": []
+          },
+          "196": {
+            "name": "Electric",
+            "subcategories": []
+          }
+        }
+      },
+      "83": {
+        "name": "Electric solid body",
+        "subcategories": {}
+      },
+      "87": {
+        "name": "Flat top",
+        "subcategories": {}
+      },
+      "84": {
+        "name": "Semi-hollow body",
+        "subcategories": {}
+      },
+      "255": {
+        "name": "12 string",
+        "subcategories": {
+          "256": {
+            "name": "Acoustic",
+            "subcategories": []
+          },
+          "257": {
+            "name": "Electric",
+            "subcategories": []
+          }
+        }
+      },
+      "369": {
+        "name": "Baritone",
+        "subcategories": {}
+      },
+      "372": {
+        "name": "Chambered solid body",
+        "subcategories": {}
+      },
+      "88": {
+        "name": "Classical",
+        "subcategories": {}
+      },
+      "386": {
+        "name": "Fretless Guitar",
+        "subcategories": {}
+      },
+      "231": {
+        "name": "Lap & pedal steel",
+        "subcategories": {}
+      },
+      "254": {
+        "name": "Lefthands",
+        "subcategories": {
+          "261": {
+            "name": "Electric Solid Body (LH)",
+            "subcategories": []
+          },
+          "262": {
+            "name": "Semi-Hollowbody (LH)",
+            "subcategories": []
+          },
+          "263": {
+            "name": "Flattop (LH)",
+            "subcategories": []
+          },
+          "264": {
+            "name": "Classical & Nylon (LH)",
+            "subcategories": []
+          },
+          "265": {
+            "name": "Resonator (LH)",
+            "subcategories": []
+          },
+          "266": {
+            "name": "Archtop Electric & Acoustic (LH)",
+            "subcategories": []
+          },
+          "267": {
+            "name": "12 String (LH)",
+            "subcategories": []
+          }
+        }
+      },
+      "234": {
+        "name": "Gypsy Jazz",
+        "subcategories": {}
+      },
+      "211": {
+        "name": "Parts & accessories",
+        "subcategories": {
+          "286": {
+            "name": "Case",
+            "subcategories": []
+          },
+          "272": {
+            "name": "Tuners",
+            "subcategories": []
+          },
+          "273": {
+            "name": "Knobs",
+            "subcategories": []
+          },
+          "274": {
+            "name": "Pickguard",
+            "subcategories": []
+          },
+          "275": {
+            "name": "Neck",
+            "subcategories": []
+          },
+          "276": {
+            "name": "Body",
+            "subcategories": []
+          },
+          "277": {
+            "name": "Pots",
+            "subcategories": []
+          },
+          "278": {
+            "name": "Saddles",
+            "subcategories": []
+          },
+          "279": {
+            "name": "Other",
+            "subcategories": []
+          },
+          "280": {
+            "name": "Pickups",
+            "subcategories": [
+              {
+                "id": "281",
+                "name": "Strat"
+              },
+              {
+                "id": "282",
+                "name": "Tele"
+              },
+              {
+                "id": "283",
+                "name": "Humbucker"
+              },
+              {
+                "id": "284",
+                "name": "P90"
+              },
+              {
+                "id": "285",
+                "name": "Other"
+              }
+            ]
+          },
+          "296": {
+            "name": "Bridge",
+            "subcategories": []
+          },
+          "297": {
+            "name": "Vibrato",
+            "subcategories": []
+          },
+          "355": {
+            "name": "Literature",
+            "subcategories": []
+          },
+          "373": {
+            "name": "Wooden Inlays",
+            "subcategories": [
+              {
+                "id": "377",
+                "name": "Rosettes"
+              },
+              {
+                "id": "378",
+                "name": "Bindings"
+              },
+              {
+                "id": "379",
+                "name": "Purflings"
+              }
+            ]
+          },
+          "411": {
+            "name": "Neck screws",
+            "subcategories": []
+          },
+          "412": {
+            "name": "Case Keys",
+            "subcategories": []
+          },
+          "413": {
+            "name": "Logos",
+            "subcategories": []
+          },
+          "414": {
+            "name": "Footswitches",
+            "subcategories": []
+          },
+          "415": {
+            "name": "Amp bolts",
+            "subcategories": []
+          },
+          "419": {
+            "name": "Guitar straps",
+            "subcategories": []
+          }
+        }
+      },
+      "230": {
+        "name": "Resonator",
+        "subcategories": {}
+      },
+      "416": {
+        "name": "Steel hollow",
+        "subcategories": {}
+      },
+      "232": {
+        "name": "Tenor",
+        "subcategories": {}
+      },
+      "356": {
+        "name": "Miscellaneous",
+        "subcategories": {}
+      }
+    }
+  },
+  "52": {
+    "name": "Basses",
+    "subcategories": {
+      "69": {
+        "name": "4 string",
+        "subcategories": {}
+      },
+      "70": {
+        "name": "5 string",
+        "subcategories": {}
+      },
+      "79": {
+        "name": "6 string",
+        "subcategories": {}
+      },
+      "80": {
+        "name": "Semi-hollowbody",
+        "subcategories": {}
+      },
+      "81": {
+        "name": "Upright bass",
+        "subcategories": {
+          "383": {
+            "name": "Acoustic",
+            "subcategories": []
+          },
+          "384": {
+            "name": "Electric",
+            "subcategories": []
+          },
+          "385": {
+            "name": "Acoustic / Electric",
+            "subcategories": []
+          }
+        }
+      },
+      "82": {
+        "name": "Acoustic / Electric",
+        "subcategories": {}
+      },
+      "206": {
+        "name": "Pickups",
+        "subcategories": {
+          "228": {
+            "name": "Other",
+            "subcategories": []
+          },
+          "207": {
+            "name": "J-bass",
+            "subcategories": []
+          },
+          "208": {
+            "name": "P-bass",
+            "subcategories": []
+          }
+        }
+      },
+      "246": {
+        "name": "Fretless",
+        "subcategories": {}
+      },
+      "253": {
+        "name": "Lefthand",
+        "subcategories": {}
+      },
+      "287": {
+        "name": "Parts & accessories",
+        "subcategories": {
+          "288": {
+            "name": "Tuners",
+            "subcategories": []
+          },
+          "289": {
+            "name": "Knobs",
+            "subcategories": []
+          },
+          "290": {
+            "name": "Pots",
+            "subcategories": []
+          },
+          "291": {
+            "name": "Pickups",
+            "subcategories": []
+          },
+          "292": {
+            "name": "Neck",
+            "subcategories": []
+          },
+          "293": {
+            "name": "Body",
+            "subcategories": []
+          },
+          "294": {
+            "name": "Case",
+            "subcategories": []
+          },
+          "295": {
+            "name": "Other",
+            "subcategories": []
+          }
+        }
+      },
+      "368": {
+        "name": "Miscellaneous Basses",
+        "subcategories": {}
+      },
+      "417": {
+        "name": "Hollow steel",
+        "subcategories": {}
+      }
+    }
+  },
+  "90": {
+    "name": "Effects",
+    "subcategories": {
+      "91": {
+        "name": "Overdrive",
+        "subcategories": {}
+      },
+      "92": {
+        "name": "Distortion",
+        "subcategories": {}
+      },
+      "93": {
+        "name": "Fuzz",
+        "subcategories": {}
+      },
+      "95": {
+        "name": "Octa Fuzz",
+        "subcategories": {}
+      },
+      "96": {
+        "name": "Compressor",
+        "subcategories": {}
+      },
+      "97": {
+        "name": "Octave",
+        "subcategories": {}
+      },
+      "98": {
+        "name": "Delay & Echo",
+        "subcategories": {}
+      },
+      "99": {
+        "name": "Chorus",
+        "subcategories": {}
+      },
+      "100": {
+        "name": "Phaser",
+        "subcategories": {}
+      },
+      "101": {
+        "name": "Vibe",
+        "subcategories": {}
+      },
+      "103": {
+        "name": "Oscillator, Modulator, Filter, Frequenzy and other",
+        "subcategories": {}
+      },
+      "127": {
+        "name": "Tremolo",
+        "subcategories": {}
+      },
+      "129": {
+        "name": "Reverb",
+        "subcategories": {}
+      },
+      "128": {
+        "name": "Wah Wah",
+        "subcategories": {}
+      },
+      "126": {
+        "name": "Booster",
+        "subcategories": {}
+      },
+      "125": {
+        "name": "Treble Booster",
+        "subcategories": {}
+      },
+      "229": {
+        "name": "Other",
+        "subcategories": {}
+      },
+      "247": {
+        "name": "Multieffect",
+        "subcategories": {}
+      },
+      "248": {
+        "name": "Buffer",
+        "subcategories": {}
+      },
+      "249": {
+        "name": "Equalizer",
+        "subcategories": {}
+      },
+      "250": {
+        "name": "Looper/Switching/Controller",
+        "subcategories": {}
+      },
+      "268": {
+        "name": "Flanger",
+        "subcategories": {}
+      },
+      "269": {
+        "name": "Envelope",
+        "subcategories": {}
+      },
+      "270": {
+        "name": "Sustain",
+        "subcategories": {}
+      },
+      "335": {
+        "name": "Buffer/Line Driver",
+        "subcategories": {}
+      },
+      "357": {
+        "name": "Booster/Overdrive",
+        "subcategories": {}
+      },
+      "359": {
+        "name": "Fuzz/Distortion",
+        "subcategories": {}
+      },
+      "360": {
+        "name": "Overdrive/Distortion",
+        "subcategories": {}
+      },
+      "361": {
+        "name": "Overdrive/Boost",
+        "subcategories": {}
+      },
+      "362": {
+        "name": "Overdrive/Pre-amp",
+        "subcategories": {}
+      },
+      "363": {
+        "name": "Bass Overdrive",
+        "subcategories": {}
+      },
+      "370": {
+        "name": "Attenuator",
+        "subcategories": {}
+      },
+      "381": {
+        "name": "Bass Fuzz",
+        "subcategories": {}
+      },
+      "382": {
+        "name": "Bass Overdrive / Fuzz",
+        "subcategories": {}
+      },
+      "387": {
+        "name": "Amp simulator",
+        "subcategories": {}
+      },
+      "420": {
+        "name": "Buffer/booster",
+        "subcategories": {}
+      },
+      "418": {
+        "name": "Noise gate",
+        "subcategories": {}
+      }
+    }
+  },
+  "53": {
+    "name": "Amps",
+    "subcategories": {
+      "182": {
+        "name": "Heads",
+        "subcategories": {}
+      },
+      "212": {
+        "name": "Head + Cab",
+        "subcategories": {}
+      },
+      "242": {
+        "name": "Cabinets",
+        "subcategories": {}
+      },
+      "251": {
+        "name": "Pre-amps",
+        "subcategories": {}
+      },
+      "258": {
+        "name": "Reverb units",
+        "subcategories": {}
+      },
+      "367": {
+        "name": "Power Amps",
+        "subcategories": {}
+      },
+      "183": {
+        "name": "Combo",
+        "subcategories": {}
+      }
+    }
+  },
+  "216": {
+    "name": "Drums",
+    "subcategories": {
+      "225": {
+        "name": "Percussion",
+        "subcategories": {}
+      },
+      "217": {
+        "name": "Shell Kits",
+        "subcategories": {}
+      },
+      "218": {
+        "name": "Snares",
+        "subcategories": {}
+      },
+      "219": {
+        "name": "Bass Drums",
+        "subcategories": {}
+      },
+      "220": {
+        "name": "Floor toms",
+        "subcategories": {}
+      },
+      "221": {
+        "name": "Tom-Toms",
+        "subcategories": {}
+      },
+      "222": {
+        "name": "Tuned & Classical",
+        "subcategories": {}
+      },
+      "223": {
+        "name": "Hardware & accessories",
+        "subcategories": {}
+      },
+      "224": {
+        "name": "Cymbals",
+        "subcategories": {}
+      },
+      "226": {
+        "name": "Pedals",
+        "subcategories": {}
+      },
+      "366": {
+        "name": "Hand percussion",
+        "subcategories": {}
+      }
+    }
+  },
+  "57": {
+    "name": "Pianos",
+    "subcategories": {
+      "131": {
+        "name": "Upright Piano",
+        "subcategories": {}
+      },
+      "130": {
+        "name": "Grand Piano",
+        "subcategories": {}
+      },
+      "252": {
+        "name": "Synth & Keyboard",
+        "subcategories": {}
+      },
+      "298": {
+        "name": "Other",
+        "subcategories": {}
+      }
+    }
+  },
+  "56": {
+    "name": "Brass & Woodwind",
+    "subcategories": {
+      "245": {
+        "name": "Trumpet",
+        "subcategories": {}
+      },
+      "198": {
+        "name": "Woodwind parts",
+        "subcategories": {
+          "209": {
+            "name": "Necks",
+            "subcategories": []
+          }
+        }
+      },
+      "199": {
+        "name": "Brass accessories",
+        "subcategories": {
+          "210": {
+            "name": "Mouthpieces",
+            "subcategories": []
+          }
+        }
+      },
+      "140": {
+        "name": "Trombones",
+        "subcategories": {}
+      },
+      "142": {
+        "name": "Flutes & Piccolos",
+        "subcategories": {}
+      },
+      "148": {
+        "name": "Oboe & Basoon",
+        "subcategories": {}
+      },
+      "150": {
+        "name": "Recorders",
+        "subcategories": {}
+      },
+      "179": {
+        "name": "Cornets & Flugelhorns",
+        "subcategories": {}
+      },
+      "173": {
+        "name": "French Horns",
+        "subcategories": {
+          "175": {
+            "name": "Single horns",
+            "subcategories": []
+          },
+          "176": {
+            "name": "Double Horns",
+            "subcategories": []
+          }
+        }
+      },
+      "160": {
+        "name": "Clarinets",
+        "subcategories": {}
+      },
+      "161": {
+        "name": "Saxophones",
+        "subcategories": {
+          "170": {
+            "name": "Baritone",
+            "subcategories": []
+          },
+          "169": {
+            "name": "Alto",
+            "subcategories": []
+          },
+          "168": {
+            "name": "Soprano",
+            "subcategories": []
+          },
+          "171": {
+            "name": "Tenor",
+            "subcategories": []
+          },
+          "186": {
+            "name": "Others",
+            "subcategories": []
+          }
+        }
+      },
+      "177": {
+        "name": "Tenorhorns, Barytons & Euphoniums",
+        "subcategories": {}
+      },
+      "178": {
+        "name": "Tubas",
+        "subcategories": {}
+      }
+    }
+  },
+  "188": {
+    "name": "Stringed Instruments",
+    "subcategories": {
+      "190": {
+        "name": "Mandolin & mandolin family",
+        "subcategories": {}
+      },
+      "191": {
+        "name": "Ukulele",
+        "subcategories": {}
+      },
+      "189": {
+        "name": "Banjo",
+        "subcategories": {}
+      },
+      "192": {
+        "name": "Bouzouki",
+        "subcategories": {}
+      },
+      "213": {
+        "name": "Other",
+        "subcategories": {}
+      },
+      "233": {
+        "name": "Ethnic instruments",
+        "subcategories": {}
+      },
+      "375": {
+        "name": "Parts, tools & accessories",
+        "subcategories": {
+          "376": {
+            "name": "Wooden Inlays",
+            "subcategories": []
+          }
+        }
+      },
+      "388": {
+        "name": "Lute",
+        "subcategories": {}
+      },
+      "389": {
+        "name": "Harp",
+        "subcategories": {}
+      }
+    }
+  },
+  "390": {
+    "name": "Music Furniture",
+    "subcategories": {
+      "391": {
+        "name": "Music Stands",
+        "subcategories": {}
+      },
+      "392": {
+        "name": "Sheet Music Cabinets",
+        "subcategories": {}
+      },
+      "393": {
+        "name": "Guitar Stands & Rests",
+        "subcategories": {}
+      },
+      "394": {
+        "name": "Guitar Display Cabinets",
+        "subcategories": {}
+      },
+      "395": {
+        "name": "Guitar Wall Racks",
+        "subcategories": {}
+      },
+      "396": {
+        "name": "Cello & Double Bass Stands",
+        "subcategories": {}
+      },
+      "397": {
+        "name": "Footrests (Guitar Footstools)",
+        "subcategories": {}
+      },
+      "398": {
+        "name": "Violin Holders",
+        "subcategories": {}
+      },
+      "399": {
+        "name": "Violin Stands",
+        "subcategories": {}
+      },
+      "400": {
+        "name": "Violin Cabinets",
+        "subcategories": {}
+      },
+      "401": {
+        "name": "Mandolin/Banjo Stands & Wall Mounts",
+        "subcategories": {}
+      },
+      "402": {
+        "name": "Ukulele Cradles",
+        "subcategories": {}
+      },
+      "403": {
+        "name": "Piano Benches & Seating",
+        "subcategories": {}
+      },
+      "404": {
+        "name": "Recorder & Flute Tressels",
+        "subcategories": {}
+      },
+      "405": {
+        "name": "Music Tables",
+        "subcategories": {}
+      },
+      "406": {
+        "name": "Hardwood Boxes",
+        "subcategories": {}
+      },
+      "407": {
+        "name": "Tables",
+        "subcategories": {}
+      },
+      "408": {
+        "name": "Chairs",
+        "subcategories": {}
+      },
+      "409": {
+        "name": "Sculptures",
+        "subcategories": {}
+      },
+      "410": {
+        "name": "Clocks",
+        "subcategories": {}
+      }
+    }
+  },
+  "422": {
+    "name": "Books & DVDs",
+    "subcategories": {
+      "423": {
+        "name": "Fender related",
+        "subcategories": {}
+      },
+      "424": {
+        "name": "Gibson related",
+        "subcategories": {}
+      },
+      "425": {
+        "name": "Other guitar brands",
+        "subcategories": {}
+      },
+      "426": {
+        "name": "Amp related",
+        "subcategories": {}
+      },
+      "427": {
+        "name": "Drum related",
+        "subcategories": {}
+      },
+      "428": {
+        "name": "Sound & recording",
+        "subcategories": {}
+      },
+      "429": {
+        "name": "Construction & repair",
+        "subcategories": {}
+      }
+    }
+  },
+  "235": {
+    "name": "Bowed Instruments",
+    "subcategories": {
+      "236": {
+        "name": "Violins",
+        "subcategories": {}
+      },
+      "237": {
+        "name": "Violas",
+        "subcategories": {}
+      },
+      "238": {
+        "name": "Cellos",
+        "subcategories": {}
+      },
+      "239": {
+        "name": "Double Basses",
+        "subcategories": {}
+      },
+      "241": {
+        "name": "Bows",
+        "subcategories": {}
+      }
+    }
+  }
+}

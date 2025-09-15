@@ -2,290 +2,57 @@
 """
 CLI script to manage V&R items using AJAX endpoints.
 Usage: 
-  python scripts/manage_vr_items.py delete [item_ids...] 
-  python scripts/manage_vr_items.py mark-sold [item_ids...]
+    python scripts/vr/manage_vr_items.py delete [item_ids...] 
+    python scripts/vr/manage_vr_items.py mark-sold [item_ids...]
 
 Examples:
 
 # Delete items
-python scripts/manage_vr_items.py delete --dry-run 122805 122806
-python scripts/manage_vr_items.py delete --verify 122805 122806
+    python scripts/vr/manage_vr_items.py delete --dry-run 122805 122806
+    python scripts/vr/manage_vr_items.py delete --verify 122805 122806
 
 # Mark items as sold  
-python scripts/manage_vr_items.py mark-sold --dry-run 122755 122754
-python scripts/manage_vr_items.py mark-sold 122755 122754
+    python scripts/vr/manage_vr_items.py mark-sold --dry-run 122755 122754
+    python scripts/vr/manage_vr_items.py mark-sold 122755 122754
 
 """
 
-import requests
 import argparse
 import sys
 import os
-import time
-import random
+
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Add the project root to Python path
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-class VRItemManager:
-    """Manage V&R items using AJAX endpoints"""
-    
-    def __init__(self, username: str, password: str):
-        self.username = username
-        self.password = password
-        self.session = requests.Session()
-        self.authenticated = False
-        
-        # Headers to mimic browser behavior
-        self.headers = {
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'X-Requested-With': 'XMLHttpRequest',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
-            'Referer': 'https://www.vintageandrare.com/instruments/show'
-        }
+# Load environment variables from .env file
+load_dotenv(project_root / '.env')  # Add this line
 
-    def authenticate(self) -> bool:
-        """Authenticate with V&R"""
-        try:
-            print(f"🔐 Authenticating with V&R as {self.username}...")
-            
-            # Get main page first
-            response = self.session.get('https://www.vintageandrare.com')
-            print(f"📄 Main page status: {response.status_code}")
-            
-            # Login
-            login_data = {
-                'username': self.username,
-                'pass': self.password,
-                'open_where': 'header'
-            }
-            
-            response = self.session.post(
-                'https://www.vintageandrare.com/do_login',
-                data=login_data,
-                headers=self.headers,
-                allow_redirects=True
-            )
-            
-            # Check authentication
-            self.authenticated = 'Sign out' in response.text or '/account' in response.url
-            
-            if self.authenticated:
-                print("✅ Authentication successful!")
-            else:
-                print("❌ Authentication failed!")
-                
-            return self.authenticated
-            
-        except Exception as e:
-            print(f"❌ Authentication error: {str(e)}")
-            return False
+from app.services.vintageandrare.client import VintageAndRareClient
 
-    def mark_item_as_sold(self, item_id: str) -> dict:
-        """Mark a single V&R item as sold using AJAX"""
-        if not self.authenticated:
-            return {"success": False, "error": "Not authenticated"}
-            
-        try:
-            print(f"💰 Marking item as sold ID: {item_id}")
-            
-            # Generate random number for cache busting (like V&R does)
-            random_num = random.random()
-            
-            # AJAX mark as sold request (exact endpoint from your discovery)
-            mark_sold_data = f'product_id={item_id}'
-            
-            response = self.session.post(
-                f'https://www.vintageandrare.com/ajax/mark_as_sold/{random_num}',
-                data=mark_sold_data,
-                headers=self.headers
-            )
-            
-            print(f"📡 Mark sold response status: {response.status_code}")
-            print(f"📝 Response content: '{response.text}'")
-            print(f"📏 Response length: {len(response.text)} characters")
-            
-            if response.status_code == 200:
-                response_text = response.text.strip()
-                
-                # Handle different response types
-                if not response_text:
-                    # Empty response - V&R often returns empty on successful operations
-                    print(f"✅ Empty response (likely successful mark as sold) for {item_id}")
-                    return {"success": True, "response": "empty_success", "item_id": item_id}
-                
-                # Try to parse JSON response
-                try:
-                    result = response.json()
-                    print(f"✅ JSON response for {item_id}: {result}")
-                    return {"success": True, "response": result, "item_id": item_id}
-                except:
-                    # If not JSON, check for success indicators in text
-                    response_lower = response_text.lower()
-                    if any(keyword in response_lower for keyword in ['success', 'sold', 'marked', 'ok', '1', 'true']):
-                        print(f"✅ Text indicates success for {item_id}")
-                        return {"success": True, "response": response_text, "item_id": item_id}
-                    elif any(keyword in response_lower for keyword in ['error', 'failed', 'not found', 'invalid']):
-                        print(f"❌ Text indicates failure for {item_id}: {response_text}")
-                        return {"success": False, "error": f"Server error: {response_text}", "item_id": item_id}
-                    else:
-                        print(f"⚠️  Unknown response for {item_id}: '{response_text}'")
-                        # For now, assume success if we got a 200 status
-                        return {"success": True, "response": f"unknown_success: {response_text}", "item_id": item_id}
-            else:
-                print(f"❌ Mark sold failed for {item_id}: HTTP {response.status_code}")
-                return {"success": False, "error": f"HTTP {response.status_code}: {response.text}", "item_id": item_id}
-                
-        except Exception as e:
-            print(f"❌ Error marking {item_id} as sold: {str(e)}")
-            return {"success": False, "error": str(e), "item_id": item_id}
-
-    def delete_item(self, item_id: str) -> dict:
-        """Delete a single V&R item using AJAX"""
-        if not self.authenticated:
-            return {"success": False, "error": "Not authenticated"}
-            
-        try:
-            print(f"🗑️  Deleting item ID: {item_id}")
-            
-            # AJAX delete request
-            delete_data = {
-                'product_id': str(item_id)
-            }
-            
-            response = self.session.post(
-                'https://www.vintageandrare.com/ajax/delete_item',
-                data=delete_data,
-                headers=self.headers
-            )
-            
-            print(f"📡 Delete response status: {response.status_code}")
-            print(f"📝 Response content: '{response.text}'")
-            print(f"📏 Response length: {len(response.text)} characters")
-            
-            if response.status_code == 200:
-                response_text = response.text.strip()
-                
-                # Handle different response types
-                if not response_text:
-                    # Empty response - V&R often returns empty on successful delete
-                    print(f"✅ Empty response (likely successful delete) for {item_id}")
-                    return {"success": True, "response": "empty_success", "item_id": item_id}
-                
-                # Try to parse JSON response
-                try:
-                    result = response.json()
-                    print(f"✅ JSON response for {item_id}: {result}")
-                    return {"success": True, "response": result, "item_id": item_id}
-                except:
-                    # If not JSON, check for success indicators in text
-                    response_lower = response_text.lower()
-                    if any(keyword in response_lower for keyword in ['success', 'deleted', 'removed', 'ok']):
-                        print(f"✅ Text indicates success for {item_id}")
-                        return {"success": True, "response": response_text, "item_id": item_id}
-                    elif any(keyword in response_lower for keyword in ['error', 'failed', 'not found', 'invalid']):
-                        print(f"❌ Text indicates failure for {item_id}: {response_text}")
-                        return {"success": False, "error": f"Server error: {response_text}", "item_id": item_id}
-                    else:
-                        print(f"⚠️  Unknown response for {item_id}: '{response_text}'")
-                        return {"success": True, "response": f"unknown_success: {response_text}", "item_id": item_id}
-            else:
-                print(f"❌ Delete failed for {item_id}: HTTP {response.status_code}")
-                return {"success": False, "error": f"HTTP {response.status_code}: {response.text}", "item_id": item_id}
-                
-        except Exception as e:
-            print(f"❌ Error deleting {item_id}: {str(e)}")
-            return {"success": False, "error": str(e), "item_id": item_id}
-
-    def process_items(self, item_ids: list, action: str, verify: bool = False) -> dict:
-        """Process multiple V&R items (delete or mark as sold)"""
-        results = {
-            "total": len(item_ids),
-            "successful": 0,
-            "failed": 0,
-            "verified": 0,
-            "details": []
-        }
-        
-        for item_id in item_ids:
-            if action == "delete":
-                result = self.delete_item(item_id)
-            elif action == "mark-sold":
-                result = self.mark_item_as_sold(item_id)
-            else:
-                result = {"success": False, "error": f"Unknown action: {action}", "item_id": item_id}
-            
-            # If verification requested and action seemed successful, verify
-            if verify and result["success"]:
-                time.sleep(2)  # Wait a bit for V&R to process
-                if self.verify_item_status(item_id, action):
-                    result["verified"] = True
-                    results["verified"] += 1
-                else:
-                    result["verified"] = False
-                    result["success"] = False  # Mark as failed if verification failed
-                    
-            results["details"].append(result)
-            
-            if result["success"]:
-                results["successful"] += 1
-            else:
-                results["failed"] += 1
-                
-            # Small delay between operations to be nice to the server
-            time.sleep(1)
-        
-        return results
-
-    def verify_item_status(self, item_id: str, action: str) -> bool:
-        """Verify if an action was successful"""
-        try:
-            # Try to access the item's page
-            response = self.session.get(f'https://www.vintageandrare.com/instruments/{item_id}')
-            
-            if action == "delete":
-                if response.status_code == 404:
-                    print(f"✅ Verified: Item {item_id} is deleted (404)")
-                    return True
-                elif 'not found' in response.text.lower() or 'does not exist' in response.text.lower():
-                    print(f"✅ Verified: Item {item_id} is deleted (not found)")
-                    return True
-                else:
-                    print(f"⚠️  Item {item_id} may still exist (status: {response.status_code})")
-                    return False
-            
-            elif action == "mark-sold":
-                if response.status_code == 200:
-                    # For mark as sold, we'd need to check the page content for "sold" indicators
-                    # This is more complex to verify automatically
-                    print(f"⚠️  Item {item_id} verification for 'mark-sold' not implemented")
-                    return True  # Assume success for now
-                else:
-                    print(f"⚠️  Cannot verify {item_id} mark-sold status")
-                    return False
-                    
-        except Exception as e:
-            print(f"❌ Error verifying {item_id}: {str(e)}")
-            return False
 
 def main():
     """CLI entry point"""
     parser = argparse.ArgumentParser(description='Manage V&R items via AJAX')
-    parser.add_argument('action', choices=['delete', 'mark-sold'], help='Action to perform')
+    parser.add_argument('action', choices=['delete', 'mark-sold', 'edit', 'debug-mark', 'test-variations'], help='Action to perform')
     parser.add_argument('item_ids', nargs='+', help='V&R item IDs to process')
     parser.add_argument('--username', help='V&R username (or set VR_USERNAME env var)')
     parser.add_argument('--password', help='V&R password (or set VR_PASSWORD env var)')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be done without actually doing it')
     parser.add_argument('--verify', action='store_true', help='Verify actions by checking item status afterwards')
     
+    # Add edit-specific arguments:
+    parser.add_argument('--description', help='New description for edit action')
+    parser.add_argument('--price', help='New price for edit action')
+    parser.add_argument('--title', help='New title/model for edit action')
+    
     args = parser.parse_args()
     
     # Get credentials
-    username = args.username or os.environ.get('VR_USERNAME') or os.environ.get('VINTAGE_AND_RARE_USERNAME')
+    username = os.environ.get('VINTAGE_AND_RARE_USERNAME') or args.username or os.environ.get('VR_USERNAME')
     password = args.password or os.environ.get('VR_PASSWORD') or os.environ.get('VINTAGE_AND_RARE_PASSWORD')
     
     if not username or password is None:
@@ -302,29 +69,193 @@ def main():
         return
     
     # Create manager and authenticate
-    manager = VRItemManager(username, password)
-    
-    if not manager.authenticate():
+    # manager = VRItemManager(username, password)
+    # if not manager.authenticate():
         print("❌ Failed to authenticate with V&R")
         sys.exit(1)
     
-    # Process items
-    action_text = "deletion" if args.action == "delete" else "marking as sold"
-    print(f"\n🔄 Starting {action_text} of {len(args.item_ids)} items...")
-    results = manager.process_items(args.item_ids, args.action, args.verify)
+    # Use the client instead of VRItemManager
+    client = VintageAndRareClient(username=username, password=password)
     
-    # Print summary
-    action_past = "DELETED" if args.action == "delete" else "MARKED AS SOLD"
-    print(f"\n📊 **{action_past} SUMMARY**")
-    print(f"Total items: {results['total']}")
-    print(f"✅ Successful: {results['successful']}")
-    print(f"❌ Failed: {results['failed']}")
+    # Authenticate (now async, so we need to handle that)
+    import asyncio
     
-    if results['failed'] > 0:
-        print(f"\n❌ **FAILED OPERATIONS:**")
-        for detail in results['details']:
-            if not detail['success']:
-                print(f"  - {detail['item_id']}: {detail['error']}")
+    async def run_operations():
+        """Handle the main operations workflow with improved error handling and debug options"""
+
+        # Authentication
+        try:
+            if not await client.authenticate():
+                print("❌ Failed to authenticate with V&R")
+                print("Please check your credentials and try again.")
+                sys.exit(1)
+            print("✅ Authentication successful")
+        except Exception as e:
+            print(f"❌ Authentication error: {str(e)}")
+            sys.exit(1)
+
+        # Handle debug actions (single item only)
+        if args.action in ['debug-mark', 'test-variations']:
+            if len(args.item_ids) > 1:
+                print(f"⚠️  {args.action} mode only supports one item at a time")
+                print(f"Using first item: {args.item_ids[0]}")
+            
+            item_id = args.item_ids[0]
+            
+            if args.action == 'debug-mark':
+                print(f"\n🔍 **DEBUG MARK-AS-SOLD FOR ITEM {item_id}**")
+                result = await client.debug_mark_as_sold(item_id)
+                print(f"\n📊 **DEBUG RESULTS:**")
+                print(f"Status Code: {result.get('status_code')}")
+                print(f"Response Text: '{result.get('response_text')}'")
+                print(f"Content Length: {len(result.get('response_text', ''))}")
+                
+            elif args.action == 'test-variations':
+                print(f"\n🧪 **TESTING MARK-AS-SOLD VARIATIONS FOR ITEM {item_id}**")
+                result = await client.test_mark_as_sold_variations(item_id)
+                print(f"\n📊 **TEST RESULTS:**")
+                for i, (method, status, text) in enumerate(result.get('tests', []), 1):
+                    print(f"Test {i} ({method}): HTTP {status} - '{text}'")
+            
+            return  # Exit after debug operations
+        
+        # ✅ ADD: Prepare update_data for edit operations
+        update_data = None
+        if args.action == "edit":
+            # Prepare update data from command line arguments
+            update_data = {}
+            
+            if hasattr(args, 'description') and args.description:
+                update_data['description'] = args.description
+            if hasattr(args, 'price') and args.price:
+                update_data['price'] = args.price
+            if hasattr(args, 'title') and args.title:
+                update_data['model'] = args.title  # Map title to model field
+            
+            # Check if any update data was provided
+            if not update_data:
+                print("❌ Error: No update data provided for edit operation!")
+                print("Use --description, --price, or --title to specify what to update")
+                sys.exit(1)
+            
+            print(f"📝 Update data prepared: {update_data}")        
+        
+
+        # Regular operations (delete or mark-sold)
+        action_text = "deletion" if args.action == "delete" else ("editing" if args.action == "edit" else "marking as sold")
+        action_past = "DELETED" if args.action == "delete" else ("EDITED" if args.action == "edit" else "MARKED AS SOLD")
+        
+        print(f"\n🔄 Starting {action_text} of {len(args.item_ids)} items...")
+        
+        # Show verification notice
+        if args.verify:
+            print("🔍 Verification enabled - will check each item after processing")
+        
+        # Process items
+        try:
+            results = await client.process_items(args.item_ids, args.action, args.verify, update_data)
+        except Exception as e:
+            print(f"❌ Critical error during {action_text}: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            sys.exit(1)
+        
+        # Print detailed summary
+        print(f"\n📊 **{action_past} SUMMARY**")
+        print("=" * 50)
+        print(f"Total items processed: {results['total']}")
+        print(f"✅ Successful: {results['successful']}")
+        print(f"❌ Failed: {results['failed']}")
+        
+        # Show verification results if applicable
+        if args.verify and 'verified' in results:
+            print(f"🔍 Verified successful: {results['verified']}")
+        
+        # Show success details for successful operations
+        if results['successful'] > 0:
+            print(f"\n✅ **SUCCESSFUL {action_past} OPERATIONS:**")
+            for detail in results['details']:
+                if detail.get('success', False):
+                    item_id = detail.get('item_id', 'Unknown')
+                    response_info = detail.get('response', 'No response info')
+                    
+                    # Format response info nicely
+                    if isinstance(response_info, dict):
+                        response_info = f"JSON: {response_info}"
+                    elif isinstance(response_info, str) and len(response_info) > 50:
+                        response_info = f"'{response_info[:50]}...'"
+                    else:
+                        response_info = f"'{response_info}'"
+                    
+                    verification_status = ""
+                    if args.verify and detail.get('verified') is not None:
+                        verification_status = " ✓ Verified" if detail.get('verified') else " ⚠️ Not verified"
+                    
+                    print(f"  - {item_id}: {response_info}{verification_status}")
+        
+        # Show failure details for failed operations
+        if results['failed'] > 0:
+            print(f"\n❌ **FAILED {action_past} OPERATIONS:**")
+            for detail in results['details']:
+                if not detail.get('success', False):
+                    item_id = detail.get('item_id', 'Unknown')
+                    
+                    # Extract error message from various possible keys
+                    error_msg = (
+                        detail.get('error') or 
+                        detail.get('response') or 
+                        detail.get('message') or
+                        'Unknown error'
+                    )
+                    
+                    # Handle complex error objects
+                    if isinstance(error_msg, dict):
+                        error_msg = error_msg.get('message', str(error_msg))
+                    elif isinstance(error_msg, bool):
+                        error_msg = f"Operation returned: {error_msg}"
+                    
+                    # Truncate very long error messages
+                    if isinstance(error_msg, str) and len(error_msg) > 100:
+                        error_msg = f"{error_msg[:100]}..."
+                    
+                    print(f"  - {item_id}: {error_msg}")
+        
+        # Final status message
+        if results['failed'] == 0:
+            print(f"\n🎉 All {results['successful']} items successfully {action_text.replace('ion', 'ed')}!")
+        elif results['successful'] == 0:
+            print(f"\n💥 All {results['failed']} {action_text} operations failed!")
+        else:
+            print(f"\n⚖️  Mixed results: {results['successful']} succeeded, {results['failed']} failed")
+        
+        return results
+
+        # if not await client.authenticate():
+        #     print("❌ Failed to authenticate with V&R")
+        #     sys.exit(1)    
+
+        # # Process items
+        # action_text = "deletion" if args.action == "delete" else "marking as sold"
+        # print(f"\n🔄 Starting {action_text} of {len(args.item_ids)} items...")
+        # # results = manager.process_items(args.item_ids, args.action, args.verify)
+        # results = await client.process_items(args.item_ids, args.action, args.verify)
+        
+        # # Print summary
+        # action_past = "DELETED" if args.action == "delete" else "MARKED AS SOLD"
+        # print(f"\n📊 **{action_past} SUMMARY**")
+        # print(f"Total items: {results['total']}")
+        # print(f"✅ Successful: {results['successful']}")
+        # print(f"❌ Failed: {results['failed']}")
+        
+        # if results['failed'] > 0:
+        #     print(f"\n❌ **FAILED OPERATIONS:**")
+        #     for detail in results['details']:
+        #         if not detail['success']:
+        #             # ✅ FIX: Handle both 'error' and 'response' keys
+        #             error_msg = detail.get('error') or detail.get('response') or 'Unknown error'
+        #             print(f"  - {detail['item_id']}: {error_msg}")
+
+    asyncio.run(run_operations())
 
 if __name__ == '__main__':
     main()

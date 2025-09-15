@@ -1,0 +1,8 @@
+{
+  "enableAllProjectMcpServers": false,
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/test_ebay_conditions.py:*)"
+    ]
+  }
+}

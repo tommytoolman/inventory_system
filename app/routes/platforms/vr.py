@@ -3,9 +3,10 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Request, Depends, BackgroundTasks, HTTPException
-from app.services.vintageandrare_service import VintageAndRareService
+from app.services.vr_service import VRService
 from app.services.activity_logger import ActivityLogger
 from app.services.websockets.manager import manager
+from app.services.vintageandrare.brand_validator import VRBrandValidator
 from app.database import async_session
 from app.core.config import Settings, get_settings
 from app.dependencies import get_db
@@ -16,6 +17,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["vr"])
+
+@router.get("/vr/validate-brand")
+async def validate_brand(brand: str):
+    """
+    Validate a brand name against V&R's accepted brand list.
+    Returns whether the brand is valid and will be accepted by V&R.
+    If invalid, the brand will default to 'Justin' when creating V&R listings.
+    """
+    if not brand or not brand.strip():
+        return {"valid": False, "message": "Brand name is required"}
+    
+    # Use the V&R brand validator
+    result = VRBrandValidator.validate_brand(brand.strip())
+    
+    return {
+        "valid": result["is_valid"],
+        "brand_id": result.get("brand_id"),
+        "message": result.get("message", ""),
+        "fallback_brand": "Justin" if not result["is_valid"] else None
+    }
 
 @router.post("/sync/vr")
 async def sync_vr(
@@ -67,7 +88,7 @@ async def run_vr_sync_background(username: str, password: str, db: AsyncSession,
             "timestamp": datetime.now().isoformat()
         })
         
-        vr_service = VintageAndRareService(db)
+        vr_service = VRService(db)
         result = await vr_service.run_import_process(username, password, sync_run_id, save_only=False)
         
         if result.get('status') == 'success':

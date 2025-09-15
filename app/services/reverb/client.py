@@ -78,6 +78,7 @@ class ReverbClient:
             ReverbAPIError: If the API request fails
         """
         url = f"{self.BASE_URL}/{endpoint.lstrip('/')}"
+        # print(f"DEBUG: {url}")
         headers = self._get_headers()
         
         # Log the request details for debugging (but hide the auth token)
@@ -107,8 +108,11 @@ class ReverbClient:
                 )
                 
                 if response.status_code not in (200, 201, 202, 204):
-                    logger.error(f"Reverb API error: {response.text}")
-                    raise ReverbAPIError(f"Request failed: {response.text}")
+                    logger.error(f"Reverb API error: Status {response.status_code}, Body: {response.text}")
+                    error_msg = f"Request failed with status {response.status_code}"
+                    if response.text:
+                        error_msg += f": {response.text}"
+                    raise ReverbAPIError(error_msg)
                 
                 if response.status_code == 204:  # No content
                     return {}
@@ -294,6 +298,18 @@ class ReverbClient:
         """
         return await self._make_request("GET", "/my/listings/drafts")
     
+    async def get_account(self) -> Dict:
+        """
+        Get the authenticated user's account information
+        
+        Returns:
+            Dict: Account data
+            
+        Raises:
+            ReverbAPIError: If the API request fails
+        """
+        return await self._make_request("GET", "/my/account")
+    
     async def get_my_counts(self) -> Dict:
         """
         Get the authenticated user's listing counts by state
@@ -305,6 +321,55 @@ class ReverbClient:
             ReverbAPIError: If the API request fails
         """
         return await self._make_request("GET", "/my/counts")
+    
+    async def get_shop_info(self) -> Dict:
+        """
+        Get the authenticated user's shop information including shipping profiles
+        
+        Returns:
+            Dict: Shop data including shipping_profiles list with id and name
+            
+        Raises:
+            ReverbAPIError: If the API request fails
+        """
+        return await self._make_request("GET", "/shop")
+    
+    async def get_shipping_profiles(self) -> List[Dict]:
+        """
+        Get the authenticated user's shipping profiles
+        
+        Returns:
+            List[Dict]: List of shipping profiles with id and name
+            
+        Raises:
+            ReverbAPIError: If the API request fails
+        """
+        shop_info = await self.get_shop_info()
+        return shop_info.get("shipping_profiles", [])
+    
+    async def get_shipping_regions(self) -> Dict:
+        """
+        Get all available shipping regions
+        
+        Returns:
+            Dict: Shipping regions data
+            
+        Raises:
+            ReverbAPIError: If the API request fails
+        """
+        return await self._make_request("GET", "/shipping/regions")
+    
+    async def get_shipping_providers(self) -> Dict:
+        """
+        Get all available shipping providers
+        
+        Returns:
+            Dict: Shipping providers data
+            
+        Raises:
+            ReverbAPIError: If the API request fails
+        """
+        return await self._make_request("GET", "/shipping/providers")
     
     # Image operations
     
@@ -513,73 +578,73 @@ class ReverbClient:
             logger.error(f"Network error getting listing details: {str(e)}")
             raise ReverbAPIError(f"Network error getting listing details: {str(e)}")
         
-    # async def get_all_sold_orders(self, per_page=50, max_pages=None):
-    #     """
-    #     Get all sold orders from Reverb with improved reliability
+    async def get_all_sold_orders(self, per_page=50, max_pages=None):
+        """
+        Get all sold orders from Reverb with improved reliability
         
-    #     Args:
-    #         per_page: Number of orders per page
-    #         max_pages: Maximum number of pages to fetch (None for all)
+        Args:
+            per_page: Number of orders per page
+            max_pages: Maximum number of pages to fetch (None for all)
             
-    #     Returns:
-    #         List of order objects
-    #     """
-    #     url = "/my/orders/selling/all"
-    #     params = {"per_page": per_page}
+        Returns:
+            List of order objects
+        """
+        url = "/my/orders/selling/all"
+        params = {"per_page": per_page}
         
-    #     # First request to get total count and first page
-    #     response = await self._make_request("GET", url, params=params, timeout=60.0)
-    #     if not response:
-    #         return []
+        # First request to get total count and first page
+        response = await self._make_request("GET", url, params=params, timeout=60.0)
+        if not response:
+            return []
         
-    #     total = response.get('total', 0)
-    #     orders = response.get('orders', [])
+        total = response.get('total', 0)
+        orders = response.get('orders', [])
         
-    #     # Calculate number of pages
-    #     total_pages = (total + per_page - 1) // per_page
-    #     if max_pages is not None:
-    #         total_pages = min(total_pages, max_pages)
+        # Calculate number of pages
+        total_pages = (total + per_page - 1) // per_page
+        if max_pages is not None:
+            total_pages = min(total_pages, max_pages)
         
-    #     logger.info(f"Found {total} sold orders across {total_pages} pages")
+        logger.info(f"Found {total} sold orders across {total_pages} pages")
         
-    #     # Fetch remaining pages with retry logic
-    #     for page in range(2, total_pages + 1):
-    #         logger.info(f"Fetching sold orders page {page}/{total_pages}")
-    #         params["page"] = page
+        # Fetch remaining pages with retry logic
+        for page in range(2, total_pages + 1):
+            logger.info(f"Fetching sold orders page {page}/{total_pages}")
+            params["page"] = page
             
-    #         # Add retry logic
-    #         max_retries = 3
-    #         retry_count = 0
-    #         success = False
+            # Add retry logic
+            max_retries = 3
+            retry_count = 0
+            success = False
             
-    #         while not success and retry_count < max_retries:
-    #             try:
-    #                 # Add a delay to avoid rate limiting (increase with each retry)
-    #                 await asyncio.sleep(1 + retry_count)
+            while not success and retry_count < max_retries:
+                try:
+                    # Add a delay to avoid rate limiting (increase with each retry)
+                    await asyncio.sleep(1 + retry_count)
                     
-    #                 # Increase timeout for potentially slow responses
-    #                 page_response = await self._make_request("GET", url, params=params, timeout=60.0)
+                    # Increase timeout for potentially slow responses
+                    page_response = await self._make_request("GET", url, params=params, timeout=60.0)
                     
-    #                 if page_response and 'orders' in page_response:
-    #                     orders.extend(page_response['orders'])
-    #                     success = True
-    #                 else:
-    #                     raise Exception("Invalid response format")
+                    if page_response and 'orders' in page_response:
+                        orders.extend(page_response['orders'])
+                        success = True
+                    else:
+                        raise Exception("Invalid response format")
                         
-    #             except Exception as e:
-    #                 retry_count += 1
-    #                 logger.warning(f"Error fetching page {page}, attempt {retry_count}/{max_retries}: {str(e)}")
+                except Exception as e:
+                    retry_count += 1
+                    logger.warning(f"Error fetching page {page}, attempt {retry_count}/{max_retries}: {str(e)}")
                     
-    #                 if retry_count >= max_retries:
-    #                     logger.error(f"Failed to fetch page {page} after {max_retries} attempts")
-    #                     # Continue with what we have instead of failing completely
-    #                     break
+                    if retry_count >= max_retries:
+                        logger.error(f"Failed to fetch page {page} after {max_retries} attempts")
+                        # Continue with what we have instead of failing completely
+                        break
                     
-    #                 # Exponential backoff
-    #                 await asyncio.sleep(retry_count * 2)
+                    # Exponential backoff
+                    await asyncio.sleep(retry_count * 2)
         
-    #     logger.info(f"Successfully retrieved {len(orders)} sold orders")
-    #     return orders
+        logger.info(f"Successfully retrieved {len(orders)} sold orders")
+        return orders
     
     
     
@@ -588,14 +653,4 @@ class ReverbClient:
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+   

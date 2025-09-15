@@ -120,7 +120,7 @@ class Settings(BaseSettings):
     FDX_PWD: str = ""
     
     model_config = ConfigDict(
-        env_file=os.environ.get('ENV_FILE', '.env'),  # 🎯 THIS IS THE KEY CHANGE
+        env_file=os.environ.get('ENV_FILE', '.env') if os.path.exists('.env') else None,
         case_sensitive=True
     )
 

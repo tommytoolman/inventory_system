@@ -19,6 +19,21 @@ pydantic==2.9.1
 pydantic-settings==2.7.1
 aiofiles==24.1.0
 
+# HTTP Clients
+httpx==0.27.0
+requests==2.32.3
+
+# Data Processing
+pandas==2.2.2
+numpy==1.26.4
+
+# Cloud Storage
+dropbox==12.0.2
+
+# Image Processing
+Pillow==10.4.0
+
 # Unit Testing
 pytest-mock
-pytest-asyncioreportlab==4.0.8
+pytest-asyncio
+reportlab==4.0.8

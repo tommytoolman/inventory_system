@@ -42,6 +42,7 @@ async def database_health():
         }
 
 @router.post("/health/migrate")
+@router.get("/health/migrate")
 async def run_migrations():
     """Manually run database migrations"""
     try:

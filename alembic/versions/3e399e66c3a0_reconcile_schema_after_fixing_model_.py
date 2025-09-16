@@ -56,10 +56,19 @@ def upgrade() -> None:
             op.drop_index('idx_ebay_listings_listing_status', table_name='ebay_listings')
         if 'idx_ebay_listings_platform_id' in indexes:
             op.drop_index('idx_ebay_listings_platform_id', table_name='ebay_listings')
-    op.create_index(op.f('ix_ebay_listings_ebay_category_id'), 'ebay_listings', ['ebay_category_id'], unique=False)
-    op.create_index(op.f('ix_ebay_listings_ebay_item_id'), 'ebay_listings', ['ebay_item_id'], unique=True)
-    op.create_index(op.f('ix_ebay_listings_id'), 'ebay_listings', ['id'], unique=False)
-    op.create_index(op.f('ix_ebay_listings_listing_status'), 'ebay_listings', ['listing_status'], unique=False)
+
+    # Only create indexes if the table and columns exist
+    if 'ebay_listings' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('ebay_listings')]
+
+        if 'ebay_category_id' in columns:
+            op.create_index(op.f('ix_ebay_listings_ebay_category_id'), 'ebay_listings', ['ebay_category_id'], unique=False)
+        if 'ebay_item_id' in columns:
+            op.create_index(op.f('ix_ebay_listings_ebay_item_id'), 'ebay_listings', ['ebay_item_id'], unique=True)
+        if 'id' in columns:
+            op.create_index(op.f('ix_ebay_listings_id'), 'ebay_listings', ['id'], unique=False)
+        if 'listing_status' in columns:
+            op.create_index(op.f('ix_ebay_listings_listing_status'), 'ebay_listings', ['listing_status'], unique=False)
 
     # Check if foreign key exists before dropping
     if 'ebay_listings' in inspector.get_table_names():

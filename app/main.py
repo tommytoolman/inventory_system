@@ -91,24 +91,27 @@ templates = Jinja2Templates(directory="app/templates")
 # Mount static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-# Include routers
-app.include_router(dashboard.router, prefix="", tags=["dashboard"])
-app.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
+# Add authentication dependency to all routes
+from app.core.security import require_auth
+
+# Include routers with authentication
+app.include_router(dashboard.router, prefix="", tags=["dashboard"], dependencies=[require_auth()])
+app.include_router(inventory.router, prefix="/inventory", tags=["inventory"], dependencies=[require_auth()])
 # Import and include inspection router for payload testing
 from app.routes import inventory_inspection
-app.include_router(inventory_inspection.router)
-app.include_router(ebay_router)
-app.include_router(reverb_router)
-app.include_router(vr_router)
-app.include_router(shopify_router)
-app.include_router(sync_all_router)
-app.include_router(webhook_router)
-app.include_router(websocket_router.router)
+app.include_router(inventory_inspection.router, dependencies=[require_auth()])
+app.include_router(ebay_router, dependencies=[require_auth()])
+app.include_router(reverb_router, dependencies=[require_auth()])
+app.include_router(vr_router, dependencies=[require_auth()])
+app.include_router(shopify_router, dependencies=[require_auth()])
+app.include_router(sync_all_router, dependencies=[require_auth()])
+app.include_router(webhook_router)  # Webhooks need to be accessible without auth
+app.include_router(websocket_router.router, dependencies=[require_auth()])
 # app.include_router(sync_scheduler.router) # Commented out for now as it has conflicting route with sync_all_router
-app.include_router(reports.router, prefix="/reports", tags=["reports"])
-app.include_router(shipping.router)
-app.include_router(matching.router, prefix="/matching", tags=["matching"])
-app.include_router(health.router)
+app.include_router(reports.router, prefix="/reports", tags=["reports"], dependencies=[require_auth()])
+app.include_router(shipping.router, dependencies=[require_auth()])
+app.include_router(matching.router, prefix="/matching", tags=["matching"], dependencies=[require_auth()])
+app.include_router(health.router)  # Health check should be accessible without auth
 
 ## This will show us in CLI all our registered routes. Uncomment to show.
 # print("Registered routes:")

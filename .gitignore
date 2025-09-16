@@ -27,5 +27,7 @@ app/services/ebay/tokens.json
 *.xlsx
 *.jpg
 *.jpeg
+# Exception for background image
+!app/static/images/background.jpg
 # More Image Files
 *.png

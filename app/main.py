@@ -108,7 +108,7 @@ app.include_router(vr_router, dependencies=[require_auth()])
 app.include_router(shopify_router, dependencies=[require_auth()])
 app.include_router(sync_all_router, dependencies=[require_auth()])
 app.include_router(webhook_router)  # Webhooks need to be accessible without auth
-app.include_router(websocket_router.router, dependencies=[require_auth()])
+app.include_router(websocket_router.router)  # WebSockets handle auth differently
 # app.include_router(sync_scheduler.router) # Commented out for now as it has conflicting route with sync_all_router
 app.include_router(reports.router, prefix="/reports", tags=["reports"], dependencies=[require_auth()])
 app.include_router(shipping.router, dependencies=[require_auth()])

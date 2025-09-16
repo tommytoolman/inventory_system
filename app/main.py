@@ -88,8 +88,10 @@ app = FastAPI(
 # Templates - define this once at module level
 templates = Jinja2Templates(directory="app/templates")
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Mount static files with proper path resolution
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Add authentication dependency to all routes
 from app.core.security import require_auth
@@ -151,6 +153,23 @@ async def test_404(request: Request):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# Debug static files
+@app.get("/debug/static")
+async def debug_static():
+    import os
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    images_dir = os.path.join(static_dir, "images")
+
+    return {
+        "static_dir": static_dir,
+        "static_exists": os.path.exists(static_dir),
+        "images_dir": images_dir,
+        "images_exists": os.path.exists(images_dir),
+        "background_exists": os.path.exists(os.path.join(images_dir, "background.jpg")),
+        "files_in_static": os.listdir(static_dir) if os.path.exists(static_dir) else [],
+        "files_in_images": os.listdir(images_dir) if os.path.exists(images_dir) else []
+    }
 
 
 # Database test endpoint

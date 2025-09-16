@@ -101,26 +101,54 @@ async def import_data(railway_db_url=None):
                 # Clear existing data in table
                 await conn.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
 
-                # Import data
-                for row in data:
-                    # Convert any datetime strings back to datetime objects
+                # Get table schema to identify JSONB columns
+                schema_result = await conn.execute(text(f"""
+                    SELECT column_name, data_type
+                    FROM information_schema.columns
+                    WHERE table_name = '{table}'
+                    AND table_schema = 'public'
+                """))
+                schema = {row[0]: row[1] for row in schema_result}
+
+                # Process all rows first
+                processed_rows = []
+                for i, row in enumerate(data):
+                    # Show progress for large datasets
+                    if len(data) > 100 and i % 100 == 0:
+                        print(f"  Processing row {i}/{len(data)}...")
+
+                    # Process each column based on its type
                     for key, value in row.items():
-                        if isinstance(value, str) and ('T' in value and ':' in value):
-                            try:
-                                row[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
-                            except:
-                                pass
+                        if key in schema:
+                            # Convert datetime strings back to datetime objects
+                            if isinstance(value, str) and ('T' in value and ':' in value):
+                                try:
+                                    row[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                                except:
+                                    pass
+                            # Convert dicts/lists to JSON strings for JSONB columns
+                            elif schema[key] == 'jsonb' and isinstance(value, (dict, list)):
+                                row[key] = json.dumps(value)
 
-                    # Build INSERT statement
-                    columns = list(row.keys())
-                    placeholders = [f":{col}" for col in columns]
+                    processed_rows.append(row)
 
-                    insert_sql = f"""
-                        INSERT INTO {table} ({', '.join(columns)})
-                        VALUES ({', '.join(placeholders)})
-                    """
+                # Batch insert for better performance
+                if processed_rows:
+                    columns = list(processed_rows[0].keys())
 
-                    await conn.execute(text(insert_sql), row)
+                    # Use batch insert
+                    for i in range(0, len(processed_rows), 100):
+                        batch = processed_rows[i:i+100]
+                        if len(data) > 100:
+                            print(f"  Inserting batch {i//100 + 1}/{(len(processed_rows) + 99)//100}...")
+
+                        for row in batch:
+                            placeholders = [f":{col}" for col in columns]
+                            insert_sql = f"""
+                                INSERT INTO {table} ({', '.join(columns)})
+                                VALUES ({', '.join(placeholders)})
+                            """
+                            await conn.execute(text(insert_sql), row)
 
                 imported_counts[table] = len(data)
                 print(f"✅ Imported {len(data)} rows into {table}")

@@ -45,9 +45,39 @@ def upgrade() -> None:
     )
     shipmentstatus_enum.create(op.get_bind(), checkfirst=True)
 
-    # Create sequences for new tables
-    op.execute("CREATE SEQUENCE IF NOT EXISTS users_id_seq")
-    op.execute("CREATE SEQUENCE IF NOT EXISTS webhook_events_id_seq")
+    # Create all sequences first
+    sequences = [
+        'activity_log_id_seq',
+        'category_mappings_id_seq',
+        'csv_import_logs_id_seq',
+        'ebay_category_mappings_id_seq',
+        'ebay_listings_id_seq',
+        'orders_id_seq',
+        'platform_category_mappings_id_seq',
+        'platform_common_id_seq',
+        'platform_policies_id_seq',
+        'platform_status_mappings_id_seq',
+        'product_mappings_id_seq',
+        'product_merges_id_seq',
+        'products_id_seq',
+        'reverb_categories_id_seq',
+        'reverb_listings_id_seq',
+        'sales_id_seq',
+        'shipments_id_seq',
+        'shipping_profiles_id_seq',
+        'shopify_category_mappings_id_seq',
+        'shopify_listings_id_seq',
+        'sync_events_id_seq',
+        'sync_stats_id_seq',
+        'vr_accepted_brands_id_seq',
+        'vr_category_mappings_id_seq',
+        'vr_listings_id_seq',
+        'users_id_seq',
+        'webhook_events_id_seq'
+    ]
+
+    for seq in sequences:
+        op.execute(f"CREATE SEQUENCE IF NOT EXISTS {seq}")
 
     # Create tables
 
@@ -639,6 +669,36 @@ def downgrade() -> None:
     op.execute('DROP TYPE IF EXISTS productstatus_old')
     op.execute('DROP TYPE IF EXISTS shipmentstatus')
 
-    # Drop sequences
-    op.execute('DROP SEQUENCE IF EXISTS users_id_seq')
-    op.execute('DROP SEQUENCE IF EXISTS webhook_events_id_seq')
+    # Drop all sequences
+    sequences = [
+        'activity_log_id_seq',
+        'category_mappings_id_seq',
+        'csv_import_logs_id_seq',
+        'ebay_category_mappings_id_seq',
+        'ebay_listings_id_seq',
+        'orders_id_seq',
+        'platform_category_mappings_id_seq',
+        'platform_common_id_seq',
+        'platform_policies_id_seq',
+        'platform_status_mappings_id_seq',
+        'product_mappings_id_seq',
+        'product_merges_id_seq',
+        'products_id_seq',
+        'reverb_categories_id_seq',
+        'reverb_listings_id_seq',
+        'sales_id_seq',
+        'shipments_id_seq',
+        'shipping_profiles_id_seq',
+        'shopify_category_mappings_id_seq',
+        'shopify_listings_id_seq',
+        'sync_events_id_seq',
+        'sync_stats_id_seq',
+        'vr_accepted_brands_id_seq',
+        'vr_category_mappings_id_seq',
+        'vr_listings_id_seq',
+        'users_id_seq',
+        'webhook_events_id_seq'
+    ]
+
+    for seq in sequences:
+        op.execute(f'DROP SEQUENCE IF EXISTS {seq}')

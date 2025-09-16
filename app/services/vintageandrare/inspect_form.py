@@ -1383,7 +1383,7 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None):
         print(f"❌ Form fill failed after {form_duration:.1f} seconds")
         
         print(f"Error filling form: {str(e)}")
-        driver.save_screenshot("form_error.png")
+        # driver.save_screenshot("form_error.png")
         print("ERROR: Keeping browser open for debugging...")
         input("Press Enter to close the browser after reviewing the form...")
         raise e
@@ -1461,7 +1461,7 @@ def submit_form_and_capture_response(driver, db_session=None):
         
         # Step 1: Save pre-submission state
         print("\n📸 Step 1: Saving pre-submission state...")
-        driver.save_screenshot("01_before_vr_submit_search.png")
+        # driver.save_screenshot("01_before_vr_submit_search.png")
         initial_url = driver.current_url
         print(f"   Current URL: {initial_url}")
         
@@ -1548,8 +1548,8 @@ def submit_form_and_capture_response(driver, db_session=None):
                 time.sleep(2)  # Wait for scroll to complete
                 
                 # Take screenshot before clicking
-                driver.save_screenshot("03_before_vr_publish_click.png")
-                print("📸 Screenshot saved: before V&R publish click")
+                # driver.save_screenshot("03_before_vr_publish_click.png")
+                # print("📸 Screenshot saved: before V&R publish click")
                 
                 # Click the V&R publish button
                 print("🖱️  Clicking V&R 'Publish item' button...")
@@ -1570,8 +1570,8 @@ def submit_form_and_capture_response(driver, db_session=None):
                     print("⚠️  URL unchanged - checking page content for changes...")
                 
                 # Take screenshot after submission
-                driver.save_screenshot("04_after_vr_publish_click.png")
-                print("📸 Screenshot saved: after V&R publish click")
+                # driver.save_screenshot("04_after_vr_publish_click.png")
+                # print("📸 Screenshot saved: after V&R publish click")
                 
                 # Analyze V&R's response
                 print("\n📊 Step 4: Analyzing V&R response...")

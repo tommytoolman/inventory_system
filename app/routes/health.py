@@ -98,3 +98,125 @@ async def run_migrations():
             "message": "Migration exception",
             "error": str(e)
         }
+
+@router.get("/health/db-audit")
+async def database_audit():
+    """Comprehensive database audit showing all tables, columns, and types"""
+    try:
+        from app.database import async_session
+        from sqlalchemy import text
+
+        audit_results = {
+            "status": "success",
+            "tables": {},
+            "custom_types": {},
+            "alembic_version": None
+        }
+
+        async with async_session() as session:
+            # Get all tables
+            result = await session.execute(text("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+            """))
+            tables = [row[0] for row in result]
+
+            # For each table, get column information
+            for table in tables:
+                result = await session.execute(text("""
+                    SELECT
+                        column_name,
+                        data_type,
+                        character_maximum_length,
+                        is_nullable,
+                        column_default
+                    FROM information_schema.columns
+                    WHERE table_name = :table_name
+                    AND table_schema = 'public'
+                    ORDER BY ordinal_position
+                """), {"table_name": table})
+
+                columns = {}
+                for row in result:
+                    col_type = row[1]
+                    if row[2]:  # has max length
+                        col_type += f"({row[2]})"
+                    columns[row[0]] = {
+                        "type": col_type,
+                        "nullable": row[3] == "YES",
+                        "default": row[4] if row[4] else None
+                    }
+
+                audit_results["tables"][table] = {
+                    "columns": columns,
+                    "indexes": [],
+                    "foreign_keys": []
+                }
+
+                # Get indexes
+                result = await session.execute(text("""
+                    SELECT indexname, indexdef
+                    FROM pg_indexes
+                    WHERE tablename = :table_name
+                    AND schemaname = 'public'
+                """), {"table_name": table})
+
+                audit_results["tables"][table]["indexes"] = [
+                    {"name": row[0], "definition": row[1]} for row in result
+                ]
+
+                # Get foreign keys
+                result = await session.execute(text("""
+                    SELECT
+                        tc.constraint_name,
+                        kcu.column_name,
+                        ccu.table_name AS foreign_table,
+                        ccu.column_name AS foreign_column
+                    FROM information_schema.table_constraints AS tc
+                    JOIN information_schema.key_column_usage AS kcu
+                        ON tc.constraint_name = kcu.constraint_name
+                    JOIN information_schema.constraint_column_usage AS ccu
+                        ON ccu.constraint_name = tc.constraint_name
+                    WHERE tc.constraint_type = 'FOREIGN KEY'
+                    AND tc.table_name = :table_name
+                """), {"table_name": table})
+
+                audit_results["tables"][table]["foreign_keys"] = [
+                    {
+                        "name": row[0],
+                        "column": row[1],
+                        "references": f"{row[2]}.{row[3]}"
+                    } for row in result
+                ]
+
+            # Get custom types/enums
+            result = await session.execute(text("""
+                SELECT
+                    t.typname AS enum_name,
+                    array_agg(e.enumlabel ORDER BY e.enumsortorder) AS enum_values
+                FROM pg_type t
+                JOIN pg_enum e ON t.oid = e.enumtypid
+                JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+                WHERE n.nspname = 'public'
+                GROUP BY t.typname
+            """))
+
+            for row in result:
+                audit_results["custom_types"][row[0]] = list(row[1])
+
+            # Check alembic version
+            if 'alembic_version' in tables:
+                result = await session.execute(text("SELECT version_num FROM alembic_version"))
+                version = result.scalar()
+                audit_results["alembic_version"] = version
+
+        return audit_results
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }

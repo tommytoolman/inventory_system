@@ -17,7 +17,11 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade():
-    op.drop_table('old_platform_listings')
+    # Check if table exists before trying to drop it
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if 'old_platform_listings' in inspector.get_table_names():
+        op.drop_table('old_platform_listings')
 
 def downgrade():
     # Recreate the table if we need to downgrade

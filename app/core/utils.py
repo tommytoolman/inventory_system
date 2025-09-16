@@ -159,7 +159,7 @@ class ImageTransformer:
         # For other qualities, remove existing transformations and add new ones
         # First remove any existing transformation patterns
         # Pattern 1: /s--xyz--/anything/
-        url = re.sub(r'/s--[^/]+--/[^/]*/', '/s--\g<0>--/', url)
+        url = re.sub(r'/s--[^/]+--/[^/]*/', '/', url)
         # Pattern 2: /a_0/anything/
         url = re.sub(r'/a_0/[^/]*/', '/', url)
         

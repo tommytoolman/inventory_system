@@ -451,7 +451,7 @@ def upgrade() -> None:
 
     # Table: shopify_listings
     op.execute('''CREATE TABLE shopify_listings (
-    id integer NOT NULL DEFAULT nextval('website_listings_id_seq'::regclass),
+    id integer NOT NULL DEFAULT nextval('shopify_listings_id_seq'::regclass),
     platform_id integer,
     seo_title character varying,
     seo_description character varying,

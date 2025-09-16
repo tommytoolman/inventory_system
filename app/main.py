@@ -12,6 +12,7 @@ from fastapi.responses import RedirectResponse
 from .database import get_session
 from app.routes import inventory, websockets as websocket_router
 from app.core.config import get_settings
+from app.core.security import get_current_username
 
 from app import models
 
@@ -115,8 +116,8 @@ app.include_router(health.router)
 #     if hasattr(route, 'path') and hasattr(route, 'methods'):
 #         print(f"  {route.methods} {route.path}")
 
-# Root redirect
-@app.get("/")
+# Root redirect - now requires authentication
+@app.get("/", dependencies=[Depends(get_current_username)])
 async def root():
     return RedirectResponse(url="/inventory")
 

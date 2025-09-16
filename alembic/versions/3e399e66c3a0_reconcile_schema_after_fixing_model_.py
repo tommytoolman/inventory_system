@@ -25,20 +25,48 @@ def upgrade() -> None:
         'NEW', 'EXCELLENT', 'VERY_GOOD', 'GOOD', 'FAIR', 'POOR',
         name='productcondition', create_type=False
     )
-    productcondition_enum.create(op.get_bind(), checkfirst=False)
+    productcondition_enum.create(op.get_bind(), checkfirst=True)
     
     # op.drop_table('ebay_listings_old')
-    op.drop_index('idx_category_mapping_unique', table_name='category_mappings')
-    op.drop_constraint('ebay_listings_ebay_item_id_key', 'ebay_listings', type_='unique')
-    op.drop_index('idx_ebay_listings_ebay_category_id', table_name='ebay_listings')
-    op.drop_index('idx_ebay_listings_ebay_item_id', table_name='ebay_listings')
-    op.drop_index('idx_ebay_listings_listing_status', table_name='ebay_listings')
-    op.drop_index('idx_ebay_listings_platform_id', table_name='ebay_listings')
+
+    # Check if indexes exist before dropping
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+
+    # Drop category_mappings index if exists
+    if 'category_mappings' in inspector.get_table_names():
+        indexes = [idx['name'] for idx in inspector.get_indexes('category_mappings')]
+        if 'idx_category_mapping_unique' in indexes:
+            op.drop_index('idx_category_mapping_unique', table_name='category_mappings')
+
+    # Drop ebay_listings constraints and indexes if they exist
+    if 'ebay_listings' in inspector.get_table_names():
+        # Check constraints
+        constraints = [c['name'] for c in inspector.get_unique_constraints('ebay_listings')]
+        if 'ebay_listings_ebay_item_id_key' in constraints:
+            op.drop_constraint('ebay_listings_ebay_item_id_key', 'ebay_listings', type_='unique')
+
+        # Check indexes
+        indexes = [idx['name'] for idx in inspector.get_indexes('ebay_listings')]
+        if 'idx_ebay_listings_ebay_category_id' in indexes:
+            op.drop_index('idx_ebay_listings_ebay_category_id', table_name='ebay_listings')
+        if 'idx_ebay_listings_ebay_item_id' in indexes:
+            op.drop_index('idx_ebay_listings_ebay_item_id', table_name='ebay_listings')
+        if 'idx_ebay_listings_listing_status' in indexes:
+            op.drop_index('idx_ebay_listings_listing_status', table_name='ebay_listings')
+        if 'idx_ebay_listings_platform_id' in indexes:
+            op.drop_index('idx_ebay_listings_platform_id', table_name='ebay_listings')
     op.create_index(op.f('ix_ebay_listings_ebay_category_id'), 'ebay_listings', ['ebay_category_id'], unique=False)
     op.create_index(op.f('ix_ebay_listings_ebay_item_id'), 'ebay_listings', ['ebay_item_id'], unique=True)
     op.create_index(op.f('ix_ebay_listings_id'), 'ebay_listings', ['id'], unique=False)
     op.create_index(op.f('ix_ebay_listings_listing_status'), 'ebay_listings', ['listing_status'], unique=False)
-    op.drop_constraint('ebay_listings_platform_id_fkey', 'ebay_listings', type_='foreignkey')
+
+    # Check if foreign key exists before dropping
+    if 'ebay_listings' in inspector.get_table_names():
+        foreign_keys = [fk['name'] for fk in inspector.get_foreign_keys('ebay_listings')]
+        if 'ebay_listings_platform_id_fkey' in foreign_keys:
+            op.drop_constraint('ebay_listings_platform_id_fkey', 'ebay_listings', type_='foreignkey')
+
     op.create_foreign_key(None, 'ebay_listings', 'platform_common', ['platform_id'], ['id'])
     op.alter_column('products', 'condition',
             existing_type=sa.VARCHAR(),
@@ -58,7 +86,12 @@ def upgrade() -> None:
                existing_type=sa.TEXT(),
                type_=sa.String(),
                existing_nullable=True)
-    op.drop_constraint('shipping_profiles_name_key', 'shipping_profiles', type_='unique')
+
+    # Check if constraint exists before dropping
+    if 'shipping_profiles' in inspector.get_table_names():
+        constraints = [c['name'] for c in inspector.get_unique_constraints('shipping_profiles')]
+        if 'shipping_profiles_name_key' in constraints:
+            op.drop_constraint('shipping_profiles_name_key', 'shipping_profiles', type_='unique')
     op.add_column('website_listings', sa.Column('created_at', sa.DateTime(), nullable=True))
     op.add_column('website_listings', sa.Column('updated_at', sa.DateTime(), nullable=True))
     op.add_column('website_listings', sa.Column('last_synced_at', sa.DateTime(), nullable=True))

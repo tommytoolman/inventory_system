@@ -1,0 +1,86 @@
+[
+  {
+    "id": 1,
+    "source_platform": "reverb",
+    "source_id": "e57deb7a-382b-4e18-a008-67d4fbcb2879",
+    "source_name": "Electric Guitars / Solid Body",
+    "target_platform": "vr",
+    "target_id": "51",
+    "target_subcategory_id": "83",
+    "target_tertiary_id": null,
+    "created_at": "2025-03-06T17:15:56.950193",
+    "updated_at": "2025-03-06T17:15:56.950196"
+  },
+  {
+    "id": 2,
+    "source_platform": "reverb",
+    "source_id": "e57deb7a-382b-4e18-a008-67d4fbcb2879",
+    "source_name": "Electric Guitars / Solid Body",
+    "target_platform": "ebay",
+    "target_id": "619",
+    "target_subcategory_id": "3858",
+    "target_tertiary_id": "33034",
+    "created_at": "2025-03-06T17:15:56.950197",
+    "updated_at": "2025-03-06T17:15:56.950198"
+  },
+  {
+    "id": 3,
+    "source_platform": "ebay",
+    "source_id": "33034",
+    "source_name": "Musical Instruments & Gear / Guitars & Basses / Electric Guitars",
+    "target_platform": "vr",
+    "target_id": "51",
+    "target_subcategory_id": "83",
+    "target_tertiary_id": null,
+    "created_at": "2025-03-06T17:15:56.950198",
+    "updated_at": "2025-03-06T17:15:56.950199"
+  },
+  {
+    "id": 4,
+    "source_platform": "internal",
+    "source_id": "electric_guitars_solid_body",
+    "source_name": "Electric Guitars / Solid Body",
+    "target_platform": "vr",
+    "target_id": "51",
+    "target_subcategory_id": "83",
+    "target_tertiary_id": null,
+    "created_at": "2025-03-06T17:15:56.950199",
+    "updated_at": "2025-03-06T17:15:56.950200"
+  },
+  {
+    "id": 5,
+    "source_platform": "internal",
+    "source_id": "electric_guitars_solid_body",
+    "source_name": "Electric Guitars / Solid Body",
+    "target_platform": "reverb",
+    "target_id": "dfd39027-d134-4353-b9e4-57dc6be791b9",
+    "target_subcategory_id": "e57deb7a-382b-4e18-a008-67d4fbcb2879",
+    "target_tertiary_id": null,
+    "created_at": "2025-03-06T17:15:56.950200",
+    "updated_at": "2025-03-06T17:15:56.950200"
+  },
+  {
+    "id": 6,
+    "source_platform": "internal",
+    "source_id": "electric_guitars_solid_body",
+    "source_name": "Electric Guitars / Solid Body",
+    "target_platform": "ebay",
+    "target_id": "619",
+    "target_subcategory_id": "3858",
+    "target_tertiary_id": "33034",
+    "created_at": "2025-03-06T17:15:56.950201",
+    "updated_at": "2025-03-06T17:15:56.950201"
+  },
+  {
+    "id": 7,
+    "source_platform": "default",
+    "source_id": "default",
+    "source_name": "Default Category",
+    "target_platform": "vr",
+    "target_id": "51",
+    "target_subcategory_id": "63",
+    "target_tertiary_id": null,
+    "created_at": "2025-03-06T17:15:56.950202",
+    "updated_at": "2025-03-06T17:15:56.950202"
+  }
+]

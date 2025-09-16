@@ -1,0 +1,512 @@
+[
+  {
+    "id": 1,
+    "reverb_profile_id": "107308",
+    "ebay_profile_id": null,
+    "name": "10kg",
+    "description": "Reverb Profile: 10kg (ID: 107308)",
+    "is_default": false,
+    "package_type": "custom",
+    "weight": 10.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 50,
+      "height": 30,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 20.0,
+      "row": 150.0,
+      "usa": 100.0,
+      "europe": 60.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 2,
+    "reverb_profile_id": "106058",
+    "ebay_profile_id": null,
+    "name": "Amp Panels 24",
+    "description": "Reverb Profile: Amp Panels 24 (ID: 106058)",
+    "is_default": false,
+    "package_type": "custom",
+    "weight": 10.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 50,
+      "height": 30,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 12.0,
+      "row": 35.0,
+      "usa": 29.0,
+      "europe": 20.5
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 3,
+    "reverb_profile_id": "106057",
+    "ebay_profile_id": null,
+    "name": "Amp Logos",
+    "description": "Reverb Profile: Amp Logos (ID: 106057)",
+    "is_default": false,
+    "package_type": "custom",
+    "weight": 10.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 50,
+      "height": 30,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 12.0,
+      "row": 35.0,
+      "usa": 29.0,
+      "europe": 20.5
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 4,
+    "reverb_profile_id": "105662",
+    "ebay_profile_id": null,
+    "name": "Production Cases",
+    "description": "Reverb Profile: Production Cases (ID: 105662)",
+    "is_default": false,
+    "package_type": "custom",
+    "weight": 15.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 60,
+      "height": 40,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 100.0,
+      "row": 700.0,
+      "usa": 700.0,
+      "europe": 400.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 5,
+    "reverb_profile_id": "103323",
+    "ebay_profile_id": null,
+    "name": "Very Large Items",
+    "description": "Reverb Profile: Very Large Items (ID: 103323)",
+    "is_default": false,
+    "package_type": "custom",
+    "weight": 10.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 50,
+      "height": 30,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 100.0,
+      "row": 600.0,
+      "usa": 500.0,
+      "europe": 300.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 6,
+    "reverb_profile_id": "85687",
+    "ebay_profile_id": null,
+    "name": "Amp Panels",
+    "description": "Reverb Profile: Amp Panels (ID: 85687)",
+    "is_default": false,
+    "package_type": "custom",
+    "weight": 10.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 50,
+      "height": 30,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 10.0,
+      "row": 39.0,
+      "usa": 29.0,
+      "europe": 35.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 7,
+    "reverb_profile_id": "15655",
+    "ebay_profile_id": null,
+    "name": "Electric Guitars",
+    "description": "Reverb Profile: Electric Guitars (ID: 15655)",
+    "is_default": true,
+    "package_type": "guitar_case",
+    "weight": 10.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 60,
+      "height": 20,
+      "length": 135
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 60.0,
+      "row": 200.0,
+      "usa": 200.0,
+      "europe": 130.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 8,
+    "reverb_profile_id": "59948",
+    "ebay_profile_id": null,
+    "name": "New Acoustic",
+    "description": "Reverb Profile: New Acoustic (ID: 59948)",
+    "is_default": false,
+    "package_type": "custom",
+    "weight": 10.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 50,
+      "height": 30,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 25.0,
+      "row": 120.0,
+      "usa": 100.0,
+      "europe": 62.5
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 9,
+    "reverb_profile_id": "63784",
+    "ebay_profile_id": null,
+    "name": "Regular Synth",
+    "description": "Reverb Profile: Regular Synth (ID: 63784)",
+    "is_default": false,
+    "package_type": "synth",
+    "weight": 15.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 50,
+      "height": 30,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 60.0,
+      "row": 220.0,
+      "usa": 160.0,
+      "europe": 110.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 10,
+    "reverb_profile_id": "23177",
+    "ebay_profile_id": null,
+    "name": "Small Spares",
+    "description": "Reverb Profile: Small Spares (ID: 23177)",
+    "is_default": false,
+    "package_type": "small_box",
+    "weight": 0.5,
+    "dimensions": {
+      "unit": "cm",
+      "width": 20,
+      "height": 10,
+      "length": 30
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": false,
+      "insurance": true,
+      "require_signature": false
+    },
+    "rates": {
+      "uk": 10.0,
+      "row": 40.0,
+      "usa": 20.0,
+      "europe": 15.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 11,
+    "reverb_profile_id": "15659",
+    "ebay_profile_id": null,
+    "name": "Guitar Cabs",
+    "description": "Reverb Profile: Guitar Cabs (ID: 15659)",
+    "is_default": false,
+    "package_type": "custom",
+    "weight": 10.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 50,
+      "height": 30,
+      "length": 100
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 60.0,
+      "row": 400.0,
+      "usa": 250.0,
+      "europe": 155.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 12,
+    "reverb_profile_id": "15658",
+    "ebay_profile_id": null,
+    "name": "Amp Heads",
+    "description": "Reverb Profile: Amp Heads (ID: 15658)",
+    "is_default": false,
+    "package_type": "amp_head",
+    "weight": 25.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 45,
+      "height": 45,
+      "length": 70
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 40.0,
+      "row": 140.0,
+      "usa": 100.0,
+      "europe": 70.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 13,
+    "reverb_profile_id": "15656",
+    "ebay_profile_id": null,
+    "name": "Acoustic Guitars",
+    "description": "Reverb Profile: Acoustic Guitars (ID: 15656)",
+    "is_default": false,
+    "package_type": "guitar_case",
+    "weight": 8.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 60,
+      "height": 25,
+      "length": 135
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 30.0,
+      "row": 140.0,
+      "usa": 100.0,
+      "europe": 65.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 14,
+    "reverb_profile_id": "15654",
+    "ebay_profile_id": null,
+    "name": "Effects Pedals",
+    "description": "Reverb Profile: Effects Pedals (ID: 15654)",
+    "is_default": false,
+    "package_type": "pedal_small",
+    "weight": 1.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 30,
+      "height": 15,
+      "length": 30
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": false
+    },
+    "rates": {
+      "uk": 10.0,
+      "row": 70.0,
+      "usa": 30.0,
+      "europe": 20.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  },
+  {
+    "id": 15,
+    "reverb_profile_id": "15657",
+    "ebay_profile_id": null,
+    "name": "Bass Guitars",
+    "description": "Reverb Profile: Bass Guitars (ID: 15657)",
+    "is_default": false,
+    "package_type": "guitar_case",
+    "weight": 12.0,
+    "dimensions": {
+      "unit": "cm",
+      "width": 60,
+      "height": 20,
+      "length": 145
+    },
+    "carriers": [
+      "dhl",
+      "fedex",
+      "tnt"
+    ],
+    "options": {
+      "fragile": true,
+      "insurance": true,
+      "require_signature": true
+    },
+    "rates": {
+      "uk": 30.0,
+      "row": 140.0,
+      "usa": 100.0,
+      "europe": 65.0
+    },
+    "created_at": "2025-09-09T07:51:39.350290",
+    "updated_at": "2025-09-09T07:54:31.388043"
+  }
+]

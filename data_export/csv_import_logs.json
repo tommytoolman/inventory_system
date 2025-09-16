@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "timestamp": "2025-02-02T17:26:21.986508",
+    "filename": "vintageandrare_inventory_2025-01-21_09-28.csv",
+    "platform": "vintageandrare",
+    "total_rows": 972,
+    "successful_rows": 972,
+    "failed_rows": 0,
+    "error_log": {
+      "errors": []
+    }
+  },
+  {
+    "id": 2,
+    "timestamp": "2025-02-02T17:34:45.883157",
+    "filename": "vintageandrare_inventory_2025-01-21_09-28.csv",
+    "platform": "vintageandrare",
+    "total_rows": 972,
+    "successful_rows": 972,
+    "failed_rows": 0,
+    "error_log": {
+      "errors": []
+    }
+  }
+]

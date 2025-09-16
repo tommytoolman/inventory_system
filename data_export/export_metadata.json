@@ -1,0 +1,31 @@
+{
+  "export_date": "2025-09-16T11:03:18.606943",
+  "table_counts": {
+    "shipping_profiles": 15,
+    "activity_log": 722,
+    "category_mappings": 7,
+    "csv_import_logs": 2,
+    "platform_category_mappings": 253,
+    "platform_policies": 6,
+    "platform_status_mappings": 0,
+    "reverb_categories": 146,
+    "vr_accepted_brands": 5819,
+    "products": 472,
+    "product_mappings": 0,
+    "product_merges": 1214,
+    "platform_common": 1763,
+    "reverb_listings": 466,
+    "ebay_listings": 459,
+    "shopify_listings": 470,
+    "vr_listings": 366,
+    "ebay_category_mappings": 146,
+    "shopify_category_mappings": 41,
+    "vr_category_mappings": 66,
+    "sales": 0,
+    "orders": 0,
+    "shipments": 0,
+    "sync_events": 62,
+    "sync_stats": 3
+  },
+  "total_rows": 12498
+}

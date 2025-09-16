@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "platform": "ebay",
+    "policy_type": "payment",
+    "policy_id": "252544577017",
+    "policy_name": "Payment Policy 2025",
+    "is_default": true
+  },
+  {
+    "id": 2,
+    "platform": "ebay",
+    "policy_type": "return",
+    "policy_id": "252277356017",
+    "policy_name": "30 days",
+    "is_default": true
+  },
+  {
+    "id": 3,
+    "platform": "ebay",
+    "policy_type": "shipping",
+    "policy_id": "252277357017",
+    "policy_name": "Flat Postage Guitars",
+    "is_default": true
+  },
+  {
+    "id": 4,
+    "platform": "ebay",
+    "policy_type": "return",
+    "policy_id": "247568579017",
+    "policy_name": "14 days",
+    "is_default": false
+  },
+  {
+    "id": 5,
+    "platform": "ebay",
+    "policy_type": "shipping",
+    "policy_id": "252680098017",
+    "policy_name": "Flat Postage Guitars Copy",
+    "is_default": false
+  },
+  {
+    "id": 6,
+    "platform": "ebay",
+    "policy_type": "shipping",
+    "policy_id": "252544585017",
+    "policy_name": "Small Items 2025",
+    "is_default": false
+  }
+]

@@ -1,0 +1,1462 @@
+[
+  {
+    "id": 7,
+    "uuid": "5004a624-03c4-436b-81bf-78a108eb595d",
+    "name": "Accessories / Headphones",
+    "full_path": "Accessories / Headphones",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 8,
+    "uuid": "22af0079-d5e7-48d1-9e5c-108105a2156c",
+    "name": "Accessories / Merchandise",
+    "full_path": "Accessories / Merchandise",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 9,
+    "uuid": "98a45e2d-2cc2-4b17-b695-a5d198c8f6d3",
+    "name": "Accessories / Picks",
+    "full_path": "Accessories / Picks",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 10,
+    "uuid": "f5b5d030-51db-0134-7b64-2cbc3295deb9",
+    "name": "Accessories / Slides",
+    "full_path": "Accessories / Slides",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 11,
+    "uuid": "bb1ca93f-5dcc-48ec-adad-77d22f61b588",
+    "name": "Accessories / Stands",
+    "full_path": "Accessories / Stands",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 12,
+    "uuid": "1b357626-300e-47dd-85b0-bf657bca1a96",
+    "name": "Accessories / Straps",
+    "full_path": "Accessories / Straps",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 13,
+    "uuid": "4ca6d5e9-f00f-468d-bcae-8c7497537281",
+    "name": "Accessories / Tools",
+    "full_path": "Accessories / Tools",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 22,
+    "uuid": "3ca3eb03-7eac-477d-b253-15ce603d2550",
+    "name": "Acoustic Guitars",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 18,
+    "uuid": "14d6cc96-ed7b-4521-bc21-7713c61e9dc5",
+    "name": "Acoustic Guitars / 12-String",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 19,
+    "uuid": "be24976f-ab6e-42e1-a29b-275e5fbca68f",
+    "name": "Acoustic Guitars / Archtop",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 24,
+    "uuid": "d63135ba-55a8-4742-9891-a01d91538d96",
+    "name": "Acoustic Guitars / Baritone",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 23,
+    "uuid": "09ea109a-5df1-4156-b00c-7456a3e5abf3",
+    "name": "Acoustic Guitars / Built-in Electronics",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 16,
+    "uuid": "a7f470d1-266d-4495-b4d6-998cc84b7474",
+    "name": "Acoustic Guitars / Classical",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 21,
+    "uuid": "18bdeae7-e834-42a8-aeee-0e8ae33f8709",
+    "name": "Acoustic Guitars / Concert",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 17,
+    "uuid": "630dc140-45e2-4371-b569-19405de321cc",
+    "name": "Acoustic Guitars / Dreadnought",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 15,
+    "uuid": "c58c6c12-4b50-4568-90c9-e071ec8e6a26",
+    "name": "Acoustic Guitars / Jumbo",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 33,
+    "uuid": "af33fcd5-f10a-407d-a39d-92765a7d4796",
+    "name": "Acoustic Guitars / Left-Handed",
+    "full_path": "Acoustic Guitars / Left-Handed",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 34,
+    "uuid": "090748e6-9ca8-4083-896b-d59e0aa42582",
+    "name": "Acoustic Guitars / Mini/Travel",
+    "full_path": "Acoustic Guitars / Mini/Travel",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 35,
+    "uuid": "db34e833-b352-45b9-9976-4f674a7e6d8c",
+    "name": "Acoustic Guitars / OM and Auditorium",
+    "full_path": "Acoustic Guitars / OM and Auditorium",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 36,
+    "uuid": "15cedc86-0e56-4800-b3f0-0f99fab350cb",
+    "name": "Acoustic Guitars / Parlor",
+    "full_path": "Acoustic Guitars / Parlor",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 20,
+    "uuid": "8b531867-88ee-46c5-b6d1-40d2d6b9dc35",
+    "name": "Acoustic Guitars / Resonator",
+    "full_path": "Acoustic Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 39,
+    "uuid": "4069c185-c9a4-4354-b09f-31e83fbde2f1",
+    "name": "Amps / Amp Attenuators",
+    "full_path": "Amps / Amp Attenuators",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 40,
+    "uuid": "6c664a95-048a-4795-b0ad-c7c03d9eee4c",
+    "name": "Amps / Bass Amps / Bass Cabinets",
+    "full_path": "Amps / Bass Amps / Bass Cabinets",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 41,
+    "uuid": "052c7288-b2e0-42d2-8927-2c9176ef1699",
+    "name": "Amps / Bass Amps / Bass Combos",
+    "full_path": "Amps / Bass Amps / Bass Combos",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 43,
+    "uuid": "4ca4f473-567f-46b0-8b66-9936a1179cd6",
+    "name": "Amps / Boutique Amps",
+    "full_path": "Amps / Boutique Amps",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 44,
+    "uuid": "66d136cb-02f2-4d04-b617-9215e972cc29",
+    "name": "Amps / Guitar Amps / Guitar Amp Stacks",
+    "full_path": "Amps / Guitar Amps / Guitar Amp Stacks",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 48,
+    "uuid": "0338462f-285a-4273-afde-47c4fc752e3f",
+    "name": "Amps / Guitar Amps / Guitar Modeling Amps",
+    "full_path": "Amps / Guitar Amps / Guitar Modeling Amps",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 49,
+    "uuid": "b6722b4b-4a2b-4d8f-82e9-0eacd20841aa",
+    "name": "Amps / Guitar Amps / Guitar Preamps",
+    "full_path": "Amps / Guitar Amps / Guitar Preamps",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 50,
+    "uuid": "edd6e048-a378-4f6f-b2b5-dd46016c6118",
+    "name": "Amps / Small Amps",
+    "full_path": "Amps / Small Amps",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 42,
+    "uuid": "892aa8b2-a209-49db-8ad2-eed758025a9d",
+    "name": "Bass Amplifiers",
+    "full_path": "Amps / Bass Amps / Bass Heads",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 57,
+    "uuid": "bd0f2bd8-714b-4d19-ad87-05c5695a3b02",
+    "name": "Bass Guitars / Acoustic Bass Guitars",
+    "full_path": "Bass Guitars / Acoustic Bass Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 58,
+    "uuid": "a69d9614-7635-45f4-8fd5-4931ce756655",
+    "name": "Bass Guitars / Active Electronics",
+    "full_path": "Bass Guitars / Active Electronics",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 55,
+    "uuid": "ac571749-28c7-4eec-a1d9-09dca3cf3e5f",
+    "name": "Basses",
+    "full_path": "Bass Guitars / 4-String",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 59,
+    "uuid": "5b9e2d05-0797-4c53-a653-390516aef1e9",
+    "name": "Bass Guitars / Fretless",
+    "full_path": "Bass Guitars / Fretless",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 60,
+    "uuid": "0cd005a7-90ce-4f51-8e3c-b7acc4fa82f0",
+    "name": "Bass Guitars / Left-Handed",
+    "full_path": "Bass Guitars / Left-Handed",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 61,
+    "uuid": "07276aa7-6f18-4cae-a691-e6043b002fa4",
+    "name": "Bass Guitars / Short Scale",
+    "full_path": "Bass Guitars / Short Scale",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 54,
+    "uuid": "53a9c7d7-d73d-4e7f-905c-553503e50a90",
+    "name": "Basses",
+    "full_path": "Bass Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 56,
+    "uuid": "3178be7d-f1cd-4da5-a606-bf3c1b8e834d",
+    "name": "Basses",
+    "full_path": "Bass Guitars / 5-String or More",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 65,
+    "uuid": "58d889f7-0aa1-4689-a9d3-da16dd225e8d",
+    "name": "DJ and Lighting Gear",
+    "full_path": "DJ and Lighting Gear",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 66,
+    "uuid": "f8c37b8b-a8c6-4967-a2a4-7d50717a52ab",
+    "name": "DJ and Lighting Gear / Turntables",
+    "full_path": "DJ and Lighting Gear / Turntables",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 67,
+    "uuid": "default",
+    "name": "Default",
+    "full_path": "Default",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 68,
+    "uuid": "b3cb9f8e-4cb6-4325-8215-1efcd9999daf",
+    "name": "Drums and Percussion",
+    "full_path": "Drum Kits",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 70,
+    "uuid": "b905874b-ecdd-43f0-99e5-5c4d6857ff99",
+    "name": "Drums and Percussion / Acoustic Drums / Full Acoustic Kits",
+    "full_path": "Drums and Percussion / Acoustic Drums / Full Acoustic Kits",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 71,
+    "uuid": "93d86ecd-27e6-452c-9a43-16a0c5d547ab",
+    "name": "Drums and Percussion / Cymbals / Other (Splash, China, etc)",
+    "full_path": "Drums and Percussion / Cymbals / Other (Splash, China, etc)",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 72,
+    "uuid": "caa94b2b-d52b-499c-b4bb-412568747078",
+    "name": "Drums and Percussion / Electronic Drums / Modules",
+    "full_path": "Drums and Percussion / Electronic Drums / Modules",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 73,
+    "uuid": "ecb1bc0c-1f79-40a9-9429-0696defa7b19",
+    "name": "Drums and Percussion / Marching Percussion / Marching Cymbals",
+    "full_path": "Drums and Percussion / Marching Percussion / Marching Cymbals",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 74,
+    "uuid": "8f8e21ff-aa89-4f79-943c-dfaab20251f4",
+    "name": "Drums and Percussion / Pad Controllers",
+    "full_path": "Drums and Percussion / Pad Controllers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 75,
+    "uuid": "7a28aae1-de39-4c8b-ae37-b621fc46a5e9",
+    "name": "Drums and Percussion / Parts and Accessories / Heads",
+    "full_path": "Drums and Percussion / Parts and Accessories / Heads",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 76,
+    "uuid": "4fe438c3-8312-4c52-b8d6-9f502174cbe7",
+    "name": "Drums and Percussion / Parts and Accessories / Pedals",
+    "full_path": "Drums and Percussion / Parts and Accessories / Pedals",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 78,
+    "uuid": "fa10f97c-dd98-4a8f-933b-8cb55eb653dd",
+    "name": "Effects and Pedals",
+    "full_path": "Effects Pedal Accessories",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 84,
+    "uuid": "fc775402-66a5-4248-8e71-fd9be6b2214a",
+    "name": "Effects and Pedals / Amp Simulators",
+    "full_path": "Effects and Pedals / Amp Simulators",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 85,
+    "uuid": "c6602a28-e2e7-4e70-abeb-0fa38b320be6",
+    "name": "Effects and Pedals / Bass Pedals",
+    "full_path": "Effects and Pedals / Bass Pedals",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 86,
+    "uuid": "15800d29-53a1-446e-8560-7a74a6d8d962",
+    "name": "Effects and Pedals / Chorus and Vibrato",
+    "full_path": "Effects and Pedals / Chorus and Vibrato",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 87,
+    "uuid": "86d377ed-c038-4353-a391-f592ebd6d921",
+    "name": "Effects and Pedals / Compression and Sustain",
+    "full_path": "Effects and Pedals / Compression and Sustain",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 88,
+    "uuid": "6bd92034-d59c-4d78-a6c1-1e8a3c31b31e",
+    "name": "Effects and Pedals / Controllers, Volume and Expression",
+    "full_path": "Effects and Pedals / Controllers, Volume and Expression",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 77,
+    "uuid": "3b09f948-3462-4ac2-93b3-59dd66da787e",
+    "name": "Effects and Pedals / Delay",
+    "full_path": "Effects Pedal Accessories",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 90,
+    "uuid": "732e30f0-21cf-4960-a3d4-bb90c68081db",
+    "name": "Effects and Pedals / Distortion",
+    "full_path": "Effects and Pedals / Distortion",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 91,
+    "uuid": "ec612b9c-6227-4249-9010-b85b6b0eb5b0",
+    "name": "Effects and Pedals / EQ",
+    "full_path": "Effects and Pedals / EQ",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 92,
+    "uuid": "b753bcd4-2cc5-4ea1-8f01-c8b034012372",
+    "name": "Effects and Pedals / Flanger",
+    "full_path": "Effects and Pedals / Flanger",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 81,
+    "uuid": "305e09a1-f9cb-4171-8a70-6428ad1b55a8",
+    "name": "Effects and Pedals / Fuzz",
+    "full_path": "Effects Pedal Accessories",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 94,
+    "uuid": "7e6b6d7c-cdd5-4a42-bceb-6ea12899137b",
+    "name": "Effects and Pedals / Guitar Synths",
+    "full_path": "Effects and Pedals / Guitar Synths",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 95,
+    "uuid": "66170426-1b4d-4361-8002-3282f4907217",
+    "name": "Effects and Pedals / Loop Pedals and Samplers",
+    "full_path": "Effects and Pedals / Loop Pedals and Samplers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 96,
+    "uuid": "2d6093b4-6b33-474e-b07c-25f6657d7956",
+    "name": "Effects and Pedals / Multi-Effect Unit",
+    "full_path": "Effects and Pedals / Multi-Effect Unit",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 97,
+    "uuid": "8745626e-3273-4f9d-b7a1-ca5b202a8e6e",
+    "name": "Effects and Pedals / Noise Reduction and Gates",
+    "full_path": "Effects and Pedals / Noise Reduction and Gates",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 98,
+    "uuid": "8dab3e10-a7f8-444b-aa9d-ccdab4fe66c6",
+    "name": "Effects and Pedals / Octave and Pitch",
+    "full_path": "Effects and Pedals / Octave and Pitch",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 80,
+    "uuid": "9bee8b39-c5f1-4fa7-90af-38740fc21a73",
+    "name": "Effects and Pedals / Overdrive and Boost",
+    "full_path": "Effects Pedal Accessories",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 100,
+    "uuid": "66fd5c3b-3227-4182-9337-d0e4893be9a2",
+    "name": "Effects and Pedals / Pedalboards and Power Supplies",
+    "full_path": "Effects and Pedals / Pedalboards and Power Supplies",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 101,
+    "uuid": "75e55b59-f57b-4e39-87b1-fcda4c1ed562",
+    "name": "Effects and Pedals / Phase Shifters",
+    "full_path": "Effects and Pedals / Phase Shifters",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 102,
+    "uuid": "4d45f512-4dd5-4dae-95b7-7eb400ce406b",
+    "name": "Effects and Pedals / Preamps",
+    "full_path": "Effects and Pedals / Preamps",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 79,
+    "uuid": "1738a9ae-6485-46c2-8ead-0807bb2e20e9",
+    "name": "Effects and Pedals / Reverb",
+    "full_path": "Effects Pedal Accessories",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 104,
+    "uuid": "38f7f86b-5d7a-499a-9bdc-c3198395dfa6",
+    "name": "Effects and Pedals / Tremolo",
+    "full_path": "Effects and Pedals / Tremolo",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 105,
+    "uuid": "69a7e38f-0ce8-42ea-a0f6-8a30b7f6886e",
+    "name": "Effects and Pedals / Tuning Pedals",
+    "full_path": "Effects and Pedals / Tuning Pedals",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 106,
+    "uuid": "e5553727-8786-4932-8761-dab396640ff0",
+    "name": "Effects and Pedals / Vocal",
+    "full_path": "Effects and Pedals / Vocal",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 82,
+    "uuid": "a92165b2-2281-4dc2-850f-2789f513ec10",
+    "name": "Effects and Pedals / Wahs and Filters",
+    "full_path": "Effects Pedal Accessories",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 110,
+    "uuid": "dfd39027-d134-4353-b9e4-57dc6be791b9",
+    "name": "Electric Guitars",
+    "full_path": "Electric Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 113,
+    "uuid": "80d6ce96-487c-4ac1-ad10-d4bef6336fe6",
+    "name": "Electric Guitars / 12-String",
+    "full_path": "Electric Guitars / 12-String",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 108,
+    "uuid": "367e1d5d-1185-4a1e-b283-8ec860dc1d5f",
+    "name": "Electric Guitars / Archtop",
+    "full_path": "Electric Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 115,
+    "uuid": "8f8b1f88-83f5-449c-8c93-b57cf3ba1fd7",
+    "name": "Electric Guitars / Baritone",
+    "full_path": "Electric Guitars / Baritone",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 109,
+    "uuid": "5db35d7e-2b7e-4dcf-a73b-6a144c710956",
+    "name": "Electric Guitars / Hollow Body",
+    "full_path": "Electric Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 117,
+    "uuid": "ddd7553e-68d5-4005-a356-3f94202682a8",
+    "name": "Electric Guitars / Lap Steel",
+    "full_path": "Electric Guitars / Lap Steel",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 118,
+    "uuid": "c86f64cf-43df-4430-a2bf-b4126d81c5bd",
+    "name": "Electric Guitars / Left-Handed",
+    "full_path": "Electric Guitars / Left-Handed",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 111,
+    "uuid": "6a63ac2e-f2a5-4064-b6ea-0393f42ee497",
+    "name": "Electric Guitars / Semi-Hollow",
+    "full_path": "Electric Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 112,
+    "uuid": "e57deb7a-382b-4e18-a008-67d4fbcb2879",
+    "name": "Electric Guitars / Solid Body",
+    "full_path": "Electric Guitars",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 121,
+    "uuid": "69edc7c9-a145-4e7d-bab2-26e9df982c57",
+    "name": "Electric Guitars / Tenor",
+    "full_path": "Electric Guitars / Tenor",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 14,
+    "uuid": "aff19d6a-ad5e-4b3b-b21c-8aa71ae834c6",
+    "name": "Electronic Tuners",
+    "full_path": "Accessories / Tuners",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 123,
+    "uuid": "fb60628c-be4b-4be2-9c0f-bc5d31e3996c",
+    "name": "Folk Instruments",
+    "full_path": "Folk Instruments",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 52,
+    "uuid": "45ba2a33-add3-4f9d-a2d4-842fa663924f",
+    "name": "Folk Instruments / Banjos",
+    "full_path": "Banjos",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 46,
+    "uuid": "10335451-31e5-418a-8ed8-f48cd738f17d",
+    "name": "Guitar Amplifiers",
+    "full_path": "Amps / Guitar Amps / Guitar Combos",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 47,
+    "uuid": "19d53222-297e-410c-ba4f-b48678e917f9",
+    "name": "Guitar Amplifiers",
+    "full_path": "Amps / Guitar Amps / Guitar Heads",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 45,
+    "uuid": "f1b3d127-4158-43c3-934b-e402adc3d6ca",
+    "name": "Guitar Amplifiers",
+    "full_path": "Amps / Guitar Amps / Guitar Cabinets",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 38,
+    "uuid": "09055aa7-ed49-459d-9452-aa959f288dc2",
+    "name": "Guitar Amplifiers",
+    "full_path": "Amps",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 132,
+    "uuid": "b7c14414-a2fb-4345-bd3d-887ce076769c",
+    "name": "Home Audio / Amplifiers",
+    "full_path": "Home Audio / Amplifiers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 133,
+    "uuid": "010855a4-d387-405f-929d-ec22667abadc",
+    "name": "Home Audio / Tape Decks",
+    "full_path": "Home Audio / Tape Decks",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 134,
+    "uuid": "d002db05-ab63-4c79-999c-d49bbe8d7739",
+    "name": "Keyboards and Synths",
+    "full_path": "Keyboards and Synths",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 135,
+    "uuid": "e36bdc32-abba-45e2-948b-ce60153cbdd9",
+    "name": "Keyboards and Synths / Drum Machines",
+    "full_path": "Keyboards and Synths / Drum Machines",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 136,
+    "uuid": "148977b8-b308-4364-89fc-95859d2b3bc3",
+    "name": "Keyboards and Synths / Electric Pianos",
+    "full_path": "Keyboards and Synths / Electric Pianos",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 137,
+    "uuid": "206ee409-a7e6-4c15-8ef9-eee27139a5fc",
+    "name": "Keyboards and Synths / Keyboard and Synth Accessories / Keyboard Sustain Pedals",
+    "full_path": "Keyboards and Synths / Keyboard and Synth Accessories / Keyboard Sustain Pedals",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 138,
+    "uuid": "fa8d98c5-3538-46d1-b74a-d48c5222f889",
+    "name": "Keyboards and Synths / MIDI Controllers",
+    "full_path": "Keyboards and Synths / MIDI Controllers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 139,
+    "uuid": "0f4ee318-296a-4dfb-8bee-be46d7531b60",
+    "name": "Keyboards and Synths / MIDI Controllers / Keyboard MIDI Controllers",
+    "full_path": "Keyboards and Synths / MIDI Controllers / Keyboard MIDI Controllers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 140,
+    "uuid": "10250c4e-e0db-47b4-aa25-767a8bdd54f0",
+    "name": "Keyboards and Synths / MIDI Controllers / Keytar MIDI Controllers",
+    "full_path": "Keyboards and Synths / MIDI Controllers / Keytar MIDI Controllers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 141,
+    "uuid": "f4499585-f591-4401-9191-f7ba9fdeb02c",
+    "name": "Keyboards and Synths / Organs",
+    "full_path": "Keyboards and Synths / Organs",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 142,
+    "uuid": "5e3c7bdb-469a-4a22-bbb2-85ddf8bff3c9",
+    "name": "Keyboards and Synths / Samplers",
+    "full_path": "Keyboards and Synths / Samplers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 143,
+    "uuid": "c577b406-a405-45ec-a8eb-56fbe628fa19",
+    "name": "Keyboards and Synths / Synths / Analog Synths",
+    "full_path": "Keyboards and Synths / Synths / Analog Synths",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 144,
+    "uuid": "75b1e4a3-dbb4-46c5-8386-fa18546e097a",
+    "name": "Keyboards and Synths / Synths / Digital Synths",
+    "full_path": "Keyboards and Synths / Synths / Digital Synths",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 145,
+    "uuid": "d2688e49-3cca-4cf6-95d0-c105e8e5c3bd",
+    "name": "Keyboards and Synths / Synths / Keyboard Synths",
+    "full_path": "Keyboards and Synths / Synths / Keyboard Synths",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 146,
+    "uuid": "9854a2b4-5db3-4dfd-85f1-dcb444d5d7f6",
+    "name": "Keyboards and Synths / Synths / Rackmount Synths",
+    "full_path": "Keyboards and Synths / Synths / Rackmount Synths",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 147,
+    "uuid": "4caba01d-fef3-4f67-9c2c-a5116d1faf0a",
+    "name": "Keyboards and Synths / Workstation Keyboards",
+    "full_path": "Keyboards and Synths / Workstation Keyboards",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 125,
+    "uuid": "d6322534-edf5-43dd-b1c0-99f0c28e3053",
+    "name": "Mandolins",
+    "full_path": "Folk Instruments / Mandolin",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 4,
+    "uuid": "516cfd7e-e745-44cf-bb72-053b3edcddaf",
+    "name": "Musical Instrument & Orchestra Accessories",
+    "full_path": "Accessories / Cables",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 1,
+    "uuid": "62835d2e-ac92-41fc-9b8d-4aba8c1c25d5",
+    "name": "Musical Instrument & Orchestra Accessories",
+    "full_path": "Accessories",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 5,
+    "uuid": "5cb132e1-1a42-42f4-bcd1-cf17405e7aff",
+    "name": "Musical Instrument & Orchestra Accessories",
+    "full_path": "Accessories / Case Candy",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 3,
+    "uuid": "7681b711-435c-4923-bdc3-65076d15d78c",
+    "name": "Musical Instrument & Orchestra Accessories",
+    "full_path": "Accessories / Books and DVDs",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 6,
+    "uuid": "b1f4ce46-26e5-4f27-8b8a-66bd0f41a8eb",
+    "name": "Musical Instrument Amplifier Covers & Cases",
+    "full_path": "Accessories / Cases and Gig Bags / Guitar Cases",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 2,
+    "uuid": "cdadd9b5-9d6d-4193-b0ee-b94d9ffd02ec",
+    "name": "Musical Instrument Amplifier Covers & Cases",
+    "full_path": "Accessories / Amp Covers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 155,
+    "uuid": "1f99c852-9d20-4fd3-a903-91da9c805a5e",
+    "name": "Parts",
+    "full_path": "Parts",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 156,
+    "uuid": "eb1827f3-c02c-46ff-aea9-7983e2aae1b4",
+    "name": "Parts / Amp Parts",
+    "full_path": "Parts / Amp Parts",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 157,
+    "uuid": "3852c31e-5019-4cd6-8c60-ba5fd397cf43",
+    "name": "Parts / Bass Guitar Parts",
+    "full_path": "Parts / Bass Guitar Parts",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 158,
+    "uuid": "92aef906-a2fd-47be-85f5-8595cc61bedb",
+    "name": "Parts / Guitar Bodies",
+    "full_path": "Parts / Guitar Bodies",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 159,
+    "uuid": "ae1822ce-4a55-42b0-a094-b9be6b27fc62",
+    "name": "Parts / Guitar Parts / Bridges",
+    "full_path": "Parts / Guitar Parts / Bridges",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 160,
+    "uuid": "c33e4de7-7ec0-4de9-912c-98a4dcb268c8",
+    "name": "Parts / Guitar Parts / Necks",
+    "full_path": "Parts / Guitar Parts / Necks",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 161,
+    "uuid": "33095a65-5662-414a-b86d-0e874911da16",
+    "name": "Parts / Guitar Parts / Tailpieces",
+    "full_path": "Parts / Guitar Parts / Tailpieces",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 162,
+    "uuid": "ed9714d2-2b98-4e1e-b85e-eb2f948a8985",
+    "name": "Parts / Guitar Pickups",
+    "full_path": "Parts / Guitar Pickups",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 163,
+    "uuid": "f87eeadc-82f0-4e67-97df-8ac363f28e1a",
+    "name": "Parts / Knobs",
+    "full_path": "Parts / Knobs",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 164,
+    "uuid": "9614b33f-20dc-4381-9d16-aa1c086f0e7e",
+    "name": "Parts / Pedal Parts",
+    "full_path": "Parts / Pedal Parts",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 165,
+    "uuid": "2015ef45-0261-4fb5-a5ca-f33e76e5f8da",
+    "name": "Parts / Pickguards",
+    "full_path": "Parts / Pickguards",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 166,
+    "uuid": "6a00326e-3acc-4a53-be16-389d7b6a228c",
+    "name": "Parts / Replacement Speakers",
+    "full_path": "Parts / Replacement Speakers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 167,
+    "uuid": "7ddd7fc0-59cc-42ca-b52d-181e1eea4294",
+    "name": "Parts / Tubes",
+    "full_path": "Parts / Tubes",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 168,
+    "uuid": "3b1bc5f2-e783-4a53-b21c-61d54bff9837",
+    "name": "Parts / Tuning Heads",
+    "full_path": "Parts / Tuning Heads",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 169,
+    "uuid": "b021203f-1ed8-476c-a8fc-32d4e3b0ef9e",
+    "name": "Pro Audio",
+    "full_path": "Pro Audio",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 170,
+    "uuid": "0bbe9f3e-7a6e-4654-862f-96dd6136c9b3",
+    "name": "Pro Audio / DI Boxes",
+    "full_path": "Pro Audio / DI Boxes",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 171,
+    "uuid": "0f2bbf76-3225-44d5-8a5b-c540cc1fd058",
+    "name": "Pro Audio / Microphones",
+    "full_path": "Pro Audio / Microphones",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 172,
+    "uuid": "c63d7668-c0d1-421d-97ef-587959f7282c",
+    "name": "Pro Audio / Mixers",
+    "full_path": "Pro Audio / Mixers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 173,
+    "uuid": "8865016e-edbb-4ee7-a704-6ea0652d6bf4",
+    "name": "Pro Audio / Outboard Gear / Compressors and Limiters",
+    "full_path": "Pro Audio / Outboard Gear / Compressors and Limiters",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 174,
+    "uuid": "d02b5dfa-38f1-4eec-9ebb-1eba6b108c53",
+    "name": "Pro Audio / Outboard Gear / Delay",
+    "full_path": "Pro Audio / Outboard Gear / Delay",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 175,
+    "uuid": "1db56ead-c657-4a26-ac8b-2e441d5c6e76",
+    "name": "Pro Audio / Outboard Gear / Equalizers",
+    "full_path": "Pro Audio / Outboard Gear / Equalizers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 176,
+    "uuid": "10187eaa-7746-4978-9f44-7670e95a40da",
+    "name": "Pro Audio / Outboard Gear / Gates and Expanders",
+    "full_path": "Pro Audio / Outboard Gear / Gates and Expanders",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 177,
+    "uuid": "d3c6e84c-5bb2-41a3-9a60-0e8b88edc515",
+    "name": "Pro Audio / Outboard Gear / Microphone Preamps",
+    "full_path": "Pro Audio / Outboard Gear / Microphone Preamps",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 178,
+    "uuid": "101acc1f-ae38-4e27-9fde-1948498618aa",
+    "name": "Pro Audio / Outboard Gear / Multi-Effect",
+    "full_path": "Pro Audio / Outboard Gear / Multi-Effect",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 179,
+    "uuid": "af9cb76e-0fd3-43fe-9f2d-6f53a4e60371",
+    "name": "Pro Audio / Outboard Gear / Reverb",
+    "full_path": "Pro Audio / Outboard Gear / Reverb",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 180,
+    "uuid": "760ffd05-b7e1-4dc9-a293-5e3f1da33483",
+    "name": "Pro Audio / Portable Recorders",
+    "full_path": "Pro Audio / Portable Recorders",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 181,
+    "uuid": "a509367a-6d89-4692-9e28-796357b009a7",
+    "name": "Pro Audio / Powered Mixers",
+    "full_path": "Pro Audio / Powered Mixers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 182,
+    "uuid": "36a0faca-93b7-4ad1-ab09-02629ec1e900",
+    "name": "Pro Audio / Recording",
+    "full_path": "Pro Audio / Recording",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 183,
+    "uuid": "7d314252-3de4-494c-9e49-27edc5ef6482",
+    "name": "Pro Audio / Speakers / Passive Speakers",
+    "full_path": "Pro Audio / Speakers / Passive Speakers",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 184,
+    "uuid": "f4104d52-a9ee-4256-8753-15bf5ff1b71d",
+    "name": "Pro Audio / Speakers / Studio Monitors",
+    "full_path": "Pro Audio / Speakers / Studio Monitors",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 51,
+    "uuid": "5c89d4ef-7652-4f89-b766-bb257e746099",
+    "name": "Saxophones",
+    "full_path": "Band and Orchestra / Woodwind / Saxophones",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  },
+  {
+    "id": 127,
+    "uuid": "e70f504b-eee7-4b71-89bc-eb925e802b3d",
+    "name": "Ukuleles",
+    "full_path": "Folk Instruments / Ukuleles",
+    "parent_uuid": null,
+    "item_count": null,
+    "created_at": "2025-09-10T09:04:19.952690",
+    "updated_at": "2025-09-10T09:04:19.952690"
+  }
+]

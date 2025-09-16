@@ -9,6 +9,7 @@ import os
 import sys
 from datetime import datetime, date
 from decimal import Decimal
+from uuid import UUID
 
 # Add the app directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -25,6 +26,8 @@ class DateTimeEncoder(json.JSONEncoder):
             return obj.isoformat()
         elif isinstance(obj, Decimal):
             return float(obj)
+        elif isinstance(obj, UUID):
+            return str(obj)
         return super().default(obj)
 
 

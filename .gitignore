@@ -23,6 +23,10 @@ app/services/ebay/tokens.json
 # YAML Files
 *.yml
 *.yaml
+# eBay tokens - NEVER commit these!
+app/services/ebay/tokens/
+ebay_tokens.json
+
 # Data Files
 *.csv
 *.xlsx

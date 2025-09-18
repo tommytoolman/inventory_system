@@ -16,13 +16,14 @@ from app.core.security import get_current_username
 
 from app import models
 
-from app.routes import shipping, dashboard, sync_scheduler, matching, reports, health
+from app.routes import shipping, dashboard, sync_scheduler, reports, health  # matching is now in reports
 from app.routes.platforms.ebay import router as ebay_router
 from app.routes.platforms.reverb import router as reverb_router
 from app.routes.platforms.vr import router as vr_router
 from app.routes.platforms.shopify import router as shopify_router
 from app.routes.platforms.sync_all import router as sync_all_router
 from app.routes.webhooks import router as webhook_router
+from app.routers.admin import router as admin_router
 
 from contextlib import asynccontextmanager
 
@@ -112,7 +113,8 @@ app.include_router(websocket_router.router)  # WebSockets handle auth differentl
 # app.include_router(sync_scheduler.router) # Commented out for now as it has conflicting route with sync_all_router
 app.include_router(reports.router, prefix="/reports", tags=["reports"], dependencies=[require_auth()])
 app.include_router(shipping.router, dependencies=[require_auth()])
-app.include_router(matching.router, prefix="/matching", tags=["matching"], dependencies=[require_auth()])
+# app.include_router(matching.router, prefix="/matching", tags=["matching"], dependencies=[require_auth()])  # Moved to reports
+app.include_router(admin_router, dependencies=[require_auth()])
 app.include_router(health.router)  # Health check should be accessible without auth
 
 ## This will show us in CLI all our registered routes. Uncomment to show.

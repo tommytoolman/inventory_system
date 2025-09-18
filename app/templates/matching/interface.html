@@ -297,11 +297,11 @@ function resetBothOffsets() {
 async function loadStats() {
     try {
         // Load basic stats
-        const response = await fetch('/matching/api/stats');
+        const response = await fetch('/reports/matching/api/stats');
         const stats = await response.json();
         
         // Load detailed match stats
-        const matchResponse = await fetch('/matching/api/match-stats');
+        const matchResponse = await fetch('/reports/matching/api/match-stats');
         const matchStats = await matchResponse.json();
         
         // Display platform match statistics
@@ -334,7 +334,7 @@ async function loadStats() {
 
 async function loadFilterOptions() {
     try {
-        const response = await fetch('/matching/api/filter-options');
+        const response = await fetch('/reports/matching/api/filter-options');
         filterOptions = await response.json();
         
         // Populate brand dropdowns
@@ -457,7 +457,7 @@ async function loadProducts(side) {
         formData.append('offset', offset);
         formData.append('limit', limit);
         
-        const response = await fetch('/matching/api/products', {
+        const response = await fetch('/reports/matching/api/products', {
             method: 'POST',
             body: formData
         });
@@ -632,7 +632,7 @@ async function confirmMatch() {
         formData.append('product1_id', selectedProduct1);
         formData.append('product2_id', selectedProduct2);
         
-        const response = await fetch('/matching/api/confirm', {
+        const response = await fetch('/reports/matching/api/confirm', {
             method: 'POST',
             body: formData
         });
@@ -687,7 +687,7 @@ function resetSelections() {
 
 async function loadMatchHistory() {
     try {
-        const response = await fetch('/matching/api/history');
+        const response = await fetch('/reports/matching/api/history');
         const history = await response.json();
         
         const historyDiv = document.getElementById('matchHistory');
@@ -720,7 +720,7 @@ async function loadMatchHistory() {
 
 async function updateStatusDropdown(side, platform) {
     try {
-        const response = await fetch(`/matching/api/platform-status-options/${platform}`);
+        const response = await fetch(`/reports/matching/api/platform-status-options/${platform}`);
         const statuses = await response.json();
         
         const statusSelect = document.getElementById(`status${side}`);

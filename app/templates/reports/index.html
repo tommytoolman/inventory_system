@@ -12,26 +12,72 @@
     
     <!-- Report Categories -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        
-        <!-- Status Mismatches Report -->
+
+        <!-- Platform Coverage Report -->
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center mb-4">
-                <div class="p-2 bg-red-100 rounded-lg mr-3">
-                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                <div class="p-2 bg-yellow-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4" />
                     </svg>
                 </div>
                 <div>
-                    <h3 class="text-lg font-semibold">Status Mismatches</h3>
-                    <p class="text-sm text-gray-500">Products with different statuses across platforms</p>
+                    <h3 class="text-lg font-semibold">Platform Coverage</h3>
+                    <p class="text-sm text-gray-500">Products missing from certain platforms</p>
                 </div>
             </div>
             <p class="text-gray-600 mb-4">
-                Identify products that are active on one platform but sold/ended on another. 
-                Critical for preventing overselling and maintaining accurate inventory.
+                Find products listed on some platforms but missing from others.
+                Identify opportunities to maximize sales reach.
             </p>
-            <a href="/reports/status-mismatches" 
-                class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+            <a href="/reports/platform-coverage"
+                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                View Report →
+            </a>
+        </div>
+
+        <!-- Sales & Ended Listings Report -->
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center mb-4">
+                <div class="p-2 bg-indigo-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold">Sales & Ended Listings</h3>
+                    <p class="text-sm text-gray-500">Track sold items and determine sale platforms</p>
+                </div>
+            </div>
+            <p class="text-gray-600 mb-4">
+                Comprehensive view of all sales with intelligent platform detection.
+                See where items sold versus being removed offline.
+            </p>
+            <a href="/reports/sales"
+                class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                View Report →
+            </a>
+        </div>
+
+        <!-- Non-Performing Inventory Report -->
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center mb-4">
+                <div class="p-2 bg-orange-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold">Non-Performing Inventory</h3>
+                    <p class="text-sm text-gray-500">Slow-moving stock analysis and optimization</p>
+                </div>
+            </div>
+            <p class="text-gray-600 mb-4">
+                Identify inventory that's been on the market for 3+ months with detailed engagement metrics.
+                Optimize pricing and unlock tied-up capital.
+            </p>
+            <a href="/reports/non-performing-inventory"
+               class="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors">
                 View Report →
             </a>
         </div>
@@ -52,58 +98,35 @@
             <p class="text-gray-600 mb-4">
                 Review a detailed feed of all detected changes, errors, and new listings before they are fully processed.
             </p>
-            <a href="/reports/sync-events" 
+            <a href="/reports/sync-events"
                 class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
                 View Report →
             </a>
         </div>
 
-        <!-- Non-Performing Inventory Report -->
+        <!-- Status Mismatches Report -->
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center mb-4">
-                <div class="p-2 bg-orange-100 rounded-lg mr-3">
-                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div class="p-2 bg-red-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
                     </svg>
                 </div>
                 <div>
-                    <h3 class="text-lg font-semibold">Non-Performing Inventory</h3>
-                    <p class="text-sm text-gray-500">Slow-moving stock analysis and optimization</p>
+                    <h3 class="text-lg font-semibold">Status Mismatches</h3>
+                    <p class="text-sm text-gray-500">Products with different statuses across platforms</p>
                 </div>
             </div>
             <p class="text-gray-600 mb-4">
-                Identify inventory that's been on the market for 3+ months with detailed engagement metrics. 
-                Optimize pricing and unlock tied-up capital.
+                Identify products that are active on one platform but sold/ended on another.
+                Critical for preventing overselling and maintaining accurate inventory.
             </p>
-            <a href="/reports/non-performing-inventory" 
-               class="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors">
+            <a href="/reports/status-mismatches"
+                class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
                 View Report →
             </a>
         </div>
-        
-        <!-- Platform Coverage Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-yellow-100 rounded-lg mr-3">
-                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4" />
-                    </svg>
-                </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Platform Coverage</h3>
-                    <p class="text-sm text-gray-500">Products missing from certain platforms</p>
-                </div>
-            </div>
-            <p class="text-gray-600 mb-4">
-                Find products listed on some platforms but missing from others. 
-                Identify opportunities to maximize sales reach.
-            </p>
-            <a href="/reports/platform-coverage" 
-                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                View Report →
-            </a>
-        </div>
-        
+
         <!-- Price Inconsistencies Report -->
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center mb-4">
@@ -118,21 +141,21 @@
                 </div>
             </div>
             <p class="text-gray-600 mb-4">
-                Detect products with significant price differences between platforms. 
+                Detect products with significant price differences between platforms.
                 Ensure consistent pricing strategy.
             </p>
-            <a href="/reports/price-inconsistencies" 
+            <a href="/reports/price-inconsistencies"
                 class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                 View Report →
             </a>
         </div>
-        
+
         <!-- Sync Statistics Report -->
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center mb-4">
                 <div class="p-2 bg-green-100 rounded-lg mr-3">
                     <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                 </div>
                 <div>
@@ -141,38 +164,38 @@
                 </div>
             </div>
             <p class="text-gray-600 mb-4">
-                View comprehensive sync statistics including events processed, sales detected, 
+                View comprehensive sync statistics including events processed, sales detected,
                 and error rates. Track sync health over time.
             </p>
-            <a href="/reports/sync-stats" 
+            <a href="/reports/sync-stats"
                 class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                 View Report →
             </a>
         </div>
-        
-        <!-- Sales & Ended Listings Report -->
+
+        <!-- Product Matching Interface -->
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
             <div class="flex items-center mb-4">
-                <div class="p-2 bg-indigo-100 rounded-lg mr-3">
-                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                <div class="p-2 bg-teal-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                 </div>
                 <div>
-                    <h3 class="text-lg font-semibold">Sales & Ended Listings</h3>
-                    <p class="text-sm text-gray-500">Track sold items and determine sale platforms</p>
+                    <h3 class="text-lg font-semibold">Product Matching</h3>
+                    <p class="text-sm text-gray-500">Manual cross-platform product matching</p>
                 </div>
             </div>
             <p class="text-gray-600 mb-4">
-                Comprehensive view of all sales with intelligent platform detection. 
-                See where items sold versus being removed offline.
+                Manually match products across different platforms to ensure accurate inventory tracking.
+                Side-by-side comparison with filtering and search capabilities.
             </p>
-            <a href="/reports/sales" 
-                class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                View Report →
+            <a href="/reports/matching"
+                class="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors">
+                Open Matcher →
             </a>
         </div>
-        
+
     </div>
 </div>
 {% endblock %}

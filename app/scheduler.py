@@ -5,7 +5,6 @@ Works on Railway and other hosting platforms.
 """
 
 import logging
-import asyncio
 from datetime import datetime
 from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -14,7 +13,6 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 import httpx
 import os
 
-from app.core.config import get_settings
 from app.database import async_session
 
 logger = logging.getLogger(__name__)
@@ -27,12 +25,14 @@ async def sync_all_platforms_task():
     """Task to sync all platforms"""
     try:
         logger.info("=== SCHEDULED SYNC STARTING ===")
-        settings = get_settings()
 
         # Get the base URL - in Railway this will be the internal URL
-        base_url = os.getenv("RAILWAY_PRIVATE_DOMAIN", "localhost:8080")
-        if not base_url.startswith("http"):
-            base_url = f"http://{base_url}"
+        if os.getenv("RAILWAY_ENVIRONMENT"):
+            # On Railway, use the internal domain
+            base_url = f"http://0.0.0.0:{os.getenv('PORT', '8080')}"
+        else:
+            # Local development
+            base_url = "http://localhost:8080"
 
         # Get auth credentials
         auth_user = os.getenv("BASIC_AUTH_USERNAME", "admin")

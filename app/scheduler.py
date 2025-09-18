@@ -57,7 +57,7 @@ async def sync_all_platforms_task():
                     await db.execute(
                         text("""
                         INSERT INTO activity_log (action, entity_type, entity_id, platform, details, user_id, created_at)
-                        VALUES ('scheduled_sync', 'system', 'scheduler', 'all', :details, 'system', NOW())
+                        VALUES ('scheduled_sync', 'system', 'scheduler', 'all', :details, NULL, NOW())
                         """),
                         {"details": result}
                     )

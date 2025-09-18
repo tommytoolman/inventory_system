@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from fastapi.responses import RedirectResponse
-from .database import get_session
+from app.database import get_session
 from app.routes import inventory, websockets as websocket_router
 from app.core.config import get_settings
 from app.core.security import get_current_username

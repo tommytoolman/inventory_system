@@ -54,12 +54,13 @@ async def sync_all_platforms_task():
                 # Log to database for tracking
                 async with async_session() as db:
                     from sqlalchemy import text
+                    import json
                     await db.execute(
                         text("""
                         INSERT INTO activity_log (action, entity_type, entity_id, platform, details, user_id, created_at)
-                        VALUES ('scheduled_sync', 'system', 'scheduler', 'all', :details, NULL, NOW())
+                        VALUES ('scheduled_sync', 'system', 'scheduler', 'all', :details::jsonb, NULL, NOW())
                         """),
-                        {"details": result}
+                        {"details": json.dumps(result)}
                     )
                     await db.commit()
             else:

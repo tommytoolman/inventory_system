@@ -58,10 +58,66 @@
                         class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                         Match Products
                     </a> -->
-                    <a href="/reports" 
+                    <a href="/reports"
                         class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                         Reports
                     </a>
+                    <div class="relative inline-block text-left" id="syncDropdown">
+                        <button type="button"
+                                class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                                onclick="toggleSyncMenu(event)"
+                                aria-expanded="false">
+                            Sync
+                            <svg class="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+
+                        <div id="syncMenu"
+                             class="origin-top-left absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50"
+                             role="menu"
+                             aria-orientation="vertical"
+                             aria-labelledby="menu-button">
+                            <div class="py-1" role="none">
+                                <a href="#" onclick="triggerSync('all'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <svg class="w-4 h-4 mr-2 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Sync All Platforms
+                                </a>
+                                <div class="border-t border-gray-100"></div>
+                                <a href="#" onclick="triggerSync('reverb'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2">
+                                    Sync Reverb
+                                </a>
+                                <a href="#" onclick="triggerSync('ebay'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2">
+                                    Sync eBay
+                                </a>
+                                <a href="#" onclick="triggerSync('shopify'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2">
+                                    Sync Shopify
+                                </a>
+                                <a href="#" onclick="triggerSync('vr'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2">
+                                    Sync V&R
+                                </a>
+                                <div class="border-t border-gray-100"></div>
+                                <a href="#" onclick="checkSchedulerStatus(); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Scheduler Status
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                     <div class="relative inline-block text-left" id="platformDropdown">
                         <button type="button" 
                                 class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
@@ -160,16 +216,16 @@
             event.stopPropagation(); // Prevent immediate document click
             const menu = document.getElementById('platformMenu');
             const isHidden = menu.classList.contains('hidden');
-            
+
             // Close menu if it's open
             if (!isHidden) {
                 menu.classList.add('hidden');
                 return;
             }
-            
+
             // Open menu
             menu.classList.remove('hidden');
-            
+
             // Close menu when clicking outside
             function closeMenu(e) {
                 const dropdown = document.getElementById('platformDropdown');
@@ -178,8 +234,107 @@
                     document.removeEventListener('click', closeMenu);
                 }
             }
-            
+
             document.addEventListener('click', closeMenu);
+        }
+
+        function toggleSyncMenu(event) {
+            event.stopPropagation();
+            const menu = document.getElementById('syncMenu');
+            const isHidden = menu.classList.contains('hidden');
+
+            // Close menu if it's open
+            if (!isHidden) {
+                menu.classList.add('hidden');
+                return;
+            }
+
+            // Open menu
+            menu.classList.remove('hidden');
+
+            // Close menu when clicking outside
+            function closeMenu(e) {
+                if (!document.getElementById('syncDropdown').contains(e.target)) {
+                    menu.classList.add('hidden');
+                    document.removeEventListener('click', closeMenu);
+                }
+            }
+
+            document.addEventListener('click', closeMenu);
+        }
+
+        // Sync functions
+        async function triggerSync(platform) {
+            // Close the sync menu
+            document.getElementById('syncMenu').classList.add('hidden');
+
+            // Show a notification
+            const message = platform === 'all' ? 'Starting sync for all platforms...' : `Starting ${platform} sync...`;
+            showNotification(message, 'info');
+
+            try {
+                const endpoint = platform === 'all' ? '/api/sync/all' : `/api/sync/${platform}`;
+                const response = await fetch(endpoint, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showNotification(data.message || `${platform} sync initiated successfully`, 'success');
+                } else {
+                    showNotification(data.message || `Failed to start ${platform} sync`, 'error');
+                }
+            } catch (error) {
+                console.error(`Error syncing ${platform}:`, error);
+                showNotification(`Error starting ${platform} sync`, 'error');
+            }
+        }
+
+        // Notification helper
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity duration-300 ${
+                type === 'success' ? 'bg-green-600 text-white' :
+                type === 'error' ? 'bg-red-600 text-white' :
+                'bg-blue-600 text-white'
+            }`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Check scheduler status
+        async function checkSchedulerStatus() {
+            // Close the sync menu
+            document.getElementById('syncMenu').classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/scheduler/status');
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Format the scheduler status
+                    let statusMessage = `Scheduler: ${data.status}`;
+                    if (data.jobs && data.jobs.length > 0) {
+                        const job = data.jobs.find(j => j.id === 'sync_all_platforms');
+                        if (job) {
+                            statusMessage += `\nNext sync: ${job.next_run ? new Date(job.next_run).toLocaleString('en-GB', {timeZone: 'Europe/London'}) : 'Not scheduled'}`;
+                        }
+                    }
+
+                    // Show notification with status
+                    showNotification(statusMessage, 'info');
+                } else {
+                    showNotification('Scheduler not available', 'error');
+                }
+            } catch (error) {
+                console.error('Error checking scheduler status:', error);
+                showNotification('Failed to check scheduler status', 'error');
+            }
         }
         </script>
     </body>

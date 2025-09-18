@@ -27,7 +27,7 @@
         
         <!-- Shopify Card -->
         <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-3">
                 <h2 class="text-lg font-semibold">Shopify</h2>
                 <div class="flex items-center space-x-2">
                     <span class="text-sm {{ 'text-green-600' if shopify_connected else 'text-red-600' }}">
@@ -36,6 +36,9 @@
                     <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if shopify_connected else 'bg-red-500' }}"></div>
                 </div>
             </div>
+
+            <!-- Divider line -->
+            <div class="border-b border-gray-200 mb-4"></div>
             
             <!-- Active Count - Bold -->
             <div class="mb-4">
@@ -102,7 +105,7 @@
         
         <!-- Reverb Card -->
         <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-3">
                 <h3 class="text-lg font-semibold">Reverb</h3>
                 <div class="flex items-center space-x-2">
                     <span class="text-sm {{ 'text-green-600' if reverb_connected else 'text-red-600' }}">
@@ -111,6 +114,9 @@
                     <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if reverb_connected else 'bg-red-500' }}"></div>
                 </div>
             </div>
+
+            <!-- Divider line -->
+            <div class="border-b border-gray-200 mb-4"></div>
             
             <!-- Active (Live) Count - Bold -->
             <div class="mb-4">
@@ -184,7 +190,7 @@
         
         <!-- V&R Card -->
         <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-3">
                 <h2 class="text-lg font-semibold">Vintage & Rare</h2>
                 <div class="flex items-center space-x-2">
                     <span class="text-sm {{ 'text-green-600' if vr_connected else 'text-red-600' }}">
@@ -193,6 +199,9 @@
                     <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if vr_connected else 'bg-red-500' }}"></div>
                 </div>
             </div>
+
+            <!-- Divider line -->
+            <div class="border-b border-gray-200 mb-4"></div>
             
             <!-- Active Count - Bold -->
             <div class="mb-4">
@@ -266,7 +275,7 @@
 
         <!-- eBay Card -->
         <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-3">
                 <h2 class="text-lg font-semibold">eBay</h2>
                 <div class="flex items-center space-x-2">
                     <span class="text-sm {{ 'text-green-600' if ebay_connected else 'text-red-600' }}">
@@ -275,6 +284,9 @@
                     <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if ebay_connected else 'bg-red-500' }}"></div>
                 </div>
             </div>
+
+            <!-- Divider line -->
+            <div class="border-b border-gray-200 mb-4"></div>
             
             <!-- Active Count - Bold -->
             <div class="mb-4">
@@ -354,63 +366,92 @@
 
     <!-- Sync Section -->
     <div class="mb-10">
-        <h2 class="text-xl font-semibold mb-4">Inventory Synchronization</h2>
-        
-        <!-- Sync Status -->
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-            <h3 class="text-lg font-medium mb-4">Sync Status</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {% for platform in ['shopify', 'reverb', 'vr','ebay'] %}
-                    {% set platform_name = 'Vintage & Rare' if platform == 'vr' else platform.title() %}
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <span class="font-medium">{{ platform_name }}</span>
-                            <p class="text-sm text-gray-500" id="{{ platform }}-last-sync-display">
-                                {% if platform == 'shopify' and ebay_last_sync %}
-                                    Last sync: 
-                                        {% if shopify_last_sync is not none and shopify_last_sync is not string %}
-                                            {{ shopify_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                                        {% else %}
-                                            {{ shopify_last_sync }}
-                                        {% endif %}
-                                {% elif platform == 'reverb' and reverb_last_sync %}
-                                    Last sync: {{ reverb_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                                {% elif platform == 'vr' and vr_last_sync %}
-                                    Last sync: {{ vr_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                                {% elif platform == 'ebay' and shopify_last_sync %}
-                                    Last sync: {{ ebay_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                                {% else %}
-                                    Never synced
-                                {% endif %}
-                            </p>
-                        </div>
-                        <span id="{{ platform }}-sync-status" class="text-sm text-gray-500">
-                            IDLE
-                        </span>
+        <h2 class="text-xl font-semibold mb-4">Inventory Sync Status</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Shopify Sync Card -->
+            <div class="bg-gray-50 rounded-lg shadow p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2">
+                        <h4 class="font-medium">Shopify</h4>
                     </div>
-                {% endfor %}
+                    <span id="shopify-sync-status" class="text-sm text-gray-500">
+                        IDLE
+                    </span>
+                </div>
+                <p class="text-sm text-gray-600" id="shopify-last-sync-display">
+                    {% if shopify_last_sync %}
+                        Last sync:
+                        {% if shopify_last_sync is not none and shopify_last_sync is not string %}
+                            {{ shopify_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                        {% else %}
+                            {{ shopify_last_sync }}
+                        {% endif %}
+                    {% else %}
+                        Never synced
+                    {% endif %}
+                </p>
             </div>
-        </div>
-        
-        <!-- Sync Actions -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium mb-4">Sync Actions</h3>
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <button id="sync-all" class="bg-green-600 hover:bg-green-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('all')">
-                    Sync All Platforms
-                </button>
-                <button id="sync-shopify" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('shopify')">
-                    Sync Shopify
-                </button>
-                <button id="sync-reverb" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('reverb')">
-                    Sync Reverb
-                </button>
-                <button id="sync-vr" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('vr')">
-                    Sync V & R
-                </button>
-                <button id="sync-ebay" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 text-center" onclick="triggerSync('ebay')">
-                    Sync eBay
-                </button>
+
+            <!-- Reverb Sync Card -->
+            <div class="bg-gray-50 rounded-lg shadow p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2">
+                        <h4 class="font-medium">Reverb</h4>
+                    </div>
+                    <span id="reverb-sync-status" class="text-sm text-gray-500">
+                        IDLE
+                    </span>
+                </div>
+                <p class="text-sm text-gray-600" id="reverb-last-sync-display">
+                    {% if reverb_last_sync %}
+                        Last sync: {{ reverb_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                    {% else %}
+                        Never synced
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- V&R Sync Card -->
+            <div class="bg-gray-50 rounded-lg shadow p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2">
+                        <h4 class="font-medium">Vintage & Rare</h4>
+                    </div>
+                    <span id="vr-sync-status" class="text-sm text-gray-500">
+                        IDLE
+                    </span>
+                </div>
+                <p class="text-sm text-gray-600" id="vr-last-sync-display">
+                    {% if vr_last_sync %}
+                        Last sync: {{ vr_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                    {% else %}
+                        Never synced
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- eBay Sync Card -->
+            <div class="bg-gray-50 rounded-lg shadow p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2">
+                        <h4 class="font-medium">eBay</h4>
+                    </div>
+                    <span id="ebay-sync-status" class="text-sm text-gray-500">
+                        IDLE
+                    </span>
+                </div>
+                <p class="text-sm text-gray-600" id="ebay-last-sync-display">
+                    {% if ebay_last_sync %}
+                        Last sync: {{ ebay_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
+                    {% else %}
+                        Never synced
+                    {% endif %}
+                </p>
             </div>
         </div>
     </div>
@@ -527,11 +568,7 @@ function handleSyncUpdateOld(data) {
             syncAllState.completedPlatforms.add(platform);
             
             if (syncAllState.completedPlatforms.size === syncAllState.platformsToSync.length) {
-                const allButton = document.getElementById('sync-all');
-                if (allButton) {
-                    allButton.innerText = allButton.dataset.originalText || 'Sync All Platforms';
-                    allButton.disabled = false;
-                }
+                // Sync All button is now in the navigation menu
                 syncAllState.isSyncingAll = false;
                 syncAllState.completedPlatforms.clear();
             }
@@ -568,11 +605,7 @@ function handleSyncUpdate(data) {
             syncAllState.completedPlatforms.add(platform);
             
             if (syncAllState.completedPlatforms.size === syncAllState.platformsToSync.length) {
-                const allButton = document.getElementById('sync-all');
-                if (allButton) {
-                    allButton.innerText = allButton.dataset.originalText || 'Sync All Platforms';
-                    allButton.disabled = false;
-                }
+                // Sync All button is now in the navigation menu
                 syncAllState.isSyncingAll = false;
                 syncAllState.completedPlatforms.clear();
             }
@@ -585,12 +618,7 @@ function handleSyncUpdate(data) {
         // Handle sync all completion - refresh the entire dashboard
         console.log(`Sync All completed with status: ${data.status}`);
         
-        // Reset the Sync All button
-        const allButton = document.getElementById('sync-all');
-        if (allButton) {
-            allButton.innerText = allButton.dataset.originalText || 'Sync All Platforms';
-            allButton.disabled = false;
-        }
+        // Sync All button is now in the navigation menu
         
         // Reset sync all state
         syncAllState.isSyncingAll = false;
@@ -691,62 +719,56 @@ function addToRecentActivity(icon, message, timestamp) {
     }
 }
 
-async function triggerSync(platform) {
-    console.log(`Triggering sync for: ${platform}`);
-    
-    if (platform === 'all') {
-        const allButton = document.getElementById('sync-all');
-        if (allButton) {
-            if (!allButton.dataset.originalText) {
-                allButton.dataset.originalText = allButton.innerText;
-            }
-            allButton.disabled = true;
-            allButton.innerHTML = `<span class="inline-block animate-spin mr-2">↻</span> Syncing All...`;
-        }
+// Sync functionality moved to navigation menu in base.html
 
-        syncAllState.isSyncingAll = true;
-        syncAllState.completedPlatforms.clear();
+function convertToBritishTime(utcTimeString) {
+    // Parse the UTC time string (format: "dd/mm/yyyy, HH:MM:SS")
+    const parts = utcTimeString.split(', ');
+    const dateParts = parts[0].split('/');
+    const timeParts = parts[1].split(':');
 
-        try {
-            const response = await fetch(`/api/sync/all`, { method: 'POST' });
-            const data = await response.json();
-            
-            if (data.status !== 'success') {
-                console.error("Failed to initiate sync all");
-                if (allButton) {
-                    allButton.innerText = allButton.dataset.originalText || 'Sync All Platforms';
-                    allButton.disabled = false;
-                }
-                syncAllState.isSyncingAll = false;
-            }
-        } catch (error) {
-            console.error(`Error calling /api/sync/all:`, error);
-            if (allButton) {
-                allButton.innerText = allButton.dataset.originalText || 'Sync All Platforms';
-                allButton.disabled = false;
-            }
-            syncAllState.isSyncingAll = false;
-        }
-    } else {
-        const button = document.getElementById(`sync-${platform}`);
-        if (button) {
-            if (!button.dataset.originalText) {
-                button.dataset.originalText = button.innerText;
-            }
-        }
+    // Create a UTC date object
+    const utcDate = new Date(Date.UTC(
+        parseInt(dateParts[2]), // year
+        parseInt(dateParts[1]) - 1, // month (0-indexed)
+        parseInt(dateParts[0]), // day
+        parseInt(timeParts[0]), // hour
+        parseInt(timeParts[1]), // minute
+        parseInt(timeParts[2])  // second
+    ));
 
-        try {
-            const response = await fetch(`/api/sync/${platform}`, { method: 'POST' });
-            const data = await response.json();
-            console.log(`Sync ${platform} response:`, data);
-        } catch (error) {
-            console.error(`Error syncing ${platform}:`, error);
+    // Convert to British time
+    return utcDate.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        timeZone: 'Europe/London'
+    }) + ', ' + utcDate.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        timeZone: 'Europe/London'
+    });
+}
+
+function convertAllSyncTimes() {
+    // Convert all sync times on page load
+    ['shopify', 'reverb', 'vr', 'ebay'].forEach(platform => {
+        const syncDisplay = document.getElementById(`${platform}-last-sync-display`);
+        if (syncDisplay && syncDisplay.textContent.includes('Last sync:')) {
+            const timeMatch = syncDisplay.textContent.match(/Last sync:\s*(\d{2}\/\d{2}\/\d{4},\s*\d{2}:\d{2}:\d{2})/);
+            if (timeMatch) {
+                const britishTime = convertToBritishTime(timeMatch[1]);
+                syncDisplay.textContent = `Last sync: ${britishTime}`;
+            }
         }
-    }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     initWebSocket();
+    convertAllSyncTimes();
 });
 </script>
 {% endblock %}

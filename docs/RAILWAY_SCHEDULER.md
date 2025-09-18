@@ -216,7 +216,7 @@ Railway uses UTC. Adjust your cron schedules accordingly:
 ```bash
 # Railway Environment Variables
 SYNC_SCHEDULE_ENABLED=true
-SYNC_SCHEDULE=35 11,15,19,23,3,7 * * *  # Starting at 11:35 UTC (12:35 BST), then every 4 hours
+SYNC_SCHEDULE=45 11,15,19,23,3,7 * * *  # Starting at 11:45 UTC (12:45 BST), then every 4 hours
 # Note: BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD should already be set in your Railway environment
 LOG_LEVEL=INFO
 ```

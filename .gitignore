@@ -36,3 +36,10 @@ ebay_tokens.json
 !app/static/images/background.jpg
 # More Image Files
 *.png
+
+# Cache files
+app/cache/
+*.cache
+cache.json
+sync_state.json
+temp_links.json

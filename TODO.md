@@ -164,4 +164,269 @@ A new table, `category_mappings`, will be created with the following structure:
 - Sync frequency target: 2x daily status checks
 
 ---
-*Last Updated: 2025-09-04*
+
+## ~~OLD TODO CONTENT (Archived 2025-09-17)~~
+
+<details>
+<summary>Click to view archived content</summary>
+
+~~The content above has been superseded by the consolidated TODO list below.~~
+
+</details>
+
+---
+
+# CONSOLIDATED TODO LIST - CURRENT
+*Last Updated: 2025-09-17*
+
+## ✅ COMPLETED TASKS
+
+### Architecture & Infrastructure
+- [x] Set up basic FastAPI application
+- [x] Configure PostgreSQL database
+- [x] Create initial models
+- [x] Deprecate integration abstraction layer
+- [x] Move `app/integrations_old` to `old/` directory
+- [x] Remove StockManager references from webhook_processor.py
+- [x] Extract StockUpdateEvent to `app/core/events.py`
+- [x] Update test files to remove integration layer references
+- [x] Delete obsolete integration test files
+- [x] Verify system still works after cleanup
+- [x] Replace all migrations with squashed initial migration (Railway deployment)
+- [x] Add basic HTTP authentication to all routes
+- [x] Export/import local database to Railway (12,498 rows)
+- [x] Fix background image not showing on deployed app
+- [x] Remove .env.test from git history
+- [x] Remove ebay_tokens.json from git history
+- [x] Implement secure in-memory token storage for eBay
+- [x] Update token generation scripts to not use JSON files
+- [x] Delete all remaining token JSON files
+
+### VR Service Fixes
+- [x] Add timeout configuration (180s) to VR inventory download
+- [x] Add Selenium browser cleanup method
+- [x] Add pre-operation temp file cleanup
+- [x] Fix DataFrame comparison error (check type before comparing to string)
+- [x] Fix VR reconciliation column name mismatches (spaces vs underscores)
+- [x] Fix missing extended_attributes and last_synced_at in reconciliation
+- [x] Fix price_notax field - use `product_price` from CSV
+- [x] Create one-off script to fix missing vr_listings entries
+
+### UI Improvements
+- [x] Add consistent status color scheme across list and detail pages
+- [x] Apply title case to brand names in templates
+- [x] Apply title case to status displays
+- [x] Add configurable dropdown sorting (categories by count, brands alphabetical)
+- [x] Document dropdown configuration in README
+
+### Platform Integrations
+- [x] Set up Reverb API client
+- [x] Create basic CSV handler
+- [x] Implement VintageAndRare import
+- [x] Fixed Shopify Extended Attributes (were empty, now store full API data)
+- [x] Enhanced eBay Service for flexibility (sandbox support, shipping profiles)
+- [x] Generated new eBay sandbox tokens
+
+### Data Models
+- [x] Create Product model
+- [x] Create PlatformListing model
+
+## 🔴 CRITICAL ISSUES (Priority 1 - Blocking Production)
+
+### eBay Service Issues
+- [ ] **Fix eBay category parsing error** - `'list' object has no attribute 'get'` in test_ebay_conditions.py
+  - Quick win - should be easy fix in response parsing
+  - Blocking: Ability to validate item conditions before listing
+
+- [ ] **Consolidate eBay service implementations**
+  - Current state: 3 competing implementations
+    - `importer.py`: Async + Raw SQL (used by `scripts/ebay/import_ebay.py`)
+    - `inventory.py`: Sync + ORM (EbayInventorySync class)
+    - `service.py`: Async + ORM (incomplete, has placeholder product_id=1)
+  - Decision needed: Keep `importer.py` for import script, refactor others to single async ORM approach
+  - Risk: Data consistency issues, race conditions
+
+### eBay Shipping Configuration
+- [ ] **Fix eBay Shipping Mismatch**
+  - Inventory Route: Uses use_shipping_profile=True with hardcoded Business Policy IDs - WORKS
+  - Sync Service: Uses use_shipping_profile=False trying to map Reverb shipping inline - FAILS
+  - Solution: Update sync service to use Business Policies or fix inline shipping mapping
+  - Move hardcoded policy IDs to configuration settings
+
+### Sync Event Processing
+- [ ] **Fix Partial Status Processing for eBay**
+  - Sync events with status 'partial' are being skipped
+  - Event ID 12292 can be used as test case
+  - Ensure --retry-errors flag works for 'partial' status
+
+## 🟡 IMPORTANT ISSUES (Priority 2 - Needed for Full Functionality)
+
+### Platform Stats Updates
+- [ ] **Implement Stats Updates During Sync**
+  - Platform stats (views, watches, offers) aren't being updated
+  - Available data:
+    - Reverb: view_count, watch_count
+    - eBay: WatchCount
+    - VR: stats: {views: 257, watches: 26}
+    - Shopify: Likely available via GraphQL
+  - Solution: Implement "silent" sync that updates stats without creating sync events
+
+### VR Service Issues
+- [ ] **Fix VR Reconciliation Failure**
+  - VR listings created successfully but reconciliation can't find VR ID
+  - Need retry mechanism as VR can be unreliable
+  - Fix VR service to properly capture and store listing ID after creation
+
+- [ ] **Rename `price_notax` field** to `price` or `vr_price` in vr_listings table
+- [ ] **Consolidate VR listing creation logic** - Currently duplicated in multiple files
+- [ ] **Add VR listing URL resolution** - VR doesn't return ID immediately
+- [ ] **Improve VR reconciliation matching** - Currently uses brand/model/price
+
+### Product Update Sync
+- [ ] **Enable Product Update Sync to Platforms**
+  - Editing product details doesn't sync changes to platforms
+  - Edit UI works but platform sync is disabled due to errors
+  - Implement proper update sync that pushes changes to all platforms
+
+### Testing & Verification
+- [ ] Implement sync verification system for hybrid testing phase
+- [ ] Create "To Do" list generation for manual verification
+- [ ] Add conflict resolution for external listings detected
+- [ ] Verify sync operations correctly update local DB
+
+### Platform Implementations
+- [ ] Complete V&R service missing methods
+- [ ] Finish Shopify integration (uncomment sync triggers)
+- [ ] Standardize platform-specific error handling
+- [ ] Implement cross-platform sync after sales
+- [ ] **eBay ItemSpecifics for Niche Categories** - Musical instruments need specific attributes
+
+### Database & Models
+- [ ] Set up database migrations properly (Alembic)
+- [ ] Add validation rules to models
+- [ ] Create database indices for performance
+- [ ] Add audit trail functionality
+- [ ] Create models for tables without them:
+  - csv_import_logs
+  - platform_category_mappings
+  - platform_policies
+  - product_merges
+- [ ] **Implement eBay Listings Table Entry** after successful API call
+
+### Security & Authentication
+- [ ] Implement proper user authentication (beyond basic auth)
+- [ ] Add user roles and permissions
+
+## 🔵 NICE TO HAVE (Priority 3 - Quality of Life Improvements)
+
+### Code Organization
+- [ ] Remove empty files: `ebay/schemas.py`, `ebay/sync.py`, `ebay/__init__.py`
+- [ ] Rename `ebay/service.py` → `ebay_repository.py`
+- [ ] Move `ebay_data_analysis.py` to scripts/developer/
+- [ ] Remove duplicate `EbayTradingAPIOld` class from `trading.py`
+- [ ] Clean up old token management scripts (consolidated into new system)
+
+### Category Mapping Database Migration
+- [ ] Create SQLAlchemy model for `category_mappings` table
+- [ ] Write Alembic migration to create table
+- [ ] Write seeding script from `reverb_to_ebay_categories.json`
+- [ ] Update platform services to query DB instead of JSON file
+
+### Frontend Improvements
+- [ ] Create base templates
+- [ ] Implement comprehensive dashboard
+- [ ] Add CSV upload interface
+- [ ] Create advanced product management views
+- [ ] Add platform sync status controls
+- [ ] Implement error reporting interface
+- [ ] Add loading states/spinners for sync operations
+- [ ] Implement progress indicators for bulk operations
+- [ ] Create platform sync status dashboard
+- [ ] Add real-time status updates via WebSockets
+- [ ] Add drag-and-drop support for images
+- [ ] Add image compression before upload
+
+### Documentation
+- [ ] Update API documentation
+- [ ] Create user guides for each platform integration
+- [ ] Document platform-specific behaviors
+- [ ] Add example usage to all docstrings
+- [ ] Set up Sphinx documentation generation
+- [ ] Create deployment documentation
+- [ ] Document platform sync frequency and hierarchy
+
+### CSV Processing
+- [ ] Add export functionality
+- [ ] Implement batch processing
+- [ ] Add progress tracking for large imports
+- [ ] Create error recovery system
+
+### Testing
+- [ ] Set up comprehensive testing framework
+- [ ] Write model tests
+- [ ] Write CSV handler tests
+- [ ] Create platform integration tests
+- [ ] Add frontend tests
+- [ ] Create CI/CD pipeline
+- [ ] Rebuild integration tests after architecture change
+- [ ] Add unit tests for platform services
+- [ ] Create end-to-end tests for sync processes
+- [ ] Test error handling paths
+
+### Monitoring & Operations
+- [ ] Set up monitoring system (Sentry DSN configured)
+- [ ] Configure backup system
+- [ ] Create disaster recovery plan
+- [ ] Set up staging environment
+- [ ] Add logging system throughout application
+
+### Advanced Features
+- [ ] Add bulk operations API
+- [ ] Implement advanced search
+- [ ] Add comprehensive reporting system:
+  - Price Performance Analysis
+  - Platform Arbitrage Finder
+  - Inventory Velocity Dashboard
+  - Dead Stock Liquidation Planner
+- [ ] Create analytics dashboard
+- [ ] Add inventory forecasting
+- [ ] Implement automated pricing system
+
+## 📊 Current State Summary
+
+### Working Well
+- Clean architecture post-cleanup
+- Comprehensive platform API clients (eBay REST + Trading, Reverb, V&R, Shopify)
+- Good async/await patterns
+- StockUpdateEvent system ready for cross-platform sync
+- Basic authentication implemented
+- Deployed to Railway with data migrated
+- Secure token management (no more JSON files)
+- All syncs working remotely (as of 2025-09-17)
+
+### Needs Immediate Attention
+- eBay service implementation consolidation
+- eBay category parsing error fix
+- eBay shipping configuration standardization
+- Stats updates during sync
+- VR reconciliation reliability
+- Product update sync to platforms
+
+## 🚀 Recommended Next Steps
+
+1. **Fix eBay category parsing error** - Quick win, unblocks testing
+2. **Consolidate eBay service implementations** - Choose async ORM approach
+3. **Standardize eBay shipping configuration** - Use Business Policies consistently
+4. **Implement stats updates** - Keep engagement metrics current
+5. **Fix VR reconciliation** - Add retry logic for reliability
+6. **Enable product update sync** - Complete the CRUD cycle
+
+## 📝 Notes
+
+- Need end-to-end testing before tackling remaining bugs
+- Platform hierarchy for sales: First platform to sell wins
+- Sync frequency target: 2x daily status checks
+- About half a dozen bugs remain to be fixed after testing
+
+---
+*Last Updated: 2025-09-17*

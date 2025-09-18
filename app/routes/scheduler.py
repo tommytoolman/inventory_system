@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Dict, Any
 
-from app.dependencies import get_current_username
+from app.core.security import get_current_username
 from app.scheduler import (
     trigger_sync_manually,
     get_scheduler_status,

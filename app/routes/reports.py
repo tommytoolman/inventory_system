@@ -572,7 +572,7 @@ async def sync_events_report(
     db: AsyncSession = Depends(get_session),
     platform_filter: Optional[str] = Query(None, alias="platform"),
     change_type_filter: Optional[str] = Query(None, alias="change_type"),
-    status_filter: Optional[str] = Query(None, alias="status"),
+    status_filter: Optional[str] = Query("pending", alias="status"),
     sort_by: Optional[str] = Query("detected_at", alias="sort"),
     sort_order: Optional[str] = Query("desc", alias="order")
 ):
@@ -580,27 +580,35 @@ async def sync_events_report(
     Report for viewing and filtering unprocessed synchronization events.
     """
     async with get_session() as db:
-        # --- 1. Fetch Summary Statistics ---
-        summary_query = text("""
-        SELECT
-            COUNT(*) FILTER (WHERE status = 'pending') AS pending,
-            COUNT(*) FILTER (WHERE status = 'processed' AND processed_at >= CURRENT_DATE) AS processed_today,
-            COUNT(*) FILTER (WHERE status = 'partial') AS partial,
-            COUNT(*) FILTER (WHERE status = 'error') AS errors
-        FROM sync_events;
+        # --- 1. Fetch Status Counts ---
+        status_counts_query = text("""
+        SELECT status, COUNT(*) as count
+        FROM sync_events
+        GROUP BY status
+        ORDER BY status;
         """)
-        summary_result = await db.execute(summary_query)
-        summary_stats = dict(summary_result.fetchone()._mapping)
+        status_counts_result = await db.execute(status_counts_query)
+        status_counts = {row.status: row.count for row in status_counts_result.fetchall()}
 
-        # --- 2. Fetch Platform Summary ---
-        platform_summary_query = text("""
-        SELECT platform_name, COUNT(*) as event_count
+        # --- 2. Fetch Platform Counts ---
+        platform_counts_query = text("""
+        SELECT platform_name, COUNT(*) as count
         FROM sync_events
         GROUP BY platform_name
-        ORDER BY event_count DESC;
+        ORDER BY platform_name;
         """)
-        platform_summary_result = await db.execute(platform_summary_query)
-        platform_summary = [dict(row._mapping) for row in platform_summary_result.fetchall()]
+        platform_counts_result = await db.execute(platform_counts_query)
+        platform_counts = {row.platform_name: row.count for row in platform_counts_result.fetchall()}
+
+        # --- 3. Fetch Change Type Counts ---
+        change_type_counts_query = text("""
+        SELECT change_type, COUNT(*) as count
+        FROM sync_events
+        GROUP BY change_type
+        ORDER BY change_type;
+        """)
+        change_type_counts_result = await db.execute(change_type_counts_query)
+        change_type_counts = {row.change_type: row.count for row in change_type_counts_result.fetchall()}
 
         # --- 3. Build and Fetch Detailed Events List ---
         params = {}
@@ -657,8 +665,9 @@ async def sync_events_report(
     return templates.TemplateResponse("reports/sync_events_report.html", {
         "request": request,
         "sync_events": sync_events,
-        "summary_stats": summary_stats,
-        "platform_summary": platform_summary,
+        "status_counts": status_counts,
+        "platform_counts": platform_counts,
+        "change_type_counts": change_type_counts,
         "platform_filter": platform_filter,
         "change_type_filter": change_type_filter,
         "status_filter": status_filter,

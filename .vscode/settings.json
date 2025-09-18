@@ -1,5 +1,5 @@
 {
-"workbench.colorTheme": "Python Stereo Darker",
+"workbench.colorTheme": "Visual Studio Dark",
 "workbench.colorCustomizations": {
     "tab.activeBorder": "#ffffab",
     "tab.unfocusedActiveBorder": "#000000"
@@ -15,5 +15,6 @@
     "javascript.validate.enable": false
 },
 "html.validate.scripts": false,
-"html.validate.styles": false
+"html.validate.styles": false,
+"python.defaultInterpreterPath": "./venv/bin/python"
 }

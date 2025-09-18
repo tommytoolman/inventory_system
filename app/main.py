@@ -77,9 +77,22 @@ async def lifespan(app: FastAPI):
     
     print("Starting periodic Dropbox refresh task...")
     asyncio.create_task(periodic_dropbox_refresh(app))
-    
+
+    # Start scheduler if enabled
+    try:
+        from app.scheduler import start_scheduler
+        await start_scheduler()
+    except Exception as e:
+        print(f"Scheduler startup error: {e}")
+
     yield  # This is where the app runs
-    # Shutdown: No specific cleanup needed in this case
+
+    # Shutdown: cleanup
+    try:
+        from app.scheduler import stop_scheduler
+        await stop_scheduler()
+    except Exception as e:
+        print(f"Scheduler shutdown error: {e}")
 
 app = FastAPI(
     title="Realtime Inventory Form Flows",

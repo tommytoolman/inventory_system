@@ -268,8 +268,15 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
         selenium_grid_url = os.environ.get('SELENIUM_GRID_URL')
 
         if selenium_grid_url:
+            # Debug the raw value
+            print(f"DEBUG: Raw SELENIUM_GRID_URL from env: '{selenium_grid_url}'")
+            print(f"DEBUG: URL repr: {repr(selenium_grid_url)}")
+
+            # Strip any whitespace from the URL
+            selenium_grid_url = selenium_grid_url.strip()
+
             # Use remote Selenium Grid
-            print(f"DEBUG: Using remote Selenium Grid at: {selenium_grid_url}")
+            print(f"DEBUG: After strip, using remote Selenium Grid at: '{selenium_grid_url}'")
 
             # Ensure the URL has the correct format
             if not selenium_grid_url.startswith('http'):

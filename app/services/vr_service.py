@@ -200,13 +200,17 @@ class VRService:
         created_count, events_logged = 0, 0
         events_to_create = []
         for item in items:
+            raw_data = item.get('_raw', {})
             event_data = {
                 'sync_run_id': sync_run_id, 'platform_name': 'vr', 'product_id': None,
-                'platform_common_id': None, 'external_id': item['vr_id'], 'change_type': 'new_listing',
+                'platform_common_id': None, 'external_id': item['external_id'], 'change_type': 'new_listing',
                 'change_data': {
-                    'title': f"{item.get('brand')} {item.get('model')}", 'price': item['price'], 'sku': item['sku'],
-                    'is_sold': item['is_sold'], 'listing_url': item.get('listing_url'),
-                    'extended_attributes': item.get('extended_attributes', {})},
+                    'title': f"{raw_data.get('brand_name', '')} {raw_data.get('product_model_name', '')}".strip(),
+                    'price': item['price'],
+                    'sku': f"VR-{item['external_id']}",
+                    'is_sold': item['status'] == 'sold',
+                    'listing_url': raw_data.get('external_link'),
+                    'extended_attributes': raw_data},
                 'status': 'pending'}
             events_to_create.append(event_data)
             created_count += 1

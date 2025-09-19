@@ -37,7 +37,7 @@
             <div class="flex justify-between h-16">
                 <div class="flex-shrink-0 flex items-center">
                     <a href="/inventory" class="text-xl font-bold text-gray-800">
-                        Realtime Inventory Form Feeds System
+                        Realtime Inventory Fast Flow
                     </a>
                 </div>
 
@@ -106,14 +106,6 @@
                                    class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                     <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2">
                                     Sync V&R
-                                </a>
-                                <div class="border-t border-gray-100"></div>
-                                <a href="#" onclick="checkSchedulerStatus(); return false;"
-                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                    <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Scheduler Status
                                 </a>
                             </div>
                         </div>
@@ -204,7 +196,7 @@
     <footer class="bg-white shadow-lg mt-8">
         <div class="max-w-7xl mx-auto py-4 px-4">
             <div class="text-center text-gray-500 text-sm">
-                &copy; 2025 Realtime Inventory Forms Feed System
+                &copy; 2025 Realtime Inventory Fast Flow. All rights reserved.
             </div>
         </div>
     </footer>
@@ -292,50 +284,23 @@
         function showNotification(message, type = 'info') {
             // Create notification element
             const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity duration-300 ${
-                type === 'success' ? 'bg-green-600 text-white' :
-                type === 'error' ? 'bg-red-600 text-white' :
-                'bg-blue-600 text-white'
+            notification.className = `fixed top-4 right-4 px-4 py-2 text-sm rounded-md shadow-md z-50 transition-all duration-300 ${
+                type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
+                type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
+                'bg-gray-50 text-gray-800 border border-gray-200'
             }`;
-            notification.textContent = message;
+            notification.style.maxWidth = '320px';
+            notification.innerHTML = message.replace('\n', '<br>');
             document.body.appendChild(notification);
 
             // Remove after 3 seconds
             setTimeout(() => {
                 notification.style.opacity = '0';
+                notification.style.transform = 'translateX(100%)';
                 setTimeout(() => notification.remove(), 300);
             }, 3000);
         }
 
-        // Check scheduler status
-        async function checkSchedulerStatus() {
-            // Close the sync menu
-            document.getElementById('syncMenu').classList.add('hidden');
-
-            try {
-                const response = await fetch('/api/scheduler/status');
-                const data = await response.json();
-
-                if (response.ok) {
-                    // Format the scheduler status
-                    let statusMessage = `Scheduler: ${data.status}`;
-                    if (data.jobs && data.jobs.length > 0) {
-                        const job = data.jobs.find(j => j.id === 'sync_all_platforms');
-                        if (job) {
-                            statusMessage += `\nNext sync: ${job.next_run ? new Date(job.next_run).toLocaleString('en-GB', {timeZone: 'Europe/London'}) : 'Not scheduled'}`;
-                        }
-                    }
-
-                    // Show notification with status
-                    showNotification(statusMessage, 'info');
-                } else {
-                    showNotification('Scheduler not available', 'error');
-                }
-            } catch (error) {
-                console.error('Error checking scheduler status:', error);
-                showNotification('Failed to check scheduler status', 'error');
-            }
-        }
         </script>
     </body>
 </html>

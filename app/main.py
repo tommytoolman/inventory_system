@@ -24,7 +24,6 @@ from app.routes.platforms.shopify import router as shopify_router
 from app.routes.platforms.sync_all import router as sync_all_router
 from app.routes.webhooks import router as webhook_router
 from app.routers.admin import router as admin_router
-from app.routes.scheduler import router as scheduler_router
 
 from contextlib import asynccontextmanager
 
@@ -79,21 +78,7 @@ async def lifespan(app: FastAPI):
     print("Starting periodic Dropbox refresh task...")
     asyncio.create_task(periodic_dropbox_refresh(app))
 
-    # Start scheduler if enabled
-    try:
-        from app.scheduler import start_scheduler
-        await start_scheduler()
-    except Exception as e:
-        print(f"Scheduler startup error: {e}")
-
     yield  # This is where the app runs
-
-    # Shutdown: cleanup
-    try:
-        from app.scheduler import stop_scheduler
-        await stop_scheduler()
-    except Exception as e:
-        print(f"Scheduler shutdown error: {e}")
 
 app = FastAPI(
     title="Realtime Inventory Form Flows",
@@ -129,7 +114,6 @@ app.include_router(reports.router, prefix="/reports", tags=["reports"], dependen
 app.include_router(shipping.router, dependencies=[require_auth()])
 # app.include_router(matching.router, prefix="/matching", tags=["matching"], dependencies=[require_auth()])  # Moved to reports
 app.include_router(admin_router, dependencies=[require_auth()])
-app.include_router(scheduler_router, dependencies=[require_auth()])
 app.include_router(health.router)  # Health check should be accessible without auth
 
 ## This will show us in CLI all our registered routes. Uncomment to show.

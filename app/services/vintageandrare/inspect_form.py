@@ -314,8 +314,9 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
             )
             print("DEBUG: Chrome WebDriver created successfully")
         
-        # Enable Network domain for CDP
-        driver.execute_cdp_cmd('Network.enable', {})
+        # Enable Network domain for CDP (only for local Chrome, not RemoteWebDriver)
+        if not selenium_grid_url:
+            driver.execute_cdp_cmd('Network.enable', {})
         
         try:
             print("4. Setting up Selenium session...")
@@ -370,7 +371,7 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
                 category_map = map_category_options(driver)
             elif item_data:
                 print("\n12. Filling form...")
-                result = fill_item_form(driver, item_data, test_mode, db_session)  # Pass db_session
+                result = fill_item_form(driver, item_data, test_mode, db_session, is_remote=bool(selenium_grid_url))  # Pass db_session and is_remote
                 return result
             else:
                 print("\n12. Analyzing form elements...")
@@ -391,7 +392,7 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
         return result
     elif item_data:
         print("\n12. Filling create form...")
-        result = fill_item_form(driver, item_data, test_mode, db_session)
+        result = fill_item_form(driver, item_data, test_mode, db_session, is_remote=bool(selenium_grid_url))
         return result
     else:
         print("\n12. Analyzing form elements...")
@@ -815,17 +816,18 @@ def analyze_vr_response_with_network(driver):
                                         print(f"✅ Found product ID in form redirect: {product_id}")
                                         return product_id
                             
-                            # Try to get the response body
-                            try:
-                                response_body = driver.execute_cdp_cmd('Network.getResponseBody', {'requestId': request_id})
-                                body_content = response_body.get('body', '')
-                                
-                                if body_content:
-                                    print(f"✅ FORM RESPONSE BODY: {body_content[:1000]}...")
-                                    
-                                    # Look for item ID in the actual form response
-                                    id_patterns = [
-                                        r'"item_id"[:\s]*"?(\d{5,7})"?',
+                            # Try to get the response body (only for local Chrome)
+                            if not is_remote:
+                                try:
+                                    response_body = driver.execute_cdp_cmd('Network.getResponseBody', {'requestId': request_id})
+                                    body_content = response_body.get('body', '')
+
+                                    if body_content:
+                                        print(f"✅ FORM RESPONSE BODY: {body_content[:1000]}...")
+
+                                        # Look for item ID in the actual form response
+                                        id_patterns = [
+                                            r'"item_id"[:\s]*"?(\d{5,7})"?',
                                         r'"id"[:\s]*"?(\d{5,7})"?',
                                         r'item_id[=:](\d{5,7})',
                                         r'product_id[=:](\d{5,7})',
@@ -848,9 +850,9 @@ def analyze_vr_response_with_network(driver):
                                         if 120000 <= int(num) <= 130000:  # Your observed range
                                             print(f"✅ Found likely product ID in response: {num}")
                                             return num
-                                            
-                            except Exception as e:
-                                print(f"Error getting form response body: {str(e)}")
+
+                                except Exception as e:
+                                    print(f"Error getting form response body: {str(e)}")
                                 
                 except (json.JSONDecodeError, KeyError) as e:
                     continue
@@ -966,7 +968,7 @@ def extract_ids_from_json(json_data, path=""):
     
     return potential_ids
 
-def fill_item_form(driver, item_data, test_mode=True, db_session=None):
+def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote=False):
     """
     Fill in the add/edit item form with the provided data
     """
@@ -1488,7 +1490,7 @@ def edit_item_form(driver, item_id, item_data, test_mode=True, db_session=None):
         
         # Step 3: Fill the form (reuse existing fill_item_form logic)
         print("4. Filling edit form...")
-        result = fill_item_form(driver, item_data_copy, test_mode, db_session)
+        result = fill_item_form(driver, item_data_copy, test_mode, db_session, is_remote=False)  # Always False for edit since it's passed from parent
         
         print(f"✅ Edit form completed for item {item_id}")
         return result

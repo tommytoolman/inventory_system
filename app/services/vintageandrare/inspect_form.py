@@ -263,27 +263,49 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
         # Enable DevTools for response body access
         options.add_argument("--remote-debugging-port=9222")
         
-        # Add detailed logging for ChromeDriver download
-        print("DEBUG: Starting ChromeDriver download/check...")
+        # Check for Selenium Grid URL from environment
+        import os
+        selenium_grid_url = os.environ.get('SELENIUM_GRID_URL')
 
-        import time as time_module
-        start_time = time_module.time()
+        if selenium_grid_url:
+            # Use remote Selenium Grid
+            print(f"DEBUG: Using remote Selenium Grid at: {selenium_grid_url}")
 
-        try:
-            driver_path = ChromeDriverManager().install()
-            elapsed = time_module.time() - start_time
-            print(f"DEBUG: ChromeDriver installed/found in {elapsed:.2f} seconds at: {driver_path}")
-        except Exception as e:
-            elapsed = time_module.time() - start_time
-            print(f"ERROR: ChromeDriver download failed after {elapsed:.2f} seconds: {e}")
-            raise
+            # Ensure the URL has the correct format
+            if not selenium_grid_url.startswith('http'):
+                selenium_grid_url = f"http://{selenium_grid_url}"
+            if not selenium_grid_url.endswith('/wd/hub'):
+                selenium_grid_url = f"{selenium_grid_url}/wd/hub"
 
-        print("DEBUG: Creating Chrome WebDriver instance...")
-        driver = webdriver.Chrome(
-            service=Service(driver_path),
-            options=options
-        )
-        print("DEBUG: Chrome WebDriver created successfully")
+            print(f"DEBUG: Formatted Selenium Grid URL: {selenium_grid_url}")
+
+            driver = webdriver.Remote(
+                command_executor=selenium_grid_url,
+                options=options
+            )
+            print("DEBUG: Connected to Selenium Grid successfully")
+        else:
+            # Local Chrome setup
+            print("DEBUG: Starting ChromeDriver download/check...")
+
+            import time as time_module
+            start_time = time_module.time()
+
+            try:
+                driver_path = ChromeDriverManager().install()
+                elapsed = time_module.time() - start_time
+                print(f"DEBUG: ChromeDriver installed/found in {elapsed:.2f} seconds at: {driver_path}")
+            except Exception as e:
+                elapsed = time_module.time() - start_time
+                print(f"ERROR: ChromeDriver download failed after {elapsed:.2f} seconds: {e}")
+                raise
+
+            print("DEBUG: Creating Chrome WebDriver instance...")
+            driver = webdriver.Chrome(
+                service=Service(driver_path),
+                options=options
+            )
+            print("DEBUG: Chrome WebDriver created successfully")
         
         # Enable Network domain for CDP
         driver.execute_cdp_cmd('Network.enable', {})

@@ -1608,13 +1608,14 @@ class VintageAndRareClient:
         import os
         headless_mode = os.environ.get('VR_HEADLESS', 'true').lower() == 'true'
         is_docker = os.path.exists('/.dockerenv') or os.environ.get('RAILWAY_ENVIRONMENT') is not None
+        selenium_grid_url = os.environ.get('SELENIUM_GRID_URL')  # e.g., https://your-selenium.up.railway.app
 
         if headless_mode:
             options.add_argument("--headless=new")
             logger.info("Running V&R browser in HEADLESS mode")
 
             # Add container-specific optimizations only when in Docker/Railway
-            if is_docker:
+            if is_docker and not selenium_grid_url:  # Only add these if using local Chrome
                 options.add_argument("--no-sandbox")
                 options.add_argument("--disable-dev-shm-usage")
                 options.add_argument("--disable-setuid-sandbox")
@@ -1633,30 +1634,43 @@ class VintageAndRareClient:
         import time as time_module
         start_time = time_module.time()
 
-        try:
-            # In Docker/Railway, ChromeDriver is pre-installed
-            if is_docker:
-                driver_path = "/usr/local/bin/chromedriver"
-                if os.path.exists(driver_path):
-                    logger.info(f"Using pre-installed ChromeDriver in container: {driver_path}")
-                else:
-                    logger.warning("ChromeDriver not found at expected path, falling back to download")
-                    driver_path = ChromeDriverManager().install()
-            else:
-                # Local development - use ChromeDriverManager
-                driver_path = ChromeDriverManager().install()
-                elapsed = time_module.time() - start_time
-                logger.info(f"DEBUG: ChromeDriver installed/found in {elapsed:.2f} seconds at: {driver_path}")
-        except Exception as e:
-            elapsed = time_module.time() - start_time
-            logger.error(f"ERROR: ChromeDriver setup failed after {elapsed:.2f} seconds: {e}")
-            raise
+        # Decide between local Chrome or remote Selenium Grid
+        if selenium_grid_url:
+            # Use remote Selenium Grid
+            logger.info(f"Using remote Selenium Grid at: {selenium_grid_url}")
+            from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
-        logger.info("DEBUG: Creating Chrome WebDriver instance...")
-        driver = webdriver.Chrome(
-            service=Service(driver_path),
-            options=options
-        )
+            driver = webdriver.Remote(
+                command_executor=selenium_grid_url,
+                options=options
+            )
+            logger.info("Connected to Selenium Grid successfully")
+        else:
+            # Local Chrome setup
+            try:
+                # In Docker/Railway without Selenium Grid, ChromeDriver is pre-installed
+                if is_docker:
+                    driver_path = "/usr/local/bin/chromedriver"
+                    if os.path.exists(driver_path):
+                        logger.info(f"Using pre-installed ChromeDriver in container: {driver_path}")
+                    else:
+                        logger.warning("ChromeDriver not found at expected path, falling back to download")
+                        driver_path = ChromeDriverManager().install()
+                else:
+                    # Local development - use ChromeDriverManager
+                    driver_path = ChromeDriverManager().install()
+                    elapsed = time_module.time() - start_time
+                    logger.info(f"DEBUG: ChromeDriver installed/found in {elapsed:.2f} seconds at: {driver_path}")
+            except Exception as e:
+                elapsed = time_module.time() - start_time
+                logger.error(f"ERROR: ChromeDriver setup failed after {elapsed:.2f} seconds: {e}")
+                raise
+
+            logger.info("DEBUG: Creating local Chrome WebDriver instance...")
+            driver = webdriver.Chrome(
+                service=Service(driver_path),
+                options=options
+            )
         logger.info("DEBUG: Chrome WebDriver created successfully")
         
         try:

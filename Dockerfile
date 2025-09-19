@@ -78,5 +78,9 @@ RUN mkdir -p /app/logs /app/cache /app/app/cache && \
 # Set Python path
 ENV PYTHONPATH=/app
 
-# Debug and run
-CMD ["/bin/sh", "-c", "echo 'PORT env var is:' && echo $PORT && exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Railway expects port 8080
+ENV PORT=8080
+EXPOSE 8080
+
+# Run on Railway's expected port
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

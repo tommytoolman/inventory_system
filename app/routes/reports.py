@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import text, select
 from typing import Optional, List, Dict, Any
 from app.database import get_session
 from app.core.templates import templates
 from app.core.config import Settings, get_settings
 from app.services.reconciliation_service import process_reconciliation
+from app.models import SyncEvent
 from scripts.product_matcher import ProductMatcher
 import logging
 
@@ -784,37 +785,67 @@ async def process_sync_event(
     event_id: int,
     settings: Settings = Depends(get_settings)
 ):
-    """Process a single sync event or related events for the same product."""
+    """Process a single sync event - handles all event types including new listings."""
     try:
         async with get_session() as db:
-            # Use the common reconciliation service
-            report = await process_reconciliation(
-                db=db,
-                event_id=event_id,
-                dry_run=False  # Always live mode from UI
-            )
-            
-            # Format the response
-            if report.summary['errors'] > 0:
+            # Check the event type first
+            stmt = select(SyncEvent).where(SyncEvent.id == event_id)
+            result = await db.execute(stmt)
+            event = result.scalar_one_or_none()
+
+            if not event:
                 return {
                     "status": "error",
-                    "message": f"Processed with errors: {report.summary['errors']} errors",
-                    "summary": report.summary,
-                    "actions": report.actions_taken
+                    "message": f"Sync event {event_id} not found"
                 }
-            elif report.summary['processed'] == 0:
+
+            # Route based on event type
+            if event.change_type == 'new_listing':
+                # Use the EventProcessor class EXACTLY like the CLI script
+                from app.services.event_processor import EventProcessor
+
+                processor = EventProcessor(db, dry_run=False)
+                result = await processor.process_sync_event(event)
+
                 return {
-                    "status": "warning",
-                    "message": "No events were processed",
-                    "summary": report.summary
+                    "status": "success" if result.success else "error",
+                    "message": result.message,
+                    "details": {
+                        "product_id": result.product_id,
+                        "platforms_created": result.platforms_created,
+                        "platforms_failed": result.platforms_failed,
+                        "errors": result.errors
+                    }
                 }
             else:
-                return {
-                    "status": "success",
-                    "message": f"Successfully processed {report.summary['processed']} event(s)",
-                    "summary": report.summary,
-                    "actions": report.actions_taken
-                }
+                # Use the existing reconciliation service for other event types
+                report = await process_reconciliation(
+                    db=db,
+                    event_id=event_id,
+                    dry_run=False  # Always live mode from UI
+                )
+
+                # Format the response
+                if report.summary['errors'] > 0:
+                    return {
+                        "status": "error",
+                        "message": f"Processed with errors: {report.summary['errors']} errors",
+                        "summary": report.summary,
+                        "actions": report.actions_taken
+                    }
+                elif report.summary['processed'] == 0:
+                    return {
+                        "status": "warning",
+                        "message": "No events were processed",
+                        "summary": report.summary
+                    }
+                else:
+                    return {
+                        "status": "success",
+                        "message": f"Successfully processed {report.summary['processed']} event(s)",
+                        "summary": report.summary,
+                        "actions": report.actions_taken
+                    }
             
     except Exception as e:
         logger.error(f"Error processing sync event {event_id}: {e}", exc_info=True)

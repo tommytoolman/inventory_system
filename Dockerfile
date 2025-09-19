@@ -78,5 +78,5 @@ RUN mkdir -p /app/logs /app/cache /app/app/cache && \
 # Set Python path
 ENV PYTHONPATH=/app
 
-# Run the application using Python script to handle PORT properly
-CMD ["python", "/app/start_app.py"]
+# Debug and run
+CMD ["/bin/sh", "-c", "echo 'PORT env var is:' && echo $PORT && exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

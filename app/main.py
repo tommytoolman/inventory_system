@@ -85,6 +85,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Add middleware to handle HTTPS behind proxy
+@app.middleware("http")
+async def proxy_headers_middleware(request: Request, call_next):
+    # Railway sets X-Forwarded-Proto header to indicate HTTPS
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    if forwarded_proto == "https":
+        # Update the URL scheme to https
+        request.scope["scheme"] = "https"
+    response = await call_next(request)
+    return response
+
 # Templates - define this once at module level
 templates = Jinja2Templates(directory="app/templates")
 

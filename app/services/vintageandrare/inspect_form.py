@@ -263,10 +263,27 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
         # Enable DevTools for response body access
         options.add_argument("--remote-debugging-port=9222")
         
+        # Add detailed logging for ChromeDriver download
+        print("DEBUG: Starting ChromeDriver download/check...")
+
+        import time as time_module
+        start_time = time_module.time()
+
+        try:
+            driver_path = ChromeDriverManager().install()
+            elapsed = time_module.time() - start_time
+            print(f"DEBUG: ChromeDriver installed/found in {elapsed:.2f} seconds at: {driver_path}")
+        except Exception as e:
+            elapsed = time_module.time() - start_time
+            print(f"ERROR: ChromeDriver download failed after {elapsed:.2f} seconds: {e}")
+            raise
+
+        print("DEBUG: Creating Chrome WebDriver instance...")
         driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
+            service=Service(driver_path),
             options=options
         )
+        print("DEBUG: Chrome WebDriver created successfully")
         
         # Enable Network domain for CDP
         driver.execute_cdp_cmd('Network.enable', {})

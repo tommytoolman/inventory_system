@@ -40,8 +40,8 @@ except ImportError:
 
 # Assuming inspect_form and media_handler are in the same directory
 try:
-    from .inspect_form import login_and_navigate
-    from .media_handler import MediaHandler # Now used directly if needed, or via inspect_form
+    from app.services.vintageandrare.inspect_form import login_and_navigate
+    from app.services.vintageandrare.media_handler import MediaHandler # Now used directly if needed, or via inspect_form
 except ImportError:
     login_and_navigate = None
     MediaHandler = None
@@ -1615,10 +1615,27 @@ class VintageAndRareClient:
         
         options.add_argument("--window-size=1920,1080")
         
+        # Add detailed logging for ChromeDriver download
+        logger.info("DEBUG: Starting ChromeDriver download/check...")
+
+        import time as time_module
+        start_time = time_module.time()
+
+        try:
+            driver_path = ChromeDriverManager().install()
+            elapsed = time_module.time() - start_time
+            logger.info(f"DEBUG: ChromeDriver installed/found in {elapsed:.2f} seconds at: {driver_path}")
+        except Exception as e:
+            elapsed = time_module.time() - start_time
+            logger.error(f"ERROR: ChromeDriver download failed after {elapsed:.2f} seconds: {e}")
+            raise
+
+        logger.info("DEBUG: Creating Chrome WebDriver instance...")
         driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
+            service=Service(driver_path),
             options=options
         )
+        logger.info("DEBUG: Chrome WebDriver created successfully")
         
         try:
             # Step 3: Go to main site first
@@ -1839,7 +1856,7 @@ class VintageAndRareClient:
             logger.info(f"Starting Selenium edit automation for item {item_id}")
             
             # Reuse the SAME login pattern as create, just call edit_item_form instead
-            from .inspect_form import login_and_navigate
+            from app.services.vintageandrare.inspect_form import login_and_navigate
             
             # But we need a way to tell it to edit instead of create
             # Option 1: Add edit mode to existing function

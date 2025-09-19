@@ -1640,6 +1640,14 @@ class VintageAndRareClient:
             logger.info(f"Using remote Selenium Grid at: {selenium_grid_url}")
             from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
+            # Ensure the URL has the correct format
+            if not selenium_grid_url.startswith('http'):
+                selenium_grid_url = f"http://{selenium_grid_url}"
+            if not selenium_grid_url.endswith('/wd/hub'):
+                selenium_grid_url = f"{selenium_grid_url}/wd/hub"
+
+            logger.info(f"Formatted Selenium Grid URL: {selenium_grid_url}")
+
             driver = webdriver.Remote(
                 command_executor=selenium_grid_url,
                 options=options

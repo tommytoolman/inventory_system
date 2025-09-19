@@ -1607,9 +1607,21 @@ class VintageAndRareClient:
         # Check for headless mode from environment variable
         import os
         headless_mode = os.environ.get('VR_HEADLESS', 'true').lower() == 'true'
+        is_docker = os.path.exists('/.dockerenv') or os.environ.get('RAILWAY_ENVIRONMENT') is not None
+
         if headless_mode:
             options.add_argument("--headless=new")
             logger.info("Running V&R browser in HEADLESS mode")
+
+            # Add container-specific optimizations only when in Docker/Railway
+            if is_docker:
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--disable-setuid-sandbox")
+                options.add_argument("--disable-gpu")
+                options.add_argument("--disable-web-security")
+                options.add_argument("--disable-features=VizDisplayCompositor")
+                logger.info("Added Docker/Railway-specific Chrome flags")
         else:
             logger.info("Running V&R browser in VISIBLE mode for debugging")
         
@@ -1622,12 +1634,22 @@ class VintageAndRareClient:
         start_time = time_module.time()
 
         try:
-            driver_path = ChromeDriverManager().install()
-            elapsed = time_module.time() - start_time
-            logger.info(f"DEBUG: ChromeDriver installed/found in {elapsed:.2f} seconds at: {driver_path}")
+            # In Docker/Railway, ChromeDriver is pre-installed
+            if is_docker:
+                driver_path = "/usr/local/bin/chromedriver"
+                if os.path.exists(driver_path):
+                    logger.info(f"Using pre-installed ChromeDriver in container: {driver_path}")
+                else:
+                    logger.warning("ChromeDriver not found at expected path, falling back to download")
+                    driver_path = ChromeDriverManager().install()
+            else:
+                # Local development - use ChromeDriverManager
+                driver_path = ChromeDriverManager().install()
+                elapsed = time_module.time() - start_time
+                logger.info(f"DEBUG: ChromeDriver installed/found in {elapsed:.2f} seconds at: {driver_path}")
         except Exception as e:
             elapsed = time_module.time() - start_time
-            logger.error(f"ERROR: ChromeDriver download failed after {elapsed:.2f} seconds: {e}")
+            logger.error(f"ERROR: ChromeDriver setup failed after {elapsed:.2f} seconds: {e}")
             raise
 
         logger.info("DEBUG: Creating Chrome WebDriver instance...")

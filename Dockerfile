@@ -65,8 +65,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=appuser:appuser . .
 
-# Make start script executable
-RUN chmod +x /app/start.sh
+# Make scripts executable
+RUN chmod +x /app/start.sh /app/start_app.py
 
 # Create necessary directories with correct permissions
 RUN mkdir -p /app/logs /app/cache /app/app/cache && \
@@ -78,5 +78,5 @@ RUN mkdir -p /app/logs /app/cache /app/app/cache && \
 # Set Python path
 ENV PYTHONPATH=/app
 
-# Run the application using the start script
-CMD ["/app/start.sh"]
+# Run the application using Python script to handle PORT properly
+CMD ["python", "/app/start_app.py"]

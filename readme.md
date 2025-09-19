@@ -1,4 +1,4 @@
-# Realtime Inventory Forms Feed System
+# Realtime Inventory Fast Flow
 
 A comprehensive multi-platform inventory management system that syncs product listings across eBay, Reverb, Vintage & Rare, and your own website.
 

@@ -1,5 +1,12 @@
 # CLAUDE.md - Important Instructions for Claude AI Assistant
 
+## 🚫 NEVER USE CONDA - CRITICAL
+**NEVER EVER install packages using conda. DO NOT suggest conda commands. DO NOT use conda environments.**
+- Always use the project's virtual environment: `source venv/bin/activate`
+- Install packages with pip only: `pip install package_name`
+- If you see `/opt/miniconda3/` in error paths, remind user to activate venv first
+- Conda is a nightmare - avoid at all costs
+
 ## Critical Reminders
 
 ### 🔴 ALWAYS CHECK DATABASE SCHEMA BEFORE QUERIES

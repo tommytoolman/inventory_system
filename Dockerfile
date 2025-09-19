@@ -79,6 +79,8 @@ RUN mkdir -p /app/logs /app/cache /app/app/cache && \
 ENV PYTHONPATH=/app
 
 # Railway expects port 8080
+# Force rebuild with timestamp
+ENV REBUILD_TIME="2025-09-19-09:40"
 ENV PORT=8080
 EXPOSE 8080
 

@@ -752,7 +752,7 @@ def extract_vr_product_id(driver):
         print(f"Error extracting product ID: {str(e)}")
         return None
 
-def analyze_vr_response_with_network(driver):
+def analyze_vr_response_with_network(driver, is_remote=False):
     """Analyze V&R's response focusing on actual form submission responses"""
     try:
         print("Analyzing network logs for ACTUAL form submission responses...")
@@ -1793,7 +1793,7 @@ def analyze_vr_response(driver, db_session=None):
                 # Use your existing VRExportService for ID extraction
                 vr_id = None
                 if db_session:
-                    vr_id = analyze_vr_response_with_export_fallback(driver, db_session)
+                    vr_id = analyze_vr_response_with_export_fallback(driver, db_session, is_remote)
                 
                 return {
                     "status": "success",
@@ -1832,7 +1832,7 @@ def analyze_vr_response(driver, db_session=None):
         # Try to extract any product ID anyway
         vr_id = None
         if db_session:
-            vr_id = analyze_vr_response_with_export_fallback(driver, db_session)
+            vr_id = analyze_vr_response_with_export_fallback(driver, db_session, is_remote)
         
         return {
             "status": "unknown",
@@ -1873,13 +1873,13 @@ def save_response_screenshot(driver):
         print(f"Error saving screenshot: {str(e)}")
         return None
 
-def analyze_vr_response_with_export_fallback(driver, db_session):
+def analyze_vr_response_with_export_fallback(driver, db_session, is_remote=False):
     """
     Enhanced response analysis using your existing VRExportService as fallback
     """
     try:
         # First try network analysis (in case V&R changes and starts returning IDs)
-        vr_id = analyze_vr_response_with_network(driver)
+        vr_id = analyze_vr_response_with_network(driver, is_remote)
         
         if vr_id:
             print(f"✅ Found ID via network analysis: {vr_id}")

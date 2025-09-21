@@ -600,7 +600,7 @@ def fill_categories(driver, main_id, sub1_id=None, sub2_id=None, sub3_id=None):
         if sub1_id:
             print(f"Warning: Subcategory {sub1_id} provided but not required or not found")
 
-def wait_for_manual_submission_and_capture_result(driver, db_session=None):
+def wait_for_manual_submission_and_capture_result(driver, db_session=None, is_remote=False):
     """
     Wait for user to manually submit the form, then capture V&R's response
     V&R reloads the same page after submission, so we detect page reload + success message
@@ -629,7 +629,7 @@ def wait_for_manual_submission_and_capture_result(driver, db_session=None):
             print("✅ Page content changed - submission detected")
         
         # Analyze the current page for success/failure
-        result = analyze_vr_response(driver, db_session)
+        result = analyze_vr_response(driver, db_session, is_remote)
         
         # Save screenshot for debugging
         screenshot_path = save_response_screenshot(driver)
@@ -1409,10 +1409,10 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
         
         if test_mode:
             print("TEST MODE: Form filled. You can manually submit or wait for timeout.")
-            result = wait_for_manual_submission_and_capture_result(driver, db_session)
+            result = wait_for_manual_submission_and_capture_result(driver, db_session, is_remote)
         else:
             print("LIVE MODE: Auto-submitting form and capturing response...")
-            result = submit_form_and_capture_response(driver, db_session)
+            result = submit_form_and_capture_response(driver, db_session, is_remote)
         
         # ✅ ADD TIMING TO RESULT
         if isinstance(result, dict):
@@ -1500,7 +1500,7 @@ def edit_item_form(driver, item_id, item_data, test_mode=True, db_session=None):
         driver.save_screenshot(f"edit_error_{item_id}.png")
         raise e
 
-def submit_form_and_capture_response(driver, db_session=None):
+def submit_form_and_capture_response(driver, db_session=None, is_remote=False):
     """Submit the V&R form automatically and capture response - V&R optimized version"""
     try:
         print("\n" + "="*60)
@@ -1623,7 +1623,7 @@ def submit_form_and_capture_response(driver, db_session=None):
                 
                 # Analyze V&R's response
                 print("\n📊 Step 4: Analyzing V&R response...")
-                result = analyze_vr_response(driver, db_session)
+                result = analyze_vr_response(driver, db_session, is_remote)
                 result["submission_method"] = found_method
                 result["url_changed"] = new_url != initial_url
                 return result
@@ -1727,7 +1727,7 @@ def submit_form_and_capture_response(driver, db_session=None):
                         if new_url != initial_url:
                             print(f"✅ Fallback candidate {i+1} worked!")
                             driver.save_screenshot(f"05_fallback_candidate_{i+1}_success.png")
-                            result = analyze_vr_response(driver, db_session)
+                            result = analyze_vr_response(driver, db_session, is_remote)
                             result["submission_method"] = f"Fallback {candidate['type']}"
                             return result
                             
@@ -1765,7 +1765,7 @@ def submit_form_and_capture_response(driver, db_session=None):
             "traceback": traceback.format_exc()
         }
 
-def analyze_vr_response(driver, db_session=None):
+def analyze_vr_response(driver, db_session=None, is_remote=False):
     """Analyze V&R's response page for success/failure"""
     try:
         current_url = driver.current_url

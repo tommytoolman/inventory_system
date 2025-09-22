@@ -245,5 +245,53 @@ async def create_product_with_ebay(
     return {
         "product": product,
         "ebay_listing": ebay_listing
-    }   
+    }
+
+@router.post("/ebay/listings/{listing_id}/end")
+async def end_ebay_listing(
+    listing_id: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
+):
+    """End an eBay listing"""
+    try:
+        # Initialize eBay service
+        ebay_service = EbayService(db, settings)
+
+        # End the listing on eBay
+        success = await ebay_service.mark_item_as_sold(listing_id)
+
+        if success:
+            # Update local database status
+            query = text("""
+                UPDATE platform_common pc
+                SET status = 'ENDED',
+                    last_sync = CURRENT_TIMESTAMP
+                WHERE pc.platform_name = 'ebay'
+                AND pc.external_id = :listing_id
+            """)
+            await db.execute(query, {"listing_id": listing_id})
+
+            # Log activity
+            activity_logger = ActivityLogger(db)
+            await activity_logger.log_activity(
+                action="end_listing",
+                entity_type="listing",
+                entity_id=listing_id,
+                platform="ebay",
+                details={"status": "ended", "reason": "NotAvailable", "method": "manual_ui"}
+            )
+
+            await db.commit()
+
+            return {"success": True, "message": f"eBay listing {listing_id} ended successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to end listing on eBay")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error ending eBay listing {listing_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 

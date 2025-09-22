@@ -327,25 +327,73 @@ async def get_shopify_product(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/shopify/products/{product_id}/archive")
+async def archive_shopify_product(
+    product_id: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
+):
+    """Archive (mark as sold) a Shopify product"""
+    try:
+        # Initialize Shopify service
+        shopify_service = ShopifyService(db, settings)
+
+        # Mark the item as sold (which archives it in Shopify)
+        success = await shopify_service.mark_item_as_sold(product_id)
+
+        if success:
+            # Update local database status
+            query = text("""
+                UPDATE platform_common pc
+                SET status = 'ARCHIVED',
+                    last_sync = CURRENT_TIMESTAMP
+                WHERE pc.platform_name = 'shopify'
+                AND pc.external_id = :product_id
+            """)
+            await db.execute(query, {"product_id": product_id})
+
+            # Log activity
+            activity_logger = ActivityLogger(db)
+            await activity_logger.log_activity(
+                action="archive_listing",
+                entity_type="listing",
+                entity_id=product_id,
+                platform="shopify",
+                details={"status": "archived", "method": "manual_ui"}
+            )
+
+            await db.commit()
+
+            return {"success": True, "message": f"Shopify product {product_id} archived successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to archive product on Shopify")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error archiving Shopify product {product_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 def verify_shopify_webhook(
-    body: bytes, 
-    signature: Optional[str], 
+    body: bytes,
+    signature: Optional[str],
     secret: str
 ) -> bool:
     """
     Verify Shopify webhook signature.
-    
+
     Args:
         body: Raw request body
         signature: X-Shopify-Hmac-Sha256 header value
         secret: Webhook secret from Shopify
-        
+
     Returns:
         True if signature is valid
     """
     if not signature:
         return False
-    
+
     # Calculate expected signature
     hash = hmac.new(
         secret.encode('utf-8'),
@@ -353,6 +401,6 @@ def verify_shopify_webhook(
         hashlib.sha256
     )
     expected = base64.b64encode(hash.digest()).decode()
-    
+
     # Compare signatures
     return hmac.compare_digest(expected, signature)

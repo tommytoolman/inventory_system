@@ -119,15 +119,31 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            {% if event.product_id %}
-                                <div class="text-sm font-medium text-gray-900">{{ event.platform_name.title() }}</div>
-                                <div class="text-sm text-gray-500">Product ID: {{ event.product_id }}</div>
-                            {% else %}
-                                <div class="text-sm font-medium text-gray-900">{{ event.platform_name.title() }}</div>
-                                <div class="text-sm text-gray-500">ID: {{ event.external_id }}</div>
-                            {% endif %}
+                            <div class="flex items-center gap-2">
+                                {% if event.platform_name == 'reverb' %}
+                                    <img src="https://reverb.com/favicon.ico" alt="Reverb" class="w-5 h-5">
+                                {% elif event.platform_name == 'ebay' %}
+                                    <img src="https://www.ebay.com/favicon.ico" alt="eBay" class="w-5 h-5">
+                                {% elif event.platform_name == 'shopify' %}
+                                    <img src="https://www.shopify.com/favicon.ico" alt="Shopify" class="w-5 h-5">
+                                {% elif event.platform_name == 'vr' %}
+                                    <img src="https://www.vintageandrare.com/favicon.ico" alt="V&R" class="w-5 h-5">
+                                {% endif %}
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">{{ event.platform_name.title() if event.platform_name != 'vr' else 'Vintage & Rare' }}</div>
+                                    {% if event.product_id %}
+                                        <div class="text-sm text-gray-500">Product ID: {{ event.product_id }}</div>
+                                    {% else %}
+                                        <div class="text-sm text-gray-500">ID: {{ event.external_id }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </td>
                         <td class="px-6 py-4 text-sm text-gray-700">
+                            {% set has_image = event.primary_image or (event.change_data and event.change_data.primary_image_url) %}
+                            {% set image_url = event.primary_image or (event.change_data.primary_image_url if event.change_data else None) %}
+                            {% set product_title = event.brand ~ ' ' ~ event.model if event.brand and event.model else (event.change_data.title if event.change_data and event.change_data.title else 'Unknown Product') %}
+
                             {% if event.change_type == 'new_listing' %}
                                 <div class="flex items-start space-x-3">
                                     {% if event.change_data.primary_image_url %}
@@ -171,56 +187,117 @@
                                     </div>
                                 </div>
                             {% elif event.change_type == 'price' or event.change_type == 'price_change' %}
-                                <div>
-                                    <span class="text-gray-500">Old:</span> 
-                                    <strong class="text-gray-800">
-                                        {% if event.change_data.old is defined and event.change_data.old is not none %}
-                                            £{{ "{:,.0f}".format(event.change_data.old) }}
-                                        {% else %}
-                                            N/A
-                                        {% endif %}
-                                    </strong>
-                                </div>
-                                <div>
-                                    <span class="text-gray-500">New:</span> 
-                                    <strong class="text-red-600">
-                                        {% if event.change_data.new is defined and event.change_data.new is not none %}
-                                            £{{ "{:,.0f}".format(event.change_data.new) }}
-                                        {% else %}
-                                            N/A
-                                        {% endif %}
-                                    </strong>
-                                </div>
-                            {% elif event.change_type == 'status' or event.change_type == 'status_change' %}
-                                <div>
-                                    <span class="text-gray-500">Old:</span> <strong class="text-gray-800">{{ event.change_data.old if event.change_data and event.change_data.old else 'N/A' }}</strong>
-                                </div>
-                                <div>
-                                    <span class="text-gray-500">New:</span> <strong class="text-blue-600">{{ event.change_data.new if event.change_data and event.change_data.new else 'N/A' }}</strong>
-                                </div>
-                            {% elif event.change_type == 'removed_listing' %}
-                                <div class="text-sm">
-                                    {% if event.change_data.reason %}
-                                        <div><span class="text-gray-500">Reason:</span>
-                                            <strong class="text-red-600">
-                                                {% if event.change_data.reason == 'not_found_in_api' %}
-                                                    Not found in API
-                                                {% elif event.change_data.reason == 'sold' %}
-                                                    Item Sold
-                                                {% elif event.change_data.reason == 'ended' %}
-                                                    Listing Ended
+                                <div class="flex items-start space-x-3">
+                                    {% if has_image %}
+                                    <div class="flex-shrink-0">
+                                        <img src="{{ image_url }}"
+                                             alt="{{ product_title }}"
+                                             class="w-16 h-16 object-cover rounded-md border border-gray-200">
+                                    </div>
+                                    {% endif %}
+                                    <a href="{% if event.platform_name == 'reverb' %}https://reverb.com/uk/item/{{ event.external_id }}{% elif event.platform_name == 'ebay' %}https://www.ebay.co.uk/itm/{{ event.external_id }}{% elif event.platform_name == 'shopify' %}https://londonvintageguitars.com/products/{{ event.external_id }}{% elif event.platform_name == 'vr' %}https://www.vintageandrare.com/product/{{ event.external_id }}{% endif %}"
+                                       target="_blank"
+                                       class="flex-shrink-0 mt-0.5">
+                                        <svg class="w-4 h-4 text-gray-500 hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                        </svg>
+                                    </a>
+                                    <div class="flex-grow">
+                                        <div class="font-semibold text-gray-900">{{ product_title }}</div>
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            <span class="text-gray-500">Price:</span>
+                                            <strong class="text-gray-800">
+                                                {% if event.change_data.old is defined and event.change_data.old is not none %}
+                                                    £{{ "{:,.0f}".format(event.change_data.old|float) }}
                                                 {% else %}
-                                                    {{ event.change_data.reason | title }}
+                                                    N/A
+                                                {% endif %}
+                                            </strong>
+                                            →
+                                            <strong class="text-red-600">
+                                                {% if event.change_data.new is defined and event.change_data.new is not none %}
+                                                    £{{ "{:,.0f}".format(event.change_data.new|float) }}
+                                                {% else %}
+                                                    N/A
                                                 {% endif %}
                                             </strong>
                                         </div>
+                                        {% if event.product_sku or (event.change_data and event.change_data.sku) %}
+                                            <div class="text-xs text-gray-400 mt-0.5">SKU: {{ event.product_sku or event.change_data.sku }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% elif event.change_type == 'status' or event.change_type == 'status_change' %}
+                                <div class="flex items-start space-x-3">
+                                    {% if has_image %}
+                                    <div class="flex-shrink-0">
+                                        <img src="{{ image_url }}"
+                                             alt="{{ product_title }}"
+                                             class="w-16 h-16 object-cover rounded-md border border-gray-200">
+                                    </div>
                                     {% endif %}
-                                    {% if event.change_data.sku %}
-                                        <div><span class="text-gray-500">SKU:</span> <strong>{{ event.change_data.sku }}</strong></div>
+                                    <a href="{% if event.platform_name == 'reverb' %}https://reverb.com/uk/item/{{ event.external_id }}{% elif event.platform_name == 'ebay' %}https://www.ebay.co.uk/itm/{{ event.external_id }}{% elif event.platform_name == 'shopify' %}https://londonvintageguitars.com/products/{{ event.external_id }}{% elif event.platform_name == 'vr' %}https://www.vintageandrare.com/product/{{ event.external_id }}{% endif %}"
+                                       target="_blank"
+                                       class="flex-shrink-0 mt-0.5">
+                                        <svg class="w-4 h-4 text-gray-500 hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                        </svg>
+                                    </a>
+                                    <div class="flex-grow">
+                                        <div class="font-semibold text-gray-900">{{ product_title }}</div>
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            <span class="text-gray-500">Status:</span>
+                                            <strong class="text-gray-800">{{ event.change_data.old if event.change_data and event.change_data.old else 'N/A' }}</strong>
+                                            →
+                                            {% set new_status = event.change_data.new if event.change_data and event.change_data.new else 'N/A' %}
+                                            {% set status_color = 'text-blue-600' %}
+                                            {% if new_status in ['sold', 'ended'] %}{% set status_color = 'text-red-600' %}{% endif %}
+                                            {% if new_status == 'active' %}{% set status_color = 'text-green-600' %}{% endif %}
+                                            <strong class="{{ status_color }}">{{ new_status }}</strong>
+                                        </div>
+                                        {% if event.product_sku or (event.change_data and event.change_data.sku) %}
+                                            <div class="text-xs text-gray-400 mt-0.5">SKU: {{ event.product_sku or event.change_data.sku }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% elif event.change_type == 'removed_listing' %}
+                                <div class="flex items-start space-x-3">
+                                    {% if has_image %}
+                                    <div class="flex-shrink-0">
+                                        <img src="{{ image_url }}"
+                                             alt="{{ product_title }}"
+                                             class="w-16 h-16 object-cover rounded-md border border-gray-200">
+                                    </div>
                                     {% endif %}
-                                    {% if event.change_data.title %}
-                                        <div class="text-xs text-gray-600 mt-1">{{ event.change_data.title }}</div>
-                                    {% endif %}
+                                    <a href="{% if event.platform_name == 'reverb' %}https://reverb.com/uk/item/{{ event.external_id }}{% elif event.platform_name == 'ebay' %}https://www.ebay.co.uk/itm/{{ event.external_id }}{% elif event.platform_name == 'shopify' %}https://londonvintageguitars.com/products/{{ event.external_id }}{% elif event.platform_name == 'vr' %}https://www.vintageandrare.com/product/{{ event.external_id }}{% endif %}"
+                                       target="_blank"
+                                       class="flex-shrink-0 mt-0.5">
+                                        <svg class="w-4 h-4 text-gray-500 hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                        </svg>
+                                    </a>
+                                    <div class="flex-grow">
+                                        <div class="font-semibold text-gray-900">{{ product_title }}</div>
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            {% if event.change_data.reason %}
+                                                <span class="text-gray-500">Reason:</span>
+                                                <strong class="text-red-600">
+                                                    {% if event.change_data.reason == 'not_found_in_api' %}
+                                                        Not found in API
+                                                    {% elif event.change_data.reason == 'sold' %}
+                                                        Item Sold
+                                                    {% elif event.change_data.reason == 'ended' %}
+                                                        Listing Ended
+                                                    {% else %}
+                                                        {{ event.change_data.reason | title }}
+                                                    {% endif %}
+                                                </strong>
+                                            {% endif %}
+                                        </div>
+                                        {% if event.product_sku or (event.change_data and event.change_data.sku) %}
+                                            <div class="text-xs text-gray-400 mt-0.5">SKU: {{ event.product_sku or event.change_data.sku }}</div>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             {% else %}
                                 <div class="text-xs overflow-auto font-mono bg-gray-50 p-2 rounded">{{ event.change_data | tojson(indent=2) }}</div>

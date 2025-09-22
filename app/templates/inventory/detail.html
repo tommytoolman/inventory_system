@@ -447,8 +447,8 @@
             displayMessage(message, type);
         }
 
-        // End listing function
-        async function endListing(platform, externalId, productId) {
+        // Make endListing globally accessible
+        window.endListing = async function(platform, externalId, productId) {
             let action = 'end';  // default action
 
             // For V&R, offer choice between end and delete
@@ -534,8 +534,8 @@
             }
         }
 
-        // End all listings function
-        async function endAllListings() {
+        // Make endAllListings globally accessible
+        window.endAllListings = async function() {
             // Get all active platforms
             const activePlatforms = [];
             const platformElements = document.querySelectorAll('[data-platform-active="true"]');

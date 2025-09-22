@@ -195,8 +195,8 @@ async def end_vr_listing(
         from app.services.vintageandrare.client import VintageAndRareClient
 
         vr_client = VintageAndRareClient(
-            username=settings.VR_USERNAME,
-            password=settings.VR_PASSWORD,
+            username=settings.VINTAGE_AND_RARE_USERNAME,
+            password=settings.VINTAGE_AND_RARE_PASSWORD,
             db_session=db
         )
 
@@ -255,8 +255,8 @@ async def delete_vr_listing(
         from app.services.vintageandrare.client import VintageAndRareClient
 
         vr_client = VintageAndRareClient(
-            username=settings.VR_USERNAME,
-            password=settings.VR_PASSWORD,
+            username=settings.VINTAGE_AND_RARE_USERNAME,
+            password=settings.VINTAGE_AND_RARE_PASSWORD,
             db_session=db
         )
 

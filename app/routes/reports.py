@@ -616,13 +616,13 @@ async def sync_events_report(
         where_clauses = []
 
         if platform_filter:
-            where_clauses.append("platform_name = :platform")
+            where_clauses.append("se.platform_name = :platform")
             params["platform"] = platform_filter
         if change_type_filter:
-            where_clauses.append("change_type = :change_type")
+            where_clauses.append("se.change_type = :change_type")
             params["change_type"] = change_type_filter
         if status_filter:
-            where_clauses.append("status = :status")
+            where_clauses.append("se.status = :status")
             params["status"] = status_filter
             
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
@@ -639,17 +639,22 @@ async def sync_events_report(
         sort_direction = "ASC" if sort_order == "asc" else "DESC"
 
         detailed_query = text(f"""
-        SELECT 
-            id,
-            platform_name,
-            product_id,
-            external_id,
-            change_type,
-            change_data,
-            status,
-            detected_at,
-            notes
-        FROM sync_events
+        SELECT
+            se.id,
+            se.platform_name,
+            se.product_id,
+            se.external_id,
+            se.change_type,
+            se.change_data,
+            se.status,
+            se.detected_at,
+            se.notes,
+            p.primary_image,
+            p.brand,
+            p.model,
+            p.sku as product_sku
+        FROM sync_events se
+        LEFT JOIN products p ON se.product_id = p.id
         WHERE {where_sql}
         ORDER BY {sort_column} {sort_direction}, id DESC
         LIMIT 500;

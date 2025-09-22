@@ -1311,32 +1311,130 @@ async def add_product(
         logger.info(f"Product created: ID={product.id}, SKU={product.sku}")
         
         # Step 3: Create platform listings based on selection
-        # Prepare enriched data that mimics what would come from Reverb
-        enriched_data = {
-            "title": f"{year} {brand} {model}" if year else f"{brand} {model}",
-            "description": description,
-            "photos": [],  # Will be populated with images
-            "cloudinary_photos": [],  # For high-res images
-            "condition": {"display_name": condition},
-            "categories": [{"uuid": platform_data.get("reverb", {}).get("primary_category")}] if platform_data.get("reverb") else [],
-            "price": {"amount": str(base_price), "currency": "GBP"},
-            "inventory": quantity if is_stocked_item else 1,
-            "shipping": {},
-            "finish": finish,
-            "year": str(year) if year else None,
-            "model": model,
-            "brand": brand
-        }
-        
-        # Add images to enriched data
-        if primary_image:
-            enriched_data["photos"].append({"url": primary_image})
-            enriched_data["cloudinary_photos"].append({"preview_url": primary_image, "url": primary_image})
-        
-        if additional_images:
-            for img_url in additional_images:
-                enriched_data["photos"].append({"url": img_url})
-                enriched_data["cloudinary_photos"].append({"preview_url": img_url, "url": img_url})
+
+        # Initialize enriched_data - will be populated from Reverb if creating there first
+        enriched_data = None
+
+        # If Reverb is selected, create it FIRST to get enriched data
+        if "reverb" in platforms_to_sync:
+            logger.info(f"=== CREATING REVERB LISTING FIRST ===")
+            logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
+
+            try:
+                # Initialize Reverb client
+                from app.services.reverb.client import ReverbClient
+                reverb_client = ReverbClient(api_key=settings.REVERB_API_KEY)
+
+                # Prepare listing data for Reverb
+                reverb_listing_data = {
+                    "title": product.title or f"{year} {brand} {model}" if year else f"{brand} {model}",
+                    "make": brand,
+                    "model": model,
+                    "description": description or f"{brand} {model} in {condition} condition",
+                    "condition": {"uuid": platform_data.get("reverb", {}).get("condition_uuid")},
+                    "categories": [{"uuid": platform_data.get("reverb", {}).get("primary_category")}],
+                    "price": {
+                        "amount": str(base_price),
+                        "currency": "GBP"
+                    },
+                    "shipping": {
+                        "local": local_pickup,
+                        "rates": []  # Will use default shipping profile
+                    },
+                    "has_inventory": is_stocked_item,
+                    "inventory": quantity if is_stocked_item else 1,
+                    "finish": finish,
+                    "year": str(year) if year else None,
+                    "sku": sku,
+                    "publish": True,  # Publish immediately
+                    "photos": []
+                }
+
+                # Add images
+                if primary_image:
+                    reverb_listing_data["photos"].append(primary_image)
+                if additional_images:
+                    reverb_listing_data["photos"].extend(additional_images)
+
+                # Create the listing on Reverb
+                logger.info(f"Creating Reverb listing with data: {json.dumps(reverb_listing_data, indent=2)}")
+                reverb_response = await reverb_client.create_listing(reverb_listing_data)
+
+                # Extract the created listing data
+                reverb_id = str(reverb_response.get("id"))
+                logger.info(f"✅ Created Reverb listing with ID: {reverb_id}")
+
+                # Create local database entries
+                # 1. Create platform_common entry
+                platform_common = PlatformCommon(
+                    product_id=product.id,
+                    platform_name="reverb",
+                    external_id=reverb_id,
+                    status="ACTIVE",
+                    listing_url=f"https://reverb.com/item/{reverb_id}",
+                    platform_specific_data=reverb_response,
+                    last_sync=datetime.utcnow()
+                )
+                db.add(platform_common)
+                await db.flush()
+
+                # 2. Create reverb_listings entry
+                reverb_listing = ReverbListing(
+                    platform_id=platform_common.id,
+                    reverb_listing_id=reverb_id,
+                    reverb_state=reverb_response.get("state", {}).get("slug", "live"),
+                    extended_attributes=reverb_response
+                )
+                db.add(reverb_listing)
+                await db.commit()
+
+                platform_statuses["reverb"] = {
+                    "status": "success",
+                    "message": f"Listed on Reverb with ID: {reverb_id}"
+                }
+
+                # NOW use the Reverb response as enriched data for other platforms
+                enriched_data = reverb_response
+
+                # Remove Reverb from platforms_to_sync since we already created it
+                platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
+
+            except Exception as e:
+                logger.error(f"Reverb listing error: {str(e)}", exc_info=True)
+                platform_statuses["reverb"] = {
+                    "status": "error",
+                    "message": f"Error: {str(e)}"
+                }
+                # If Reverb fails, create fallback enriched data
+                enriched_data = None
+
+        # If no Reverb or it failed, create fallback enriched data
+        if not enriched_data:
+            enriched_data = {
+                "title": f"{year} {brand} {model}" if year else f"{brand} {model}",
+                "description": description,
+                "photos": [],  # Will be populated with images
+                "cloudinary_photos": [],  # For high-res images
+                "condition": {"display_name": condition},
+                "categories": [{"uuid": platform_data.get("reverb", {}).get("primary_category")}] if platform_data.get("reverb") else [],
+                "price": {"amount": str(base_price), "currency": "GBP"},
+                "inventory": quantity if is_stocked_item else 1,
+                "shipping": {},
+                "finish": finish,
+                "year": str(year) if year else None,
+                "model": model,
+                "brand": brand
+            }
+
+            # Add images to enriched data
+            if primary_image:
+                enriched_data["photos"].append({"url": primary_image})
+                enriched_data["cloudinary_photos"].append({"preview_url": primary_image, "url": primary_image})
+
+            if additional_images:
+                for img_url in additional_images:
+                    enriched_data["photos"].append({"url": img_url})
+                    enriched_data["cloudinary_photos"].append({"preview_url": img_url, "url": img_url})
         
         # Create listings on each selected platform
         if "shopify" in platforms_to_sync:
@@ -1443,23 +1541,7 @@ async def add_product(
                     "message": f"Error: {str(e)}"
                 }
         
-        if "reverb" in platforms_to_sync:
-            logger.info(f"=== CREATING REVERB LISTING ===")
-            logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
-            logger.warning("⚠️  NOTE: Reverb listing creation from form is not yet implemented")
-            try:
-                # For now, Reverb creation from form is pending implementation
-                platform_statuses["reverb"] = {
-                    "status": "info",
-                    "message": "Reverb listing creation from form is pending implementation"
-                }
-                logger.info("ℹ️  Reverb listing creation skipped - not implemented yet")
-            except Exception as e:
-                logger.error(f"Reverb listing error: {str(e)}", exc_info=True)
-                platform_statuses["reverb"] = {
-                    "status": "error",
-                    "message": f"Error: {str(e)}"
-                }
+        # Reverb is already handled above if it was selected
         
         # Log final summary
         logger.info(f"=== PLATFORM SYNC SUMMARY ===")

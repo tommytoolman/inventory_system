@@ -213,8 +213,8 @@ async def consolidate_listings(event_ids: List[int], dry_run: bool = False, auto
             if event.platform_name == 'reverb':
                 # Create reverb_listings entry
                 create_listing = text("""
-                    INSERT INTO reverb_listings (platform_id, reverb_listing_id)
-                    VALUES (:platform_id, :external_id)
+                    INSERT INTO reverb_listings (platform_id, reverb_listing_id, reverb_state)
+                    VALUES (:platform_id, :external_id, 'live')
                     ON CONFLICT (reverb_listing_id) DO NOTHING
                 """)
                 await session.execute(create_listing, {

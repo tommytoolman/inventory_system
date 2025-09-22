@@ -558,7 +558,7 @@
                                                 </svg>
                                                 <p class="text-gray-600 font-medium">Loading Dropbox folders...</p>
                                             </div>
-                                            <div id="dropbox-items" class="grid grid-cols-3 gap-2 hidden"></div>
+                                            <div id="dropbox-items" class="grid grid-cols-5 gap-2 hidden"></div>
                                             <div class="text-center py-12 hidden" id="dropbox-empty">
                                                 <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
                                                     <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
@@ -2086,6 +2086,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (content.classList.contains('hidden')) {
                 content.classList.remove('hidden');
                 icon.classList.add('rotate-180');
+
+                // Auto-load Dropbox folders when Images & Media section is opened
+                if (isImagesSection && !window.dropboxLoaded) {
+                    console.log("Auto-loading Dropbox folders on section open");
+                    loadDropboxFolders('');
+                }
             } else {
                 content.classList.add('hidden');
                 icon.classList.remove('rotate-180');
@@ -3206,13 +3212,13 @@ function initializeSortable() {
                         }
                         
                         if (folder.is_folder) {
-                            // Render folder
-                            itemElement.className = 'p-2 border rounded flex items-center cursor-pointer hover:bg-gray-50';
+                            // Render folder as square tile
+                            itemElement.className = 'aspect-square border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:shadow-md transition-all bg-gray-50';
                             itemElement.innerHTML = `
-                                <svg class="h-5 w-5 mr-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="h-8 w-8 mb-1 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
                                 </svg>
-                                <span class="text-sm truncate">${folder.name}</span>
+                                <span class="text-xs text-center px-1 font-medium">${folder.name}</span>
                             `;
                             
                             itemElement.addEventListener('click', function() {
@@ -3497,11 +3503,11 @@ function initializeSortable() {
                 
                 const imageItem = document.createElement('div');
                 imageItem.className = `cursor-pointer hover:opacity-80 relative ${isSelected ? 'ring-2 ring-green-500' : ''}`;
-                imageItem.dataset.imageUrl = image.url;
+                imageItem.dataset.imageUrl = image.full_url || image.url;  // Store full URL for selection
                 imageItem.style = 'padding: 0; margin: 0; border: none; position: relative;';
-                
+
                 imageItem.innerHTML = `
-                    <img src="${image.url}" alt="${image.name}" 
+                    <img src="${image.thumbnail_url || image.url}" alt="${image.name}"
                          style="width: 100%; height: auto; display: block;">
                     ${isSelected ? `
                     <div style="position: absolute; top: 4px; right: 4px;">
@@ -3614,15 +3620,21 @@ function initializeSortable() {
     
     function toggleImageSelection(image) {
         console.log('Toggling image selection:', image);
-        const existingIndex = selectedImages.findIndex(img => img.url === image.url);
-        
+        // Use full URL for selection
+        const fullUrl = image.full_url || image.url;
+        const existingIndex = selectedImages.findIndex(img => (img.full_url || img.url) === fullUrl);
+
         if (existingIndex >= 0) {
             // Remove from selection
             selectedImages.splice(existingIndex, 1);
             console.log('Removed image, now have', selectedImages.length);
         } else {
-            // Add to selection
-            selectedImages.push(image);
+            // Add to selection with full URL
+            selectedImages.push({
+                ...image,
+                url: fullUrl,  // Ensure URL is the full resolution
+                source: 'dropbox'
+            });
             console.log('Added image, now have', selectedImages.length);
         }
         

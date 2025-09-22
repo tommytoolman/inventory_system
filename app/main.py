@@ -219,15 +219,21 @@ async def periodic_dropbox_refresh(app):
         
         if cache_file.exists():
             with open(cache_file, 'r') as f:
-                cached_structure = json.load(f)
-                
+                cache_data = json.load(f)
+                # Extract the actual structure from the timestamped cache
+                cached_structure = cache_data.get('structure', {}) if isinstance(cache_data, dict) and 'structure' in cache_data else cache_data
+
             temp_links = {}
             if links_file.exists():
                 with open(links_file, 'r') as f:
                     cached_links = json.load(f)
-                    # Extract just the URLs from the cache
-                    temp_links = {k: v[0] for k, v in cached_links.items() if isinstance(v, list)}
-                    
+                    # Handle new format where values are dicts with 'full' key
+                    for k, v in cached_links.items():
+                        if isinstance(v, dict) and 'full' in v:
+                            temp_links[k] = v['full']
+                        elif isinstance(v, list) and len(v) >= 1:
+                            temp_links[k] = v[0]
+
             app.state.dropbox_map = {
                 'folder_structure': cached_structure,
                 'temp_links': temp_links,

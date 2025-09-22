@@ -1089,16 +1089,37 @@ class ReverbService:
             # 3. Compare the sets of IDs to find differences.
             new_rogue_ids = api_live_ids - local_live_ids
             missing_from_api_ids = local_live_ids - api_live_ids
-            
+
+            # Create a mapping for easy access to listing data
+            api_listings_map = {str(listing['id']): listing for listing in live_listings_api}
+
             logger.info(f"Detected {len(new_rogue_ids)} new 'rogue' listings and {len(missing_from_api_ids)} potential status changes.")
 
             events_to_log = []
 
             # 4. Create 'new_listing' events for rogue items.
             for reverb_id in new_rogue_ids:
+                listing = api_listings_map.get(reverb_id, {})
+
+                # Extract primary image URL
+                photos = listing.get('photos', [])
+                primary_image_url = None
+                if photos:
+                    primary_image_url = photos[0].get('_links', {}).get('full', {}).get('href')
+
+                # Extract listing details
+                change_data = {
+                    'reason': 'Live on Reverb but not in local DB',
+                    'title': listing.get('title'),
+                    'price': listing.get('price', {}).get('amount'),
+                    'brand': listing.get('make'),  # Reverb uses 'make' for brand
+                    'model': listing.get('model'),
+                    'primary_image_url': primary_image_url
+                }
+
                 events_to_log.append(self._prepare_sync_event(
                     sync_run_id, 'new_listing', external_id=reverb_id,
-                    change_data={'reason': 'Live on Reverb but not in local DB'}
+                    change_data=change_data
                 ))
 
             # 5. For items no longer 'live' on the API, fetch their details to find out WHY.

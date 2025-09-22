@@ -2,12 +2,11 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Request, Depends, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from app.services.vr_service import VRService
 from app.services.activity_logger import ActivityLogger
 from app.services.websockets.manager import manager
 from app.services.vintageandrare.brand_validator import VRBrandValidator
-from app.database import async_session
 from app.core.config import Settings, get_settings
 from app.dependencies import get_db
 from datetime import datetime
@@ -183,3 +182,123 @@ async def run_vr_sync_background(username: str, password: str, db: AsyncSession,
             "message": error_message,
             "timestamp": datetime.now().isoformat()
         })
+
+@router.post("/vr/listings/{listing_id}/end")
+async def end_vr_listing(
+    listing_id: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
+):
+    """End (mark as sold) a V&R listing"""
+    try:
+        # Initialize V&R client
+        from app.services.vintageandrare.client import VintageAndRareClient
+
+        vr_client = VintageAndRareClient(
+            username=settings.VR_USERNAME,
+            password=settings.VR_PASSWORD,
+            db_session=db
+        )
+
+        # Authenticate
+        auth_result = await vr_client.authenticate()
+        if not auth_result:
+            raise HTTPException(status_code=401, detail="Failed to authenticate with V&R")
+
+        # Mark item as sold
+        result = await vr_client.mark_item_as_sold(listing_id)
+
+        if result.get("success"):
+            # Update local database status
+            query = text("""
+                UPDATE platform_common pc
+                SET status = 'ENDED',
+                    last_sync = CURRENT_TIMESTAMP
+                WHERE pc.platform_name = 'vr'
+                AND pc.external_id = :listing_id
+            """)
+            await db.execute(query, {"listing_id": listing_id})
+
+            # Log activity
+            activity_logger = ActivityLogger(db)
+            await activity_logger.log_activity(
+                action="end_listing",
+                entity_type="listing",
+                entity_id=listing_id,
+                platform="vr",
+                details={"status": "ended", "method": "manual_ui"}
+            )
+
+            await db.commit()
+
+            return {"success": True, "message": f"V&R listing {listing_id} marked as sold"}
+        else:
+            error_msg = result.get("error", "Unknown error")
+            raise HTTPException(status_code=400, detail=f"Failed to end listing: {error_msg}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error ending V&R listing {listing_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/vr/listings/{listing_id}/delete")
+async def delete_vr_listing(
+    listing_id: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
+):
+    """Delete a V&R listing permanently"""
+    try:
+        # Initialize V&R client
+        from app.services.vintageandrare.client import VintageAndRareClient
+
+        vr_client = VintageAndRareClient(
+            username=settings.VR_USERNAME,
+            password=settings.VR_PASSWORD,
+            db_session=db
+        )
+
+        # Authenticate
+        auth_result = await vr_client.authenticate()
+        if not auth_result:
+            raise HTTPException(status_code=401, detail="Failed to authenticate with V&R")
+
+        # Delete item
+        result = await vr_client.delete_item(listing_id)
+
+        if result.get("success"):
+            # Update local database status
+            query = text("""
+                UPDATE platform_common pc
+                SET status = 'REMOVED',
+                    last_sync = CURRENT_TIMESTAMP
+                WHERE pc.platform_name = 'vr'
+                AND pc.external_id = :listing_id
+            """)
+            await db.execute(query, {"listing_id": listing_id})
+
+            # Log activity
+            activity_logger = ActivityLogger(db)
+            await activity_logger.log_activity(
+                action="delete_listing",
+                entity_type="listing",
+                entity_id=listing_id,
+                platform="vr",
+                details={"status": "deleted", "method": "manual_ui"}
+            )
+
+            await db.commit()
+
+            return {"success": True, "message": f"V&R listing {listing_id} deleted"}
+        else:
+            error_msg = result.get("error", "Unknown error")
+            raise HTTPException(status_code=400, detail=f"Failed to delete listing: {error_msg}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error deleting V&R listing {listing_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

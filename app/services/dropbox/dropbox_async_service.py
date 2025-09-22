@@ -69,6 +69,13 @@ class AsyncDropboxClient:
         self.refresh_token = refresh_token or os.environ.get("DROPBOX_REFRESH_TOKEN")
         self.app_key = app_key or os.environ.get("DROPBOX_APP_KEY")
         self.app_secret = app_secret or os.environ.get("DROPBOX_APP_SECRET")
+
+        # Setup cache directory first
+        self.cache_dir = os.path.join("app", "cache", "dropbox")
+        os.makedirs(self.cache_dir, exist_ok=True)
+
+        # DO NOT load tokens from files - security risk!
+        # Tokens should only come from environment variables
         
         # Set up headers if we have an access token
         if self.access_token:
@@ -76,9 +83,6 @@ class AsyncDropboxClient:
         else:
             self.headers = {}
 
-        # Setup cache directory
-        self.cache_dir = os.path.join("app", "cache", "dropbox")
-        os.makedirs(self.cache_dir, exist_ok=True)
         
          # Cache file paths
         self.temp_links_cache_file = os.path.join(self.cache_dir, "temp_links.json")
@@ -107,10 +111,17 @@ class AsyncDropboxClient:
             try:
                 with open(self.temp_links_cache_file, 'r') as f:
                     cached_data = json.load(f)
-                    # Convert back to the expected format
-                    for path, (link, expiry_str) in cached_data.items():
-                        expiry = datetime.fromisoformat(expiry_str)
-                        self.file_links_cache[path] = (link, expiry)
+                    # Handle both old and new formats
+                    for path, value in cached_data.items():
+                        if isinstance(value, list) and len(value) == 2:
+                            # Old format: [link, expiry]
+                            self.file_links_cache[path] = (value[0], datetime.fromisoformat(value[1]))
+                        elif isinstance(value, dict) and 'expiry' in value:
+                            # New format: dict with full/thumbnail/expiry
+                            # Store in cache as tuple for backward compatibility
+                            expiry = datetime.fromisoformat(value['expiry'])
+                            # Use full URL for the main cache
+                            self.file_links_cache[path] = (value.get('full', ''), expiry)
                 logger.info(f"Loaded {len(self.file_links_cache)} cached temp links")
             except Exception as e:
                 logger.error(f"Error loading temp links cache: {e}")
@@ -118,31 +129,67 @@ class AsyncDropboxClient:
         # Load folder structure cache
         if os.path.exists(self.folder_structure_cache_file):
             try:
-                with open(self.folder_structure_cache_file, 'r') as f:
-                    self.folder_structure = json.load(f)
-                logger.info(f"Loaded cached folder structure")
+                cached_structure = self.load_folder_structure_from_cache()
+                if cached_structure:
+                    self.folder_structure = cached_structure
+                    logger.info(f"Loaded cached folder structure")
+                else:
+                    logger.info(f"Folder structure cache expired or invalid")
             except Exception as e:
                 logger.error(f"Error loading folder structure cache: {e}")
     
-    def load_temp_links_cache(self) -> Dict[str, Tuple[str, str]]:
-        """Load temporary links cache from disk"""
+    def load_temp_links_cache(self) -> Dict[str, Any]:
+        """Load temporary links cache from disk, handling both old and new formats"""
         if os.path.exists(self.temp_links_cache_file):
             try:
                 with open(self.temp_links_cache_file, 'r') as f:
-                    return json.load(f)
+                    raw_data = json.load(f)
+
+                # Convert to consistent format
+                cache_data = {}
+                for path, value in raw_data.items():
+                    if isinstance(value, list) and len(value) == 2:
+                        # Old format: [link, expiry]
+                        cache_data[path] = {
+                            'full': value[0],
+                            'thumbnail': value[0],  # Use same URL for old format
+                            'expiry': value[1]
+                        }
+                    elif isinstance(value, dict):
+                        # New format: already a dict
+                        cache_data[path] = value
+                    else:
+                        # Unknown format, skip
+                        logger.warning(f"Unknown cache format for {path}: {type(value)}")
+
+                return cache_data
             except Exception as e:
                 logger.error(f"Error loading temp links cache: {e}")
         return {}
     
-    def save_temp_links_cache(self, temp_links: Dict[str, str]):
-        """Save temporary links cache to disk"""
+    def save_temp_links_cache(self, temp_links: Dict[str, Any]):
+        """Save temporary links cache to disk with both thumbnail and full-res URLs"""
         try:
             # Convert to storable format with expiry times
             cache_data = {}
             expiry = datetime.now() + timedelta(hours=3)  # Links are valid for ~4 hours, cache for 3
-            for path, link in temp_links.items():
-                cache_data[path] = (link, expiry.isoformat())
-            
+
+            for path, link_data in temp_links.items():
+                if isinstance(link_data, str):
+                    # Legacy format - just a URL string
+                    cache_data[path] = {
+                        'full': link_data,
+                        'thumbnail': link_data,  # Use same URL for now
+                        'expiry': expiry.isoformat()
+                    }
+                else:
+                    # New format with thumbnail and full URLs
+                    cache_data[path] = {
+                        'full': link_data.get('full'),
+                        'thumbnail': link_data.get('thumbnail'),
+                        'expiry': expiry.isoformat()
+                    }
+
             with open(self.temp_links_cache_file, 'w') as f:
                 json.dump(cache_data, f)
             logger.info(f"Saved {len(cache_data)} temp links to cache")
@@ -183,10 +230,13 @@ class AsyncDropboxClient:
                         # Update headers with new token
                         self.headers = self._get_headers()
                         logger.info("Successfully refreshed access token")
-                        
+
                         # Store this token for future use
                         os.environ["DROPBOX_ACCESS_TOKEN"] = self.access_token
-                        
+
+                        # DO NOT save tokens to files - security risk!
+                        # Tokens should only be in environment variables or encrypted storage
+
                         return True
                     else:
                         logger.error("Token refresh response did not include access_token")
@@ -251,22 +301,34 @@ class AsyncDropboxClient:
             return False
 
     def load_temp_links_from_cache(self):
-        """Load temporary links from cache if not expired"""
+        """Load temporary links from cache with new format support"""
         try:
             if not os.path.exists(self.temp_links_cache_file):
                 return {}
-                
+
             with open(self.temp_links_cache_file, 'r') as f:
                 cache_data = json.load(f)
-                
-            # Check if cache is expired (temporary links expire after 4 hours)
-            timestamp = datetime.fromisoformat(cache_data["timestamp"])
-            if datetime.now() - timestamp > timedelta(hours=3.5):  # Use 3.5 hours to be safe
-                print("Cache expired, links need refresh")
-                return {}
-                
-            print(f"Loaded {len(cache_data['links'])} temporary links from cache")
-            return cache_data["links"]
+
+            # Handle different cache formats
+            if 'timestamp' in cache_data and 'links' in cache_data:
+                # Old format with timestamp
+                timestamp = datetime.fromisoformat(cache_data["timestamp"])
+                if datetime.now() - timestamp > timedelta(hours=3.5):
+                    print("Cache expired, links need refresh")
+                    return {}
+                print(f"Loaded {len(cache_data['links'])} temporary links from cache")
+                return cache_data["links"]
+            else:
+                # New format - cache_data is the direct mapping
+                valid_links = {}
+                now = datetime.now()
+                for path, entry in cache_data.items():
+                    if isinstance(entry, dict) and 'expiry' in entry:
+                        expiry = datetime.fromisoformat(entry['expiry'])
+                        if expiry > now:
+                            valid_links[path] = entry
+                print(f"Loaded {len(valid_links)} valid temporary links from cache")
+                return valid_links
         except Exception as e:
             print(f"Error loading temp links from cache: {str(e)}")
             return {}
@@ -418,10 +480,17 @@ class AsyncDropboxClient:
             now = datetime.now()
             for path in image_paths:
                 if path in cached_links:
-                    link, expiry_str = cached_links[path]
-                    expiry = datetime.fromisoformat(expiry_str)
-                    if expiry > now:
-                        valid_cached_links[path] = link
+                    cache_entry = cached_links[path]
+                    # Cache loader now always returns dict format
+                    if isinstance(cache_entry, dict) and 'expiry' in cache_entry:
+                        expiry = datetime.fromisoformat(cache_entry['expiry'])
+                        if expiry > now:
+                            valid_cached_links[path] = {
+                                'thumbnail': cache_entry.get('thumbnail'),
+                                'full': cache_entry.get('full')
+                            }
+                        else:
+                            paths_needing_links.append(path)
                     else:
                         paths_needing_links.append(path)
                 else:
@@ -441,7 +510,24 @@ class AsyncDropboxClient:
                 else:
                     processing_paths = paths_needing_links
                     
-                new_links = await self.get_temporary_links_async(processing_paths)
+                # Get both thumbnail and full resolution links
+                new_links = {}
+                async with aiohttp.ClientSession() as session:
+                    # Create tasks for all paths
+                    tasks = []
+                    for path in processing_paths:
+                        task = self.get_image_links_with_thumbnails(session, path)
+                        tasks.append(task)
+
+                    # Process in batches to avoid overwhelming the API
+                    batch_size = 50
+                    for i in range(0, len(tasks), batch_size):
+                        batch = tasks[i:i + batch_size]
+                        results = await asyncio.gather(*batch)
+                        for path, links in results:
+                            if links['full']:  # Only add if we got a valid link
+                                new_links[path] = links
+
                 temp_links = {**valid_cached_links, **new_links}
                 
                 # Save to cache
@@ -469,7 +555,9 @@ class AsyncDropboxClient:
             
             # Cache the folder structure
             self.folder_structure = folder_structure
-            
+            # Save to disk for persistence
+            self.save_folder_structure_to_cache(folder_structure)
+
             total_time = (datetime.now() - start_time).total_seconds()
             logger.info(f"Total scan time: {total_time:.2f} seconds")
             return dropbox_map
@@ -788,14 +876,47 @@ class AsyncDropboxClient:
         ext = os.path.splitext(path.lower())[1]
         return ext in self.IMAGE_EXTENSIONS
     
+    async def get_image_links_with_thumbnails(self, session, file_path: str) -> Tuple[str, Dict[str, Optional[str]]]:
+        """
+        Get both thumbnail and full-res temporary links for an image.
+
+        Args:
+            session: aiohttp ClientSession to use
+            file_path: Path to the image file
+
+        Returns:
+            Tuple of (file_path, {'thumbnail': url, 'full': url})
+        """
+        try:
+            # Get the full resolution temporary link
+            _, full_link = await self.get_temporary_link(session, file_path)
+            if not full_link:
+                return file_path, {'thumbnail': None, 'full': None}
+
+            # For thumbnail, append size parameter to the temporary link
+            # Dropbox supports these size params: w32h32, w64h64, w128h128, w256h256, w480h320, w640h480, w960h640, w1024h768
+            thumbnail_link = full_link
+            if '?' in full_link:
+                thumbnail_link = f"{full_link}&size=w256h256"
+            else:
+                thumbnail_link = f"{full_link}?size=w256h256"
+
+            return file_path, {
+                'thumbnail': thumbnail_link,
+                'full': full_link
+            }
+        except Exception as e:
+            logger.error(f"Error getting image links for {file_path}: {str(e)}")
+            return file_path, {'thumbnail': None, 'full': None}
+
     async def get_temporary_link(self, session, file_path: str) -> Tuple[str, Optional[str]]:
         """
         Get a temporary link for a single file with caching.
-        
+
         Args:
             session: aiohttp ClientSession to use
             file_path: Path to the file
-            
+
         Returns:
             Tuple of (file_path, temporary_link_url or None)
         """
@@ -805,18 +926,18 @@ class AsyncDropboxClient:
             cached_link, expiry = self.file_links_cache[file_path]
             if now < expiry:
                 return file_path, cached_link
-        
+
         async def _get_link():
             """Internal implementation of get_temporary_link"""
             try:
                 endpoint = f"{self.BASE_URL}/files/get_temporary_link"
                 data = {"path": file_path}
-                
+
                 async with session.post(endpoint, headers=self.headers, json=data) as response:
                     if response.status == 200:
                         result = await response.json()
                         link = result.get('link')
-                        
+
                         # Cache the link with 4-hour expiration
                         expiry = now + timedelta(hours=4)
                         self.file_links_cache[file_path] = (link, expiry)
@@ -824,14 +945,19 @@ class AsyncDropboxClient:
                         return file_path, link
                     else:
                         text = await response.text()
-                        logger.error(f"Error getting link for {file_path}: {text}")
-                        # Raise ClientResponseError for auth errors
-                        if response.status == 401:
+                        # Don't log rate limit errors at ERROR level
+                        if response.status == 429:
+                            logger.debug(f"Rate limit hit for {file_path}")
+                        else:
+                            logger.error(f"Error getting link for {file_path}: {text}")
+
+                        # Raise ClientResponseError for auth errors and rate limits
+                        if response.status in [401, 429]:
                             raise aiohttp.ClientResponseError(
                                 request_info=response.request_info,
                                 history=response.history,
                                 status=response.status,
-                                message="Unauthorized",
+                                message=text,
                                 headers=response.headers
                             )
                         return file_path, None
@@ -1299,10 +1425,20 @@ class AsyncDropboxClient:
         """
         # Check if we have a cached folder structure
         if not self.folder_structure:
-            # Perform a minimal scan to get the structure
-            logger.info("No cached folder structure, performing scan...")
-            dropbox_map = await self.scan_and_map_folder()
-            folder_structure = dropbox_map['folder_structure']
+            # COMMENTED OUT AUTOMATIC SCAN - Return empty instead
+            # # Perform a minimal scan to get the structure
+            # logger.info("No cached folder structure, performing scan...")
+            # dropbox_map = await self.scan_and_map_folder()
+            # folder_structure = dropbox_map['folder_structure']
+
+            # Return empty result instead of auto-scanning
+            logger.info("No cached folder structure, returning empty result")
+            return {
+                'folders': [],
+                'files': [],
+                'images': [],
+                'message': 'No cached data available. Please use sync button.'
+            }
         else:
             folder_structure = self.folder_structure
             

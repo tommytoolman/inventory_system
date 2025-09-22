@@ -129,7 +129,14 @@
                         </td>
                         <td class="px-6 py-4 text-sm text-gray-700">
                             {% if event.change_type == 'new_listing' %}
-                                <div class="flex items-start space-x-2">
+                                <div class="flex items-start space-x-3">
+                                    {% if event.change_data.primary_image_url %}
+                                    <div class="flex-shrink-0">
+                                        <img src="{{ event.change_data.primary_image_url }}"
+                                             alt="{{ event.change_data.title or 'Product image' }}"
+                                             class="w-16 h-16 object-cover rounded-md border border-gray-200">
+                                    </div>
+                                    {% endif %}
                                     <a href="{% if event.platform_name == 'reverb' %}https://reverb.com/uk/item/{{ event.external_id }}{% elif event.platform_name == 'ebay' %}https://www.ebay.co.uk/itm/{{ event.external_id }}{% elif event.platform_name == 'shopify' %}https://londonvintageguitars.com/products/{{ event.external_id }}{% elif event.platform_name == 'vr' %}https://www.vintageandrare.com/product/{{ event.external_id }}{% endif %}"
                                        target="_blank"
                                        class="flex-shrink-0 mt-0.5">
@@ -149,7 +156,7 @@
                                         </div>
                                         <div class="text-xs text-gray-500 mt-1">
                                             {% if event.change_data.price %}
-                                                Price: £{{ "{:,.0f}".format(event.change_data.price) }}
+                                                Price: £{{ "{:,.0f}".format(event.change_data.price|float) }}
                                             {% endif %}
                                             {% if event.change_data.brand %}
                                                 {% if event.change_data.price %} • {% endif %}Brand: {{ event.change_data.brand }}
@@ -163,25 +170,6 @@
                                         {% endif %}
                                     </div>
                                 </div>
-                                {% if event.external_id %}
-                                    {% if event.platform_name == 'reverb' %}
-                                        <a href="https://reverb.com/uk/item/{{ event.external_id }}" target="_blank" class="inline-flex items-center mt-2 px-2 py-1 text-xs font-medium text-white bg-orange-600 hover:bg-orange-700 rounded-md">
-                                            View on Reverb →
-                                        </a>
-                                    {% elif event.platform_name == 'ebay' %}
-                                        <a href="https://www.ebay.co.uk/itm/{{ event.external_id }}" target="_blank" class="inline-flex items-center mt-2 px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md">
-                                            View on eBay →
-                                        </a>
-                                    {% elif event.platform_name == 'shopify' %}
-                                        <a href="https://londonvintageguitars.com/products/{{ event.external_id }}" target="_blank" class="inline-flex items-center mt-2 px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md">
-                                            View on Shopify →
-                                        </a>
-                                    {% elif event.platform_name == 'vr' %}
-                                        <a href="https://www.vintageandrare.com/product/{{ event.external_id }}" target="_blank" class="inline-flex items-center mt-2 px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md">
-                                            View on V&R →
-                                        </a>
-                                    {% endif %}
-                                {% endif %}
                             {% elif event.change_type == 'price' or event.change_type == 'price_change' %}
                                 <div>
                                     <span class="text-gray-500">Old:</span> 
@@ -292,6 +280,34 @@
                                 
                                 {% if not event.product_id and event.status != 'pending' %}
                                 <span class="text-gray-400">-</span>
+                                {% endif %}
+
+                                {% if event.external_id %}
+                                    {% if event.platform_name == 'reverb' %}
+                                        <a href="https://reverb.com/uk/item/{{ event.external_id }}"
+                                           target="_blank"
+                                           class="px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors">
+                                            View on Reverb
+                                        </a>
+                                    {% elif event.platform_name == 'ebay' %}
+                                        <a href="https://www.ebay.co.uk/itm/{{ event.external_id }}"
+                                           target="_blank"
+                                           class="px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors">
+                                            View on eBay
+                                        </a>
+                                    {% elif event.platform_name == 'shopify' %}
+                                        <a href="https://londonvintageguitars.com/products/{{ event.external_id }}"
+                                           target="_blank"
+                                           class="px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors">
+                                            View on Shopify
+                                        </a>
+                                    {% elif event.platform_name == 'vr' %}
+                                        <a href="https://www.vintageandrare.com/product/{{ event.external_id }}"
+                                           target="_blank"
+                                           class="px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors">
+                                            View on V&R
+                                        </a>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         </td>

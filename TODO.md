@@ -28,6 +28,35 @@
 - [x] Add configurable dropdown sorting (categories by count, brands alphabetical)
 - [x] Document dropdown configuration in README
 
+### Dropbox Integration Improvements (2025-09-22)
+- [x] Fix cache loading error ("too many values to unpack")
+- [x] Implement folder structure persistence across server restarts
+- [x] Add automatic token refresh and sharing between instances
+- [x] Remove token file storage for security (only use env vars)
+- [x] Add rate limit handling with exponential backoff
+- [x] Auto-load Dropbox folders when Images & Media section opens
+- [x] Style folders as square tiles (5 per row) for better UX
+- [x] Create cache cleanup script for managing temporary links
+- [x] Ensure cache directory is in .gitignore
+
+## 🔴 Critical Issues (Priority 1)
+
+### UI Integration Tasks
+- [ ] **Implement ending item logic in UI**
+  - Add end listing buttons/actions to product detail pages
+  - Create bulk end listing functionality for multiple items
+  - Show confirmation dialogs before ending
+  - Update status displays after ending
+  - Handle platform-specific ending requirements
+
+- [ ] **Complete Add Product item creation flow**
+  - Fix "Create Listing" button functionality
+  - Implement payload generation and submission
+  - Add loading states during creation
+  - Show success/error messages
+  - Navigate to product detail after creation
+  - Handle multi-platform listing creation
+
 ## 🔴 Critical Issues (Priority 1)
 
 ### eBay Service Issues

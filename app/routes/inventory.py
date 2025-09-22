@@ -2604,37 +2604,7 @@ async def get_dropbox_folders(
             )
             
         
-        # Check if we need to initialize a scan
-        if (not hasattr(request.app.state, 'dropbox_map') or 
-            request.app.state.dropbox_map is None):
-            
-            # We need refresh credentials to start a scan if no access token
-            if not access_token and (not refresh_token or not app_key or not app_secret):
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "message": "No valid Dropbox credentials available"
-                    }
-                )
-            
-            # Start background scan
-            request.app.state.dropbox_scan_in_progress = True
-            request.app.state.dropbox_scan_progress = {'status': 'starting', 'progress': 0}
-            background_tasks.add_task(perform_dropbox_scan, request.app, access_token)
-            
-            return JSONResponse(
-                status_code=202,  # Accepted but processing
-                content={
-                    "status": "initializing",
-                    "message": "Starting Dropbox scan. Please try again in a moment."
-                }
-            )
-        
-        # Get cached data
-        dropbox_map = request.app.state.dropbox_map
-        
-        # Create client for direct interaction
+        # Create client first to check for cached data
         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
         client = AsyncDropboxClient(
             access_token=access_token,
@@ -2642,7 +2612,74 @@ async def get_dropbox_folders(
             app_key=app_key,
             app_secret=app_secret
         )
-        
+
+        # Check if we need to initialize a scan
+        if (not hasattr(request.app.state, 'dropbox_map') or
+            request.app.state.dropbox_map is None):
+
+            # Check if the service has cached folder structure
+            logger.info(f"Checking client folder structure: {bool(client.folder_structure)}, entries: {len(client.folder_structure) if client.folder_structure else 0}")
+            if client.folder_structure:
+                logger.info("Found cached folder structure in service, using it")
+
+                # Also update app state for consistency
+                request.app.state.dropbox_map = {
+                    'folder_structure': client.folder_structure,
+                    'temp_links': {}
+                }
+                request.app.state.dropbox_last_updated = datetime.now()
+
+                # Use the service's cached data
+                folder_contents = await client.get_folder_contents(path)
+
+                # For root path, extract top-level folders from the structure
+                if not path:
+                    folders = []
+                    logger.info(f"Extracting folders from structure with {len(client.folder_structure)} entries")
+                    for folder_path, folder_data in client.folder_structure.items():
+                        logger.debug(f"Checking {folder_path}: is_dict={isinstance(folder_data, dict)}, starts_with_slash={folder_path.startswith('/')}, slash_count={folder_path.count('/')}")
+                        if isinstance(folder_data, dict) and folder_path.startswith('/') and folder_path.count('/') == 1:
+                            folder_entry = {
+                                'name': folder_path.strip('/'),
+                                'path': folder_path,
+                                'is_folder': True
+                            }
+                            folders.append(folder_entry)
+                            logger.debug(f"Added folder: {folder_entry}")
+
+                    logger.info(f"Found {len(folders)} folders to return")
+                    return JSONResponse(
+                        content={
+                            "folders": sorted(folders, key=lambda x: x['name'].lower()),
+                            "files": [],
+                            "current_path": path,
+                            "cached": True
+                        }
+                    )
+                else:
+                    return JSONResponse(
+                        content={
+                            "folders": folder_contents.get("folders", []),
+                            "files": folder_contents.get("images", []),
+                            "current_path": path,
+                            "cached": True
+                        }
+                    )
+
+            # No cache available anywhere
+            return JSONResponse(
+                content={
+                    "folders": [],
+                    "files": [],
+                    "current_path": path,
+                    "message": "No Dropbox data cached. Please use the sync button to load data."
+                }
+            )
+
+        # Get cached data
+        dropbox_map = request.app.state.dropbox_map
+        logger.info(f"App state dropbox_map exists: {dropbox_map is not None}, has structure: {'folder_structure' in dropbox_map if dropbox_map else False}")
+
         # If the token might be expired, verify it
         last_updated = getattr(request.app.state, 'dropbox_last_updated', None)
         token_age_hours = ((datetime.now() - last_updated).total_seconds() / 3600) if last_updated else None
@@ -2788,19 +2825,32 @@ async def get_dropbox_images(
         temp_links = dropbox_map.get('temp_links', {})
         
         # Search for images directly in the requested folder
-        for path, link in temp_links.items():
+        for path, link_data in temp_links.items():
             path_lower = path.lower()
-            
+
             # Match files directly in this folder (not in subfolders)
             folder_part = os.path.dirname(path_lower)
-            
+
             if folder_part == normalized_folder_path:
                 if any(path_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
-                    images.append({
-                        'name': os.path.basename(path),
-                        'path': path,
-                        'url': link
-                    })
+                    # Handle new format with thumbnail and full URLs
+                    if isinstance(link_data, dict):
+                        images.append({
+                            'name': os.path.basename(path),
+                            'path': path,
+                            'url': link_data.get('thumbnail', link_data.get('full')),  # Use thumbnail for display
+                            'full_url': link_data.get('full'),  # Include full URL for when image is selected
+                            'thumbnail_url': link_data.get('thumbnail')
+                        })
+                    else:
+                        # Old format compatibility
+                        images.append({
+                            'name': os.path.basename(path),
+                            'path': path,
+                            'url': link_data,
+                            'full_url': link_data,
+                            'thumbnail_url': link_data
+                        })
         
         # If images found directly, return them
         if images:
@@ -2826,13 +2876,26 @@ async def get_dropbox_images(
                     fallback_images = []
                     search_prefix = f"{normalized_folder_path}/"
                     
-                    for path, link in temp_links.items():
+                    for path, link_data in temp_links.items():
                         if path.lower().startswith(search_prefix) and any(path.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
-                            fallback_images.append({
-                                'name': os.path.basename(path),
-                                'path': path,
-                                'url': link
-                            })
+                            # Handle new format with thumbnail and full URLs
+                            if isinstance(link_data, dict):
+                                fallback_images.append({
+                                    'name': os.path.basename(path),
+                                    'path': path,
+                                    'url': link_data.get('thumbnail', link_data.get('full')),
+                                    'full_url': link_data.get('full'),
+                                    'thumbnail_url': link_data.get('thumbnail')
+                                })
+                            else:
+                                # Old format compatibility
+                                fallback_images.append({
+                                    'name': os.path.basename(path),
+                                    'path': path,
+                                    'url': link_data,
+                                    'full_url': link_data,
+                                    'thumbnail_url': link_data
+                                })
                     
                     if fallback_images:
                         print(f"Found {len(fallback_images)} images using fallback search for {folder_path}")

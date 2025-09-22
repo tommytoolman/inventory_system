@@ -45,6 +45,24 @@
                                 {{ status_val|title }}
                             </span>
                         {% endif %}
+
+                        <!-- End All Listings button - only show if there are active listings -->
+                        {% set active_platforms = [] %}
+                        {% for platform_entry in all_platforms_status %}
+                            {% if platform_entry.is_listed and platform_entry.details %}
+                                {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
+                                {% if platform_status in ['ACTIVE', 'LIVE'] %}
+                                    {% set _ = active_platforms.append(platform_entry) %}
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if active_platforms|length > 0 %}
+                            <button onclick="endAllListings()"
+                                class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300">
+                                End All Listings
+                            </button>
+                        {% endif %}
                     </div>
                 </div>
                 
@@ -199,15 +217,29 @@
                                     {% endif %}
                                 </div>
                                 
-                                <!-- Line 2: ID + Show Listing button -->
+                                <!-- Line 2: ID + Show Listing button + End Listing button -->
                                 <div class="flex justify-between items-center text-sm text-gray-600 mb-1">
                                     <span>ID: {{ platform_entry.details.external_id or 'N/A' }}</span>
-                                    {% if platform_entry.details.listing_url %}
-                                        <a href="{{ platform_entry.details.listing_url }}" target="_blank" 
-                                        class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
-                                            Show Listing
-                                        </a>
-                                    {% endif %}
+                                    <div class="flex gap-2">
+                                        {% if platform_entry.details.listing_url %}
+                                            <a href="{{ platform_entry.details.listing_url }}" target="_blank"
+                                            class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
+                                                Show Listing
+                                            </a>
+                                        {% endif %}
+
+                                        <!-- End Listing button - only show for active listings -->
+                                        {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
+                                        {% if platform_status in ['ACTIVE', 'LIVE'] and platform_entry.details.external_id %}
+                                            <button onclick="endListing('{{ platform_entry.name|lower }}', '{{ platform_entry.details.external_id }}', {{ product.id }})"
+                                                class="px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300"
+                                                data-platform-active="true"
+                                                data-platform="{{ platform_entry.name|lower }}"
+                                                data-external-id="{{ platform_entry.details.external_id }}">
+                                                End Listing
+                                            </button>
+                                        {% endif %}
+                                    </div>
                                 </div>
                                 
                                 <!-- Line 3: Last Sync -->
@@ -377,7 +409,7 @@
             // Create message element
             const messageDiv = document.createElement('div');
             messageDiv.className = `alert alert-${type || 'info'} mb-4 p-4 rounded-md`;
-            
+
             // Set colors based on message type
             if (type === 'error') {
                 messageDiv.className += ' bg-red-100 border border-red-400 text-red-700';
@@ -388,18 +420,18 @@
             } else {
                 messageDiv.className += ' bg-blue-100 border border-blue-400 text-blue-700';
             }
-            
+
             messageDiv.innerHTML = `
                 <div class="flex justify-between items-center">
                     <span>${message.replace(/\+/g, ' ')}</span>
                     <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-lg">&times;</button>
                 </div>
             `;
-            
+
             // Insert at the top of the container
             const container = document.querySelector('.container');
             container.insertBefore(messageDiv, container.firstChild);
-            
+
             // Auto-remove success/info messages after 5 seconds
             if (type === 'success' || type === 'info') {
                 setTimeout(() => {
@@ -408,6 +440,221 @@
                     }
                 }, 5000);
             }
+        }
+
+        // Alias showMessage to displayMessage
+        function showMessage(type, message) {
+            displayMessage(message, type);
+        }
+
+        // End listing function
+        async function endListing(platform, externalId, productId) {
+            let action = 'end';  // default action
+
+            // For V&R, offer choice between end and delete
+            if (platform === 'vr') {
+                const vrAction = confirm(
+                    'For Vintage & Rare listings, you can either:\n\n' +
+                    'Click OK to END the listing (mark as sold)\n' +
+                    'Click Cancel to DELETE the listing permanently\n\n' +
+                    'Which would you like to do?'
+                );
+                action = vrAction ? 'end' : 'delete';
+
+                // Confirm the chosen action
+                const confirmMessage = action === 'end'
+                    ? 'Are you sure you want to END this V&R listing (mark as sold)?'
+                    : 'Are you sure you want to DELETE this V&R listing permanently?';
+
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+            } else {
+                // For other platforms, just confirm ending
+                if (!confirm(`Are you sure you want to end this ${platform} listing?`)) {
+                    return;
+                }
+            }
+
+            showMessage('info', `${action === 'delete' ? 'Deleting' : 'Ending'} ${platform} listing...`);
+
+            try {
+                let endpoint;
+                let method = 'POST';
+                let body = {};
+
+                // Platform-specific endpoints
+                switch(platform) {
+                    case 'reverb':
+                        endpoint = `/api/reverb/listings/${externalId}/end`;
+                        body = { reason: 'not_sold' };
+                        break;
+                    case 'ebay':
+                        endpoint = `/api/ebay/listings/${externalId}/end`;
+                        body = { reason: 'NotAvailable' };
+                        break;
+                    case 'shopify':
+                        endpoint = `/api/shopify/products/${externalId}/archive`;
+                        break;
+                    case 'vr':
+                        // For V&R, we need to handle end vs delete differently
+                        if (action === 'delete') {
+                            endpoint = `/api/vr/listings/${externalId}/delete`;
+                        } else {
+                            endpoint = `/api/vr/listings/${externalId}/end`;
+                        }
+                        break;
+                    default:
+                        throw new Error(`Unsupported platform: ${platform}`);
+                }
+
+                const response = await fetch(endpoint, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error || `Failed to ${action} ${platform} listing`);
+                }
+
+                showMessage('success', `Successfully ${action === 'delete' ? 'deleted' : 'ended'} ${platform} listing`);
+
+                // Reload page after 2 seconds to show updated status
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+
+            } catch (error) {
+                console.error(`Error ${action}ing listing:`, error);
+                showMessage('error', `Failed to ${action} listing: ${error.message}`);
+            }
+        }
+
+        // End all listings function
+        async function endAllListings() {
+            // Get all active platforms
+            const activePlatforms = [];
+            const platformElements = document.querySelectorAll('[data-platform-active="true"]');
+
+            platformElements.forEach(elem => {
+                const platform = elem.getAttribute('data-platform');
+                const externalId = elem.getAttribute('data-external-id');
+                if (platform && externalId) {
+                    activePlatforms.push({ platform, externalId });
+                }
+            });
+
+            if (activePlatforms.length === 0) {
+                showMessage('warning', 'No active listings to end');
+                return;
+            }
+
+            // Check if V&R is among the platforms
+            const hasVR = activePlatforms.some(p => p.platform === 'vr');
+            let vrAction = 'end';
+
+            if (hasVR) {
+                const vrChoice = confirm(
+                    'You have a Vintage & Rare listing. Would you like to:\n\n' +
+                    'Click OK to END all listings (mark as sold)\n' +
+                    'Click Cancel to DELETE the V&R listing (and end others)\n\n' +
+                    'Which would you like to do?'
+                );
+                vrAction = vrChoice ? 'end' : 'delete';
+            }
+
+            // Build confirmation message
+            let confirmMessage = `Are you sure you want to end listings on the following platforms?\n\n`;
+            activePlatforms.forEach(p => {
+                if (p.platform === 'vr' && vrAction === 'delete') {
+                    confirmMessage += `• ${p.platform.toUpperCase()}: DELETE permanently\n`;
+                } else {
+                    confirmMessage += `• ${p.platform.toUpperCase()}: End listing\n`;
+                }
+            });
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            showMessage('info', 'Processing end requests for all platforms...');
+
+            // Process each platform
+            const productId = {{ product.id }};
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const { platform, externalId } of activePlatforms) {
+                try {
+                    const action = (platform === 'vr' && vrAction === 'delete') ? 'delete' : 'end';
+                    let endpoint;
+                    let method = 'POST';
+                    let body = {};
+
+                    // Platform-specific endpoints
+                    switch(platform) {
+                        case 'reverb':
+                            endpoint = `/api/reverb/listings/${externalId}/end`;
+                            body = { reason: 'not_sold' };
+                            break;
+                        case 'ebay':
+                            endpoint = `/api/ebay/listings/${externalId}/end`;
+                            body = { reason: 'NotAvailable' };
+                            break;
+                        case 'shopify':
+                            endpoint = `/api/shopify/products/${externalId}/archive`;
+                            break;
+                        case 'vr':
+                            // For V&R, we need to handle end vs delete differently
+                            if (action === 'delete') {
+                                endpoint = `/api/vr/listings/${externalId}/delete`;
+                            } else {
+                                endpoint = `/api/vr/listings/${externalId}/end`;
+                            }
+                            break;
+                        default:
+                            console.error(`Unsupported platform: ${platform}`);
+                            errorCount++;
+                            continue;
+                    }
+
+                    const response = await fetch(endpoint, {
+                        method: method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(body)
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                        const errorText = await response.text();
+                        console.error(`Failed to ${action} ${platform} listing:`, errorText);
+                    }
+                } catch (error) {
+                    console.error(`Error ending ${platform} listing:`, error);
+                    errorCount++;
+                }
+            }
+
+            if (successCount > 0 && errorCount === 0) {
+                showMessage('success', `Successfully ended all ${successCount} listings`);
+            } else if (successCount > 0 && errorCount > 0) {
+                showMessage('warning', `Ended ${successCount} listings, but ${errorCount} failed`);
+            } else {
+                showMessage('error', `Failed to end listings`);
+            }
+
+            // Reload page after 2 seconds
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
         }
     });
 </script>

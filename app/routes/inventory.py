@@ -728,13 +728,32 @@ async def product_detail(
         
         logger.debug(f"Constructed all_platforms_status for product {product_id}: {all_platforms_status}")
 
-        # 4. Prepare context for the template
+        # 4. Check for platform status messages from Add Product redirect
+        platform_messages = []
+        show_status = request.query_params.get("show_status") == "true"
+
+        if show_status:
+            from urllib.parse import unquote
+            for platform in ["reverb", "ebay", "shopify", "vr"]:
+                status = request.query_params.get(f"{platform}_status")
+                message = request.query_params.get(f"{platform}_message")
+
+                if status and message:
+                    platform_messages.append({
+                        "platform": platform.upper(),
+                        "status": status,
+                        "message": unquote(message)
+                    })
+
+        # 5. Prepare context for the template
         context = {
             "request": request,
             "product": product,
             "all_platforms_status": all_platforms_status,
+            "platform_messages": platform_messages,
+            "show_status": show_status
         }
-        
+
         return templates.TemplateResponse("inventory/detail.html", context)
 
     except Exception as e:
@@ -1567,9 +1586,23 @@ async def add_product(
 
         print("About to return redirect response")
 
-        # Step 5: Redirect to product detail page
+        # Step 5: Redirect to product detail page with platform status
+        # Encode platform statuses as query parameters for display
+        query_params = []
+        for platform, status_info in platform_statuses.items():
+            if status_info["status"] != "pending":  # Only show platforms that were processed
+                query_params.append(f"{platform}_status={status_info['status']}")
+                # URL encode the message to handle special characters
+                from urllib.parse import quote
+                query_params.append(f"{platform}_message={quote(status_info['message'])}")
+
+        query_string = "&".join(query_params) if query_params else ""
+        redirect_url = f"/inventory/product/{product.id}"
+        if query_string:
+            redirect_url += f"?{query_string}&show_status=true"
+
         return RedirectResponse(
-            url=f"/inventory/product/{product.id}",
+            url=redirect_url,
             status_code=303
         )
 

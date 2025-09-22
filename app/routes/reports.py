@@ -574,8 +574,8 @@ async def sync_events_report(
     platform_filter: Optional[str] = Query(None, alias="platform"),
     change_type_filter: Optional[str] = Query(None, alias="change_type"),
     status_filter: Optional[str] = Query("pending", alias="status"),
-    sort_by: Optional[str] = Query("detected_at", alias="sort"),
-    sort_order: Optional[str] = Query("desc", alias="order")
+    sort_by: Optional[str] = Query("change_type", alias="sort"),
+    sort_order: Optional[str] = Query("asc", alias="order")
 ):
     """
     Report for viewing and filtering unprocessed synchronization events.

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Remove product 538 from the database completely.
+Remove a product from the database completely.
 This will remove it from all platform listing tables, platform_common, and finally products table.
 
 Usage:
-    python scripts/remove_product_538.py
-    python scripts/remove_product_538.py --dry-run
+    python scripts/remove_product_538.py 538
+    python scripts/remove_product_538.py 538 --dry-run
+    python scripts/remove_product_538.py --product-id 538
 """
 
 import asyncio
@@ -14,10 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import async_session
 
-async def remove_product_538(dry_run: bool = False):
-    """Remove product 538 from all tables in the correct order"""
+async def remove_product(product_id: int, dry_run: bool = False):
+    """Remove a product from all tables in the correct order"""
     async with async_session() as session:
-        product_id = 538
 
         try:
             # Start transaction
@@ -106,22 +106,61 @@ async def remove_product_538(dry_run: bool = False):
             raise
 
 async def main():
-    parser = argparse.ArgumentParser(description='Remove product 538 from database')
+    parser = argparse.ArgumentParser(description='Remove a product from database completely')
+    parser.add_argument('product_id', nargs='?', type=int,
+                       help='Product ID to remove')
+    parser.add_argument('--product-id', dest='product_id_flag', type=int,
+                       help='Product ID to remove (alternative syntax)')
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be deleted without actually deleting')
 
     args = parser.parse_args()
 
+    # Get product ID from either positional arg or flag
+    product_id = args.product_id or args.product_id_flag
+    if not product_id:
+        parser.error('Product ID is required. Use: script.py 123 or script.py --product-id 123')
+
+    # First, check what will be deleted
+    async with async_session() as session:
+        # Count platform entries
+        count_query = text("""
+            SELECT COUNT(*) as platform_count
+            FROM platform_common
+            WHERE product_id = :product_id
+        """)
+        result = await session.execute(count_query, {"product_id": product_id})
+        platform_count = result.scalar()
+
+        # Check if product exists
+        product_query = text("""
+            SELECT sku, brand, model
+            FROM products
+            WHERE id = :product_id
+        """)
+        result = await session.execute(product_query, {"product_id": product_id})
+        product_info = result.fetchone()
+
+        if not product_info:
+            print(f"❌ Product {product_id} not found in database")
+            return
+
+        print(f"\nProduct {product_id}: {product_info.brand} {product_info.model} (SKU: {product_info.sku})")
+        print(f"Found {platform_count} platform listings")
+
     # Confirm before proceeding (unless dry-run)
     if not args.dry_run:
-        response = input("\n⚠️  WARNING: This will permanently delete product 538 from the database.\n"
-                        "The Reverb listing will remain online and should appear in sync events.\n"
-                        "Are you sure you want to continue? (yes/no): ")
+        response = input(f"\n⚠️  WARNING: This will permanently delete:\n"
+                        f"  - {platform_count} platform listing entries\n"
+                        f"  - {platform_count} platform_common entries\n"
+                        f"  - 1 product entry\n"
+                        f"\nThe listings will remain online on their platforms.\n"
+                        f"Are you sure you want to continue? (yes/no): ")
         if response.lower() != 'yes':
             print("Cancelled")
             return
 
-    await remove_product_538(dry_run=args.dry_run)
+    await remove_product(product_id=product_id, dry_run=args.dry_run)
 
 if __name__ == "__main__":
     asyncio.run(main())

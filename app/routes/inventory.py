@@ -1424,10 +1424,35 @@ async def add_product(
                     "status": "error",
                     "message": f"Error: {str(e)}"
                 }
-                # If Reverb fails, create fallback enriched data
+
+                # If Reverb fails, DO NOT create on other platforms
+                logger.warning("❌ Reverb creation failed - skipping other platforms")
+
+                # Set other platforms as skipped
+                for platform in ["ebay", "shopify", "vr"]:
+                    if platform in platforms_to_sync:
+                        platform_statuses[platform] = {
+                            "status": "info",
+                            "message": "Skipped - Reverb creation failed"
+                        }
+
+                # Clear platforms_to_sync so no other platforms are attempted
+                platforms_to_sync = []
                 enriched_data = None
 
-        # If no Reverb or it failed, create fallback enriched data
+        # Only proceed with other platforms if we have Reverb data
+        # If no Reverb or it failed, create fallback enriched data but DON'T sync to other platforms
+        if not enriched_data and len(platforms_to_sync) > 0:
+            # If we still have platforms to sync but no Reverb data, skip them
+            logger.warning("No Reverb data available - skipping remaining platforms")
+            for platform in platforms_to_sync:
+                platform_statuses[platform] = {
+                    "status": "info",
+                    "message": "Skipped - Reverb listing required first"
+                }
+            platforms_to_sync = []  # Clear remaining platforms
+
+        # Create fallback data for display purposes only
         if not enriched_data:
             enriched_data = {
                 "title": f"{year} {brand} {model}" if year else f"{brand} {model}",

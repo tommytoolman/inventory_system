@@ -232,9 +232,9 @@ async def publish_reverb_listing(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-@router.post("/listings/{listing_id}/end", response_model=bool)
+@router.post("/reverb/listings/{listing_id}/end", response_model=bool)
 async def end_reverb_listing(
-    listing_id: int,
+    listing_id: str,
     reason: str = "not_sold",
     db: AsyncSession = Depends(get_db),
     settings = Depends(get_settings)
@@ -256,7 +256,8 @@ async def end_reverb_listing(
     
     try:
         service = ReverbService(db, settings)
-        success = await service.end_listing(listing_id, reason)
+        # Use the same method that sync_services uses
+        success = await service.mark_item_as_sold(listing_id)
         return success
     except ListingNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

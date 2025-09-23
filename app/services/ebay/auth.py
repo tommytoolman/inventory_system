@@ -125,6 +125,18 @@ class EbayAuthManager:
             logger.error(f"Unexpected error refreshing token: {str(e)}")
             raise
 
+    def get_authorization_url(self) -> str:
+        """Generate the authorization URL for manual approval"""
+        scopes_str = "%20".join(self.scopes)
+        auth_url_generated = (
+            f"{self.auth_url}"
+            f"?client_id={self.client_id}"
+            f"&redirect_uri={self.ru_name}"
+            f"&response_type=code"
+            f"&scope={scopes_str}"
+        )
+        return auth_url_generated
+
     def generate_user_authorization_url(self) -> str:
         """Generate the URL for user authorization"""
         if not self.ru_name:

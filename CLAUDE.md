@@ -1,5 +1,7 @@
 # CLAUDE.md - Important Instructions for Claude AI Assistant
 
+## If making edits to existing functions, classes DO NOT change these names unless there is a compelling reason to. Too often your "helpful" changes break stuff.
+
 ## 🚫 NEVER USE CONDA - CRITICAL
 **NEVER EVER install packages using conda. DO NOT suggest conda commands. DO NOT use conda environments.**
 - Always use the project's virtual environment: `source venv/bin/activate`

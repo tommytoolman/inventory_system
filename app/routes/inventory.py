@@ -1723,7 +1723,7 @@ async def inspect_payload(
     base_price: float = Form(...),
     quantity: int = Form(1),
     description: str = Form(""),
-    decade: Optional[str] = Form(None),
+    decade: Optional[int] = Form(None),
     year: Optional[int] = Form(None),
     finish: Optional[str] = Form(None),
     processing_time: int = Form(3),
@@ -2057,6 +2057,300 @@ async def inspect_payload(
             }
         }
     }
+
+
+@router.post("/save-draft")
+async def save_draft(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    # Basic product fields
+    brand: str = Form(...),
+    model: str = Form(...),
+    sku: str = Form(...),
+    title: Optional[str] = Form(None),
+    category: str = Form(...),
+    condition: str = Form(...),
+    base_price: float = Form(...),
+    quantity: int = Form(1),
+    description: str = Form(""),
+    # Optional fields
+    decade: Optional[int] = Form(None),
+    year: Optional[int] = Form(None),
+    finish: Optional[str] = Form(None),
+    processing_time: int = Form(3),
+    # Inventory fields
+    location: Optional[str] = Form(None),
+    stock_warning_level: Optional[int] = Form(None),
+    offer_price: Optional[float] = Form(None),
+    offer_discount: Optional[float] = Form(None),
+    # Checkbox fields
+    in_collective: Optional[bool] = Form(False),
+    in_inventory: Optional[bool] = Form(True),
+    in_reseller: Optional[bool] = Form(False),
+    free_shipping: Optional[bool] = Form(False),
+    buy_now: Optional[bool] = Form(True),
+    show_vat: Optional[bool] = Form(True),
+    local_pickup: Optional[bool] = Form(False),
+    available_for_shipment: Optional[bool] = Form(True),
+    is_stocked_item: Optional[bool] = Form(False),
+    # Media fields
+    primary_image_file: Optional[UploadFile] = File(None),
+    primary_image_url: Optional[str] = Form(None),
+    additional_images_files: List[UploadFile] = File([]),
+    additional_images_urls: Optional[str] = Form(None),
+    video_url: Optional[str] = Form(None),
+    external_link: Optional[str] = Form(None),
+    # Platform sync fields
+    sync_all: Optional[str] = Form("true"),
+    sync_platforms: Optional[List[str]] = Form(None),
+    # Platform-specific fields (for generating payloads)
+    # eBay fields
+    ebay_category: Optional[str] = Form(None),
+    ebay_category_name: Optional[str] = Form(None),
+    ebay_price: Optional[float] = Form(None),
+    ebay_payment_policy: Optional[str] = Form(None),
+    ebay_return_policy: Optional[str] = Form(None),
+    ebay_shipping_policy: Optional[str] = Form(None),
+    ebay_location: Optional[str] = Form(None),
+    ebay_country: Optional[str] = Form("GB"),
+    ebay_postal_code: Optional[str] = Form(None),
+    # Reverb fields
+    reverb_product_type: Optional[str] = Form(None),
+    reverb_primary_category: Optional[str] = Form(None),
+    reverb_price: Optional[float] = Form(None),
+    shipping_profile: Optional[str] = Form(None),
+    # V&R fields
+    vr_category_id: Optional[str] = Form(None),
+    vr_subcategory_id: Optional[str] = Form(None),
+    vr_sub_subcategory_id: Optional[str] = Form(None),
+    vr_sub_sub_subcategory_id: Optional[str] = Form(None),
+    vr_price: Optional[float] = Form(None),
+    # Shopify fields
+    shopify_category_gid: Optional[str] = Form(None),
+    shopify_price: Optional[float] = Form(None),
+    shopify_product_type: Optional[str] = Form(None),
+    shopify_seo_keywords: Optional[str] = Form(None),
+    # Draft ID for updating existing draft
+    draft_id: Optional[int] = Form(None)
+):
+    """Save product as draft without creating platform listings"""
+
+    try:
+        # Initialize product service
+        product_service = ProductService(db)
+
+        # Process images
+        primary_image = None
+        additional_images = []
+
+        # Handle primary image
+        if primary_image_file and primary_image_file.filename:
+            # Upload file to storage
+            image_url = await product_service.upload_image(primary_image_file)
+            primary_image = image_url
+        elif primary_image_url:
+            primary_image = primary_image_url
+
+        # Handle additional images - files
+        for img_file in additional_images_files:
+            if img_file.filename:
+                image_url = await product_service.upload_image(img_file)
+                additional_images.append(image_url)
+
+        # Handle additional images - URLs
+        if additional_images_urls:
+            try:
+                urls = json.loads(additional_images_urls)
+                additional_images.extend(urls)
+            except:
+                pass
+
+        # Create or update product data - only include fields that exist in Product model
+        product_data = {
+            "sku": sku,
+            "brand": brand.title(),
+            "model": model,
+            "title": title,
+            "category": category,
+            "condition": condition,
+            "base_price": base_price,
+            "quantity": quantity,
+            "description": description,
+            "decade": decade,
+            "year": year,
+            "finish": finish,
+            "processing_time": processing_time,
+            "offer_discount": offer_discount,
+            "in_collective": in_collective,
+            "in_inventory": in_inventory,
+            "in_reseller": in_reseller,
+            "free_shipping": free_shipping,
+            "buy_now": buy_now,
+            "show_vat": show_vat,
+            "local_pickup": local_pickup,
+            "available_for_shipment": available_for_shipment,
+            "is_stocked_item": is_stocked_item,
+            "primary_image": primary_image,
+            "additional_images": additional_images,
+            "video_url": video_url,
+            "external_link": external_link,
+            "status": "DRAFT"  # Always save as DRAFT
+        }
+
+        # Store platform data as JSON for later use
+        platform_data = {
+            "sync_all": sync_all == "true",
+            "sync_platforms": sync_platforms or [],
+            "ebay": {
+                "category": ebay_category,
+                "category_name": ebay_category_name,
+                "price": ebay_price,
+                "payment_policy": ebay_payment_policy,
+                "return_policy": ebay_return_policy,
+                "shipping_policy": ebay_shipping_policy,
+                "location": ebay_location,
+                "country": ebay_country,
+                "postal_code": ebay_postal_code
+            },
+            "reverb": {
+                "product_type": reverb_product_type,
+                "primary_category": reverb_primary_category,
+                "price": reverb_price,
+                "shipping_profile": shipping_profile
+            },
+            "vr": {
+                "category_id": vr_category_id,
+                "subcategory_id": vr_subcategory_id,
+                "sub_subcategory_id": vr_sub_subcategory_id,
+                "sub_sub_subcategory_id": vr_sub_sub_subcategory_id,
+                "price": vr_price
+            },
+            "shopify": {
+                "category_gid": shopify_category_gid,
+                "price": shopify_price,
+                "product_type": shopify_product_type,
+                "seo_keywords": shopify_seo_keywords
+            }
+        }
+
+        # Store platform data in package_dimensions temporarily (since attributes field doesn't exist)
+        # This is a temporary solution - ideally we'd add a proper platform_data JSONB field
+        product_data["package_dimensions"] = {"platform_data": platform_data}
+
+        if draft_id:
+            # Update existing draft
+            product = await db.get(Product, draft_id)
+            if not product:
+                raise HTTPException(status_code=404, detail="Draft not found")
+
+            # Update product fields
+            for key, value in product_data.items():
+                setattr(product, key, value)
+
+            await db.commit()
+            await db.refresh(product)
+        else:
+            # Create new draft
+            product = Product(**product_data)
+            db.add(product)
+            await db.commit()
+            await db.refresh(product)
+
+        # Return JSON response for AJAX request
+        return JSONResponse({
+            "status": "success",
+            "message": f"Draft saved successfully with SKU: {product.sku}",
+            "product_id": product.id,
+            "redirect_url": f"/inventory?message=Draft saved successfully&message_type=success"
+        })
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error saving draft: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Failed to save draft: {str(e)}"
+            }
+        )
+
+
+@router.get("/drafts", response_class=JSONResponse)
+async def get_drafts(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all draft products for resuming editing"""
+    drafts = await db.execute(
+        select(Product)
+        .where(Product.status == "DRAFT")
+        .order_by(desc(Product.updated_at))
+    )
+    drafts = drafts.scalars().all()
+
+    return {
+        "drafts": [
+            {
+                "id": d.id,
+                "sku": d.sku,
+                "brand": d.brand,
+                "model": d.model,
+                "created_at": d.created_at.isoformat(),
+                "updated_at": d.updated_at.isoformat()
+            }
+            for d in drafts
+        ]
+    }
+
+
+@router.get("/drafts/{draft_id}", response_class=JSONResponse)
+async def get_draft_details(
+    draft_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get details of a specific draft for editing"""
+    draft = await db.get(Product, draft_id)
+    if not draft or draft.status != "DRAFT":
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    # Return all draft data including platform data - only fields that exist in Product model
+    draft_data = {
+        "id": draft.id,
+        "sku": draft.sku,
+        "brand": draft.brand,
+        "model": draft.model,
+        "title": draft.title,
+        "category": draft.category,
+        "condition": draft.condition,
+        "base_price": draft.base_price,
+        "quantity": draft.quantity,
+        "description": draft.description,
+        "decade": draft.decade,
+        "year": draft.year,
+        "finish": draft.finish,
+        "processing_time": draft.processing_time,
+        "offer_discount": draft.offer_discount,
+        "in_collective": draft.in_collective,
+        "in_inventory": draft.in_inventory,
+        "in_reseller": draft.in_reseller,
+        "free_shipping": draft.free_shipping,
+        "buy_now": draft.buy_now,
+        "show_vat": draft.show_vat,
+        "local_pickup": draft.local_pickup,
+        "available_for_shipment": draft.available_for_shipment,
+        "is_stocked_item": draft.is_stocked_item,
+        "primary_image": draft.primary_image,
+        "additional_images": draft.additional_images or [],
+        "video_url": draft.video_url,
+        "external_link": draft.external_link
+    }
+
+    # Extract platform data from package_dimensions (temporary location)
+    if draft.package_dimensions and "platform_data" in draft.package_dimensions:
+        draft_data["platform_data"] = draft.package_dimensions["platform_data"]
+
+    return draft_data
 
 
 @router.get("/products/{product_id}/edit")

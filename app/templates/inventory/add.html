@@ -25,7 +25,7 @@
 
                 <!-- Quick Actions Bar -->
                 <div class="px-8 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
-                    <div class="flex items-center justify-between">
+                    <div class="flex items-center justify-between flex-wrap gap-4">
                         <div class="flex items-center space-x-4">
                             <div class="flex items-center">
                                 <svg class="w-5 h-5 text-indigo-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -34,13 +34,13 @@
                                 </svg>
                                 <label class="text-sm font-semibold text-gray-700">Quick Copy:</label>
                             </div>
-                            <select id="existingProduct" 
-                                    class="px-3 py-1.5 bg-white rounded-lg border border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[200px]">
+                            <select id="existingProduct"
+                                    class="px-3 py-1.5 bg-white rounded-lg border border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[200px] max-w-[300px]">
                                 <option value="">Select a product to copy...</option>
                     {% for product in existing_products|sort(attribute='brand') %}
-                    <option value="{{ product.id }}">
-                        {{ product.brand or "Unknown Brand" }} 
-                        {{ (product.model or "")|truncate(55) }}
+                    <option value="{{ product.id }}" title="{{ product.brand or 'Unknown Brand' }} {{ product.model or '' }}">
+                        {% set display_text = ((product.brand or "Unknown Brand") ~ " " ~ (product.model or "")) %}
+                        {{ display_text|truncate(60, True, '...') }}
                     </option>
                     {% endfor %}
                             </select>
@@ -51,6 +51,25 @@
                                 </svg>
                                 Copy
                             </button>
+
+                            <!-- Draft Selector -->
+                            <div class="ml-6 flex items-center">
+                                <svg class="w-5 h-5 text-gray-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                                </svg>
+                                <label class="text-sm font-semibold text-gray-700">Resume Draft:</label>
+                                <select id="draftSelector"
+                                        class="ml-2 px-3 py-1.5 bg-white rounded-lg border border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[200px] max-w-[250px]">
+                                    <option value="">Select a draft...</option>
+                                </select>
+                                <button type="button" id="loadDraftButton"
+                                    class="ml-2 inline-flex items-center px-4 py-1.5 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+                                    </svg>
+                                    Load Draft
+                                </button>
+                            </div>
                         </div>
                         <div class="text-sm text-gray-600">
                             <span id="copyStatus" class="inline-flex items-center"></span>
@@ -458,7 +477,7 @@
                     <!-- Modern Tab Navigation -->
                     <div class="bg-gray-100 p-1 rounded-lg mb-6">
                         <div class="flex space-x-1">
-                            <button type="button" id="tab-dropbox" class="tab-button flex-1 inline-flex items-center justify-center px-4 py-2.5 bg-white text-indigo-600 font-medium rounded-md shadow-sm transition-all duration-200 active-tab">
+                            <button type="button" id="tab-dropbox" class="tab-button flex-1 inline-flex items-center justify-center px-4 py-2.5 text-gray-600 hover:text-gray-800 font-medium rounded-md transition-all duration-200">
                                 <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                 </svg>
@@ -482,9 +501,9 @@
                     <!-- Upload Files Tab -->
                     <div id="content-upload" class="mt-4">
                         <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700">Upload Images</label>
+                            <label class="block text-sm font-medium text-gray-700">Upload Images <span id="file-count" class="text-gray-500"></span></label>
                             <input type="file" name="image_files" accept="image/*" multiple class="mt-1 block w-full" id="imageFiles">
-                            <p class="mt-1 text-sm text-gray-500">You can select multiple files. The first image will be used as the main product image.</p>
+                            <p class="mt-1 text-sm text-gray-500">Select files to add to your images. The first image will be used as the main product image.</p>
                         </div>
                     </div>
                     
@@ -1222,11 +1241,15 @@
                     </div>
                 </div>
 
-                <!-- Submit Button -->
-                <div class="flex justify-end mt-6">
+                <!-- Submit Buttons -->
+                <div class="flex justify-end mt-6 space-x-3">
+                    <button type="button" id="saveDraftBtn"
+                            class="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 font-medium">
+                        Save as Draft
+                    </button>
                     <button type="submit"
                             class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium">
-                        Add Product
+                        Create Product
                     </button>
                     </div>
                 </div>
@@ -1246,6 +1269,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load shipping profiles from Reverb
     loadShippingProfiles();
+
+    // Load drafts
+    loadDrafts();
     
     // Platform sync radio button handling
     const syncAllYes = document.getElementById('sync_all_yes');
@@ -2201,35 +2227,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 if (this.files) {
-                    Array.from(this.files).forEach(file => {
+                    // Don't clear existing images - append new ones instead
+                    // This allows adding more images when loading from drafts
+
+                    Array.from(this.files).forEach((file, fileIndex) => {
                         if (file.type.startsWith('image/')) {
                             const reader = new FileReader();
                             reader.onload = function(e) {
-                                const preview = document.createElement('div');
-                                preview.className = 'relative aspect-square';
-                                preview.setAttribute('data-source', input.name === 'primary_image_file' ? 'primary' : 'additional');
-                                preview.innerHTML = `
-                                    <img src="${e.target.result}" 
-                                            class="w-full h-full object-cover rounded-lg shadow-sm"
-                                            alt="Preview">
-                                    <div class="absolute top-1 right-1">
-                                        <button type="button" class="remove-image bg-red-500 text-white rounded-full p-1 hover:bg-red-600">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                `;
-                                previewContainer.appendChild(preview);
-                                
-                                // Add event listener to remove button
-                                preview.querySelector('.remove-image').addEventListener('click', function() {
-                                    preview.remove();
-                                    // Clear the file input if it's the primary image
-                                    if (input.name === 'primary_image_file') {
-                                        input.value = '';
-                                    }
-                                });
+                                // Add to selectedImages array
+                                const imageData = {
+                                    url: e.target.result,
+                                    name: file.name,
+                                    source: 'file',
+                                    file: file
+                                };
+
+                                // Add to array
+                                selectedImages.push(imageData);
+
+                                // Update the entire preview
+                                updateImagePreview();
+                                updateHiddenInputs();
+                                updateImageCount();
                             };
                             reader.readAsDataURL(file);
                         } else {
@@ -2895,6 +2914,556 @@ function initializeSortable() {
                     errorMsg.remove();
                 }
             });
+        });
+    }
+
+    // =========== DRAFT MANAGEMENT FUNCTIONALITY ===========
+    // Load available drafts
+    async function loadDrafts() {
+        try {
+            const response = await fetch('/inventory/drafts');
+            const data = await response.json();
+
+            const draftSelector = document.getElementById('draftSelector');
+            const loadDraftButton = document.getElementById('loadDraftButton');
+
+            // Clear existing options except the first one
+            while (draftSelector.options.length > 1) {
+                draftSelector.remove(1);
+            }
+
+            // Add drafts to the selector
+            data.drafts.forEach(draft => {
+                const option = document.createElement('option');
+                option.value = draft.id;
+                const date = new Date(draft.updated_at);
+                const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+                // Create full text for tooltip
+                const fullText = `${draft.brand} ${draft.model} - ${draft.sku} (${formattedDate})`;
+                option.title = fullText;
+
+                // Create truncated text for display
+                const displayText = `${draft.brand} ${draft.model} - ${draft.sku}`;
+                const truncatedText = displayText.length > 50 ? displayText.substring(0, 47) + '...' : displayText;
+                option.textContent = truncatedText;
+
+                draftSelector.appendChild(option);
+            });
+
+            // Enable/disable load button based on selection
+            draftSelector.addEventListener('change', function() {
+                loadDraftButton.disabled = !this.value;
+            });
+
+            // Handle load draft button click
+            loadDraftButton.addEventListener('click', async function() {
+                const draftId = draftSelector.value;
+                if (!draftId) return;
+
+                try {
+                    const response = await fetch(`/inventory/drafts/${draftId}`);
+                    const draft = await response.json();
+
+                    console.log('Draft data received:', draft);
+
+                    // Helper function to decode HTML entities
+                    function decodeHtmlEntities(text) {
+                        const textarea = document.createElement('textarea');
+                        textarea.innerHTML = text;
+                        return textarea.value;
+                    }
+
+                    // Fill in the form fields with better error handling
+                    const setFieldValue = (fieldId, value, defaultValue = '') => {
+                        const field = document.getElementById(fieldId);
+                        if (field) {
+                            // Handle null, undefined, and empty values properly
+                            if (value !== null && value !== undefined && value !== '') {
+                                field.value = value;
+                                console.log(`Set field ${fieldId} to: ${value}`);
+                            } else if (defaultValue) {
+                                field.value = defaultValue;
+                                console.log(`Set field ${fieldId} to default: ${defaultValue}`);
+                            } else {
+                                field.value = '';
+                                console.log(`Set field ${fieldId} to empty`);
+                            }
+                        } else {
+                            console.warn(`Field not found: ${fieldId}`);
+                        }
+                    };
+
+                    setFieldValue('brand', draft.brand);
+                    setFieldValue('model', draft.model);
+                    setFieldValue('sku', draft.sku);
+                    // Handle title field
+                    const titleField = document.getElementById('title');
+
+                    if (draft.title) {
+                        // Use saved title
+                        setFieldValue('title', draft.title);
+                    } else {
+                        // Auto-generate title after other fields are populated
+                        setTimeout(() => {
+                            if (!titleField?.value) {
+                                const brandField = document.getElementById('brand');
+                                const modelField = document.getElementById('model');
+                                const yearField = document.getElementById('year');
+                                const finishField = document.getElementById('finish');
+
+                                const brand = brandField?.value || '';
+                                const model = modelField?.value || '';
+                                const year = yearField?.value || '';
+                                const finish = finishField?.value || '';
+
+                                // Generate title based on available fields
+                                // Avoid duplicating finish if it's already in the model
+                                const titleParts = [];
+                                if (year) titleParts.push(year);
+                                if (brand) titleParts.push(brand);
+                                if (model) titleParts.push(model);
+                                // Only add finish if it's not already included in the model
+                                if (finish && !model.toLowerCase().includes(finish.toLowerCase())) {
+                                    titleParts.push(finish);
+                                }
+
+                                const generatedTitle = titleParts.join(' ');
+                                if (generatedTitle && titleField) {
+                                    titleField.value = generatedTitle;
+                                }
+                            }
+                        }, 500);
+                    }
+                    setFieldValue('category', draft.category);
+                    lastKnownCategoryValue = draft.category || ''; // Update the cached value
+                    setFieldValue('condition', draft.condition);
+                    // Base price has both display and hidden fields
+                    if (draft.base_price !== null && draft.base_price !== undefined) {
+                        setFieldValue('base_price', draft.base_price);
+                        setFieldValue('base_price_display', draft.base_price);
+
+                        // Calculate and update platform prices based on base price
+                        updatePlatformPrices(draft.base_price);
+                    }
+                    setFieldValue('quantity', draft.quantity, 1);
+                    // Decode HTML entities in description and update TinyMCE
+                    if (draft.description) {
+                        const decodedDescription = decodeHtmlEntities(draft.description);
+                        setFieldValue('description', decodedDescription);
+
+                        // Update TinyMCE editor
+                        if (typeof tinymce !== 'undefined' && tinymce.get('description')) {
+                            tinymce.get('description').setContent(decodedDescription);
+                        }
+                    }
+                    // Set year first
+                    setFieldValue('year', draft.year);
+
+                    // Calculate and set decade based on year if decade is not set
+                    if (draft.year && !draft.decade) {
+                        const year = parseInt(draft.year);
+                        if (year && year >= 1900 && year <= 2030) {
+                            const decade = Math.floor(year / 10) * 10;
+                            setFieldValue('decade', decade);
+                        }
+                    } else if (draft.decade) {
+                        setFieldValue('decade', draft.decade);
+                    }
+                    setFieldValue('finish', draft.finish);
+                    setFieldValue('processing_time', draft.processing_time, 3);
+                    // Skip location and stock_warning_level - they don't exist in the Product model
+                    // Skip offer_price - only offer_discount exists
+                    if (draft.offer_discount !== null && draft.offer_discount !== undefined) {
+                        setFieldValue('offer_discount', draft.offer_discount);
+                    }
+
+                    // Handle checkboxes
+                    const setCheckbox = (fieldId, value, defaultValue = false) => {
+                        const field = document.getElementById(fieldId);
+                        if (field) {
+                            field.checked = value !== undefined ? value : defaultValue;
+                        } else {
+                            console.warn(`Checkbox not found: ${fieldId}`);
+                        }
+                    };
+
+                    setCheckbox('in_collective', draft.in_collective, false);
+                    setCheckbox('in_inventory', draft.in_inventory, true);
+                    setCheckbox('in_reseller', draft.in_reseller, false);
+                    setCheckbox('free_shipping', draft.free_shipping, false);
+                    setCheckbox('buy_now', draft.buy_now, true);
+                    setCheckbox('show_vat', draft.show_vat, true);
+                    setCheckbox('local_pickup', draft.local_pickup, false);
+                    setCheckbox('available_for_shipment', draft.available_for_shipment, true);
+                    setCheckbox('is_stocked_item', draft.is_stocked_item, false);
+
+                    // Handle media fields
+                    setFieldValue('video_url', draft.video_url);
+                    setFieldValue('external_link', draft.external_link);
+
+                    // Handle images
+                    selectedImages = [];
+                    let hasDropboxImages = false;
+                    let hasLocalImages = false;
+                    let hasUrlImages = false;
+
+                    if (draft.primary_image) {
+                        const isDropbox = draft.primary_image.includes('dropbox');
+                        const isDataUrl = draft.primary_image.startsWith('data:');
+
+                        if (isDropbox) hasDropboxImages = true;
+                        else if (isDataUrl) hasLocalImages = true;
+                        else hasUrlImages = true;
+
+                        selectedImages.push({
+                            url: draft.primary_image,
+                            name: 'Primary Image',
+                            source: isDropbox ? 'dropbox' : (isDataUrl ? 'file' : 'url')
+                        });
+                    }
+                    if (draft.additional_images && draft.additional_images.length > 0) {
+                        draft.additional_images.forEach((url, index) => {
+                            const isDropbox = url.includes('dropbox');
+                            const isDataUrl = url.startsWith('data:');
+
+                            if (isDropbox) hasDropboxImages = true;
+                            else if (isDataUrl) hasLocalImages = true;
+                            else hasUrlImages = true;
+
+                            selectedImages.push({
+                                url: url,
+                                name: `Additional Image ${index + 1}`,
+                                source: isDropbox ? 'dropbox' : (isDataUrl ? 'file' : 'url')
+                            });
+                        });
+                    }
+                    updateImagePreview();
+                    updateHiddenInputs();
+                    updateImageCount();
+
+                    // Switch to appropriate tab based on image sources
+                    if (hasDropboxImages) {
+                        document.getElementById('tab-dropbox')?.click();
+                    } else if (hasLocalImages) {
+                        document.getElementById('tab-upload')?.click();
+                    } else if (hasUrlImages) {
+                        document.getElementById('tab-url')?.click();
+                    }
+
+                    // Handle platform data if available
+                    if (draft.platform_data) {
+                        const pd = draft.platform_data;
+
+                        // Set sync options
+                        if (pd.sync_all) {
+                            const syncAllYes = document.getElementById('sync_all_yes');
+                            if (syncAllYes) syncAllYes.checked = true;
+                        } else {
+                            const syncAllNo = document.getElementById('sync_all_no');
+                            if (syncAllNo) syncAllNo.checked = true;
+                            // Set individual platform checkboxes
+                            document.querySelectorAll('input[name="sync_platforms"]').forEach(cb => {
+                                cb.checked = pd.sync_platforms && pd.sync_platforms.includes(cb.value);
+                            });
+                        }
+
+                        // Set platform-specific fields
+                        // eBay
+                        if (pd.ebay) {
+                            if (pd.ebay.category) {
+                                // Wait for categories to load if needed
+                                if (!window.categoriesLoaded.ebay) {
+                                    window.pendingCategorySelections.ebay = pd.ebay.category;
+                                } else {
+                                    setFieldValue('ebay_category_id', pd.ebay.category);
+                                }
+                            }
+                            if (pd.ebay.category_name) setFieldValue('ebay_category_name', pd.ebay.category_name);
+                            if (pd.ebay.price) {
+                                setFieldValue('ebay_price', pd.ebay.price);
+                                setFieldValue('ebay_price_display', pd.ebay.price);
+                                // Trigger input event to sync hidden field
+                                const ebayPriceDisplay = document.getElementById('ebay_price_display');
+                                if (ebayPriceDisplay) {
+                                    ebayPriceDisplay.dispatchEvent(new Event('input'));
+                                }
+                            }
+                            if (pd.ebay.payment_policy) setFieldValue('ebay_payment_policy', pd.ebay.payment_policy);
+                            if (pd.ebay.return_policy) setFieldValue('ebay_return_policy', pd.ebay.return_policy);
+                            if (pd.ebay.shipping_policy) setFieldValue('ebay_shipping_policy', pd.ebay.shipping_policy);
+                            if (pd.ebay.location) setFieldValue('ebay_location', pd.ebay.location);
+                            if (pd.ebay.country) setFieldValue('ebay_country', pd.ebay.country);
+                            if (pd.ebay.postal_code) setFieldValue('ebay_postal_code', pd.ebay.postal_code);
+                        }
+
+                        // Reverb
+                        if (pd.reverb) {
+                            if (pd.reverb.product_type) setFieldValue('reverb_product_type', pd.reverb.product_type);
+                            if (pd.reverb.primary_category) setFieldValue('reverb_primary_category', pd.reverb.primary_category);
+                            if (pd.reverb.price) {
+                                setFieldValue('reverb_price', pd.reverb.price);
+                                setFieldValue('reverb_price_display', pd.reverb.price);
+                                // Trigger input event to sync hidden field
+                                const reverbPriceDisplay = document.getElementById('reverb_price_display');
+                                if (reverbPriceDisplay) {
+                                    reverbPriceDisplay.dispatchEvent(new Event('input'));
+                                }
+                            }
+                            if (pd.reverb.shipping_profile) {
+                                setFieldValue('shipping_profile', pd.reverb.shipping_profile);
+                                // Trigger change event to populate shipping fields
+                                const shippingSelect = document.getElementById('shipping_profile');
+                                if (shippingSelect) {
+                                    shippingSelect.dispatchEvent(new Event('change'));
+                                }
+                            }
+                        }
+
+                        // V&R
+                        if (pd.vr) {
+                            // V&R uses a combined category field in format "category_id/subcategory_id/sub_subcategory_id"
+                            if (pd.vr.category_id || pd.vr.subcategory_id || pd.vr.sub_subcategory_id) {
+                                const vrCategoryValue = [
+                                    pd.vr.category_id,
+                                    pd.vr.subcategory_id,
+                                    pd.vr.sub_subcategory_id,
+                                    pd.vr.sub_sub_subcategory_id
+                                ].filter(Boolean).join('/');
+
+                                // Wait for categories to load if needed
+                                if (!window.categoriesLoaded.vr) {
+                                    window.pendingCategorySelections.vr = vrCategoryValue;
+                                } else {
+                                    setFieldValue('vr_category', vrCategoryValue);
+                                }
+                            }
+                            if (pd.vr.price) {
+                                setFieldValue('vr_price', pd.vr.price);
+                                setFieldValue('vr_price_display', pd.vr.price);
+                                // Trigger input event to sync hidden field
+                                const vrPriceDisplay = document.getElementById('vr_price_display');
+                                if (vrPriceDisplay) {
+                                    vrPriceDisplay.dispatchEvent(new Event('input'));
+                                }
+                            }
+                        }
+
+                        // Shopify
+                        if (pd.shopify) {
+                            if (pd.shopify.category_gid) {
+                                // Wait for categories to load if needed
+                                if (!window.categoriesLoaded.shopify) {
+                                    window.pendingCategorySelections.shopify = pd.shopify.category_gid;
+                                } else {
+                                    setFieldValue('shopify_category', pd.shopify.category_gid);
+                                }
+                            }
+                            // If a specific price was saved, use it; otherwise it will use the calculated value
+                            if (pd.shopify.price !== null && pd.shopify.price !== undefined) {
+                                console.log('Loading saved Shopify price:', pd.shopify.price);
+                                setFieldValue('shopify_price', pd.shopify.price);
+                                setFieldValue('shopify_price_display', pd.shopify.price);
+                                // Trigger input event to sync hidden field
+                                const shopifyPriceDisplay = document.getElementById('shopify_price_display');
+                                if (shopifyPriceDisplay) {
+                                    shopifyPriceDisplay.dispatchEvent(new Event('input'));
+                                }
+                            }
+                            if (pd.shopify.product_type) setFieldValue('shopify_product_type', pd.shopify.product_type);
+
+                            // Additional Shopify fields that might have been saved
+                            console.log('Shopify SEO keywords from draft:', pd.shopify.seo_keywords);
+                            if (pd.shopify.seo_keywords) {
+                                console.log('Setting SEO keywords to:', pd.shopify.seo_keywords);
+                                setFieldValue('shopify_seo_keywords', pd.shopify.seo_keywords);
+
+                                // Double-check the value was set
+                                const seoField = document.getElementById('shopify_seo_keywords');
+                                console.log('SEO field after setting:', seoField?.value);
+                            }
+                        }
+                    }
+
+                    // Store draft ID for updating when saving
+                    form.dataset.draftId = draftId;
+
+                    // Show success notification
+                    const notification = document.createElement('div');
+                    notification.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+                    notification.innerHTML = `
+                        <span class="block sm:inline">Draft loaded successfully</span>
+                    `;
+                    document.body.appendChild(notification);
+
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 3000);
+
+                } catch (error) {
+                    console.error('Error loading draft:', error);
+                    console.error('Error stack:', error.stack);
+                    console.error('Error message:', error.message);
+                    alert('Error loading draft: ' + error.message);
+                }
+            });
+
+        } catch (error) {
+            console.error('Error loading drafts:', error);
+        }
+    }
+
+    // =========== SAVE DRAFT FUNCTIONALITY ===========
+    const saveDraftBtn = document.getElementById('saveDraftBtn');
+    if (saveDraftBtn) {
+        saveDraftBtn.addEventListener('click', async function() {
+            // Collect form data just like for normal submission
+            const formData = new FormData(form);
+
+            // Clean up empty numeric fields
+            const numericFields = ['base_price', 'offer_discount', 'platform_data__ebay__price',
+                                 'platform_data__reverb__price', 'platform_data__vr__price',
+                                 'platform_data__shopify__price'];
+
+            numericFields.forEach(field => {
+                if (formData.has(field) && formData.get(field) === '') {
+                    formData.delete(field);
+                }
+            });
+
+            // Map platform fields from their form names to what the endpoint expects
+            // The form uses platform_data__ prefix but the endpoint expects direct field names
+
+            // Get values directly from elements since FormData might not have all fields
+
+            // eBay fields
+            formData.append('ebay_category', document.getElementById('ebay_category_id')?.value || '');
+
+            // Only append price if it has a value
+            const ebayPrice = document.getElementById('ebay_price')?.value;
+            if (ebayPrice && ebayPrice !== '') {
+                formData.append('ebay_price', ebayPrice);
+            }
+
+            formData.append('ebay_payment_policy', document.getElementById('ebay_payment_policy')?.value || '');
+            formData.append('ebay_return_policy', document.getElementById('ebay_return_policy')?.value || '');
+            formData.append('ebay_shipping_policy', document.getElementById('ebay_shipping_policy')?.value || '');
+            formData.append('ebay_location', document.getElementById('ebay_location')?.value || '');
+            formData.append('ebay_country', document.getElementById('ebay_country')?.value || 'GB');
+            formData.append('ebay_postal_code', document.getElementById('ebay_postal_code')?.value || '');
+
+            // Reverb fields
+            const reverbPrice = document.getElementById('reverb_price')?.value;
+            if (reverbPrice && reverbPrice !== '') {
+                formData.append('reverb_price', reverbPrice);
+            }
+
+            formData.append('reverb_product_type', document.getElementById('reverb_product_type')?.value || '');
+            formData.append('reverb_primary_category', document.getElementById('reverb_category_uuid')?.value || '');
+            formData.append('shipping_profile', document.getElementById('shipping_profile')?.value || '');
+
+            // V&R fields
+            const vrCategory = document.getElementById('vr_category')?.value || '';
+            if (vrCategory) {
+                const vrParts = vrCategory.split('/');
+                formData.append('vr_category_id', vrParts[0] || '');
+                if (vrParts[1]) formData.append('vr_subcategory_id', vrParts[1]);
+                if (vrParts[2]) formData.append('vr_sub_subcategory_id', vrParts[2]);
+                if (vrParts[3]) formData.append('vr_sub_sub_subcategory_id', vrParts[3]);
+            }
+
+            const vrPrice = document.getElementById('vr_price')?.value;
+            if (vrPrice && vrPrice !== '') {
+                formData.append('vr_price', vrPrice);
+            }
+
+            // Shopify fields
+            const shopifyCategory = document.getElementById('shopify_category');
+            formData.append('shopify_category_gid', shopifyCategory?.value || '');
+
+            const shopifyPrice = document.getElementById('shopify_price')?.value;
+            if (shopifyPrice && shopifyPrice !== '') {
+                formData.append('shopify_price', shopifyPrice);
+            }
+
+            // Extract product type from category option
+            if (shopifyCategory && shopifyCategory.selectedOptions[0]) {
+                const fullText = shopifyCategory.selectedOptions[0].text;
+                const productType = fullText.replace(/\s*\(gid:.*\)$/, '').trim();
+                formData.append('shopify_product_type', productType);
+            }
+
+            // Get SEO keywords directly
+            const seoKeywordsElement = document.getElementById('shopify_seo_keywords');
+            console.log('SEO keywords element:', seoKeywordsElement);
+            const seoKeywords = seoKeywordsElement?.value || '';
+            console.log('Shopify SEO keywords value:', seoKeywords);
+            formData.append('shopify_seo_keywords', seoKeywords);
+
+            // Debug: Check all form data entries
+            console.log('All FormData entries:');
+            for (let [key, value] of formData.entries()) {
+                if (key.includes('shopify') || key.includes('seo')) {
+                    console.log(`${key}: ${value}`);
+                }
+            }
+
+            // Add selected images
+            const primaryImageUrl = selectedImages[0]?.url || '';
+            const additionalImages = selectedImages.slice(1).map(img => img.url);
+
+            formData.append('primary_image_url', primaryImageUrl);
+            formData.append('additional_images_urls', JSON.stringify(additionalImages));
+
+            // Add draft ID if updating existing draft
+            if (form.dataset.draftId) {
+                formData.append('draft_id', form.dataset.draftId);
+            }
+
+            // Show loading state
+            saveDraftBtn.disabled = true;
+            saveDraftBtn.textContent = 'Saving Draft...';
+
+            try {
+                const response = await fetch('/inventory/save-draft', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Save draft error response:', errorText);
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Show success message
+                    const notification = document.createElement('div');
+                    notification.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+                    notification.innerHTML = `
+                        <span class="block sm:inline">${result.message}</span>
+                    `;
+                    document.body.appendChild(notification);
+
+                    // Remove notification after 3 seconds
+                    setTimeout(() => {
+                        notification.remove();
+                        // Redirect to inventory page
+                        window.location.href = result.redirect_url;
+                    }, 2000);
+                } else {
+                    alert('Error saving draft: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error saving draft:', error);
+                alert('Error saving draft. Check console for details.');
+            } finally {
+                // Reset button state
+                saveDraftBtn.disabled = false;
+                saveDraftBtn.textContent = 'Save as Draft';
+            }
         });
     }
 
@@ -3600,13 +4169,24 @@ function initializeSortable() {
                 countElement.textContent = '';
             }
         }
-        
+
         // Update the image count badge
         const imageCountBadge = document.getElementById('imageCount');
         if (imageCountBadge) {
             imageCountBadge.textContent = `${selectedImages.length} image${selectedImages.length !== 1 ? 's' : ''}`;
         }
-        
+
+        // Update file count next to Upload Images label
+        const fileCountElement = document.getElementById('file-count');
+        if (fileCountElement) {
+            const fileImages = selectedImages.filter(img => img.source === 'file' || (img.source === 'url' && img.url.startsWith('data:')));
+            if (fileImages.length > 0) {
+                fileCountElement.textContent = `(${fileImages.length} file${fileImages.length > 1 ? 's' : ''} selected)`;
+            } else {
+                fileCountElement.textContent = '';
+            }
+        }
+
         // Hide/show the placeholder
         const placeholder = document.getElementById('noImagesPlaceholder');
         if (placeholder) {
@@ -3917,8 +4497,8 @@ function initializeSortable() {
         selectedImages.forEach((image, index) => {
             const isPrimary = index === 0;
             const preview = document.createElement('div');
-            preview.className = 'relative aspect-square';
-            preview.setAttribute('data-source', 'dropbox');
+            preview.className = 'relative aspect-square image-preview';
+            preview.setAttribute('data-source', image.source || 'url');
             preview.setAttribute('data-index', index);
             
             preview.innerHTML = `
@@ -3939,6 +4519,16 @@ function initializeSortable() {
             
             // Add event listener to remove button
             preview.querySelector('.remove-image').addEventListener('click', function() {
+                // If this is a file source and it's the last file image, clear the file input
+                if (image.source === 'file') {
+                    const remainingFileImages = selectedImages.filter((img, i) => i !== index && img.source === 'file');
+                    if (remainingFileImages.length === 0) {
+                        // Clear the file input
+                        const fileInput = document.getElementById('imageFiles');
+                        if (fileInput) fileInput.value = '';
+                    }
+                }
+
                 selectedImages.splice(index, 1);
                 updateImagePreview();
                 updateHiddenInputs();
@@ -4067,10 +4657,10 @@ function initializeSortable() {
             return;
         }
     
-    // Show dropbox tab by default
-    dropboxTab.classList.add('active-tab');
-    contentDropbox.classList.remove('hidden');
-    contentUpload.classList.add('hidden');
+    // Show upload tab by default
+    uploadTab.classList.add('active-tab');
+    contentUpload.classList.remove('hidden');
+    contentDropbox.classList.add('hidden');
     contentUrl.classList.add('hidden');
     
     // Don't auto-load Dropbox folders - wait for user action
@@ -4163,21 +4753,36 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
 
 // Auto-generate SEO keywords
 document.getElementById('generate-seo')?.addEventListener('click', function() {
+    console.log('Generate SEO button clicked');
+
     const brand = document.getElementById('brand')?.value || '';
     const model = document.getElementById('model')?.value || '';
     const category = document.getElementById('category')?.value || '';
     const finish = document.getElementById('finish')?.value || '';
-    
+
+    console.log('SEO generation values:', { brand, model, category, finish });
+
     // Generate keywords from product info
     const keywords = [brand, model, category, finish, 'vintage', 'guitar']
         .filter(word => word && word.trim() !== '')  // Remove empty values
         .map(word => word.trim().toLowerCase())      // Standardize format
         .filter((word, index, self) => self.indexOf(word) === index); // Remove duplicates
-    
+
+    console.log('Generated keywords:', keywords);
+
     // Set the keywords field
     const keywordsField = document.getElementById('shopify_seo_keywords');
+    console.log('Keywords field element:', keywordsField);
+
     if (keywordsField) {
         keywordsField.value = keywords.join(', ');
+        console.log('Set keywords field value to:', keywordsField.value);
+
+        // Trigger input event to ensure any listeners are notified
+        keywordsField.dispatchEvent(new Event('input', { bubbles: true }));
+        keywordsField.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+        console.error('SEO keywords field not found!');
     }
 });
 

@@ -66,20 +66,35 @@ class ProductService:
             ProductCreationError: If product creation fails
         """
         try:
-            # Check if SKU exists
-            if await self.sku_exists(product_data.sku):
-                raise ProductCreationError(f"SKU '{product_data.sku}' already exists")
-            
-            # Create product (convert from schema to model)
-            product = Product(**product_data.model_dump(exclude_unset=True))
-            self.db.add(product)
-            await self.db.flush()  # Get product ID without committing
+            # Check if SKU exists as a draft
+            existing_product = await self.db.execute(
+                select(Product).where(Product.sku == product_data.sku)
+            )
+            existing_product = existing_product.scalar_one_or_none()
+
+            if existing_product:
+                if existing_product.status == ProductStatus.DRAFT:
+                    # Update the existing draft product
+                    for key, value in product_data.model_dump(exclude_unset=True).items():
+                        setattr(existing_product, key, value)
+                    product = existing_product
+                    await self.db.flush()
+                else:
+                    raise ProductCreationError(f"SKU '{product_data.sku}' already exists")
+            else:
+                # Create new product
+                product = Product(**product_data.model_dump(exclude_unset=True))
+                self.db.add(product)
+                await self.db.flush()  # Get product ID without committing
 
             # If eBay data provided, create platform listing
             if ebay_data:
                 await self._create_ebay_listing(product.id, ebay_data)
 
             await self.db.commit()
+
+            # Refresh the product to ensure all fields are loaded
+            await self.db.refresh(product)
 
             # Return the created product as a schema (convert from model to schema)
             return await model_to_schema(product, ProductRead)

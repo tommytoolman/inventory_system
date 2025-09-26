@@ -1066,6 +1066,123 @@ class AsyncDropboxClient:
         
         return temp_links
 
+    async def upload_base64_image(self, base64_data: str, file_path: str) -> Optional[str]:
+        """
+        Upload a base64 encoded image to Dropbox and return a shareable link.
+
+        Args:
+            base64_data: Base64 encoded image data (with or without data:image prefix)
+            file_path: Path where to save in Dropbox (e.g., "/Uploads/product_images/image1.jpg")
+
+        Returns:
+            Shareable URL if successful, None otherwise
+        """
+        # Use the token refresh wrapper
+        return await self.execute_with_token_refresh(self._upload_base64_image_internal, base64_data, file_path)
+
+    async def _upload_base64_image_internal(self, base64_data: str, file_path: str) -> Optional[str]:
+        """Internal method that actually performs the upload"""
+        import base64
+        import re
+
+        try:
+            # Remove data:image prefix if present
+            if base64_data.startswith('data:'):
+                # Extract the actual base64 data
+                match = re.match(r'data:image/\w+;base64,(.+)', base64_data)
+                if match:
+                    base64_data = match.group(1)
+                else:
+                    logger.error("Invalid base64 data format")
+                    return None
+
+            # Decode base64 to bytes
+            image_bytes = base64.b64decode(base64_data)
+
+            # Upload to Dropbox
+            async with aiohttp.ClientSession() as session:
+                upload_url = "https://content.dropboxapi.com/2/files/upload"
+
+                headers = {
+                    "Authorization": f"Bearer {self.access_token}",
+                    "Dropbox-API-Arg": json.dumps({
+                        "path": file_path,
+                        "mode": "overwrite",
+                        "autorename": True,
+                        "mute": False
+                    }),
+                    "Content-Type": "application/octet-stream"
+                }
+
+                async with session.post(upload_url, headers=headers, data=image_bytes) as response:
+                    # Check for 401 and raise exception so token refresh can happen
+                    if response.status == 401:
+                        raise aiohttp.ClientResponseError(
+                            request_info=response.request_info,
+                            history=response.history,
+                            status=401
+                        )
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"Failed to upload image: {response.status} - {error_text}")
+                        return None
+
+                    result = await response.json()
+                    uploaded_path = result.get('path_display')
+
+                    if not uploaded_path:
+                        logger.error("No path returned from upload")
+                        return None
+
+                    # Get a shareable link for the uploaded file
+                    link_response = await session.post(
+                        f"{self.BASE_URL}/sharing/create_shared_link_with_settings",
+                        headers=self.headers,
+                        json={
+                            "path": uploaded_path,
+                            "settings": {
+                                "audience": "public",
+                                "access": "viewer",
+                                "allow_download": True
+                            }
+                        }
+                    )
+
+                    if link_response.status == 409:
+                        # Link already exists, get it
+                        list_response = await session.post(
+                            f"{self.BASE_URL}/sharing/list_shared_links",
+                            headers=self.headers,
+                            json={"path": uploaded_path}
+                        )
+
+                        if list_response.status == 200:
+                            links_data = await list_response.json()
+                            links = links_data.get('links', [])
+                            if links:
+                                url = links[0].get('url', '')
+                                # Convert to direct link for images
+                                return url.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '')
+
+                    elif link_response.status == 200:
+                        link_data = await link_response.json()
+                        url = link_data.get('url', '')
+                        # Convert to direct link for images
+                        return url.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '')
+
+                    logger.error(f"Failed to create shareable link: {link_response.status}")
+                    return None
+
+        except aiohttp.ClientResponseError as e:
+            # Re-raise 401 errors so token refresh can handle them
+            if e.status == 401:
+                raise
+            logger.error(f"HTTP error uploading image to Dropbox: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error uploading image to Dropbox: {e}")
+            return None
+
     async def setup_webhook(self, webhook_url: str) -> Optional[str]:
         """
         Set up a webhook for file changes in the Dropbox account.

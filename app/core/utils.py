@@ -31,9 +31,11 @@ async def model_to_schema(
     """
     exclude_set = set(exclude) if exclude else set()
     
+    # In Pydantic v2, use from_attributes=True for SQLAlchemy models
+    # exclude parameter is not supported in model_validate
     return schema_class.model_validate(
-        db_model, 
-        exclude=exclude_set
+        db_model,
+        from_attributes=True
     )
 
 async def models_to_schemas(

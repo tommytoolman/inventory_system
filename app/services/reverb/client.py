@@ -107,17 +107,33 @@ class ReverbClient:
                     params=params
                 )
                 
-                if response.status_code not in (200, 201, 202, 204):
+                if response.status_code not in (200, 201, 202, 204, 422):
                     logger.error(f"Reverb API error: Status {response.status_code}, Body: {response.text}")
                     error_msg = f"Request failed with status {response.status_code}"
                     if response.text:
                         error_msg += f": {response.text}"
                     raise ReverbAPIError(error_msg)
-                
+
                 if response.status_code == 204:  # No content
                     return {}
-                
-                return response.json()
+
+                # Get the JSON response
+                json_response = response.json()
+
+                # Handle 422 responses (validation errors)
+                if response.status_code == 422:
+                    # Check if a draft listing was created despite validation errors
+                    if isinstance(json_response, dict) and 'listing' in json_response and 'id' in json_response['listing']:
+                        logger.warning(f"Reverb created draft listing {json_response['listing']['id']} with validation warnings: {json_response.get('errors', {})}")
+                        return json_response['listing']
+                    else:
+                        # No listing was created, treat as error
+                        error_msg = f"Validation failed: {json_response.get('message', 'Unknown error')}"
+                        if 'errors' in json_response:
+                            error_msg += f" - Errors: {json_response['errors']}"
+                        raise ReverbAPIError(error_msg)
+
+                return json_response
         
         except httpx.RequestError as e:
             logger.error(f"Network error: {str(e)}")

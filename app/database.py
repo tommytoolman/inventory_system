@@ -9,10 +9,6 @@ import os
 
 settings = get_settings()
 
-# Debug: Print environment variables
-print(f"DATABASE_URL from settings: '{settings.DATABASE_URL}'")
-print(f"DATABASE_URL from env: '{os.environ.get('DATABASE_URL', 'NOT SET')}'")
-
 # Use environment variable directly if settings is empty
 database_url = settings.DATABASE_URL or os.environ.get('DATABASE_URL', '')
 if not database_url:

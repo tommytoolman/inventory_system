@@ -420,8 +420,13 @@
     
     // Function to process sync events
     async function processSyncEvent(eventId, actionName) {
-        if (!confirm(`Are you sure you want to ${actionName}? This will process the event and any related events for the same product.`)) {
-            return;
+        const requiresConfirmation = actionName !== 'Create Listings';
+
+        if (requiresConfirmation) {
+            const confirmed = confirm(`Are you sure you want to ${actionName}? This will process the event and any related events for the same product.`);
+            if (!confirmed) {
+                return;
+            }
         }
         
         // Disable the button to prevent double-clicks

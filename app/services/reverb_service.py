@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
 from sqlalchemy import update, text
+from sqlalchemy.orm import selectinload
 
 from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
@@ -111,10 +112,10 @@ class ReverbService:
     async def fetch_and_store_condition_mapping(self) -> Dict[str, str]:
         """
         Fetch conditions from Reverb and store for future use
-        
+
         Returns:
             Dict[str, str]: Mapping of condition display names to UUIDs
-            
+
         Raises:
             ReverbAPIError: If the API request fails
         """
@@ -135,6 +136,277 @@ class ReverbService:
             if isinstance(e, ReverbAPIError):
                 raise
             raise ReverbAPIError(f"Failed to fetch conditions: {str(e)}")
+
+    async def create_listing_from_product(
+        self,
+        product_id: int,
+        platform_options: Optional[Dict[str, Any]] = None,
+        publish: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Create a live Reverb listing from an existing product record.
+
+        Args:
+            product_id: Product primary key.
+            platform_options: Optional platform-specific overrides (e.g. category UUID).
+            publish: Whether to publish immediately (default True).
+
+        Returns:
+            Dict containing `status` and either `reverb_listing_id` or error details.
+        """
+
+        reverb_options: Dict[str, Any] = {}
+        if platform_options:
+            # Support both nested and flat structures
+            reverb_options = platform_options.get("reverb", platform_options) or {}
+
+        try:
+            product_query = (
+                select(Product)
+                .options(selectinload(Product.shipping_profile))
+                .where(Product.id == product_id)
+            )
+            result = await self.db.execute(product_query)
+            product = result.scalars().first()
+
+            if not product:
+                return {"status": "error", "error": f"Product {product_id} not found"}
+
+            if not product.brand or not product.model:
+                return {
+                    "status": "error",
+                    "error": "Product requires both brand and model before creating a Reverb listing."
+                }
+
+            status_value = (
+                product.status.value if hasattr(product.status, "value") else str(product.status)
+            )
+            if status_value and status_value.upper() == ProductStatus.SOLD.value:
+                return {
+                    "status": "error",
+                    "error": "Cannot create a Reverb listing for a product marked as SOLD."
+                }
+
+            if product.base_price is None:
+                return {
+                    "status": "error",
+                    "error": "Product is missing a base price; set one before listing on Reverb."
+                }
+
+            # Map condition to Reverb UUID
+            condition_uuid = reverb_options.get("condition_uuid")
+            if not condition_uuid and product.condition:
+                try:
+                    mappings_file = Path(__file__).parent.parent / "data" / "reverb_condition_mappings.json"
+                    with open(mappings_file, "r") as f:
+                        condition_map_data = json.load(f)
+                    condition_map = {
+                        key.upper(): value["uuid"]
+                        for key, value in condition_map_data.get("condition_mappings", {}).items()
+                    }
+                    condition_uuid = condition_map.get(str(product.condition).upper())
+                except Exception as mapping_error:
+                    logger.warning(f"Failed to map condition for product {product.sku}: {mapping_error}")
+
+            if not condition_uuid:
+                logger.warning(
+                    "Falling back to Excellent condition for product %s due to missing mapping",
+                    product.sku,
+                )
+                condition_uuid = "df268ad1-c462-4ba6-b6db-e007e23922ea"  # Excellent
+
+            # Determine category UUID
+            category_uuid = (
+                reverb_options.get("primary_category")
+                or reverb_options.get("category_uuid")
+            )
+
+            if not category_uuid:
+                logger.warning(
+                    "No Reverb category supplied for product %s; defaulting to Electric Guitars",
+                    product.sku,
+                )
+                category_uuid = "dfd39027-d134-4353-b9e4-57dc6be791b9"
+
+            # Determine shipping profile
+            shipping_profile_id = reverb_options.get("shipping_profile")
+            if not shipping_profile_id and getattr(product, "shipping_profile", None):
+                shipping_profile_id = product.shipping_profile.reverb_profile_id
+
+            # Prepare images
+            valid_photos: List[str] = []
+
+            def _collect_photo(url: Optional[str]) -> None:
+                if not url:
+                    return
+                if url.startswith(("http://", "https://")):
+                    valid_photos.append(url)
+                else:
+                    logger.warning(
+                        "Skipping non-public image URL '%s' for product %s",
+                        url,
+                        product.sku,
+                    )
+
+            _collect_photo(product.primary_image)
+            if product.additional_images:
+                for extra in product.additional_images:
+                    _collect_photo(extra)
+
+            if not valid_photos:
+                return {
+                    "status": "error",
+                    "error": "Reverb requires at least one publicly accessible image URL (http/https)."
+                }
+
+            listing_payload: Dict[str, Any] = {
+                "title": product.title or f"{product.brand} {product.model}".strip(),
+                "make": product.brand,
+                "model": product.model,
+                "description": product.description
+                    or f"{product.brand} {product.model} in {product.condition} condition",
+                "condition": {"uuid": condition_uuid},
+                "categories": [{"uuid": category_uuid}] if category_uuid else [],
+                "price": {
+                    "amount": f"{float(product.base_price):.2f}",
+                    "currency": "GBP",
+                },
+                "shipping": {
+                    "local": bool(product.local_pickup),
+                    "rates": [],
+                },
+                "has_inventory": bool(product.is_stocked_item),
+                "inventory": product.quantity if product.is_stocked_item and product.quantity else 1,
+                "finish": product.finish,
+                "year": str(product.year) if product.year else None,
+                "sku": product.sku,
+                "publish": publish,
+                "photos": valid_photos,
+            }
+
+            if shipping_profile_id:
+                listing_payload["shipping_profile_id"] = shipping_profile_id
+            else:
+                logger.warning(
+                    "No Reverb shipping profile provided for product %s; listing may use account defaults",
+                    product.sku,
+                )
+
+            # Remove None values to avoid API complaints
+            listing_payload = {
+                key: value
+                for key, value in listing_payload.items()
+                if value not in (None, [], {})
+            }
+
+            log_payload = listing_payload.copy()
+            log_payload["photos"] = f"[{len(valid_photos)} images]"
+            logger.info(
+                "Creating Reverb listing for product %s with payload: %s",
+                product.sku,
+                json.dumps(log_payload, indent=2),
+            )
+
+            response = await self.client.create_listing(listing_payload)
+            listing_data = response.get("listing", response)
+            reverb_id = str(listing_data.get("id")) if listing_data.get("id") else None
+
+            if not reverb_id:
+                await self.db.rollback()
+                return {
+                    "status": "error",
+                    "error": "Reverb did not return a listing ID; creation may have failed",
+                    "details": response,
+                }
+
+            # Upsert platform_common
+            existing_common_query = select(PlatformCommon).where(
+                PlatformCommon.product_id == product.id,
+                PlatformCommon.platform_name == "reverb",
+            )
+            existing_common_result = await self.db.execute(existing_common_query)
+            platform_common = existing_common_result.scalar_one_or_none()
+
+            listing_url = listing_data.get("_links", {}).get("web", {}).get("href")
+            if not listing_url:
+                listing_url = f"https://reverb.com/item/{reverb_id}"
+
+            if platform_common:
+                platform_common.external_id = reverb_id
+                platform_common.status = ListingStatus.ACTIVE.value
+                platform_common.listing_url = listing_url
+                platform_common.platform_specific_data = listing_data
+                platform_common.sync_status = SyncStatus.SYNCED.value
+                platform_common.last_sync = datetime.utcnow()
+            else:
+                platform_common = PlatformCommon(
+                    product_id=product.id,
+                    platform_name="reverb",
+                    external_id=reverb_id,
+                    status=ListingStatus.ACTIVE.value,
+                    listing_url=listing_url,
+                    platform_specific_data=listing_data,
+                    sync_status=SyncStatus.SYNCED.value,
+                    last_sync=datetime.utcnow(),
+                )
+                self.db.add(platform_common)
+                await self.db.flush()
+
+            await self.db.flush()
+
+            # Upsert reverb_listings entry
+            existing_listing_query = select(ReverbListing).where(
+                ReverbListing.reverb_listing_id == reverb_id
+            )
+            existing_listing_result = await self.db.execute(existing_listing_query)
+            reverb_listing = existing_listing_result.scalar_one_or_none()
+
+            category_uuid = category_uuid or (
+                listing_data.get("categories", [{}])[0] or {}
+            ).get("uuid")
+            listing_state = listing_data.get("state", {}).get("slug", "live")
+
+            if reverb_listing:
+                reverb_listing.reverb_category_uuid = category_uuid
+                reverb_listing.reverb_state = listing_state
+                reverb_listing.extended_attributes = listing_data
+                reverb_listing.platform_id = platform_common.id
+            else:
+                reverb_listing = ReverbListing(
+                    platform_id=platform_common.id,
+                    reverb_listing_id=reverb_id,
+                    reverb_category_uuid=category_uuid,
+                    reverb_state=listing_state,
+                    extended_attributes=listing_data,
+                )
+                self.db.add(reverb_listing)
+
+            await self.db.commit()
+
+            return {
+                "status": "success",
+                "reverb_listing_id": reverb_id,
+                "platform_common_id": platform_common.id,
+                "listing_url": listing_url,
+            }
+
+        except ReverbAPIError as api_error:
+            await self.db.rollback()
+            logger.error(
+                "Reverb API error while creating listing for product %s: %s",
+                product_id,
+                api_error,
+            )
+            return {"status": "error", "error": str(api_error)}
+        except Exception as exc:
+            await self.db.rollback()
+            logger.error(
+                "Unexpected error creating Reverb listing for product %s: %s",
+                product_id,
+                exc,
+                exc_info=True,
+            )
+            return {"status": "error", "error": str(exc)}
     
     async def create_draft_listing(self, reverb_listing_id: int, listing_data: Dict[str, Any] = None) -> ReverbListing:
         """

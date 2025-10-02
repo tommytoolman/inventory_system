@@ -40,6 +40,33 @@ class VRService:
             return None
         else:
             return obj
+
+    async def _get_platform_status(self, product_id: int, platform_name: str) -> Optional[str]:
+        """Fetch the current status for a given platform listing from platform_common."""
+        query = text(
+            "SELECT status FROM platform_common "
+            "WHERE product_id = :product_id AND platform_name = :platform LIMIT 1"
+        )
+        result = await self.db.execute(query, {"product_id": product_id, "platform": platform_name})
+        row = result.fetchone()
+        if not row:
+            return None
+        mapping = getattr(row, "_mapping", None)
+        return mapping["status"] if mapping else row[0]
+
+    async def _remove_vr_association(self, platform_common_id: Optional[int]) -> None:
+        """Remove local VR platform linkage (platform_common + vr_listing)."""
+        if not platform_common_id:
+            return
+
+        await self.db.execute(
+            text("DELETE FROM vr_listings WHERE platform_id = :pid"),
+            {"pid": platform_common_id}
+        )
+        await self.db.execute(
+            text("DELETE FROM platform_common WHERE id = :pid"),
+            {"pid": platform_common_id}
+        )
         
 
     # =========================================================================
@@ -329,25 +356,56 @@ class VRService:
         """Log removal events to sync_events."""
         removed_count, events_logged = 0, 0
         events_to_create = []
+
         for item in items:
+            product_id = item.get('product_id')
+            platform_common_id = item.get('platform_common_id')
+            sku = item.get('sku')
+            external_id = item.get('external_id')
+
+            # Check the Reverb listing status to see if this was a manual removal on V&R only.
+            reverb_status = await self._get_platform_status(product_id, 'reverb') if product_id else None
+            reverb_status_normalized = (reverb_status or '').lower()
+
+            if reverb_status_normalized in ('active', 'live'):
+                logger.info(
+                    "V&R listing %s missing but Reverb still %s – removing local V&R linkage instead of logging removal event",
+                    external_id,
+                    reverb_status_normalized
+                )
+                await self._remove_vr_association(platform_common_id)
+                removed_count += 1
+                continue
+
             events_to_create.append({
-                'sync_run_id': sync_run_id, 'platform_name': 'vr', 'product_id': item['product_id'],
-                'platform_common_id': item['platform_common_id'], 'external_id': item['external_id'],
-                'change_type': 'removed_listing', 'change_data': {'sku': item['sku'], 'vr_id': item['external_id'], 'reason': 'not_found_in_api'},
-                'status': 'pending'})
+                'sync_run_id': sync_run_id,
+                'platform_name': 'vr',
+                'product_id': product_id,
+                'platform_common_id': platform_common_id,
+                'external_id': external_id,
+                'change_type': 'removed_listing',
+                'change_data': {
+                    'sku': sku,
+                    'vr_id': external_id,
+                    'reason': 'not_found_in_api'
+                },
+                'status': 'pending'
+            })
             removed_count += 1
-        
+
         if events_to_create:
             try:
                 stmt = insert(SyncEvent).values(events_to_create)
                 stmt = stmt.on_conflict_do_nothing(
                     index_elements=['platform_name', 'external_id', 'change_type'],
-                    index_where=(SyncEvent.status == 'pending'))
+                    index_where=(SyncEvent.status == 'pending')
+                )
                 await self.db.execute(stmt)
                 events_logged = len(events_to_create)
-                logger.info(f"Attempted to log {len(events_to_create)} removal events (duplicates ignored)")
+                logger.info(f"Attempted to log {len(events_to_create)} V&R removal events (duplicates ignored)")
             except Exception as e:
-                logger.error(f"Failed to bulk insert removal events: {e}", exc_info=True)
+                logger.error(f"Failed to bulk insert V&R removal events: {e}", exc_info=True)
+
         return removed_count, events_logged
 
     # =========================================================================

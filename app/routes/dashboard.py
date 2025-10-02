@@ -69,8 +69,8 @@ class DashboardService:
             
             # Map Reverb states to our categories
             for row in rows:
-                state = row.reverb_state
-                count = row.count
+                state = (row.reverb_state or '').lower()
+                count = row.count or 0
                 
                 if state in ['live', 'active']:
                     counts["count"] = count  # live = active
@@ -190,16 +190,16 @@ class DashboardService:
             
             # Map Shopify statuses to our categories
             for row in rows:
-                status = row.status
-                count = row.count  # This should be the COUNT, not the status string
+                status = (row.status or '').lower()
+                count = row.count or 0
                 
-                if status.upper() == 'ACTIVE':
+                if status == 'active':
                     counts["count"] = count
-                elif status.upper() == 'SOLD':
+                elif status == 'sold':
                     counts["sold_count"] = count
-                elif status.upper() in ['ENDED', 'ARCHIVED']:
+                elif status in ['ended', 'archived']:
                     counts["ended_count"] = count
-                elif status.upper() == 'DRAFT':
+                elif status == 'draft':
                     counts["draft_count"] = count
                 else:
                     counts["other_count"] += count
@@ -241,8 +241,8 @@ class DashboardService:
             
             # Map V&R states to our categories
             for row in rows:
-                state = row.vr_state
-                count = row.count
+                state = (row.vr_state or '').lower()
+                count = row.count or 0
                 
                 if state == 'active':
                     counts["count"] = count
@@ -273,15 +273,15 @@ class DashboardService:
         try:
             active_query = select(func.count(PlatformCommon.id)).where(
                 PlatformCommon.platform_name == platform,
-                PlatformCommon.status == "active"
+                func.lower(PlatformCommon.status) == "active"
             )
             sold_query = select(func.count(PlatformCommon.id)).where(
                 PlatformCommon.platform_name == platform,
-                PlatformCommon.status == "sold"
+                func.lower(PlatformCommon.status) == "sold"
             )
             other_query = select(func.count(PlatformCommon.id)).where(
                 PlatformCommon.platform_name == platform,
-                PlatformCommon.status.notin_(["active", "sold"])
+                func.lower(PlatformCommon.status).notin_(["active", "sold"])
             )
             
             active_result = await self.db.execute(active_query)

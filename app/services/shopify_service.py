@@ -319,8 +319,8 @@ class ShopifyService:
                     })
                 
                 # Status change event check using the nuanced 'off-market' logic
-                api_status = api_data.get('status')
-                db_status = db_data.get('platform_common_status')
+                api_status = (api_data.get('status') or '').lower()
+                db_status = (db_data.get('platform_common_status') or '').lower()
                 off_market_statuses = ['sold', 'ended', 'archived', 'removed', 'deleted']
                 statuses_match = (api_status in off_market_statuses and db_status in off_market_statuses) or \
                                 (api_status == db_status)
@@ -335,8 +335,8 @@ class ShopifyService:
                         'external_id': api_data['external_id'],
                         'change_type': 'status_change',
                         'change_data': {
-                            'old': db_data.get('platform_common_status'),
-                            'new': api_data['status'],
+                            'old': db_status,
+                            'new': api_status,
                             'shopify_id': api_data['external_id'],
                             'is_archived': is_archived
                         },
@@ -852,5 +852,4 @@ class ShopifyService:
         # event = StockUpdateEvent(product_id=..., platform='shopify', new_quantity=..., ...)
         # await stock_manager.update_queue.put(event) # Assuming access to stock_manager instance
         pass
-
 

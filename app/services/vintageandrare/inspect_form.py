@@ -250,8 +250,12 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
         options.add_experimental_option('useAutomationExtension', False)
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--headless=new")  # Add this line
-        options.add_argument("--window-size=1920,1080")  # Add this line
+        options.add_argument("--headless=new")
+        options.add_argument("--window-size=1920,1080")
+        # Harden headless Chrome for container environments (Railway, Docker, etc.)
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
         
         # Enable performance logging to capture network events
         options.add_experimental_option('perfLoggingPrefs', {
@@ -316,7 +320,10 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
         
         # Enable Network domain for CDP (only for local Chrome, not RemoteWebDriver)
         if not selenium_grid_url:
-            driver.execute_cdp_cmd('Network.enable', {})
+            try:
+                driver.execute_cdp_cmd('Network.enable', {})
+            except Exception as cdp_error:
+                print(f"WARNING: Failed to enable CDP Network domain: {cdp_error}")
         
         try:
             print("4. Setting up Selenium session...")
@@ -607,13 +614,21 @@ def wait_for_manual_submission_and_capture_result(driver, db_session=None, is_re
     """
     print("Form filled successfully!")
     print("Please manually click the 'Publish' button when ready...")
-    print("After clicking, wait 3-5 seconds then press ENTER to capture result...")
+    print("After clicking, wait 3-5 seconds then press ENTER to capture result (if running interactively)...")
     
     # Store page source before submission to detect changes
     initial_page_source = driver.page_source
     
-    # Simple manual trigger - more reliable than automatic detection
-    input("Press ENTER after you've submitted the form and seen V&R's response...")
+    # Simple manual trigger - more reliable than automatic detection when running interactively
+    if os.getenv("VR_INTERACTIVE_DEBUG", "false").lower() == "true":
+        try:
+            input("Press ENTER after you've submitted the form and seen V&R's response...")
+        except EOFError:
+            print("stdin unavailable; proceeding without manual confirmation.")
+            time.sleep(2)
+    else:
+        # Non-interactive mode: give the operator a short window before continuing automatically
+        time.sleep(3)
     
     try:
         print("Capturing current page response...")
@@ -1429,11 +1444,23 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
         form_end_time = time.time()
         form_duration = form_end_time - form_start_time
         print(f"❌ Form fill failed after {form_duration:.1f} seconds")
-        
         print(f"Error filling form: {str(e)}")
-        # driver.save_screenshot("form_error.png")
-        print("ERROR: Keeping browser open for debugging...")
-        input("Press Enter to close the browser after reviewing the form...")
+
+        # Attempt to capture a screenshot for debugging, but don't fail if the browser is gone
+        try:
+            driver.save_screenshot("form_error.png")
+            print("Screenshot saved to form_error.png")
+        except Exception as screenshot_error:
+            print(f"WARNING: Unable to capture screenshot: {screenshot_error}")
+
+        # Only pause for manual inspection when explicitly requested
+        if os.getenv("VR_PAUSE_ON_ERROR", "false").lower() == "true":
+            print("VR_PAUSE_ON_ERROR enabled – waiting for user input before closing browser...")
+            try:
+                input("Press Enter to continue...")
+            except EOFError:
+                print("stdin unavailable; continuing without pause.")
+
         raise e
 
 def edit_item_form(driver, item_id, item_data, test_mode=True, db_session=None):
@@ -1630,7 +1657,10 @@ def submit_form_and_capture_response(driver, db_session=None, is_remote=False):
                 
             except Exception as click_error:
                 print(f"❌ Error during V&R button interaction: {str(click_error)}")
-                driver.save_screenshot("02_vr_button_click_error.png")
+                try:
+                    driver.save_screenshot("02_vr_button_click_error.png")
+                except Exception as screenshot_error:
+                    print(f"WARNING: Unable to capture V&R button error screenshot: {screenshot_error}")
                 return {
                     "status": "error",
                     "message": f"Error clicking V&R publish button: {str(click_error)}",

@@ -73,13 +73,13 @@ class DashboardService:
                 count = row.count or 0
                 
                 if state in ['live', 'active']:
-                    counts["count"] = count  # live = active
+                    counts["count"] += count  # live = active
                 elif state == 'sold':
-                    counts["sold_count"] = count
+                    counts["sold_count"] += count
                 elif state == 'ended':
-                    counts["ended_count"] = count
+                    counts["ended_count"] += count
                 elif state == 'draft':
-                    counts["draft_count"] = count
+                    counts["draft_count"] += count
                 else:
                     counts["other_count"] += count
             
@@ -194,13 +194,13 @@ class DashboardService:
                 count = row.count or 0
                 
                 if status == 'active':
-                    counts["count"] = count
+                    counts["count"] += count
                 elif status == 'sold':
-                    counts["sold_count"] = count
+                    counts["sold_count"] += count
                 elif status in ['ended', 'archived']:
-                    counts["ended_count"] = count
+                    counts["ended_count"] += count
                 elif status == 'draft':
-                    counts["draft_count"] = count
+                    counts["draft_count"] += count
                 else:
                     counts["other_count"] += count
             
@@ -245,13 +245,13 @@ class DashboardService:
                 count = row.count or 0
                 
                 if state == 'active':
-                    counts["count"] = count
+                    counts["count"] += count
                 elif state == 'sold':
-                    counts["sold_count"] = count
+                    counts["sold_count"] += count
                 elif state == 'ended':
-                    counts["ended_count"] = count
+                    counts["ended_count"] += count
                 elif state == 'draft':
-                    counts["draft_count"] = count
+                    counts["draft_count"] += count
                 else:
                     counts["other_count"] += count
             

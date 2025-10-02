@@ -57,6 +57,11 @@
                     <span class="text-gray-600">Ended:</span>
                     <span class="font-medium text-gray-700">{{ shopify_ended_count|default(0) }}</span>
                 </div>
+
+                <div class="flex justify-between text-xs">
+                    <span class="text-gray-600">Archived:</span>
+                    <span class="font-medium text-gray-700">{{ shopify_archived_count|default(0) }}</span>
+                </div>
                 
                 <div class="flex justify-between text-xs">
                     <span class="text-gray-600">Draft:</span>
@@ -85,20 +90,23 @@
                         {% set live_pct = ((shopify_count|default(0)) * 100 / total)|round(1) %}
                         {% set sold_pct = ((shopify_sold_count|default(0)) * 100 / total)|round(1) %}
                         {% set ended_pct = ((shopify_ended_count|default(0)) * 100 / total)|round(1) %}
+                        {% set archived_pct = ((shopify_archived_count|default(0)) * 100 / total)|round(1) %}
                         {% set draft_pct = ((shopify_draft_count|default(0)) * 100 / total)|round(1) %}
                         <div class="h-2 rounded-full flex">
                             {% if live_pct > 0 %}<div class="bg-green-500 rounded-l-full" style="width: {{ live_pct }}%"></div>{% endif %}
                             {% if sold_pct > 0 %}<div class="bg-blue-500" style="width: {{ sold_pct }}%"></div>{% endif %}
                             {% if ended_pct > 0 %}<div class="bg-red-500" style="width: {{ ended_pct }}%"></div>{% endif %}
+                            {% if archived_pct > 0 %}<div class="bg-purple-500" style="width: {{ archived_pct }}%"></div>{% endif %}
                             {% if draft_pct > 0 %}<div class="bg-yellow-500 rounded-r-full" style="width: {{ draft_pct }}%"></div>{% endif %}
                         </div>
                     {% endif %}
                 </div>
             </div>
             
-            <div class="flex justify-between">
-                <a href="/inventory?platform=shopify&status=active" class="text-blue-600 hover:text-blue-800 text-sm">View Active →</a>
-                <a href="/inventory?platform=shopify" class="text-blue-600 hover:text-blue-800 text-sm">View All →</a>
+            <div class="flex justify-between text-sm">
+                <a href="/inventory?platform=shopify&status=active" class="text-blue-600 hover:text-blue-800">View Active →</a>
+                <a href="/inventory?platform=shopify&status=archived" class="text-blue-600 hover:text-blue-800">Archived →</a>
+                <a href="/inventory?platform=shopify" class="text-blue-600 hover:text-blue-800">View All →</a>
             </div>
         </div>
 

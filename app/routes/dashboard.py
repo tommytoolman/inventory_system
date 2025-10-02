@@ -92,8 +92,13 @@ class DashboardService:
         except Exception as e:
             logger.error(f"Error getting Reverb counts: {str(e)}")
             return {
-                "count": 0, "sold_count": 0, "ended_count": 0, 
-                "draft_count": 0, "other_count": 0, "total": 0
+                "count": 0,
+                "sold_count": 0,
+                "ended_count": 0,
+                "archived_count": 0,
+                "draft_count": 0,
+                "other_count": 0,
+                "total": 0
             }
     
     async def _get_ebay_counts(self) -> dict:
@@ -183,6 +188,7 @@ class DashboardService:
                 "count": 0,      # active
                 "sold_count": 0,
                 "ended_count": 0,
+                "archived_count": 0,
                 "draft_count": 0,
                 "other_count": 0,
                 "total": 0
@@ -197,8 +203,10 @@ class DashboardService:
                     counts["count"] += count
                 elif status == 'sold':
                     counts["sold_count"] += count
-                elif status in ['ended', 'archived']:
+                elif status == 'ended':
                     counts["ended_count"] += count
+                elif status == 'archived':
+                    counts["archived_count"] += count
                 elif status == 'draft':
                     counts["draft_count"] += count
                 else:

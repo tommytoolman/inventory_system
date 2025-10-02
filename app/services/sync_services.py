@@ -162,18 +162,27 @@ class SyncService:
         
         for sc in status_changes:
             change_data = sc.change_data or {}
-            if change_data.get('new') == 'sold' or change_data.get('is_sold'):
+            new_state = change_data.get('new')
+
+            # Reverb is system-of-record: treat REVERB ended as a sale
+            if sc.platform_name == 'reverb' and new_state in ('sold', 'ended'):
+                is_sold = True
+                sale_platform = 'reverb'
+                break
+
+            if new_state == 'sold' or change_data.get('is_sold'):
                 is_sold = True
                 sale_platform = sc.platform_name
                 break
-        
+
         # If not explicitly sold but we have ended + removed, treat as offline sale
         if not is_sold and status_changes and removed_listings:
             # Check if any status_change is to "ended"
             for sc in status_changes:
-                if sc.change_data.get('new') == 'ended':
+                change_data = sc.change_data or {}
+                if change_data.get('new') == 'ended':
                     is_sold = True
-                    sale_platform = 'offline'
+                    sale_platform = sc.platform_name or 'offline'
                     break
         
         # Log the coordinated action
@@ -206,7 +215,8 @@ class SyncService:
                     else:
                         product.status = ProductStatus.SOLD
                 else:
-                    product.status = ProductStatus.ENDED
+                    # No sale detected: treat as archive-level removal
+                    product.status = ProductStatus.ARCHIVED
                 
                 self.db.add(product)
                 

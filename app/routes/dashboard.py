@@ -62,6 +62,7 @@ class DashboardService:
                 "count": 0,      # live = active
                 "sold_count": 0,
                 "ended_count": 0,
+                "archived_count": 0,
                 "draft_count": 0,
                 "other_count": 0,
                 "total": 0
@@ -78,6 +79,8 @@ class DashboardService:
                     counts["sold_count"] += count
                 elif state == 'ended':
                     counts["ended_count"] += count
+                elif state == 'archived':
+                    counts["archived_count"] += count
                 elif state == 'draft':
                     counts["draft_count"] += count
                 else:
@@ -221,8 +224,13 @@ class DashboardService:
         except Exception as e:
             logger.error(f"Error getting Shopify counts: {str(e)}")
             return {
-                "count": 0, "sold_count": 0, "ended_count": 0, 
-                "draft_count": 0, "other_count": 0, "total": 0
+                "count": 0,
+                "sold_count": 0,
+                "ended_count": 0,
+                "archived_count": 0,
+                "draft_count": 0,
+                "other_count": 0,
+                "total": 0
             }
     
     async def _get_vr_counts(self) -> dict:
@@ -272,8 +280,13 @@ class DashboardService:
         except Exception as e:
             logger.error(f"Error getting V&R counts: {str(e)}")
             return {
-                "count": 0, "sold_count": 0, "ended_count": 0, 
-                "draft_count": 0, "other_count": 0, "total": 0
+                "count": 0,
+                "sold_count": 0,
+                "ended_count": 0,
+                "archived_count": 0,
+                "draft_count": 0,
+                "other_count": 0,
+                "total": 0
             }
     
     async def _get_default_platform_counts(self, platform: str) -> dict:

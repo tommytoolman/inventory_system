@@ -143,6 +143,11 @@
                     <span class="text-gray-600">Ended:</span>
                     <span class="font-medium text-gray-700">{{ reverb_ended_count|default(0) }}</span>
                 </div>
+
+                <div class="flex justify-between text-xs">
+                    <span class="text-gray-600">Archived:</span>
+                    <span class="font-medium text-gray-700">{{ reverb_archived_count|default(0) }}</span>
+                </div>
                 
                 <div class="flex justify-between text-xs">
                     <span class="text-gray-600">Draft:</span>
@@ -170,6 +175,7 @@
                         {% set live_pct = ((reverb_count|default(0)) * 100 / reverb_total)|round(1) %}
                         {% set sold_pct = ((reverb_sold_count|default(0)) * 100 / reverb_total)|round(1) %}
                         {% set ended_pct = ((reverb_ended_count|default(0)) * 100 / reverb_total)|round(1) %}
+                        {% set archived_pct = ((reverb_archived_count|default(0)) * 100 / reverb_total)|round(1) %}
                         {% set draft_pct = ((reverb_draft_count|default(0)) * 100 / reverb_total)|round(1) %}
                         <div class="h-2 rounded-full flex">
                             {% if live_pct > 0 %}
@@ -180,6 +186,9 @@
                             {% endif %}
                             {% if ended_pct > 0 %}
                             <div class="bg-red-500" style="width: {{ ended_pct ~ '%' }}"></div>
+                            {% endif %}
+                            {% if archived_pct > 0 %}
+                            <div class="bg-purple-500" style="width: {{ archived_pct ~ '%' }}"></div>
                             {% endif %}
                             {% if draft_pct > 0 %}
                             <div class="bg-yellow-500 rounded-r-full" style="width: {{ draft_pct ~ '%' }}"></div>

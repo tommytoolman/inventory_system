@@ -15,6 +15,22 @@
       "shopify_category_path": "Acoustic Guitars / Parlor"
     }
   },
+  "Acoustic Guitars / OM and Auditorium": {
+    "reverb_path": "Acoustic Guitars / OM and Auditorium",
+    "vr_categories": {
+      "vr_category_1_id": "51",
+      "vr_category_1_name": "Guitars",
+      "vr_category_2_id": "87",
+      "vr_category_2_name": "Flat top"
+    },
+    "ebay_categories": {
+      "ebay_category_id": "33021",
+      "ebay_category_path_for_reference": "Musical Instruments & Gear > Guitars & Basses > Acoustic Guitars"
+    },
+    "shopify_categories": {
+      "shopify_category_path": "Acoustic Guitars / OM and Auditorium"
+    }
+  },
   "Electric Guitars": {
     "reverb_path": "Electric Guitars",
     "vr_categories": {

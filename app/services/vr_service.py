@@ -147,7 +147,7 @@ class VRService:
         for vr_id in db_ids - api_ids:
             db_item = db_items[vr_id]
             # ONLY flag for removal if our database thinks the listing is currently active.
-            if db_item.get('platform_common_status') == 'active':
+            if (db_item.get('platform_common_status') or '').lower() == 'active':
                 changes['remove'].append(db_item)
             
         return changes
@@ -168,8 +168,8 @@ class VRService:
 
     def _has_changed(self, api_item: Dict, db_item: Dict) -> bool:
         """Compares API data against the new, correct fields from our database query."""
-        api_status = api_item.get('status')
-        db_status = db_item.get('platform_common_status')
+        api_status = (api_item.get('status') or '').lower()
+        db_status = (db_item.get('platform_common_status') or '').lower()
 
         # Since V&R only has 'active' or 'sold', a simple comparison is enough.
         # if api_status != db_status:
@@ -274,16 +274,16 @@ class VRService:
         for item in items:
             try:
                 api_data, db_data = item['api_data'], item['db_data']
-                
-                api_status = api_data.get('status')
-                db_status = db_data.get('platform_common_status')
-                
+
+                api_status = (api_data.get('status') or '').lower()
+                db_status = (db_data.get('platform_common_status') or '').lower()
+
                 # --- NEW PRIORITIZATION LOGIC ---
-                
+
                 # First, check for a status change.
                 off_market_statuses = ['sold', 'ended']
                 statuses_match = (api_status in off_market_statuses and db_status in off_market_statuses) or (api_status == db_status)
-                
+
                 has_status_change = not statuses_match
                 new_status_is_sold = (api_status == 'sold')
 
@@ -308,7 +308,7 @@ class VRService:
                             'status': 'pending'
                         })
                 # --- END NEW LOGIC ---
-                
+
                 updated_count += 1
             except Exception as e:
                 logger.error(f"Failed to prepare events for V&R item {item['api_data']['external_id']}: {e}", exc_info=True)

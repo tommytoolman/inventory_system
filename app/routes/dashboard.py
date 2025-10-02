@@ -79,10 +79,12 @@ class DashboardService:
                     counts["sold_count"] += count
                 elif state == 'ended':
                     counts["ended_count"] += count
-                elif state == 'archived':
+                elif state in ['archived']:
                     counts["archived_count"] += count
                 elif state == 'draft':
                     counts["draft_count"] += count
+                elif state == 'published':
+                    counts["archived_count"] += count
                 else:
                     counts["other_count"] += count
             
@@ -100,7 +102,6 @@ class DashboardService:
                 "ended_count": 0,
                 "archived_count": 0,
                 "draft_count": 0,
-                "other_count": 0,
                 "total": 0
             }
     
@@ -250,8 +251,8 @@ class DashboardService:
                 "count": 0,      # active
                 "sold_count": 0,
                 "ended_count": 0,
+                "archived_count": 0,
                 "draft_count": 0,
-                "other_count": 0,
                 "total": 0
             }
             
@@ -268,8 +269,8 @@ class DashboardService:
                     counts["ended_count"] += count
                 elif state == 'draft':
                     counts["draft_count"] += count
-                else:
-                    counts["other_count"] += count
+                elif state == 'published':
+                    counts["archived_count"] += count
             
             # Calculate total
             counts["total"] = sum(counts.values()) - counts["total"]  # Exclude total from sum

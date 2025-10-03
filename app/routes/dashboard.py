@@ -135,6 +135,11 @@ class DashboardService:
                 SELECT COUNT(*) FROM ebay_listings 
                 WHERE LOWER(listing_status) IN ('ended', 'unsold', 'cancelled', 'suspended')
             """)
+
+            archived_query = text("""
+                SELECT COUNT(*) FROM ebay_listings 
+                WHERE LOWER(listing_status) IN ('archived')
+            """)
             
             draft_query = text("""
                 SELECT COUNT(*) FROM ebay_listings 
@@ -146,27 +151,30 @@ class DashboardService:
                 SELECT COUNT(*) FROM ebay_listings 
                 WHERE LOWER(listing_status) NOT IN (
                     'active', 'sold', 'completed', 'ended', 'unsold', 
-                    'cancelled', 'suspended', 'draft', 'scheduled'
+                    'cancelled', 'suspended', 'draft', 'scheduled', 'archived'
                 ) OR listing_status IS NULL
             """)
             
             active_result = await self.db.execute(active_query)
             sold_result = await self.db.execute(sold_query)
             ended_result = await self.db.execute(ended_query)
+            archived_result = await self.db.execute(archived_query)
             draft_result = await self.db.execute(draft_query)
             other_result = await self.db.execute(other_query)
-            
+
             counts = {
                 "count": active_result.scalar() or 0,
                 "sold_count": sold_result.scalar() or 0,
                 "ended_count": ended_result.scalar() or 0,
+                "archived_count": archived_result.scalar() or 0,
                 "draft_count": draft_result.scalar() or 0,
                 "other_count": other_result.scalar() or 0
             }
-            
+
             # Calculate total
-            counts["total"] = sum(counts.values())
-            
+            counts["total"] = sum(v for k, v in counts.items() if k != "other_count" and k != "total")
+            counts["total"] += counts["other_count"]
+
             logger.info(f"eBay organized counts: {counts}")
             return counts
             

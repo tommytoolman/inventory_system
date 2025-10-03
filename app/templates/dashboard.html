@@ -237,18 +237,16 @@
                     <span class="text-gray-600">Ended:</span>
                     <span class="font-medium text-gray-700">{{ vr_ended_count|default(0) }}</span>
                 </div>
-                
+
+                <div class="flex justify-between text-xs">
+                    <span class="text-gray-600">Archived:</span>
+                    <span class="font-medium text-gray-700">{{ vr_archived_count|default(0) }}</span>
+                </div>
+
                 <div class="flex justify-between text-xs">
                     <span class="text-gray-600">Draft:</span>
                     <span class="font-medium text-gray-700">{{ vr_draft_count|default(0) }}</span>
                 </div>
-                
-                {% if vr_other_count and vr_other_count > 0 %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Other:</span>
-                    <span class="font-medium text-gray-700">{{ vr_other_count }}</span>
-                </div>
-                {% endif %}
                 
                 <!-- Total -->
                 <div class="flex justify-between text-xs pt-1 border-t border-gray-200">
@@ -264,6 +262,7 @@
                         {% set vr_live_pct = ((vr_count|default(0)) * 100 / vr_total)|round(1) %}
                         {% set vr_sold_pct = ((vr_sold_count|default(0)) * 100 / vr_total)|round(1) %}
                         {% set vr_ended_pct = ((vr_ended_count|default(0)) * 100 / vr_total)|round(1) %}
+                        {% set vr_archived_pct = ((vr_archived_count|default(0)) * 100 / vr_total)|round(1) %}
                         {% set vr_draft_pct = ((vr_draft_count|default(0)) * 100 / vr_total)|round(1) %}
                         <div class="h-2 rounded-full flex">
                             {% if vr_live_pct > 0 %}
@@ -275,17 +274,22 @@
                             {% if vr_ended_pct > 0 %}
                             <div class="bg-red-500" style="width: {{ vr_ended_pct }}%"></div>
                             {% endif %}
-                            {% if vr_draft_pct > 0 %}
-                            <div class="bg-yellow-500 rounded-r-full" style="width: {{ vr_draft_pct }}%"></div>
+                            {% if vr_archived_pct > 0 %}
+                            <div class="bg-purple-500" style="width: {{ vr_archived_pct }}%"></div>
                             {% endif %}
+                            {% if vr_draft_pct > 0 %}
+                            <div class="bg-yellow-500" style="width: {{ vr_draft_pct }}%"></div>
+                            {% endif %}
+                            <div class="flex-1"></div>
                         </div>
                     {% endif %}
                 </div>
             </div>
             
-            <div class="flex justify-between">
-                <a href="/inventory?platform=vr&status=active" class="text-blue-600 hover:text-blue-800 text-sm">View Active →</a>
-                <a href="/inventory?platform=vr" class="text-blue-600 hover:text-blue-800 text-sm">View All →</a>
+            <div class="flex justify-between text-sm">
+                <a href="/inventory?platform=vr&status=active" class="text-blue-600 hover:text-blue-800">View Active →</a>
+                <a href="/inventory?platform=vr&status=archived" class="text-blue-600 hover:text-blue-800">Archived →</a>
+                <a href="/inventory?platform=vr" class="text-blue-600 hover:text-blue-800">View All →</a>
             </div>
         </div>
         
@@ -324,10 +328,15 @@
                 </div>
                 
                 <div class="flex justify-between text-xs">
+                    <span class="text-gray-600">Archived:</span>
+                    <span class="font-medium text-gray-700">{{ ebay_archived_count|default(0) }}</span>
+                </div>
+
+                <div class="flex justify-between text-xs">
                     <span class="text-gray-600">Draft:</span>
                     <span class="font-medium text-gray-700">{{ ebay_draft_count|default(0) }}</span>
                 </div>
-                
+
                 {% if ebay_other_count and ebay_other_count > 0 %}
                 <div class="flex justify-between text-xs">
                     <span class="text-gray-600">Other:</span>
@@ -350,20 +359,24 @@
                         {% set live_pct = ((ebay_count|default(0)) * 100 / total)|round(1) %}
                         {% set sold_pct = ((ebay_sold_count|default(0)) * 100 / total)|round(1) %}
                         {% set ended_pct = ((ebay_ended_count|default(0)) * 100 / total)|round(1) %}
+                        {% set archived_pct = ((ebay_archived_count|default(0)) * 100 / total)|round(1) %}
                         {% set draft_pct = ((ebay_draft_count|default(0)) * 100 / total)|round(1) %}
                         <div class="h-2 rounded-full flex">
                             {% if live_pct > 0 %}<div class="bg-green-500 rounded-l-full" style="width: {{ live_pct }}%"></div>{% endif %}
                             {% if sold_pct > 0 %}<div class="bg-blue-500" style="width: {{ sold_pct }}%"></div>{% endif %}
                             {% if ended_pct > 0 %}<div class="bg-red-500" style="width: {{ ended_pct }}%"></div>{% endif %}
-                            {% if draft_pct > 0 %}<div class="bg-yellow-500 rounded-r-full" style="width: {{ draft_pct }}%"></div>{% endif %}
+                            {% if archived_pct > 0 %}<div class="bg-purple-500" style="width: {{ archived_pct }}%"></div>{% endif %}
+                            {% if draft_pct > 0 %}<div class="bg-yellow-500" style="width: {{ draft_pct }}%"></div>{% endif %}
+                            <div class="flex-1"></div>
                         </div>
                     {% endif %}
                 </div>
             </div>
             
-            <div class="flex justify-between">
-                <a href="/inventory?platform=ebay&status=active" class="text-blue-600 hover:text-blue-800 text-sm">View Active →</a>
-                <a href="/inventory?platform=ebay" class="text-blue-600 hover:text-blue-800 text-sm">View All →</a>
+            <div class="flex justify-between text-sm">
+                <a href="/inventory?platform=ebay&status=active" class="text-blue-600 hover:text-blue-800">View Active →</a>
+                <a href="/inventory?platform=ebay&status=archived" class="text-blue-600 hover:text-blue-800">Archived →</a>
+                <a href="/inventory?platform=ebay" class="text-blue-600 hover:text-blue-800">View All →</a>
             </div>
         </div>
 

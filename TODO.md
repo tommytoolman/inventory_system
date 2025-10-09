@@ -49,6 +49,7 @@
 ## ✅ Completed
 - [x] **Editor description rendering mismatch** – ensure the product edit view loads descriptions into the TinyMCE editor instead of raw HTML.
 - [x] **Shopify archived count** – display the count of archived Shopify SKUs on the dashboard overview card.
+- [x] **Draft media persistence** – store draft uploads in shared storage per draft and clean up orphaned files after edits so drafts survive machine or redeploy changes.
 
 ---
 

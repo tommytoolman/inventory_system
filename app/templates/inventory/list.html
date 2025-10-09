@@ -259,7 +259,15 @@
                         </span>
                     </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">{{ product.category }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">
+                        <span title="{{ product.category or '' }}" class="truncate inline-block max-w-sm">
+                            {% if product.category and product.category|length > 55 %}
+                                {{ product.category[:55] }}...
+                            {% else %}
+                                {{ product.category or '' }}
+                            {% endif %}
+                        </span>
+                    </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
                     <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">
                         {% if product.base_price and product.base_price > 0 %}

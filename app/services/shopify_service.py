@@ -1,5 +1,6 @@
 # app/services/shopify_service.py
 import logging
+import math
 import uuid
 import json
 from datetime import datetime, timezone
@@ -598,8 +599,18 @@ class ShopifyService:
                     if reverb_data and reverb_data.get('inventory'):
                         inventory_qty = int(reverb_data.get('inventory', 1))
                     
+                    source_price = self._extract_source_price(product, reverb_data)
+                    shopify_price = None
+                    if source_price:
+                        try:
+                            shopify_price = self._calculate_shopify_price(source_price)
+                        except ValueError:
+                            logger.warning("Invalid source price %s for Shopify calculation", source_price)
+
+                    final_price = shopify_price if shopify_price else float(product.base_price or 0)
+
                     variant_update = {
-                        "price": str(product.base_price),
+                        "price": str(final_price),
                         "sku": product.sku,
                         "inventory": inventory_qty,
                         "inventoryPolicy": "DENY",  # Don't allow purchase when out of stock
@@ -852,4 +863,70 @@ class ShopifyService:
         # event = StockUpdateEvent(product_id=..., platform='shopify', new_quantity=..., ...)
         # await stock_manager.update_queue.put(event) # Assuming access to stock_manager instance
         pass
+    @staticmethod
+    def _extract_source_price(product: Product, reverb_data: Optional[Dict[str, Any]]) -> Optional[float]:
+        """Determine the price that should seed the Shopify calculation."""
 
+        # Prefer explicit Reverb pricing when available
+        if reverb_data:
+            price_info = reverb_data.get("price") or reverb_data.get("listing_price")
+            if isinstance(price_info, dict):
+                amount = price_info.get("amount") or price_info.get("value") or price_info.get("display")
+                if amount:
+                    try:
+                        return float(amount)
+                    except (TypeError, ValueError):
+                        pass
+            elif isinstance(price_info, (int, float, str)):
+                try:
+                    return float(price_info)
+                except (TypeError, ValueError):
+                    pass
+
+        # Fallback to any platform data captured on the product
+        platform_data = getattr(product, "package_dimensions", {}) or {}
+        if isinstance(platform_data, dict):
+            reverb_payload = platform_data.get("platform_data", {}).get("reverb", {})
+            amount = reverb_payload.get("price")
+            if amount:
+                try:
+                    return float(amount)
+                except (TypeError, ValueError):
+                    pass
+
+        # Finally fall back to the product's base price
+        for attr in ("base_price", "price", "price_notax"):
+            value = getattr(product, attr, None)
+            if value not in (None, 0, 0.0):
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    continue
+
+        return None
+
+    @staticmethod
+    def _calculate_shopify_price(source_price: float) -> int:
+        """Apply a 5% discount and round up to the nearest price ending in 999."""
+
+        if source_price <= 0:
+            raise ValueError("Source price must be positive to calculate Shopify price")
+
+        discounted = source_price * 0.95
+
+        if discounted <= 999:
+            rounded = 999
+        else:
+            thousands = math.floor(discounted / 1000)
+            rounded = thousands * 1000 + 999
+            if rounded < discounted:
+                rounded += 1000
+
+        if rounded >= source_price:
+            lower_thousands = max(math.floor(source_price / 1000) - 1, 0)
+            candidate = lower_thousands * 1000 + 999
+            if candidate >= source_price or candidate < 0:
+                candidate = max(int(source_price) - 1, 1)
+            rounded = candidate
+
+        return int(rounded)

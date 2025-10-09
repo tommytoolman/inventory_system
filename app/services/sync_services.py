@@ -647,6 +647,11 @@ class SyncService:
                                 use_shipping_profile=True,  # Use Business Policies like inventory route
                                 **policies  # Pass the policies like inventory route does
                             )
+                        elif platform == 'shopify':
+                            result = await service.create_listing_from_product(
+                                master_product,
+                                details,
+                            )
                         else:
                             result = await service.create_listing_from_product(master_product)
                         

@@ -29,6 +29,7 @@ from app.models.vr import VRListing
 from app.models.sync_event import SyncEvent
 from app.core.enums import SyncStatus, ListingStatus
 from app.services.sync_stats_service import SyncStatsService
+from app.services.notification_service import EmailNotificationService
 from app.core.events import StockUpdateEvent
 from app.core.config import get_settings
 
@@ -123,6 +124,7 @@ class SyncService:
             "ebay": EbayService(db, settings),
             "vr": VRService(db),
         }
+        self.email_service = EmailNotificationService(settings)
 
     async def _group_events_by_product(self, events: List[SyncEvent]) -> Dict[int, List[SyncEvent]]:
         """Group sync events by product_id for coordinated processing."""
@@ -686,18 +688,24 @@ class SyncService:
             return True
 
         # Update the master product based on whether it's a stocked item
+        sale_alert_needed = False
+        sale_platform = event.platform_name
+        sale_price = event.change_data.get('sale_price') if event.change_data else None
+        external_reference = event.external_id
+
         if product.is_stocked_item:
             # For stocked items, decrement quantity
             if product.quantity > 0:
                 product.quantity -= 1
                 self.db.add(product)
                 logger.info(f"Sale signal from {event.platform_name}. Decremented quantity for stocked Product #{product.id}. New quantity: {product.quantity}")
-                
+
                 # Mark as SOLD only when quantity reaches 0
                 if product.quantity == 0:
                     product.status = ProductStatus.SOLD
                     logger.info(f"Stocked Product #{product.id} quantity reached 0. Marking as SOLD.")
                     summary['sales'] += 1
+                    sale_alert_needed = True
             else:
                 logger.warning(f"Stocked Product #{product.id} already at 0 quantity. Received redundant signal from {event.platform_name}.")
         else:
@@ -707,6 +715,7 @@ class SyncService:
                 product.status = ProductStatus.SOLD
                 self.db.add(product)
                 logger.info(f"First sale signal from {event.platform_name}. Marking one-off Product #{product.id} as SOLD.")
+                sale_alert_needed = True
             else:
                 logger.info(f"Product #{product.id} is already SOLD. Received redundant signal from {event.platform_name}. Verifying consistency...")
 
@@ -745,8 +754,25 @@ class SyncService:
                 event.notes = f"Consistency check failed to end listings on {failed_count} platform(s)."
                 return False
 
+        if sale_alert_needed and not dry_run:
+            await self._send_sale_alert(product, sale_platform, sale_price=sale_price, external_reference=external_reference)
+
         event.notes = "Sale signal processed and platform consistency enforced."
         return True   
+
+    async def _send_sale_alert(self, product: Product, platform: str, *, sale_price: Optional[float], external_reference: Optional[str]) -> None:
+        if not getattr(self, "email_service", None):
+            return
+
+        try:
+            await self.email_service.send_sale_alert(
+                product=product,
+                platform=platform,
+                sale_price=sale_price,
+                external_id=external_reference,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to queue sale alert email for product %s: %s", product.id, exc, exc_info=True)
 
     async def _handle_price_change_old(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool):
         """Handles a 'price_change' event by updating the master product and propagating the change."""

@@ -87,7 +87,7 @@
                         Description
                     </label>
                     <textarea class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                              id="description" name="description" rows="4">{{ product.description or '' }}</textarea>
+                              id="description" name="description" rows="6">{{ (product.description or '') | safe }}</textarea>
                 </div>
             </div>
             
@@ -179,4 +179,47 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof tinymce === 'undefined') {
+        console.warn('TinyMCE library not available on edit page.');
+        return;
+    }
+
+    const existingEditor = tinymce.get('description');
+    if (existingEditor) {
+        existingEditor.remove();
+    }
+
+    tinymce.init({
+        selector: '#description',
+        plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount',
+        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat',
+        height: 300,
+        menubar: false,
+        setup: function (editor) {
+            editor.on('init', function () {
+                const textarea = document.getElementById('description');
+                if (textarea) {
+                    editor.setContent(textarea.value);
+                }
+            });
+        }
+    });
+
+    const form = document.querySelector('form[action^="/inventory/products/"]');
+    if (form) {
+        form.addEventListener('submit', function () {
+            const editor = tinymce.get('description');
+            if (editor) {
+                editor.save();
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

@@ -1,6 +1,8 @@
 # app/main.py
 
 import asyncio
+import os
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI, Depends, Request
@@ -99,8 +101,13 @@ async def proxy_headers_middleware(request: Request, call_next):
 # Templates - define this once at module level
 templates = Jinja2Templates(directory="app/templates")
 
+# Mount draft media directory before the broader /static mount so lookups resolve correctly
+settings = get_settings()
+draft_media_dir = Path(settings.DRAFT_UPLOAD_DIR).expanduser()
+draft_media_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/drafts", StaticFiles(directory=str(draft_media_dir)), name="draft-media")
+
 # Mount static files with proper path resolution
-import os
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

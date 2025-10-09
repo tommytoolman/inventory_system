@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import asyncio
 import aiofiles
@@ -7,7 +8,7 @@ import logging
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any, Union
 
@@ -58,6 +59,10 @@ router = APIRouter()
 # Configuration for file uploads
 UPLOAD_DIR = "app/static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+DRAFT_UPLOAD_DIR = Path(get_settings().DRAFT_UPLOAD_DIR).expanduser()
+DRAFT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+DRAFT_UPLOAD_URL_PREFIX = "/static/drafts"
 
 DEFAULT_VR_BRAND = "Justin" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR VRAcceptedBrand TABLE***
 # DEFAULT_EBAY_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR eBay Accepted Brands TABLE***
@@ -340,10 +345,47 @@ async def _prepare_vr_payload_from_product_object(
 
     return payload, brand_was_defaulted
 
+
+def _sanitize_path_component(value: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]", "-", value or "")
+    sanitized = sanitized.strip("-_")
+    return sanitized or datetime.now().strftime("%Y%m%d%H%M%S")
+
+
+def _sanitize_filename(filename: Optional[str]) -> str:
+    name = Path(filename or "upload").name
+    sanitized = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    return sanitized or "upload"
+
+
+def _draft_media_subdir(draft_id: Optional[int], sku: Optional[str]) -> str:
+    if draft_id is not None:
+        return f"id-{_sanitize_path_component(str(draft_id))}"
+    if sku:
+        return f"sku-{_sanitize_path_component(sku)}"
+    return f"draft-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+
+async def save_draft_upload_file(upload_file: UploadFile, subdir: str) -> str:
+    """Save an uploaded draft file under the configured draft media directory."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"{timestamp}_{_sanitize_filename(upload_file.filename)}"
+
+    target_dir = DRAFT_UPLOAD_DIR / subdir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    filepath = target_dir / filename
+
+    async with aiofiles.open(filepath, "wb") as out_file:
+        content = await upload_file.read()
+        await out_file.write(content)
+
+    return f"{DRAFT_UPLOAD_URL_PREFIX}/{subdir}/{filename}"
+
+
 async def save_upload_file(upload_file: UploadFile) -> str:
     """Save an uploaded file and return its path"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{timestamp}_{upload_file.filename}"
+    filename = f"{timestamp}_{_sanitize_filename(upload_file.filename)}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
     async with aiofiles.open(filepath, 'wb') as out_file:
@@ -351,6 +393,37 @@ async def save_upload_file(upload_file: UploadFile) -> str:
         await out_file.write(content)
 
     return f"/static/uploads/{filename}"
+
+
+def cleanup_draft_media(subdir: str, keep_urls: List[str]) -> None:
+    """Remove orphaned files from a draft media directory."""
+    directory = DRAFT_UPLOAD_DIR / subdir
+    if not directory.exists() or not directory.is_dir():
+        return
+
+    keep_filenames: set[str] = set()
+    for url in keep_urls:
+        if not url:
+            continue
+        parsed = urlparse(url)
+        path = parsed.path
+        prefix = f"{DRAFT_UPLOAD_URL_PREFIX}/{subdir}/"
+        if path.startswith(prefix):
+            keep_filenames.add(Path(path).name)
+
+    try:
+        for file_path in directory.iterdir():
+            if file_path.is_file() and file_path.name not in keep_filenames:
+                file_path.unlink(missing_ok=True)
+
+        if not any(directory.iterdir()):
+            directory.rmdir()
+    except Exception as cleanup_error:
+        logger.warning(
+            "Failed to tidy draft media directory %s: %s",
+            subdir,
+            cleanup_error,
+        )
 
 def process_platform_data(form_data: Dict[str, Any]) -> Dict[str, Any]:
     """Extract platform-specific data from form fields"""
@@ -2555,17 +2628,18 @@ async def save_draft(
         primary_image = None
         additional_images = []
 
+        draft_subdir = _draft_media_subdir(draft_id, sku)
+
         # Handle primary image
         if primary_image_file and primary_image_file.filename:
-            # Upload file to storage
-            primary_image = await save_upload_file(primary_image_file)
+            primary_image = await save_draft_upload_file(primary_image_file, draft_subdir)
         elif primary_image_url:
             primary_image = primary_image_url
 
         # Handle additional images - files
         for img_file in additional_images_files:
             if img_file.filename:
-                image_url = await save_upload_file(img_file)
+                image_url = await save_draft_upload_file(img_file, draft_subdir)
                 additional_images.append(image_url)
 
         # Handle additional images - URLs
@@ -2575,6 +2649,12 @@ async def save_draft(
                 additional_images.extend(urls)
             except:
                 pass
+
+        local_media_urls: List[str] = []
+        if primary_image:
+            local_media_urls.append(primary_image)
+        local_media_urls.extend(additional_images)
+        cleanup_draft_media(draft_subdir, local_media_urls)
 
         # Create or update product data - only include fields that exist in Product model
         product_data = {

@@ -2,9 +2,19 @@
 
 import os
 from functools import lru_cache
-from typing import ClassVar, Dict, List, Optional, Any
-from pydantic import ConfigDict
+from typing import ClassVar, Dict, List, Optional, Any, Annotated
+from pydantic import ConfigDict, BeforeValidator
 from pydantic_settings import BaseSettings 
+
+def _parse_email_list(value):
+    if value in (None, "", []):
+        return []
+    if isinstance(value, str):
+        return [email.strip() for email in value.split(",") if email.strip()]
+    if isinstance(value, (list, tuple, set)):
+        return [str(email).strip() for email in value if str(email).strip()]
+    return []
+
 
 class Settings(BaseSettings):
     """
@@ -104,12 +114,26 @@ class Settings(BaseSettings):
     
     # Email notifications
     ADMIN_EMAIL: str = ""
-    NOTIFICATION_EMAILS: List[str] = []
+    NOTIFICATION_EMAILS: Annotated[List[str], BeforeValidator(lambda v: _parse_email_list(v))] = []
     ADAM_EMAIL: str = ""
     SIMON_EMAIL: str = ""
-    
+
+    # SMTP / Email
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    SMTP_TIMEOUT: int = 30
+    SMTP_FROM_EMAIL: Optional[str] = None
+    SMTP_FROM_NAME: Optional[str] = None
+
+    # Draft media storage
+    DRAFT_UPLOAD_DIR: str = "tmp/draft_uploads"
+
     # DHL Express settings
-    
+
     DHL_API_KEY: str = ""
     DHL_API_SECRET: str = ""
     DHL_ACCOUNT_NUMBER: str = ""
@@ -129,6 +153,7 @@ class Settings(BaseSettings):
         env_file=os.environ.get('ENV_FILE', '.env') if os.path.exists('.env') else None,
         case_sensitive=True
     )
+
 
 @lru_cache()
 def get_settings():

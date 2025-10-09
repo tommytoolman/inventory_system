@@ -247,6 +247,13 @@
                     <span class="text-gray-600">Draft:</span>
                     <span class="font-medium text-gray-700">{{ vr_draft_count|default(0) }}</span>
                 </div>
+
+                {% if vr_other_count and vr_other_count > 0 %}
+                <div class="flex justify-between text-xs">
+                    <span class="text-gray-600">Other:</span>
+                    <span class="font-medium text-gray-700">{{ vr_other_count }}</span>
+                </div>
+                {% endif %}
                 
                 <!-- Total -->
                 <div class="flex justify-between text-xs pt-1 border-t border-gray-200">

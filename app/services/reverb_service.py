@@ -4,11 +4,13 @@ import time
 import uuid
 import logging
 import iso8601
+import re
 
 from datetime import datetime, timezone    
 from fastapi import HTTPException
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
+from urllib.parse import urlparse, parse_qs
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
@@ -283,6 +285,19 @@ class ReverbService:
                 "publish": publish,
                 "photos": valid_photos,
             }
+
+            video_payload = self._prepare_video_payload(product.video_url)
+            if video_payload:
+                listing_payload["videos"] = [video_payload]
+                video_url_for_description = video_payload.get("url") or (
+                    product.video_url.strip() if product.video_url else None
+                )
+                if video_url_for_description:
+                    listing_payload["description"] = self._ensure_video_in_description(
+                        listing_payload.get("description"),
+                        video_url_for_description,
+                        video_payload.get("video_id"),
+                    )
 
             if shipping_profile_id:
                 listing_payload["shipping_profile_id"] = shipping_profile_id
@@ -776,7 +791,20 @@ class ReverbService:
         # Add finish if available
         if product.finish:
             data["finish"] = product.finish
-            
+
+        video_payload = self._prepare_video_payload(product.video_url)
+        if video_payload:
+            data["videos"] = [video_payload]
+            video_url_for_description = video_payload.get("url") or (
+                product.video_url.strip() if product.video_url else None
+            )
+            if video_url_for_description:
+                data["description"] = self._ensure_video_in_description(
+                    data.get("description", product.description),
+                    video_url_for_description,
+                    video_payload.get("video_id"),
+                )
+
         return data
 
     def _get_condition_uuid(self, condition_name: str) -> str:
@@ -792,6 +820,86 @@ class ReverbService:
         }
         # Default to "Excellent" condition if not found
         return condition_map.get(condition_name, "df268ad1-c462-4ba6-b6db-e007e23922ea")
+
+    def _prepare_video_payload(self, video_url: Optional[str]) -> Optional[Dict[str, str]]:
+        """Normalize YouTube URLs for Reverb payloads."""
+        if not video_url:
+            return None
+
+        cleaned_url = video_url.strip()
+        if not cleaned_url:
+            return None
+
+        video_id = self._extract_youtube_id(cleaned_url)
+        normalized_url = cleaned_url
+        if video_id:
+            normalized_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        payload: Dict[str, str] = {
+            "type": "youtube",
+            "url": normalized_url,
+        }
+        if video_id:
+            payload["video_id"] = video_id
+        return payload
+
+    @staticmethod
+    def _extract_youtube_id(url: str) -> Optional[str]:
+        """Extract the YouTube video ID from common URL formats."""
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return None
+
+        if not parsed.netloc:
+            return None
+
+        hostname = parsed.netloc.lower()
+
+        if hostname.endswith("youtu.be"):
+            return parsed.path.lstrip("/") or None
+
+        if "youtube" in hostname:
+            if parsed.path.startswith("/watch"):
+                query = parse_qs(parsed.query)
+                video_values = query.get("v")
+                if video_values:
+                    return video_values[0]
+            # Shorts or other formats (/shorts/<id> or /embed/<id>)
+            path_parts = [segment for segment in parsed.path.split("/") if segment]
+            if path_parts:
+                candidate = path_parts[-1]
+                # Strip possible query fragments already handled; remove suffixes like 'watch'
+                if candidate not in {"watch", "embed", "shorts"}:
+                    return candidate
+
+        return None
+
+    @staticmethod
+    def _ensure_video_in_description(
+        description: Optional[str],
+        video_url: str,
+        video_id: Optional[str] = None,
+    ) -> str:
+        """Append the YouTube link to the description if it's not already present."""
+        base_description = (description or "").strip()
+
+        if video_url in base_description:
+            return base_description
+        if video_id and video_id in base_description:
+            return base_description
+
+        is_html = bool(re.search(r"<[^>]+>", base_description))
+
+        if is_html:
+            snippet = (
+                f'<p><strong>Video demo:</strong> '
+                f'<a href="{video_url}" target="_blank" rel="noopener">{video_url}</a></p>'
+            )
+            return f"{base_description}\n{snippet}" if base_description else snippet
+
+        snippet = f"Video demo: {video_url}"
+        return f"{base_description}\n\n{snippet}" if base_description else snippet
     
     # Replaced by _fetch_existing_reverb_data for new sync sats 14/07
     async def _process_reverb_listings(self, listings: List[Dict]) -> Dict[str, int]:

@@ -28,7 +28,7 @@ from fastapi.encoders import jsonable_encoder
 
 from sqlalchemy import select, or_, distinct, func, desc, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, get_settings
 from app.core.enums import PlatformName, ProductCondition
@@ -746,7 +746,11 @@ async def product_detail(
             )
 
         # 2. Fetch Existing PlatformCommon Listings for this Product
-        common_listings_query = select(PlatformCommon).where(PlatformCommon.product_id == product_id)
+        common_listings_query = (
+            select(PlatformCommon)
+            .options(selectinload(PlatformCommon.ebay_listing))
+            .where(PlatformCommon.product_id == product_id)
+        )
         common_listings_result = await db.execute(common_listings_query)
         existing_common_listings = common_listings_result.scalars().all()
 
@@ -797,7 +801,31 @@ async def product_detail(
                     "message": getattr(common_listing_record, 'platform_message', None),
                     "listing_url": getattr(common_listing_record, 'listing_url', None)
                 }
-            
+
+                if platform_enum.value == "EBAY":
+                    ebay_listing = getattr(common_listing_record, "ebay_listing", None)
+                    uses_crazylister = False
+                    if ebay_listing and getattr(ebay_listing, "listing_data", None):
+                        listing_data_raw = ebay_listing.listing_data
+                        listing_data_obj = {}
+
+                        if isinstance(listing_data_raw, dict):
+                            listing_data_obj = listing_data_raw
+                        elif isinstance(listing_data_raw, str):
+                            try:
+                                listing_data_obj = json.loads(listing_data_raw)
+                            except json.JSONDecodeError:
+                                listing_data_obj = {"Description": listing_data_raw}
+
+                        if listing_data_obj:
+                            if "uses_crazylister" in listing_data_obj:
+                                uses_crazylister = bool(listing_data_obj.get("uses_crazylister"))
+                            else:
+                                description_html = listing_data_obj.get("Description") or ""
+                                uses_crazylister = "crazylister" in description_html.lower()
+
+                    entry["details"]["uses_crazylister"] = uses_crazylister
+
             all_platforms_status.append(entry)
         
         logger.debug(f"Constructed all_platforms_status for product {product_id}: {all_platforms_status}")

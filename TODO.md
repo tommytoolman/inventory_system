@@ -23,7 +23,6 @@
 - [ ] **eBay listing backfill script** – write a job that refreshes ebay_listings rows from master product data to fill missing metadata (e.g., item 257112518866).
 - [ ] **Activity report tidy-up** – debug the report pipeline and trim noisy or duplicate rows so it is usable for daily review.
 - [ ] **eBay condition mapping & extra item details** – complete the attribute mapping for instruments and expand payloads with missing specifics.
-- [ ] **Image draft persistence** – ensure draft uploads are stored on Railway (or other web-accessible storage) so templates and Reverb creation always have public URLs.
 - [ ] **Recent activity & sales report fixes** – address the minor bugs observed in the activity feeds and sales summaries.
 - [ ] **Price sync on edits** – re-run outbound pricing syncs whenever an operator updates a product’s pricing fields.
 
@@ -32,7 +31,6 @@
 - [ ] **CrazyLister integration discovery** – investigate feasibility and value before committing to implementation.
 - [ ] **"Where sold" logic improvements** – refine attribution so reporting shows the definitive sale source for each SKU.
 - [ ] **Sale channel attribution** – formalise logic that tags each sale as Offline vs. Shopify vs. VR vs. eBay vs. Reverb for downstream reporting.
-- [ ] **eBay CrazyLister detection** – flag eBay listings using the template (identify via HTML markers) so we can decide whether to refresh content.
 - [ ] **Sold date surfaces** – expose the confirmed sold timestamp on product detail pages and reports when available.
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 - [ ] **NPI clustering report** – add a New Product Introduction cluster view grouped by category for merch planning.
@@ -49,7 +47,9 @@
 - [x] **Editor description rendering mismatch** – ensure the product edit view loads descriptions into the TinyMCE editor instead of raw HTML.
 - [x] **Shopify archived count** – display the count of archived Shopify SKUs on the dashboard overview card.
 - [x] **Shopify pricing parity** – apply a 5% discount when cloning Reverb listings, rounding up to the nearest £x,999 across all Shopify creation paths.
+- [x] **eBay CrazyLister detection** – flag eBay listings that use the CrazyLister template via HTML markers so we can prioritise refreshes.
 - [x] **Draft media persistence** – store draft uploads in shared storage per draft and clean up orphaned files after edits so drafts survive machine or redeploy changes.
+- [x] **Image draft persistence** – ensure draft uploads are stored on Railway (or other web-accessible storage) so templates and Reverb creation always have public URLs.
 - [x] **Product grid layout tweak** – cap category column width on the Products table so “View”/status controls remain visible without horizontal scrolling.
 - [x] **EU data hard-code review** – remove any remaining hard-coded EU shipping/tax details and move to configuration or platform data.
 

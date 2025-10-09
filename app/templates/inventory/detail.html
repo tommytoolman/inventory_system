@@ -268,6 +268,11 @@
                                         {% else %}
                                             {{ platform_entry.name|title }}
                                         {% endif %}
+                                        {% if platform_entry.name|lower == 'ebay' and platform_entry.details.uses_crazylister %}
+                                            <span class="ml-2 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-100 text-indigo-700" title="CrazyLister template detected">
+                                                CrazyLister
+                                            </span>
+                                        {% endif %}
                                     </span>
                                     {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
                                     {% if platform_status in ['SOLD', 'ENDED', 'SOLD_OUT'] %}

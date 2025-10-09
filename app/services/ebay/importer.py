@@ -553,6 +553,8 @@ class EbayImporter:
             }
         
         # Initialize the mapped data with default values
+        mapping_time = datetime.now(timezone.utc)
+
         mapped_data = {
             "ebay_item_id": listing.get("ItemID", f"unknown-{uuid.uuid4()}"),
             "listing_status": listing_type.upper(),
@@ -605,10 +607,10 @@ class EbayImporter:
             "payment_status": None,
             
             # Store current timestamp for tracking purposes
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
-            "last_synced_at": datetime.now(timezone.utc),
-            
+            "created_at": mapping_time,
+            "updated_at": mapping_time,
+            "last_synced_at": mapping_time,
+
             # Store the original listing data as JSON for reference
             "listing_data": {
                 "Title": listing.get("Title"),
@@ -617,7 +619,11 @@ class EbayImporter:
                 "_listing_type": listing_type
             }
         }
-        
+
+        description_html = listing.get("Description") or ""
+        mapped_data["listing_data"]["Description"] = description_html
+        mapped_data["listing_data"]["uses_crazylister"] = self._is_crazylister_template(description_html)
+
         # Now safely add data that might be nested
         try:
             # Price - safe extraction with nested gets
@@ -736,8 +742,23 @@ class EbayImporter:
                     mapped_data["shipping_status"] = "PENDING_PAYMENT"
             except Exception:
                 mapped_data["shipping_status"] = "PENDING_PAYMENT"
-    
+
         return mapped_data
+
+    @staticmethod
+    def _is_crazylister_template(description_html: Optional[str]) -> bool:
+        if not description_html:
+            return False
+
+        haystack = description_html.lower()
+        markers = [
+            "crazylister",
+            "cl-template-id",
+            "templates-css.crazylister.com",
+            "resized-images.crazylister.com",
+        ]
+
+        return any(marker in haystack for marker in markers)
 
     def _parse_ebay_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
         """Parse eBay datetime string to Python datetime object"""

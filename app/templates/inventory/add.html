@@ -2902,20 +2902,9 @@ function initializeSortable() {
             
             // Handle images properly based on their source
             // First, handle file uploads
-            const fileImages = selectedImages.filter(img => img.source === 'file');
+            const fileImages = selectedImages.filter(img => img.source === 'file' && img.file);
             if (fileImages.length > 0) {
-                // Add the first file image as primary if no URL primary exists
-                const primaryFile = fileImages[0];
-                if (primaryFile && primaryFile.file) {
-                    formData.append('primary_image_file', primaryFile.file);
-                }
-
-                // Add remaining file images as additional
-                for (let i = 1; i < fileImages.length; i++) {
-                    if (fileImages[i].file) {
-                        formData.append('additional_images_files', fileImages[i].file);
-                    }
-                }
+                await appendImageFilesToFormData(formData, fileImages);
             }
 
             // Then handle URL/Dropbox images from hidden inputs
@@ -3757,19 +3746,18 @@ function initializeSortable() {
 
             // Process file uploads - these will be uploaded to server
             if (fileImages.length > 0) {
-                // First file image as primary
-                if (fileImages[0] && fileImages[0].file) {
-                    formData.append('primary_image_file', fileImages[0].file);
-                    console.log(`Added primary image file: ${fileImages[0].name}`);
+                if (fileImages[0]) {
+                    console.log(`Preparing primary image file: ${fileImages[0].name}`);
+                }
+                if (fileImages.length > 1) {
+                    fileImages.slice(1).forEach(img => {
+                        if (img?.name) {
+                            console.log(`Preparing additional image file: ${img.name}`);
+                        }
+                    });
                 }
 
-                // Remaining file images as additional
-                for (let i = 1; i < fileImages.length; i++) {
-                    if (fileImages[i].file) {
-                        formData.append('additional_images_files', fileImages[i].file);
-                        console.log(`Added additional image file: ${fileImages[i].name}`);
-                    }
-                }
+                await appendImageFilesToFormData(formData, fileImages);
             }
 
             // Process URL images (Dropbox, external URLs)
@@ -3909,6 +3897,41 @@ function initializeSortable() {
     // Dropbox functionality
     let navigationHistory = [];
     let selectedImages = [];
+
+    async function appendImageFilesToFormData(formData, fileImages) {
+        if (!fileImages || fileImages.length === 0) {
+            return;
+        }
+
+        // Remove any stale file inputs so we only send the cloned blobs
+        formData.delete('primary_image_file');
+        formData.delete('additional_images_files');
+        formData.delete('image_files');
+
+        const clonedFiles = await Promise.all(
+            fileImages.map(async (image) => {
+                try {
+                    const buffer = await image.file.arrayBuffer();
+                    const fileName = image.file.name || 'image.jpg';
+                    const fileType = image.file.type || 'application/octet-stream';
+                    const lastModified = image.file.lastModified || Date.now();
+                    return new File([buffer], fileName, { type: fileType, lastModified });
+                } catch (error) {
+                    console.error('Failed to clone image before upload', image, error);
+                    throw error;
+                }
+            })
+        );
+
+        const [primaryFile, ...additionalFiles] = clonedFiles;
+        if (primaryFile) {
+            formData.append('primary_image_file', primaryFile);
+        }
+
+        additionalFiles.forEach((file) => {
+            formData.append('additional_images_files', file);
+        });
+    }
     
     const dropboxElements = {
         browser: document.getElementById('dropbox-browser'),

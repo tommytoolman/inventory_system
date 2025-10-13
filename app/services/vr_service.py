@@ -5,15 +5,15 @@ import uuid
 import pandas as pd
 import json
 from datetime import datetime, timezone
-from typing import Optional, Dict, List, Any, Tuple
-from sqlalchemy import text
+from typing import Optional, Dict, List, Any, Tuple, Set
+from sqlalchemy import text, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.services.vintageandrare.client import VintageAndRareClient
 from app.models.product import Product
-from app.models.platform_common import PlatformCommon, ListingStatus
+from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.vr import VRListing
 from app.models.sync_event import SyncEvent
 
@@ -29,6 +29,7 @@ class VRService:
     # =========================================================================
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.settings = get_settings()
 
     def _sanitize_for_json(self, obj: Any) -> Any:
         """Recursively check through a dictionary and replace NaN values with None."""
@@ -422,14 +423,28 @@ class VRService:
                 logger.error(f"Authentication failed for marking item {external_id} as sold.")
                 return False
             result = await client.mark_item_as_sold(external_id)
-            if result:
-                return result.get("success", False)
+            if result and result.get("success", False):
+                stmt = select(VRListing).where(VRListing.vr_listing_id == external_id)
+                listing_result = await self.db.execute(stmt)
+                listing = listing_result.scalar_one_or_none()
+                if listing:
+                    listing.vr_state = 'sold'
+                    listing.inventory_quantity = 0
+                    listing.in_inventory = False
+                    listing.updated_at = datetime.utcnow()
+                    self.db.add(listing)
+                return True
             return False
         except Exception as e:
             logger.error(f"Exception while marking V&R item {external_id} as sold: {e}", exc_info=True)
             return False
 
-    async def create_listing_from_product(self, product: Product, reverb_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def create_listing_from_product(
+        self,
+        product: Product,
+        reverb_data: Dict[str, Any] = None,
+        platform_options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """Creates a Vintage & Rare listing from a local master Product object."""
         logger.info(f"Creating V&R listing for Product ID: {product.id}, SKU: {product.sku}")
         try:
@@ -446,6 +461,9 @@ class VRService:
                 return {"status": "error", "message": "V&R authentication failed"}
             
             # Prepare product data for V&R (similar to CSV uploader)
+            vr_options = platform_options or {}
+            override_price = vr_options.get('price') or vr_options.get('price_display')
+
             product_data = {
                 'sku': product.sku,
                 'brand': product.brand or '',
@@ -468,6 +486,15 @@ class VRService:
                 'shipping': True,
                 'local_pickup': False,
             }
+
+            if override_price is not None:
+                try:
+                    product_data['price'] = str(float(str(override_price).replace(',', '')))
+                except ValueError:
+                    logger.warning(f"Invalid V&R price override: {override_price}")
+
+            if vr_options.get('notes'):
+                product_data['notes'] = vr_options['notes']
             
             # Add shipping fees (use defaults or extract from reverb_data if available)
             if reverb_data and 'shipping' in reverb_data:
@@ -590,6 +617,18 @@ class VRService:
                 'SubCategory2': None,
                 'SubCategory3': None
             }
+
+            override_category = vr_options.get('category')
+            if override_category:
+                parts = str(override_category).split('/')
+                if len(parts) >= 1 and parts[0]:
+                    category_ids['Category'] = parts[0]
+                if len(parts) >= 2 and parts[1]:
+                    category_ids['SubCategory1'] = parts[1]
+                if len(parts) >= 3 and parts[2]:
+                    category_ids['SubCategory2'] = parts[2]
+                if len(parts) >= 4 and parts[3]:
+                    category_ids['SubCategory3'] = parts[3]
             
             # If we have a Reverb category UUID, look up the VR category IDs
             if reverb_category_uuid:
@@ -653,10 +692,80 @@ class VRService:
                 product_data=product_data,
                 test_mode=test_mode,
                 from_scratch=False,  # Using category strings, not IDs
-                db_session=None  # Same as working script
+                db_session=self.db
             )
             
             logger.info(f"V&R creation result: {result}")
+
+            if result.get("status") == "success":
+                needs_resolution = result.get("needs_id_resolution", False)
+                vr_listing_id = result.get("vr_listing_id")
+
+                existing_platform_common = await self.db.execute(
+                    select(PlatformCommon).where(
+                        PlatformCommon.product_id == product.id,
+                        PlatformCommon.platform_name == "vr"
+                    )
+                )
+                platform_common = existing_platform_common.scalar_one_or_none()
+
+                sync_status = SyncStatus.PENDING.value if needs_resolution else SyncStatus.SYNCED.value
+                external_id = vr_listing_id or result.get("external_id") or product.sku
+
+                if platform_common:
+                    platform_common.external_id = external_id
+                    platform_common.status = ListingStatus.ACTIVE.value
+                    platform_common.sync_status = sync_status
+                    platform_common.last_sync = datetime.utcnow()
+                    platform_common.platform_specific_data = result
+                else:
+                    platform_common = PlatformCommon(
+                        product_id=product.id,
+                        platform_name="vr",
+                        external_id=external_id,
+                        status=ListingStatus.ACTIVE.value,
+                        sync_status=sync_status,
+                        last_sync=datetime.utcnow(),
+                        platform_specific_data=result
+                    )
+                    self.db.add(platform_common)
+
+                await self.db.flush()
+
+                vr_listing_stmt = select(VRListing).where(VRListing.platform_id == platform_common.id)
+                existing_vr_listing = await self.db.execute(vr_listing_stmt)
+                vr_listing = existing_vr_listing.scalar_one_or_none()
+
+                price_value = None
+                try:
+                    price_value = float(product_data.get('price') or 0)
+                except (TypeError, ValueError):
+                    price_value = None
+
+                if vr_listing:
+                    vr_listing.vr_listing_id = vr_listing_id or vr_listing.vr_listing_id
+                    vr_listing.inventory_quantity = product.quantity or vr_listing.inventory_quantity
+                    vr_listing.vr_state = 'pending' if needs_resolution else 'live'
+                    vr_listing.price_notax = price_value
+                    vr_listing.extended_attributes = result
+                    vr_listing.last_synced_at = datetime.utcnow()
+                else:
+                    vr_listing = VRListing(
+                        platform_id=platform_common.id,
+                        vr_listing_id=vr_listing_id,
+                        inventory_quantity=product.quantity or 1,
+                        vr_state='pending' if needs_resolution else 'live',
+                        price_notax=price_value,
+                        extended_attributes=result,
+                        last_synced_at=datetime.utcnow()
+                    )
+                    self.db.add(vr_listing)
+
+                await self.db.commit()
+                result["platform_common_id"] = platform_common.id
+            else:
+                await self.db.rollback()
+
             return result
             
         except Exception as e:
@@ -666,9 +775,11 @@ class VRService:
     async def update_listing_price(self, external_id: str, new_price: float) -> bool:
         """Outbound action to update the price of a listing on the V&R platform."""
         logger.info(f"Received request to update V&R listing {external_id} to price £{new_price:.2f}.")
-        settings = get_settings()
-        # Note: The db_session is now passed during client initialization
-        client = VintageAndRareClient(settings.VINTAGE_AND_RARE_USERNAME, settings.VINTAGE_AND_RARE_PASSWORD, db_session=self.db)
+        client = VintageAndRareClient(
+            self.settings.VINTAGE_AND_RARE_USERNAME,
+            self.settings.VINTAGE_AND_RARE_PASSWORD,
+            db_session=None,
+        )
         
         try:
             update_data = {'product_price': f"{new_price:.2f}"}
@@ -678,6 +789,154 @@ class VRService:
         except Exception as e:
             logger.error(f"Exception while updating price for V&R item {external_id}: {e}", exc_info=True)
             return False
+
+    def apply_product_update_from_snapshot(
+        self,
+        product_data: Dict[str, Any],
+        external_id: str,
+        changed_fields: Set[str],
+    ) -> Dict[str, Any]:
+        """Push text-based edits for a VR listing using the HTTP helper."""
+
+        relevant = {"title", "model", "description", "brand", "base_price"}
+        if not (changed_fields & relevant):
+            return {"status": "no_changes"}
+
+        if not external_id:
+            return {"status": "skipped", "reason": "missing_external_id"}
+
+        updates: Dict[str, Any] = {}
+        if "model" in changed_fields:
+            updates["model"] = product_data.get("model") or ""
+        if "title" in changed_fields:
+            updates["title"] = product_data.get("title") or ""
+        if "description" in changed_fields:
+            updates["description"] = product_data.get("description") or ""
+        if "brand" in changed_fields:
+            updates["brand"] = product_data.get("brand") or ""
+        if "base_price" in changed_fields:
+            price_value = product_data.get("base_price")
+            if price_value is not None:
+                updates["price"] = f"{float(price_value):.2f}"
+
+        if not updates:
+            return {"status": "no_changes"}
+
+        client = VintageAndRareClient(
+            self.settings.VINTAGE_AND_RARE_USERNAME,
+            self.settings.VINTAGE_AND_RARE_PASSWORD,
+            db_session=None,
+        )
+
+        try:
+            result = client.update_listing_via_requests(external_id, updates)
+            result.setdefault("requested_fields", list(updates.keys()))
+            return result
+        except Exception as exc:
+            logger.error(
+                "Error updating VR listing %s: %s",
+                external_id,
+                exc,
+                exc_info=True,
+            )
+            return {"status": "error", "message": str(exc)}
+
+    async def update_local_listing_metadata(
+        self,
+        external_id: str,
+        product_data: Dict[str, Any],
+        changed_fields: Set[str],
+        applied_fields: Optional[List[str]] = None,
+    ) -> None:
+        """Persist VR edit results back to the local database."""
+
+        if applied_fields is not None:
+            effective_fields = {
+                field for field in applied_fields if field in {"title", "model", "description", "brand", "price"}
+            }
+        else:
+            rename_map = {"base_price": "price"}
+            effective_fields = {
+                rename_map.get(field, field)
+                for field in changed_fields & {"title", "model", "description", "brand", "base_price"}
+            }
+
+        if not effective_fields:
+            return
+
+        try:
+            platform_query = (
+                select(PlatformCommon)
+                .where(
+                    PlatformCommon.platform_name == "vr",
+                    PlatformCommon.external_id == external_id,
+                )
+                .limit(1)
+            )
+            platform_result = await self.db.execute(platform_query)
+            platform_common = platform_result.scalar_one_or_none()
+            if not platform_common:
+                logger.warning("No platform_common row found for VR listing %s", external_id)
+                return
+
+            listing_query = (
+                select(VRListing)
+                .where(VRListing.platform_id == platform_common.id)
+                .order_by(VRListing.id.desc())
+                .limit(1)
+            )
+            listing_result = await self.db.execute(listing_query)
+            vr_listing = listing_result.scalar_one_or_none()
+
+            timestamp = datetime.utcnow()
+            platform_data = dict(platform_common.platform_specific_data or {})
+
+            def apply_update(target: Dict[str, Any], key: str, value_key: str) -> None:
+                value = product_data.get(value_key)
+                if value is not None:
+                    target[key] = value
+
+            if "title" in effective_fields:
+                apply_update(platform_data, "title", "title")
+            if "model" in effective_fields:
+                apply_update(platform_data, "model", "model")
+            if "description" in effective_fields:
+                apply_update(platform_data, "description", "description")
+            if "brand" in effective_fields:
+                apply_update(platform_data, "brand", "brand")
+            if "price" in effective_fields:
+                platform_data["price"] = float(product_data.get("base_price") or 0)
+
+            platform_common.platform_specific_data = platform_data
+            platform_common.last_sync = timestamp
+            self.db.add(platform_common)
+
+            if vr_listing:
+                ext_attrs = dict(vr_listing.extended_attributes or {})
+                if "title" in effective_fields:
+                    apply_update(ext_attrs, "title", "title")
+                if "model" in effective_fields:
+                    apply_update(ext_attrs, "model", "model")
+                if "description" in effective_fields:
+                    apply_update(ext_attrs, "description", "description")
+                if "brand" in effective_fields:
+                    apply_update(ext_attrs, "brand", "brand")
+                if "price" in effective_fields:
+                    ext_attrs["price"] = float(product_data.get("base_price") or 0)
+                    vr_listing.price_notax = float(product_data.get("base_price") or 0)
+
+                vr_listing.extended_attributes = ext_attrs
+                vr_listing.last_synced_at = timestamp
+                self.db.add(vr_listing)
+
+            await self.db.commit()
+        except Exception as exc:
+            logger.error(
+                "Failed to persist VR edit for %s: %s",
+                external_id,
+                exc,
+                exc_info=True,
+            )
 
     # =========================================================================
     # 6. DATA PREPARATION & FETCHING HELPERS

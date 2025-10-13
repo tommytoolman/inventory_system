@@ -4,16 +4,17 @@ import math
 import uuid
 import json
 from datetime import datetime, timezone
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any, Tuple, Set
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import select
 
 from app.models.product import Product, ProductCondition, ProductStatus
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.shopify import ShopifyListing
 from app.models.sync_event import SyncEvent
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.exceptions import ShopifyAPIError
 from app.services.shopify.client import ShopifyGraphQLClient  # You'll need to create this
 from app.services.reverb_service import ReverbService # We might need this for data mapping later
@@ -36,6 +37,150 @@ class ShopifyService:
         # Initialize Shopify client - it loads settings internally
         self.client = ShopifyGraphQLClient()
         logger.debug(f"ShopifyService initialized")
+
+    # ------------------------------------------------------------------
+    # Utility helpers reused by scripts and edit-propagation
+    # ------------------------------------------------------------------
+
+    def _resolve_product_gid(
+        self, platform_link: PlatformCommon, listing: ShopifyListing
+    ) -> Optional[str]:
+        raw_id = None
+        if listing and listing.extended_attributes:
+            raw_id = listing.extended_attributes.get("id")
+        if not raw_id:
+            raw_id = platform_link.external_id
+        if not raw_id:
+            return None
+        return raw_id if str(raw_id).startswith("gid://") else f"gid://shopify/Product/{raw_id}"
+
+    def _resolve_location_gid(self) -> str:
+        settings = self.settings or get_settings()
+        raw = getattr(settings, "SHOPIFY_LOCATION_GID", None)
+        if not raw:
+            raise ValueError("SHOPIFY_LOCATION_GID is not configured; update the environment settings")
+        return raw if str(raw).startswith("gid://") else f"gid://shopify/Location/{raw}"
+
+    def _extract_variant_nodes(self, listing: ShopifyListing) -> List[Dict[str, Any]]:
+        variants = []
+        if listing and listing.extended_attributes:
+            variants = (
+                listing.extended_attributes.get("variants", {}).get("nodes", [])
+                if isinstance(listing.extended_attributes, dict)
+                else []
+            )
+        return variants if isinstance(variants, list) else []
+
+    def _fetch_fresh_variant_nodes(self, product_gid: str) -> List[Dict[str, Any]]:
+        try:
+            data = self.client.get_product_snapshot_by_id(product_gid, num_variants=50)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to fetch fresh Shopify variants for %s: %s", product_gid, exc)
+            return []
+
+        variants = data.get("variants", {}).get("edges") if data else None
+        if not variants:
+            return []
+        return [edge.get("node", {}) for edge in variants if isinstance(edge, dict)]
+
+    def _collect_inventory_adjustments(
+        self,
+        product: Product,
+        product_gid: str,
+        variants: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        adjustments: List[Dict[str, Any]] = []
+        fallback_map: Dict[str, Dict[str, Any]] = {}
+        missing_inventory_ids = any(
+            not ((variant or {}).get("inventoryItem") or {}).get("id")
+            and not (variant or {}).get("inventoryItemId")
+            for variant in variants
+        )
+
+        if missing_inventory_ids:
+            fresh_nodes = self._fetch_fresh_variant_nodes(product_gid)
+            fallback_map = {
+                (node.get("sku") or "").strip().lower(): node
+                for node in fresh_nodes
+                if node.get("sku")
+            }
+            if fallback_map:
+                logger.info("Refreshed Shopify variant data for %s", product.sku)
+
+        location_gid = self._resolve_location_gid()
+
+        for variant in variants:
+            variant = variant or {}
+            inventory_item = variant.get("inventoryItem") or {}
+            inventory_item_id = inventory_item.get("id") or variant.get("inventoryItemId")
+
+            if not inventory_item_id and fallback_map:
+                lookup = fallback_map.get((variant.get("sku") or "").strip().lower())
+                if lookup:
+                    inventory_item_id = (
+                        ((lookup.get("inventoryItem") or {}).get("id"))
+                        or lookup.get("inventoryItemId")
+                    )
+
+            if not inventory_item_id:
+                logger.warning(
+                    "Shopify variant for %s missing inventory item id; skipping adjustment", product.sku
+                )
+                continue
+
+            adjustments.append(
+                {
+                    "inventoryItemId": inventory_item_id,
+                    "locationId": location_gid,
+                    "quantity": int(product.quantity or 0),
+                }
+            )
+
+        return adjustments
+
+    def _push_inventory_update(
+        self,
+        product: Product,
+        product_gid: str,
+        adjustments: List[Dict[str, Any]],
+    ) -> None:
+        if not adjustments:
+            logger.warning("No Shopify adjustments generated for %s; skipping", product.sku)
+            return
+
+        mutation = """
+        mutation inventorySetOnHandQuantities($input: InventorySetOnHandQuantitiesInput!) {
+          inventorySetOnHandQuantities(input: $input) {
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        """
+
+        variables = {
+            "input": {
+                "reason": "correction",
+                "setQuantities": adjustments,
+            }
+        }
+
+        try:
+            response = self.client.execute(mutation, variables)
+        except Exception as exc:  # pragma: no cover
+            logger.error("Shopify inventory update failed for %s: %s", product.sku, exc)
+            raise
+
+        errors = (
+            response.get("data", {})
+            .get("inventorySetOnHandQuantities", {})
+            .get("userErrors", [])
+        )
+        if errors:
+            logger.error("Shopify inventory update errors for %s: %s", product.sku, errors)
+            raise ShopifyAPIError(f"Inventory update errors: {errors}")
+
 
 
     # =========================================================================
@@ -114,6 +259,55 @@ class ShopifyService:
             stats['errors'] += 1
         
         return stats
+
+    # ------------------------------------------------------------------
+    # Manual propagation helpers (edit path, etc.)
+    # ------------------------------------------------------------------
+
+    async def apply_product_update(
+        self,
+        product: Product,
+        platform_link: PlatformCommon,
+        changed_fields: Set[str],
+    ) -> Dict[str, Any]:
+        listing_query = select(ShopifyListing).where(ShopifyListing.platform_id == platform_link.id)
+        listing_result = await self.db.execute(listing_query)
+        listing = listing_result.scalar_one_or_none()
+        if not listing:
+            return {"status": "skipped", "reason": "no_listing"}
+
+        product_gid = self._resolve_product_gid(platform_link, listing)
+        if not product_gid:
+            return {"status": "error", "message": "missing_product_gid"}
+
+        update_payload: Dict[str, Any] = {"id": product_gid}
+        pushed = False
+
+        if "title" in changed_fields and product.title:
+            update_payload["title"] = product.title
+            pushed = True
+
+        if "description" in changed_fields:
+            update_payload["descriptionHtml"] = product.description or ""
+            pushed = True
+
+        if pushed:
+            self.client.update_product(update_payload)
+
+        inventory_updated = False
+        if "quantity" in changed_fields and product.is_stocked_item:
+            variants = self._extract_variant_nodes(listing)
+            if not variants:
+                variants = self._fetch_fresh_variant_nodes(product_gid)
+            adjustments = self._collect_inventory_adjustments(product, product_gid, variants)
+            self._push_inventory_update(product, product_gid, adjustments)
+            inventory_updated = True
+
+        return {
+            "status": "updated" if pushed or inventory_updated else "no_changes",
+            "inventory": inventory_updated,
+            "product": pushed,
+        }
 
     def _calculate_changes(self, api_items: Dict, db_items: Dict) -> Dict[str, List]:
         """Calculates create, update, and remove operations."""
@@ -420,9 +614,19 @@ class ShopifyService:
 
             # 2. Call the existing, proven client method.
             result = await self.client.mark_product_as_sold(product_gid)
-            
-            # The client method returns a dictionary with a 'success' key.
-            return result.get("success", False)
+
+            success = result.get("success", False)
+            if success:
+                listing_stmt = select(ShopifyListing).where(ShopifyListing.shopify_legacy_id == str(external_id))
+                listing_result = await self.db.execute(listing_stmt)
+                listing = listing_result.scalar_one_or_none()
+                if listing:
+                    listing.status = 'archived'
+                    listing.last_synced_at = datetime.utcnow()
+                    listing.updated_at = datetime.utcnow()
+                    self.db.add(listing)
+
+            return success
             
         except Exception as e:
             logger.error(f"Exception while updating Shopify product {external_id}: {e}", exc_info=True)
@@ -446,7 +650,12 @@ class ShopifyService:
             logger.error(f"Exception while updating price for Shopify product {external_id}: {e}", exc_info=True)
             return False
 
-    async def create_listing_from_product(self, product: Product, reverb_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def create_listing_from_product(
+        self,
+        product: Product,
+        reverb_data: Dict[str, Any] = None,
+        platform_options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         Creates a Shopify listing from a local master Product object.
         This is called by the SyncService during the 'Action Phase'.
@@ -599,15 +808,26 @@ class ShopifyService:
                     if reverb_data and reverb_data.get('inventory'):
                         inventory_qty = int(reverb_data.get('inventory', 1))
                     
-                    source_price = self._extract_source_price(product, reverb_data)
-                    shopify_price = None
-                    if source_price:
+                    override_price = None
+                    if platform_options:
+                        override_price = platform_options.get("price") or platform_options.get("price_display")
+                    final_price = None
+                    if override_price is not None:
                         try:
-                            shopify_price = self._calculate_shopify_price(source_price)
+                            final_price = float(str(override_price).replace(",", ""))
                         except ValueError:
-                            logger.warning("Invalid source price %s for Shopify calculation", source_price)
+                            logger.warning("Invalid Shopify override price '%s'", override_price)
 
-                    final_price = shopify_price if shopify_price else float(product.base_price or 0)
+                    if final_price is None:
+                        source_price = self._extract_source_price(product, reverb_data)
+                        shopify_price = None
+                        if source_price:
+                            try:
+                                shopify_price = self._calculate_shopify_price(source_price)
+                            except ValueError:
+                                logger.warning("Invalid source price %s for Shopify calculation", source_price)
+
+                        final_price = shopify_price if shopify_price else float(product.base_price or 0)
 
                     variant_update = {
                         "price": str(final_price),
@@ -646,8 +866,19 @@ class ShopifyService:
                 except Exception as e:
                     logger.warning(f"Failed to add images: {e}")
             
-            # Step 5: Set category if we have Reverb category mapping
-            if reverb_data:
+            # Step 5: Set category if we have Reverb category mapping or platform override
+            category_gid_override = None
+            if platform_options:
+                category_gid_override = platform_options.get("category_gid") or platform_options.get("category")
+
+            if category_gid_override:
+                try:
+                    category_result = self.client.set_product_category(product_gid, category_gid_override)
+                    if category_result:
+                        logger.info("✅ Category set using platform override")
+                except Exception as e:
+                    logger.warning(f"Failed to set category via override: {e}")
+            elif reverb_data:
                 try:
                     categories = reverb_data.get('categories', [])
                     if categories and categories[0].get('uuid'):
@@ -696,7 +927,12 @@ class ShopifyService:
             
             if product_legacy_id:
                 logger.info(f"Successfully created Shopify product with ID: {product_legacy_id}")
-                return {"status": "success", "external_id": product_legacy_id}
+                return {
+                    "status": "success",
+                    "external_id": product_legacy_id,
+                    "shopify_product_id": product_legacy_id,
+                    "product_gid": product_gid,
+                }
             else:
                 return {"status": "error", "message": "No legacy ID returned"}
 

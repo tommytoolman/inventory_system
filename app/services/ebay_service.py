@@ -3,7 +3,9 @@ import os
 import logging
 import uuid
 import json
-from typing import Optional, Dict, List, Any, Tuple
+import asyncio
+from decimal import Decimal
+from typing import Optional, Dict, List, Any, Tuple, Set
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select, update, delete
@@ -42,6 +44,34 @@ class EbayService:
 
         # --- NEW: Load the category map from the JSON file on startup ---
         self.category_map = self._load_category_map()
+
+    async def _fetch_full_item_with_retry(self, item_id: str, attempts: int = 3) -> Optional[Dict[str, Any]]:
+        """Fetch the full GetItem payload with simple retry/backoff."""
+        delay_seconds = 1
+        for attempt in range(1, attempts + 1):
+            try:
+                response = await self.trading_api.get_item(item_id)
+                if response and response.get('Item'):
+                    return response
+                logger.warning(
+                    "GetItem returned no Item payload for %s on attempt %s/%s",
+                    item_id,
+                    attempt,
+                    attempts
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "GetItem failed for %s on attempt %s/%s: %s",
+                    item_id,
+                    attempt,
+                    attempts,
+                    exc
+                )
+            if attempt < attempts:
+                await asyncio.sleep(delay_seconds)
+                delay_seconds = min(delay_seconds * 2, 8)
+
+        return None
 
     def _load_category_map(self, file_path: str = 'app/services/category_mappings/reverb_to_ebay_categories.json') -> Dict:
         """Loads the Reverb to eBay category mapping from a JSON file."""
@@ -158,15 +188,35 @@ class EbayService:
         }
         
         return condition_display_map.get(condition_id, "Used")
+
+    @staticmethod
+    def _truncate_item_specific(value: str, limit: int) -> str:
+        """Return value truncated to the last whole word within limit characters."""
+        if not value:
+            return value
+
+        if len(value) <= limit:
+            return value
+
+        truncated = value[:limit].rstrip()
+        last_space = truncated.rfind(" ")
+        if last_space == -1:
+            return truncated
+
+        trimmed = truncated[:last_space].rstrip()
+        return trimmed if trimmed else truncated
     
     def _build_item_specifics(self, product: Product, category_id: str) -> Dict[str, str]:
         """
         Build comprehensive ItemSpecifics based on product data and category.
         """
         # Base specifics that apply to all items
+        model_value = product.model or "Unknown Model"
+        model_value = self._truncate_item_specific(model_value, 65)
+
         item_specifics = {
             "Brand": product.brand or "Unbranded",
-            "Model": product.model or "Unknown Model",
+            "Model": model_value,
             "UPC": "Does not apply",
             "MPN": "Does not apply"
         }
@@ -525,6 +575,13 @@ class EbayService:
         if api_item.get('listing_url') and api_item['listing_url'] != db_item.get('listing_url'):
             return True
 
+        api_qty = api_item.get('quantity_available')
+        db_qty = db_item.get('listing_quantity_available')
+        if db_qty is None:
+            db_qty = db_item.get('product_quantity')
+        if api_qty is not None and db_qty is not None and api_qty != db_qty:
+            return True
+
         
         # # --- FINAL DEBUG BLOCK ---
         # # This will print the SKU for every item being checked.
@@ -647,6 +704,32 @@ class EbayService:
                             # IMPORTANT: The 'old' price should always be the MASTER price,
                             # as the anomaly is the deviation from the canonical price.
                             'change_data': {'old': db_data.get('base_price'), 'new': api_data['price'], 'item_id': external_id},
+                            'status': 'pending'
+                        })
+
+                # Quantity change detection (primarily for stocked items)
+                api_quantity_available = api_data.get('quantity_available')
+                db_quantity_available = db_data.get('listing_quantity_available')
+                if db_quantity_available is None:
+                    db_quantity_available = db_data.get('product_quantity')
+
+                if api_quantity_available is not None and db_quantity_available is not None and api_quantity_available != db_quantity_available:
+                    if (external_id, 'quantity_change') not in pending_events:
+                        events_to_log.append({
+                            'sync_run_id': sync_run_id,
+                            'platform_name': 'ebay',
+                            'product_id': db_data['product_id'],
+                            'platform_common_id': db_data['platform_common_id'],
+                            'external_id': external_id,
+                            'change_type': 'quantity_change',
+                            'change_data': {
+                                'old_quantity': db_quantity_available,
+                                'new_quantity': api_quantity_available,
+                                'total_quantity': api_data.get('quantity_total'),
+                                'quantity_sold': api_data.get('quantity_sold'),
+                                'is_stocked_item': db_data.get('product_is_stocked'),
+                                'item_id': external_id
+                            },
                             'status': 'pending'
                         })
 
@@ -834,6 +917,7 @@ class EbayService:
         payment_profile_id: str = None,
         return_profile_id: str = None,
         shipping_details: Dict = None,
+        price_override: Optional[Decimal] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
         """
@@ -848,6 +932,7 @@ class EbayService:
             payment_profile_id: The payment profile ID to use (if use_shipping_profile=True)
             return_profile_id: The return profile ID to use (if use_shipping_profile=True)
             shipping_details: Custom shipping details to use (if use_shipping_profile=False)
+            price_override: Optional Decimal price override for the listing
             dry_run: If True, validate but don't create the listing
         """
         logger.info(f"=== CREATING EBAY LISTING ===")
@@ -961,12 +1046,20 @@ class EbayService:
             item_specifics = self._build_item_specifics(product, ebay_category_info['CategoryID'])
             logger.info(f"  ItemSpecifics: {json.dumps(item_specifics, indent=2)}")
             
+            # Determine price
+            if price_override is not None:
+                price_decimal = Decimal(str(price_override))
+            else:
+                price_decimal = Decimal(str(product.base_price or 0))
+            price_str = f"{price_decimal.quantize(Decimal('0.01'))}"
+            logger.info(f"  Listing price: £{price_str}")
+
             # 7. Build the complete item_data payload for the eBay API
             item_data = {
                 "Title": (product.title or f"{product.year or ''} {product.brand} {product.model}".strip())[:80],  # eBay limit is 80 chars
                 "Description": product.description or "No description available.",
                 "CategoryID": ebay_category_info['CategoryID'],
-                "Price": str(product.base_price),
+                "Price": price_str,
                 "CurrencyID": "GBP",
                 "Quantity": quantity,
                 "ListingDuration": "GTC",
@@ -1105,6 +1198,19 @@ class EbayService:
                 ack = response["EndItemResponse"].get("Ack", "")
                 if ack in ["Success", "Warning"]:
                     logger.info(f"Successfully sent 'end' request for eBay listing {external_id}.")
+
+                    # Update local listing metadata so we stay in sync without
+                    # waiting for the next detection pass.
+                    stmt = select(EbayListing).where(EbayListing.ebay_item_id == external_id)
+                    listing_result = await self.db.execute(stmt)
+                    listing = listing_result.scalar_one_or_none()
+                    if listing:
+                        listing.listing_status = 'ended'
+                        listing.quantity_available = 0
+                        listing.quantity = listing.quantity or 0
+                        listing.updated_at = datetime.utcnow()
+                        self.db.add(listing)
+
                     return True
             
             logger.error(f"API call to end eBay listing {external_id} failed. Response: {response}")
@@ -1141,17 +1247,32 @@ class EbayService:
             self.db.add(platform_common)
             await self.db.flush()  # Get the ID
             
+            if not full_api_response:
+                full_api_response = await self._fetch_full_item_with_retry(ebay_item_id)
+
+            seed_listing_data = listing_data or {}
+            api_item_payload = None
+            if full_api_response and isinstance(full_api_response.get('Item'), dict):
+                api_item_payload = full_api_response['Item']
+            listing_source = api_item_payload or seed_listing_data
+
             # Extract seller profiles if present
-            seller_profiles = listing_data.get('SellerProfiles', {})
+            seller_profiles = listing_source.get('SellerProfiles') or seed_listing_data.get('SellerProfiles', {})
             shipping_profile_id = seller_profiles.get('SellerShippingProfile', {}).get('ShippingProfileID')
             payment_profile_id = seller_profiles.get('SellerPaymentProfile', {}).get('PaymentProfileID')
             return_profile_id = seller_profiles.get('SellerReturnProfile', {}).get('ReturnProfileID')
-            
+
             # Extract pictures for ebay_listings table
-            pictures = listing_data.get('PictureURLs', listing_data.get('PictureURL', []))
-            picture_urls = pictures if isinstance(pictures, list) else [pictures] if pictures else []
+            pictures_source = (
+                listing_source.get('PictureURLs')
+                or listing_source.get('PictureURL')
+                or seed_listing_data.get('PictureURLs')
+                or seed_listing_data.get('PictureURL')
+                or []
+            )
+            picture_urls = pictures_source if isinstance(pictures_source, list) else [pictures_source] if pictures_source else []
             gallery_url = picture_urls[0] if picture_urls else None
-            
+
             # Get category name from ebay_category_info if available
             ebay_category_name = None
             if hasattr(self, '_last_category_info') and self._last_category_info:
@@ -1169,78 +1290,85 @@ class EbayService:
                             name_part = 'Musical Instruments & DJ Equipment'
                         category_parts.append(name_part)
                     ebay_category_name = ':'.join(category_parts)
-            
+
+            raw_price = (
+                listing_source.get('Price')
+                or listing_source.get('StartPrice')
+                or (listing_source.get('SellingStatus') or {}).get('CurrentPrice')
+                or seed_listing_data.get('Price')
+            )
+            if isinstance(raw_price, dict):
+                raw_price = raw_price.get('#text') or raw_price.get('_value')
+            try:
+                price_value = float(raw_price) if raw_price is not None else 0.0
+            except (TypeError, ValueError):
+                price_value = 0.0
+
+            def _to_int(value: Any) -> Optional[int]:
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return None
+
+            quantity_total_int = _to_int(listing_source.get('Quantity'))
+            quantity_available_int = _to_int(listing_source.get('QuantityAvailable'))
+            quantity_sold_int = _to_int((listing_source.get('SellingStatus') or {}).get('QuantitySold'))
+
+            if quantity_total_int is None:
+                quantity_total_int = _to_int(seed_listing_data.get('Quantity'))
+
+            if quantity_available_int is None and quantity_total_int is not None and quantity_sold_int is not None:
+                quantity_available_int = max(quantity_total_int - quantity_sold_int, 0)
+
+            if quantity_total_int is None:
+                quantity_total_int = quantity_available_int or 1
+            if quantity_available_int is None:
+                quantity_available_int = quantity_total_int
+
+            listing_type_value = listing_source.get('ListingType', seed_listing_data.get('ListingType', 'FixedPriceItem'))
+            listing_duration_value = listing_source.get('ListingDuration', seed_listing_data.get('ListingDuration', 'GTC'))
+            condition_id_value = listing_source.get('ConditionID', seed_listing_data.get('ConditionID', ''))
+            condition_display_name = listing_source.get('ConditionDisplayName', seed_listing_data.get('ConditionDisplayName'))
+            category_id_value = listing_source.get('CategoryID')
+            if not category_id_value:
+                primary_category = listing_source.get('PrimaryCategory') or seed_listing_data.get('PrimaryCategory', {})
+                category_id_value = primary_category.get('CategoryID', '')
+
+            listing_url_value = (
+                (listing_source.get('ListingDetails') or {}).get('ViewItemURL')
+                or seed_listing_data.get('ListingURL')
+                or f"https://www.ebay.co.uk/itm/{ebay_item_id}"
+            )
+
             # Then create ebay_listings entry
             ebay_listing = EbayListing(
                 platform_id=platform_common.id,
                 ebay_item_id=ebay_item_id,  # Changed from ebay_listing_id
-                title=listing_data.get('Title', '')[:255],  # Ensure it fits
-                price=float(listing_data.get('Price', 0)),
-                quantity=int(listing_data.get('Quantity', 1)),
-                quantity_available=int(listing_data.get('Quantity', 1)),  # Set same as quantity initially
-                ebay_category_id=listing_data.get('CategoryID', ''),  # Changed from category_id
+                title=(listing_source.get('Title') or seed_listing_data.get('Title', ''))[:255],
+                price=price_value,
+                quantity=quantity_total_int,
+                quantity_available=quantity_available_int,
+                ebay_category_id=category_id_value,
                 ebay_category_name=ebay_category_name,  # Add the category name
-                ebay_condition_id=listing_data.get('ConditionID', ''),  # Changed from condition_id
-                condition_display_name=self._get_ebay_condition_display_name(listing_data.get('ConditionID', '')) if listing_data.get('ConditionID') else None,
-                format='FIXEDPRICEITEM' if listing_data.get('ListingType') == 'FixedPriceItem' else 'AUCTION',  # Use consistent casing
-                listing_status='active',  # Use lowercase to match reference
-                listing_url=f"https://www.ebay.co.uk/itm/{ebay_item_id}",  # Add listing URL
+                ebay_condition_id=condition_id_value,
+                condition_display_name=condition_display_name or (self._get_ebay_condition_display_name(condition_id_value) if condition_id_value else None),
+                format='FIXEDPRICEITEM' if listing_type_value == 'FixedPriceItem' else 'AUCTION',
+                listing_status='active',
+                listing_url=listing_url_value,
                 shipping_policy_id=shipping_profile_id,
                 payment_policy_id=payment_profile_id,
                 return_policy_id=return_profile_id,
                 gallery_url=gallery_url,
                 picture_urls=picture_urls,
-                start_time=datetime.now(timezone.utc).replace(tzinfo=None),  # Set start time to now
-                end_time=(datetime.now(timezone.utc) + timedelta(days=30)).replace(tzinfo=None) if listing_data.get('ListingDuration') == 'GTC' else None,  # Set end time for GTC listings
+                start_time=datetime.now(timezone.utc).replace(tzinfo=None),
+                end_time=(datetime.now(timezone.utc) + timedelta(days=30)).replace(tzinfo=None) if listing_duration_value == 'GTC' else None,
                 # Store additional data in appropriate JSONB fields
-                item_specifics=listing_data.get('ItemSpecifics', {}),
+                item_specifics=listing_source.get('ItemSpecifics', seed_listing_data.get('ItemSpecifics', {})),
                 listing_data=full_api_response if full_api_response else {
-                    # If we don't have the full API response, create a structure that mimics the old format
                     'Raw': {
-                        'Item': {
-                            'Price': float(listing_data.get('Price', 0)),
-                            'Title': listing_data.get('Title', ''),
-                            'ItemID': ebay_item_id,
-                            'Currency': listing_data.get('CurrencyID', 'GBP'),
-                            'Quantity': int(listing_data.get('Quantity', 1)),
-                            'ListingType': listing_data.get('ListingType', 'FixedPriceItem'),
-                            'ListingDuration': listing_data.get('ListingDuration', 'GTC'),
-                            'ConditionID': listing_data.get('ConditionID', ''),
-                            'ConditionDisplayName': self._get_ebay_condition_display_name(listing_data.get('ConditionID', '')),
-                            'CategoryID': listing_data.get('CategoryID', ''),
-                            'PrimaryCategoryID': listing_data.get('CategoryID', ''),
-                            'PrimaryCategoryName': ebay_category_name,
-                            'ViewItemURL': f"https://www.ebay.co.uk/itm/{ebay_item_id}",
-                            'GalleryURL': gallery_url,
-                            'PictureURL': picture_urls,
-                            'ItemSpecifics': {'NameValueList': self._convert_item_specifics_to_api_format(listing_data.get('ItemSpecifics', {}))},
-                            'SellerProfiles': listing_data.get('SellerProfiles', {}),
-                            'ShippingDetails': listing_data.get('ShippingDetails', {}),
-                            'QuantityAvailable': int(listing_data.get('Quantity', 1)),
-                            'Site': listing_data.get('Site', 'UK'),
-                            'Country': listing_data.get('Country', 'GB'),
-                            'Location': listing_data.get('Location', 'London, UK'),
-                            'PostalCode': listing_data.get('PostalCode', 'SW1A 1AA'),
-                            'DispatchTimeMax': listing_data.get('DispatchTimeMax', '3'),
-                            'Seller': {
-                                'UserID': 'londonvintageguitarsltd',
-                                'FeedbackScore': '100'
-                            },
-                            'SellingStatus': {
-                                'CurrentPrice': {'_value': float(listing_data.get('Price', 0)), '_currencyID': 'GBP'},
-                                'QuantitySold': '0',
-                                'ListingStatus': 'Active'
-                            },
-                            'StartTime': datetime.now(timezone.utc).isoformat(),
-                            'EndTime': (datetime.now(timezone.utc) + timedelta(days=30)).isoformat() if listing_data.get('ListingDuration') == 'GTC' else None
-                        }
-                    },
-                    'created_via': 'api',
-                    'sandbox': sandbox,
-                    'site': listing_data.get('Site', 'UK'),
-                    'listing_type': listing_data.get('ListingType', 'FixedPriceItem'),
-                    'listing_duration': listing_data.get('ListingDuration', 'GTC'),
-                    'created_at': datetime.now(timezone.utc).isoformat()
+                        'Item': seed_listing_data,
+                        'Description': seed_listing_data.get('Description')
+                    }
                 }
             )
             self.db.add(ebay_listing)
@@ -1270,6 +1398,139 @@ class EbayService:
             logger.error(f"Exception while updating price for eBay listing {external_id}: {e}", exc_info=True)
             return False
 
+    async def update_listing_quantity(
+        self,
+        external_id: str,
+        new_quantity: int,
+        *,
+        platform_common_id: Optional[int] = None,
+        sku: Optional[str] = None,
+    ) -> bool:
+        """Outbound action to update the available quantity for an eBay listing."""
+        logger.info(
+            "Received request to update eBay listing %s to quantity %s.",
+            external_id,
+            new_quantity,
+        )
+
+        safe_quantity = max(int(new_quantity or 0), 0)
+
+        try:
+            response = await self.trading_api.revise_listing_quantity(external_id, safe_quantity, sku)
+            ack = (response or {}).get('ack')
+            method_used = (response or {}).get('method')
+            payload = (response or {}).get('payload') or {}
+
+            if ack not in ("Success", "Warning"):
+                logger.error(
+                    "API call to update quantity for eBay listing %s via %s failed. Payload: %s",
+                    external_id,
+                    method_used or "unknown method",
+                    payload,
+                )
+                return False
+
+            logger.info(
+                "Successfully sent quantity update for eBay listing %s using %s.",
+                external_id,
+                method_used,
+            )
+
+            timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+
+            db_platform_id = platform_common_id
+            if not db_platform_id:
+                result = await self.db.execute(
+                    select(PlatformCommon.id)
+                    .where(
+                        PlatformCommon.external_id == external_id,
+                        PlatformCommon.platform_name == 'ebay',
+                    )
+                    .limit(1)
+                )
+                db_platform_id = result.scalar_one_or_none()
+
+            if db_platform_id:
+                await self.db.execute(
+                    update(EbayListing)
+                    .where(EbayListing.platform_id == db_platform_id)
+                    .values(
+                        quantity=safe_quantity,
+                        quantity_available=safe_quantity,
+                        updated_at=timestamp,
+                    )
+                )
+
+                await self.db.execute(
+                    update(PlatformCommon)
+                    .where(PlatformCommon.id == db_platform_id)
+                    .values(
+                        last_sync=timestamp,
+                        sync_status=SyncStatus.SYNCED,
+                        updated_at=timestamp,
+                    )
+                )
+
+            await self.db.commit()
+            return True
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Exception while updating quantity for eBay listing %s: %s",
+                external_id,
+                exc,
+                exc_info=True,
+            )
+            await self.db.rollback()
+            return False
+
+    async def apply_product_update(
+        self,
+        product: Product,
+        platform_link: PlatformCommon,
+        changed_fields: Set[str],
+    ) -> Dict[str, Any]:
+        if not platform_link.external_id:
+            return {"status": "skipped", "reason": "missing_external_id"}
+
+        listing_stmt = select(EbayListing).where(EbayListing.platform_id == platform_link.id)
+        listing_result = await self.db.execute(listing_stmt)
+        listing = listing_result.scalar_one_or_none()
+
+        results: Dict[str, Any] = {"status": "no_changes"}
+
+        if "quantity" in changed_fields and product.is_stocked_item:
+            await self.update_listing_quantity(
+                platform_link.external_id,
+                product.quantity or 0,
+                platform_common_id=platform_link.id,
+                sku=product.sku,
+            )
+            results["quantity"] = "updated"
+
+        title = product.title if "title" in changed_fields else None
+        description = product.description if "description" in changed_fields else None
+        item_specifics = None
+        if "model" in changed_fields and product.model:
+            item_specifics = {"Model": product.model}
+
+        if title or description or item_specifics:
+            response = await self.trading_api.revise_listing_details(
+                platform_link.external_id,
+                title=title,
+                description=description,
+                item_specifics=item_specifics,
+            )
+            if listing:
+                if title:
+                    listing.title = title
+                listing.updated_at = datetime.utcnow()
+                self.db.add(listing)
+            results["details"] = response
+            results["status"] = "updated"
+
+        return results
+
 
     # =========================================================================
     # 6. DATA PREPARATION & FETCHING HELPERS
@@ -1278,16 +1539,20 @@ class EbayService:
         """Fetches all eBay-related data from the local database."""
         query = text("""
             SELECT 
-                p.id as product_id, 
+                p.id                    AS product_id,
                 p.sku,
-                p.base_price, -- The master/canonical price
-                pc.id as platform_common_id, 
-                pc.external_id, 
-                pc.status as platform_common_status,
+                p.base_price,                        -- Canonical price
+                p.quantity              AS product_quantity,
+                p.is_stocked_item       AS product_is_stocked,
+                pc.id                   AS platform_common_id,
+                pc.external_id,
+                pc.status               AS platform_common_status,
                 pc.listing_url,
-                el.price as specialist_price -- The current price in the specialist table
+                el.price                AS specialist_price,
+                el.quantity             AS listing_quantity,
+                el.quantity_available   AS listing_quantity_available
             FROM platform_common pc
-            LEFT JOIN products p ON p.id = pc.product_id
+            LEFT JOIN products p      ON p.id = pc.product_id
             LEFT JOIN ebay_listings el ON pc.id = el.platform_id
             WHERE pc.platform_name = 'ebay'
         """)
@@ -1301,9 +1566,32 @@ class EbayService:
             item_id = item.get('ItemID')
             if not item_id:
                 continue
-            
+
             selling_status = item.get('SellingStatus', {})
             price_data = selling_status.get('CurrentPrice', {})
+
+            quantity_total = item.get('Quantity')
+            quantity_available = item.get('QuantityAvailable')
+            quantity_sold = selling_status.get('QuantitySold')
+
+            try:
+                quantity_total_int = int(quantity_total) if quantity_total is not None else None
+            except (TypeError, ValueError):
+                quantity_total_int = None
+
+            try:
+                quantity_available_int = int(quantity_available) if quantity_available is not None else None
+            except (TypeError, ValueError):
+                quantity_available_int = None
+
+            try:
+                quantity_sold_int = int(quantity_sold) if quantity_sold is not None else None
+            except (TypeError, ValueError):
+                quantity_sold_int = None
+
+            if quantity_available_int is None and quantity_total_int is not None and quantity_sold_int is not None:
+                quantity_available_int = max(quantity_total_int - quantity_sold_int, 0)
+
             list_type = item.get('_list_type', 'unknown')
             
             # Map eBay's list type to our universal platform_common statuses
@@ -1320,6 +1608,9 @@ class EbayService:
                 'price': float(price_data.get('#text', 0)),
                 'title': item.get('Title'),
                 'listing_url': item.get('ListingDetails', {}).get('ViewItemURL'),
+                'quantity_total': quantity_total_int,
+                'quantity_available': quantity_available_int,
+                'quantity_sold': quantity_sold_int,
                 '_raw': item
             }
         return prepared_items
@@ -1435,5 +1726,3 @@ class EbayService:
                 "Value": value if not isinstance(value, list) else value
             })
         return name_value_list
-
-

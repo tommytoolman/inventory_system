@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import base64
 import asyncio
 import aiofiles
 import logging
@@ -48,11 +49,13 @@ from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
 from app.services.shopify_service import ShopifyService
+from app.services.shopify.client import ShopifyGraphQLClient
 from app.services.vr_service import VRService
 from app.services.vintageandrare.brand_validator import VRBrandValidator
 from app.services.vintageandrare.client import VintageAndRareClient
 from app.services.vintageandrare.export import VRExportService
 from app.schemas.product import ProductCreate
+from app.services.sync_services import SyncService
 
 router = APIRouter()
 
@@ -69,6 +72,112 @@ DEFAULT_VR_BRAND = "Justin" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR V
 # DEFAULT_REVERB_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR Reverb Accepted Brands TABLE***
 
 logger = logging.getLogger(__name__)
+
+
+UPLOAD_DIR_PATH = Path(UPLOAD_DIR)
+DROPBOX_UPLOAD_ROOT = "/InventorySystem/auto-uploads"
+
+
+def _is_local_upload(url: Optional[str]) -> bool:
+    return bool(url and url.startswith("/static/uploads/"))
+
+
+def _parse_price_to_decimal(value: Optional[Any]) -> Optional[Decimal]:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, (int, float)):
+        return Decimal(str(value))
+    if isinstance(value, str):
+        cleaned = value.replace(",", "").strip()
+        if not cleaned:
+            return None
+        try:
+            return Decimal(cleaned)
+        except Exception:
+            logger.warning("Unable to parse price value '%s'", value)
+            return None
+    return None
+
+
+def _decimal_to_str(value: Decimal) -> str:
+    try:
+        return format(value.quantize(Decimal("0.01")), "f")
+    except Exception:
+        return format(value, "f")
+
+
+async def _upload_local_image_to_dropbox(
+    local_url: str,
+    sku: str,
+    dropbox_client: AsyncDropboxClient,
+    dropbox_root: str,
+) -> Optional[str]:
+    try:
+        filename = os.path.basename(local_url)
+        local_path = UPLOAD_DIR_PATH / filename
+        if not local_path.exists():
+            logger.warning("Local upload missing on disk: %s", local_path)
+            return None
+
+        async with aiofiles.open(local_path, "rb") as fh:
+            data = await fh.read()
+
+        base64_payload = base64.b64encode(data).decode("utf-8")
+        dropbox_path = f"{dropbox_root.rstrip('/')}/{sku}/{filename}"
+        if not dropbox_path.startswith("/"):
+            dropbox_path = f"/{dropbox_path}"
+
+        remote_url = await dropbox_client.upload_base64_image(base64_payload, dropbox_path)
+        if remote_url:
+            logger.info("Uploaded image %s to Dropbox path %s", filename, dropbox_path)
+        return remote_url
+    except Exception as exc:
+        logger.warning("Failed to upload %s to Dropbox: %s", local_url, exc)
+        return None
+
+
+async def ensure_remote_media_urls(
+    primary_image: Optional[str],
+    additional_images: List[str],
+    sku: str,
+    settings: Settings,
+) -> tuple[Optional[str], List[str]]:
+    dropbox_client: Optional[AsyncDropboxClient] = None
+    dropbox_available = bool(settings.DROPBOX_ACCESS_TOKEN)
+    dropbox_root = getattr(settings, "DROPBOX_UPLOAD_ROOT", DROPBOX_UPLOAD_ROOT)
+
+    async def convert(url: Optional[str]) -> Optional[str]:
+        nonlocal dropbox_client
+        if not _is_local_upload(url):
+            return url
+        if not dropbox_available:
+            logger.warning("Local image %s will be used as-is (Dropbox not configured)", url)
+            return url
+        if dropbox_client is None:
+            dropbox_client = AsyncDropboxClient(
+                access_token=settings.DROPBOX_ACCESS_TOKEN,
+                refresh_token=settings.DROPBOX_REFRESH_TOKEN,
+                app_key=settings.DROPBOX_APP_KEY,
+                app_secret=settings.DROPBOX_APP_SECRET,
+            )
+        remote = await _upload_local_image_to_dropbox(url, sku, dropbox_client, dropbox_root)
+        return remote or url
+
+    converted_primary = await convert(primary_image) if primary_image else primary_image
+    converted_additional = []
+    for image_url in additional_images:
+        converted_additional.append(await convert(image_url))
+
+    return converted_primary, converted_additional
+
+
+def generate_shopify_handle(brand: Optional[str], model: Optional[str], sku: Optional[str]) -> str:
+    parts = [str(part) for part in [brand, model, sku] if part]
+    text = "-".join(parts).lower()
+    text = re.sub(r"[^a-z0-9\-]+", "-", text)
+    return text.strip('-')
 
 
 _reverb_to_platforms_map_cache = None
@@ -805,6 +914,8 @@ async def product_detail(
                 if platform_enum.value == "EBAY":
                     ebay_listing = getattr(common_listing_record, "ebay_listing", None)
                     uses_crazylister = False
+                    description_sources: List[str] = []
+
                     if ebay_listing and getattr(ebay_listing, "listing_data", None):
                         listing_data_raw = ebay_listing.listing_data
                         listing_data_obj = {}
@@ -821,8 +932,42 @@ async def product_detail(
                             if "uses_crazylister" in listing_data_obj:
                                 uses_crazylister = bool(listing_data_obj.get("uses_crazylister"))
                             else:
-                                description_html = listing_data_obj.get("Description") or ""
-                                uses_crazylister = "crazylister" in description_html.lower()
+                                potential_html = []
+
+                                direct_desc = listing_data_obj.get("Description")
+                                if isinstance(direct_desc, str):
+                                    potential_html.append(direct_desc)
+
+                                raw_block = listing_data_obj.get("Raw")
+                                if isinstance(raw_block, dict):
+                                    raw_desc = raw_block.get("Description")
+                                    if isinstance(raw_desc, str):
+                                        potential_html.append(raw_desc)
+
+                                    item_block = raw_block.get("Item")
+                                    if isinstance(item_block, dict):
+                                        item_desc = item_block.get("Description")
+                                        if isinstance(item_desc, str):
+                                            potential_html.append(item_desc)
+
+                                listing_section = listing_data_obj.get("listing_data")
+                                if isinstance(listing_section, dict):
+                                    section_desc = listing_section.get("Description")
+                                    if isinstance(section_desc, str):
+                                        potential_html.append(section_desc)
+
+                                for html_snippet in potential_html:
+                                    if html_snippet:
+                                        description_sources.append(html_snippet)
+
+                    if not uses_crazylister and product and product.description:
+                        description_sources.append(product.description)
+
+                    if not uses_crazylister:
+                        for source_html in description_sources:
+                            if source_html and "crazylister" in source_html.lower():
+                                uses_crazylister = True
+                                break
 
                     entry["details"]["uses_crazylister"] = uses_crazylister
 
@@ -1244,7 +1389,7 @@ async def add_product(
     local_pickup: Optional[bool] = Form(False),
     available_for_shipment: Optional[bool] = Form(True),
     is_stocked_item: Optional[bool] = Form(False),
-    quantity: Optional[int] = Form(None),
+    quantity_raw: Optional[str] = Form(None),
     # Media fields
     primary_image_file: Optional[UploadFile] = File(None),
     primary_image_url: Optional[str] = Form(None),
@@ -1288,6 +1433,15 @@ async def add_product(
     print("===== POST REQUEST TO /add =====")
     print("Method:", request.method)
     form_data = await request.form()
+
+    # Parse quantity (allow blank strings from form submissions)
+    if quantity_raw in (None, "", " "):
+        quantity = None
+    else:
+        try:
+            quantity = int(str(quantity_raw).strip())
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Quantity must be a valid integer")
 
     # Sanitize form data for logging (remove base64 image data)
     log_form_data = {}
@@ -1401,8 +1555,18 @@ async def add_product(
                     additional_images.append(path)
 
         if additional_images_urls:
-            urls = [url.strip() for url in additional_images_urls.split('\n') if url.strip()]
-            additional_images.extend(urls)
+            parsed_urls: List[str] = []
+            stripped = additional_images_urls.strip()
+            if stripped.startswith('['):
+                try:
+                    maybe_list = json.loads(stripped)
+                    if isinstance(maybe_list, list):
+                        parsed_urls = [str(u).strip() for u in maybe_list if str(u).strip()]
+                except json.JSONDecodeError:
+                    parsed_urls = []
+            if not parsed_urls:
+                parsed_urls = [url.strip() for url in additional_images_urls.split('\n') if url.strip()]
+            additional_images.extend(parsed_urls)
 
         # Convert local static paths to full URLs for external platforms
         def make_full_url(path):
@@ -1413,6 +1577,13 @@ async def add_product(
             return path
 
         # Apply URL conversion
+        primary_image, additional_images = await ensure_remote_media_urls(
+            primary_image,
+            additional_images,
+            sku,
+            settings,
+        )
+
         if primary_image:
             primary_image = make_full_url(primary_image)
         additional_images = [make_full_url(img) for img in additional_images]
@@ -1430,9 +1601,9 @@ async def add_product(
                         platform_data[platform] = {}
                     
                     # Handle boolean values properly
-                    if value.lower() in ['true', 'on']:
+                    if isinstance(value, str) and value.lower() in ['true', 'on']:
                         platform_data[platform][field] = True
-                    elif value.lower() == 'false':
+                    elif isinstance(value, str) and value.lower() == 'false':
                         platform_data[platform][field] = False
                     else:
                         platform_data[platform][field] = value
@@ -1469,8 +1640,7 @@ async def add_product(
             primary_image=primary_image,
             additional_images=additional_images,
             video_url=video_url,
-            external_link=external_link,
-            platform_data=platform_data
+            external_link=external_link
         )
 
         # Step 1: Create the product
@@ -1569,7 +1739,7 @@ async def add_product(
                         platform_common.external_id = reverb_id
                         platform_common.status = "ACTIVE"
                         platform_common.listing_url = f"https://reverb.com/item/{reverb_id}"
-                        platform_common.platform_specific_data = reverb_response
+                        platform_common.platform_specific_data = listing_data
                         platform_common.last_sync = datetime.utcnow()
                     else:
                         # Create new platform_common entry
@@ -1580,7 +1750,7 @@ async def add_product(
                             external_id=reverb_id,
                             status="ACTIVE",
                             listing_url=f"https://reverb.com/item/{reverb_id}",
-                            platform_specific_data=reverb_response,
+                            platform_specific_data=listing_data,
                             last_sync=datetime.utcnow()
                         )
                         db.add(platform_common)
@@ -1588,9 +1758,13 @@ async def add_product(
                     await db.flush()
 
                     # Extract category UUID
-                    category_uuid = platform_data.get("reverb", {}).get("primary_category")
-                    if not category_uuid and 'categories' in reverb_response and len(reverb_response['categories']) > 0:
-                        category_uuid = reverb_response['categories'][0].get('uuid')
+                    category_uuid = reverb_options.get("primary_category")
+                    if not category_uuid:
+                        categories_payload = listing_data.get('categories') or reverb_response.get('categories')
+                        if categories_payload:
+                            first_category = categories_payload[0] if isinstance(categories_payload, list) else categories_payload
+                            if isinstance(first_category, dict):
+                                category_uuid = first_category.get('uuid')
 
                     # Check if reverb_listing already exists by reverb_listing_id
                     existing_reverb_listing = await db.execute(
@@ -1622,11 +1796,11 @@ async def add_product(
 
                     platform_statuses["reverb"] = {
                         "status": "success",
-                        "message": f"Updated existing Reverb listing ID: {reverb_id}"
+                        "message": f"Listed on Reverb with ID: {reverb_id}"
                     }
 
                     # Use the listing as enriched data for other platforms
-                    enriched_data = reverb_response
+                    enriched_data = listing_data
 
                     # Remove Reverb from platforms_to_sync since we handled it
                     platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
@@ -1650,6 +1824,14 @@ async def add_product(
                             condition_uuid = condition_map.get(product.condition.upper(), "df268ad1-c462-4ba6-b6db-e007e23922ea")  # Default to Excellent
                             logger.info(f"Mapped condition '{product.condition}' to UUID: {condition_uuid}")
 
+                    reverb_options = platform_data.get("reverb", {})
+                    reverb_price_override = _parse_price_to_decimal(
+                        reverb_options.get("price") or reverb_options.get("price_display")
+                    )
+                    price_amount = reverb_price_override or _parse_price_to_decimal(product.base_price)
+                    if price_amount is None:
+                        price_amount = Decimal(str(product.base_price or 0))
+
                     reverb_listing_data = {
                         "title": title,
                         "make": product.brand,
@@ -1658,7 +1840,7 @@ async def add_product(
                         "condition": {"uuid": condition_uuid} if condition_uuid else None,
                         "categories": [{"uuid": platform_data.get("reverb", {}).get("primary_category")}],
                         "price": {
-                            "amount": str(product.base_price),
+                            "amount": _decimal_to_str(price_amount),
                             "currency": "GBP"
                         },
                         "shipping": {
@@ -1727,8 +1909,12 @@ async def add_product(
                     logger.info(f"Creating Reverb listing with data: {json.dumps(log_data, indent=2)}")
                     reverb_response = await reverb_client.create_listing(reverb_listing_data)
 
-                    # Extract the created listing data
-                    reverb_id = str(reverb_response.get("id"))
+                    listing_data = reverb_response.get("listing", reverb_response) or {}
+                    reverb_id_value = listing_data.get("id") or listing_data.get("uuid")
+                    if not reverb_id_value:
+                        raise RuntimeError("Reverb API response did not include a listing ID")
+
+                    reverb_id = str(reverb_id_value)
                     logger.info(f"✅ Created Reverb listing with ID: {reverb_id}")
 
                     # Create or update local database entries
@@ -1750,7 +1936,7 @@ async def add_product(
                         platform_common.external_id = reverb_id
                         platform_common.status = "ACTIVE"
                         platform_common.listing_url = f"https://reverb.com/item/{reverb_id}"
-                        platform_common.platform_specific_data = reverb_response
+                        platform_common.platform_specific_data = listing_data
                         platform_common.last_sync = datetime.utcnow()
                     else:
                         # Create new platform_common entry
@@ -1761,7 +1947,7 @@ async def add_product(
                             external_id=reverb_id,
                             status="ACTIVE",
                             listing_url=f"https://reverb.com/item/{reverb_id}",
-                            platform_specific_data=reverb_response,
+                            platform_specific_data=listing_data,
                             last_sync=datetime.utcnow()
                         )
                         db.add(platform_common)
@@ -1770,9 +1956,13 @@ async def add_product(
 
                     # 2. Create or update reverb_listings entry
                     # Extract category UUID from the request data
-                    category_uuid = None
-                    if platform_data.get("reverb", {}).get("primary_category"):
-                        category_uuid = platform_data["reverb"]["primary_category"]
+                    category_uuid = reverb_options.get("primary_category")
+                    if not category_uuid:
+                        categories_payload = listing_data.get('categories') or reverb_response.get('categories')
+                        if categories_payload:
+                            first_category = categories_payload[0] if isinstance(categories_payload, list) else categories_payload
+                            if isinstance(first_category, dict):
+                                category_uuid = first_category.get('uuid')
 
                     # Check if reverb_listing already exists by reverb_listing_id
                     existing_reverb_listing = await db.execute(
@@ -1786,8 +1976,8 @@ async def add_product(
                         logger.info(f"Found existing ReverbListing record for reverb ID {reverb_id}, updating it")
                         reverb_listing.reverb_listing_id = reverb_id
                         reverb_listing.reverb_category_uuid = category_uuid
-                        reverb_listing.reverb_state = reverb_response.get("state", {}).get("slug", "live")
-                        reverb_listing.extended_attributes = reverb_response
+                        reverb_listing.reverb_state = (listing_data.get("state", {}) or {}).get("slug", "live")
+                        reverb_listing.extended_attributes = listing_data
                     else:
                         # Create new reverb_listing entry
                         logger.info(f"Creating new ReverbListing record for reverb ID {reverb_id}")
@@ -1795,8 +1985,8 @@ async def add_product(
                             platform_id=platform_common.id,
                             reverb_listing_id=reverb_id,
                             reverb_category_uuid=category_uuid,
-                            reverb_state=reverb_response.get("state", {}).get("slug", "live"),
-                            extended_attributes=reverb_response
+                            reverb_state=(listing_data.get("state", {}) or {}).get("slug", "live"),
+                            extended_attributes=listing_data
                         )
                         db.add(reverb_listing)
 
@@ -1882,20 +2072,121 @@ async def add_product(
                 if 'shopify_service' not in locals():
                     shopify_service = ShopifyService(db, settings)
                 
+                shopify_options = platform_data.get("shopify", {})
                 logger.info("Calling shopify_service.create_listing_from_product()...")
                 result = await shopify_service.create_listing_from_product(
                     product=product,
-                    reverb_data=enriched_data
+                    reverb_data=enriched_data,
+                    platform_options=shopify_options
                 )
                 logger.info(f"Shopify result: {result}")
-                
+
                 if result.get("status") == "success":
+                    external_id = str(result.get("external_id") or result.get("shopify_product_id") or "")
+                    product_gid = result.get("product_gid") or (f"gid://shopify/Product/{external_id}" if external_id else None)
+
+                    existing_platform_common = await db.execute(
+                        select(PlatformCommon).where(
+                            and_(
+                                PlatformCommon.product_id == product.id,
+                                PlatformCommon.platform_name == "shopify"
+                            )
+                        )
+                    )
+                    platform_common = existing_platform_common.scalar_one_or_none()
+
+                    handle = generate_shopify_handle(product.brand, product.model, product.sku)
+                    listing_url = None
+
+                    if product_gid:
+                        try:
+                            shopify_client = ShopifyGraphQLClient()
+                            snapshot = shopify_client.get_product_snapshot_by_id(product_gid)
+                            if snapshot:
+                                listing_url = snapshot.get("onlineStoreUrl") or snapshot.get("onlineStorePreviewUrl")
+                                handle = snapshot.get("handle", handle) or handle
+                        except Exception as fetch_error:
+                            logger.warning("Could not fetch Shopify listing snapshot: %s", fetch_error)
+
+                    if not listing_url and settings.SHOPIFY_SHOP_URL and handle:
+                        listing_url = f"{settings.SHOPIFY_SHOP_URL.rstrip('/')}/products/{handle}"
+
+                    if platform_common:
+                        platform_common.external_id = external_id
+                        platform_common.status = "ACTIVE"
+                        platform_common.listing_url = listing_url
+                        platform_common.sync_status = SyncStatus.SYNCED.value
+                        platform_common.last_sync = datetime.utcnow()
+                        platform_common.platform_specific_data = result
+                    else:
+                        platform_common = PlatformCommon(
+                            product_id=product.id,
+                            platform_name="shopify",
+                            external_id=external_id,
+                            status="ACTIVE",
+                            listing_url=listing_url,
+                            sync_status=SyncStatus.SYNCED.value,
+                            last_sync=datetime.utcnow(),
+                            platform_specific_data=result
+                        )
+                        db.add(platform_common)
+
+                    await db.flush()
+
+                    # Upsert ShopifyListing
+                    listing_stmt = select(ShopifyListing).where(ShopifyListing.platform_id == platform_common.id)
+                    existing_listing = await db.execute(listing_stmt)
+                    shopify_listing = existing_listing.scalar_one_or_none()
+
+                    price_decimal = _parse_price_to_decimal(
+                        shopify_options.get("price") or shopify_options.get("price_display")
+                    ) or _parse_price_to_decimal(product.base_price)
+                    price_float = float(price_decimal) if price_decimal is not None else None
+
+                    category_gid = shopify_options.get("category") or shopify_options.get("category_gid")
+                    seo_keywords_raw = shopify_options.get("seo_keywords")
+                    seo_keywords = None
+                    if seo_keywords_raw:
+                        seo_keywords = [kw.strip() for kw in seo_keywords_raw.split(',') if kw.strip()]
+
+                    if shopify_listing:
+                        shopify_listing.shopify_product_id = product_gid
+                        shopify_listing.shopify_legacy_id = external_id
+                        shopify_listing.handle = handle
+                        shopify_listing.title = product.title or product.generate_title()
+                        shopify_listing.status = "active"
+                        shopify_listing.vendor = product.brand
+                        shopify_listing.price = price_float
+                        shopify_listing.category_gid = category_gid
+                        shopify_listing.seo_keywords = seo_keywords
+                        shopify_listing.extended_attributes = result
+                        shopify_listing.last_synced_at = datetime.utcnow()
+                    else:
+                        shopify_listing = ShopifyListing(
+                            platform_id=platform_common.id,
+                            shopify_product_id=product_gid,
+                            shopify_legacy_id=external_id,
+                            handle=handle,
+                            title=product.title or product.generate_title(),
+                            status="active",
+                            vendor=product.brand,
+                            price=price_float,
+                            category_gid=category_gid,
+                            seo_keywords=seo_keywords,
+                            extended_attributes=result,
+                            last_synced_at=datetime.utcnow()
+                        )
+                        db.add(shopify_listing)
+
+                    await db.commit()
+
                     platform_statuses["shopify"] = {
                         "status": "success",
-                        "message": f"Listed on Shopify with ID: {result.get('shopify_product_id')}"
+                        "message": f"Listed on Shopify with ID: {external_id}"
                     }
-                    logger.info(f"✅ Shopify listing created successfully: ID={result.get('shopify_product_id')}")
+                    logger.info(f"✅ Shopify listing created successfully: ID={external_id}")
                 else:
+                    await db.rollback()
                     platform_statuses["shopify"] = {
                         "status": "error",
                         "message": result.get("message", "Failed to create Shopify listing")
@@ -1915,18 +2206,23 @@ async def add_product(
             logger.warning("⚠️  eBay requires business policies to be configured properly")
             try:
                 # Get policies from platform data
+                ebay_options = platform_data.get("ebay", {})
                 ebay_policies = {
-                    "shipping_profile_id": platform_data.get("ebay", {}).get("shipping_policy"),
-                    "payment_profile_id": platform_data.get("ebay", {}).get("payment_policy"),
-                    "return_profile_id": platform_data.get("ebay", {}).get("return_policy")
+                    "shipping_profile_id": ebay_options.get("shipping_policy"),
+                    "payment_profile_id": ebay_options.get("payment_policy"),
+                    "return_profile_id": ebay_options.get("return_policy")
                 }
+                price_override = _parse_price_to_decimal(
+                    ebay_options.get("price") or ebay_options.get("price_display")
+                )
                 logger.info(f"eBay policies: {ebay_policies}")
                 
                 logger.info("Calling ebay_service.create_listing_from_product()...")
                 result = await ebay_service.create_listing_from_product(
                     product=product,
                     reverb_api_data=enriched_data,
-                    use_shipping_profile=True,
+                    use_shipping_profile=bool(ebay_policies.get("shipping_profile_id")),
+                    price_override=price_override,
                     **ebay_policies
                 )
                 logger.info(f"eBay result: {result}")
@@ -1934,9 +2230,9 @@ async def add_product(
                 if result.get("status") == "success":
                     platform_statuses["ebay"] = {
                         "status": "success",
-                        "message": f"Listed on eBay with ID: {result.get('item_id')}"
+                        "message": f"Listed on eBay with ID: {result.get('external_id') or result.get('ItemID')}"
                     }
-                    logger.info(f"✅ eBay listing created successfully: ID={result.get('item_id')}")
+                    logger.info(f"✅ eBay listing created successfully: ID={result.get('external_id') or result.get('ItemID')}")
                 else:
                     platform_statuses["ebay"] = {
                         "status": "error",
@@ -1961,14 +2257,18 @@ async def add_product(
                 logger.info("Calling vr_service.create_listing_from_product()...")
                 result = await vr_service.create_listing_from_product(
                     product=product,
-                    reverb_data=enriched_data
+                    reverb_data=enriched_data,
+                    platform_options=platform_data.get("vr")
                 )
                 logger.info(f"V&R result: {result}")
                 
                 if result.get("status") == "success":
+                    vr_message = "Successfully created V&R listing"
+                    if result.get("vr_listing_id"):
+                        vr_message = f"V&R listing ID: {result.get('vr_listing_id')}"
                     platform_statuses["vr"] = {
                         "status": "success",
-                        "message": "Successfully created V&R listing"
+                        "message": vr_message
                     }
                     logger.info("✅ V&R listing created successfully")
                 else:
@@ -2921,6 +3221,15 @@ async def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
+    original_values = {
+        "title": product.title,
+        "brand": product.brand,
+        "model": product.model,
+        "description": product.description,
+        "quantity": product.quantity,
+        "base_price": product.base_price,
+    }
+    
     # Update product fields with validation
     product.title = form_data.get('title') or product.title
     product.brand = form_data.get('brand') or product.brand
@@ -2961,11 +3270,29 @@ async def update_product(
             pass
     
     await db.commit()
-    
-    # For now, skip platform sync as it needs proper implementation
-    # This can be added later when sync methods are properly implemented
+
+    changed_fields = {
+        field
+        for field, original in original_values.items()
+        if getattr(product, field) != original
+    }
+
     message = "Product updated successfully."
-    
+
+    if changed_fields:
+        vr_executor = getattr(request.app.state, "vr_executor", None)
+        sync_service = SyncService(db, vr_executor=vr_executor)
+        try:
+            propagation_result = await sync_service.propagate_product_edit(
+                product_id,
+                original_values,
+                changed_fields,
+            )
+            logger.info("Edit propagation result for product %s: %s", product.sku, propagation_result)
+        except Exception as exc:
+            logger.error("Error propagating product edits: %s", exc, exc_info=True)
+            message += " (Warning: some platform updates may have failed)"
+
     # Check if any platforms were selected for sync
     sync_platforms = []
     for platform in ['reverb', 'ebay', 'shopify', 'vr']:

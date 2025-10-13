@@ -15,8 +15,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
 from app.models.sync_event import SyncEvent
-from app.models.product import Product, ProductCondition
-from app.models.platform_common import PlatformCommon
+from app.models.product import Product, ProductCondition, ProductStatus
+from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.reverb import ReverbListing
 from app.models.shopify import ShopifyListing
 from app.models.ebay import EbayListing
@@ -98,6 +98,8 @@ async def process_sync_event(
             result = await _process_status_change(session, event, platforms)
         elif event.change_type in ['price_change', 'price']:
             result = await _process_price_change(session, event, platforms)
+        elif event.change_type == 'quantity_change':
+            result = await _process_quantity_change(session, event)
         else:
             result.message = f"Unknown event type: {event.change_type}"
             logger.error(result.message)
@@ -622,11 +624,24 @@ async def _create_vr_listing(session: AsyncSession, product: Product, reverb_dat
         if vr_result.get('status') == 'success':
             logger.info("  ✅ VR listing created on website successfully")
 
-            # Create platform_common entry
+            platform_common_id = vr_result.get('platform_common_id')
+            if platform_common_id:
+                if vr_result.get('needs_id_resolution'):
+                    return {
+                        'success': True,
+                        'needs_reconciliation': True,
+                        'platform_common_id': platform_common_id
+                    }
+                return {
+                    'success': True,
+                    'vr_id': vr_result.get('vr_listing_id')
+                }
+
+            # Fallback for legacy behaviour if service didn't persist data
             platform_common = PlatformCommon(
                 product_id=product.id,
                 platform_name='vr',
-                external_id=product.sku,  # Temporarily use SKU
+                external_id=product.sku,
                 status='active',
                 sync_status='pending',
                 last_sync=datetime.utcnow()
@@ -634,7 +649,6 @@ async def _create_vr_listing(session: AsyncSession, product: Product, reverb_dat
             session.add(platform_common)
             await session.flush()
 
-            # V&R doesn't return ID immediately - mark for reconciliation
             if vr_result.get('needs_id_resolution'):
                 logger.info("  ⚠️  VR doesn't return listing ID immediately - will reconcile later")
                 return {
@@ -680,6 +694,89 @@ async def _process_price_change(
     result = EventProcessingResult()
     result.message = "Price change processing not yet implemented in event_processor"
     result.success = False
+    return result
+
+
+async def _process_quantity_change(
+    session: AsyncSession,
+    event: SyncEvent
+) -> EventProcessingResult:
+    """Handle quantity_change events for platforms such as eBay."""
+    result = EventProcessingResult()
+
+    try:
+        if not event.product_id:
+            result.message = "Event is missing product_id, cannot adjust quantity."
+            return result
+
+        product = await session.get(Product, event.product_id)
+        if not product:
+            result.message = f"Product with ID {event.product_id} not found."
+            return result
+
+        change_data = event.change_data or {}
+        new_quantity = change_data.get('new_quantity')
+        if new_quantity is None:
+            result.message = "Quantity change event missing new_quantity value."
+            return result
+
+        try:
+            new_quantity_int = int(new_quantity)
+        except (TypeError, ValueError):
+            result.message = f"Invalid new quantity value: {new_quantity}"
+            return result
+
+        old_quantity = change_data.get('old_quantity')
+        try:
+            old_quantity_int = int(old_quantity) if old_quantity is not None else None
+        except (TypeError, ValueError):
+            old_quantity_int = None
+
+        is_stocked_item = change_data.get('is_stocked_item', product.is_stocked_item)
+
+        if is_stocked_item:
+            product.quantity = new_quantity_int
+            if new_quantity_int > 0 and product.status == ProductStatus.SOLD:
+                product.status = ProductStatus.ACTIVE
+            if new_quantity_int == 0:
+                product.status = ProductStatus.SOLD
+        else:
+            if new_quantity_int == 0:
+                product.status = ProductStatus.SOLD
+
+        session.add(product)
+
+        if event.platform_common_id:
+            platform_link = await session.get(PlatformCommon, event.platform_common_id)
+            if platform_link:
+                platform_link.status = ListingStatus.ACTIVE.value if new_quantity_int > 0 else ListingStatus.ENDED.value
+                platform_link.sync_status = SyncStatus.SYNCED.value
+                session.add(platform_link)
+
+            listing_stmt = select(EbayListing).where(EbayListing.platform_id == event.platform_common_id)
+            listing = (await session.execute(listing_stmt)).scalar_one_or_none()
+            if listing:
+                listing.quantity_available = new_quantity_int
+                total_quantity = change_data.get('total_quantity')
+                if total_quantity is not None:
+                    try:
+                        listing.quantity = int(total_quantity)
+                    except (TypeError, ValueError):
+                        pass
+                session.add(listing)
+
+        result.success = True
+        result.product_id = product.id
+        result.details['old_quantity'] = old_quantity_int
+        result.details['new_quantity'] = new_quantity_int
+        result.message = f"Quantity updated to {new_quantity_int}"
+
+    except Exception as e:
+        await session.rollback()
+        result.message = f"Error processing quantity change: {e}"
+        logger.error(result.message, exc_info=True)
+        result.errors.append(result.message)
+
     return result
 
 

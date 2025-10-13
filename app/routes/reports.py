@@ -1092,31 +1092,44 @@ async def sales_report(
         sales_result = await db.execute(sales_query, params)
         sales_data = [dict(row._mapping) for row in sales_result.fetchall()]
         
-        # Get summary statistics
+        # Prepare summary statistics directly from the filtered sales data so
+        # the headline figures always match the table rows the user sees.
+        from decimal import Decimal
+        from collections import Counter
+
+        platform_totals = Counter()
+        total_value = Decimal("0")
+
+        for sale in sales_data:
+            price = sale.get("base_price") or 0
+            total_value += Decimal(str(price))
+
+            platform_key = (sale.get("sale_platform") or sale.get("reporting_platform") or "").lower()
+            if platform_key in {"reverb", "ebay", "shopify", "vr"}:
+                platform_totals[platform_key] += 1
+
+        total_sold = len(sales_data)
+        avg_sale_price = (total_value / total_sold) if total_sold else Decimal("0")
+
+        summary_stats = {
+            "total_sold": total_sold,
+            "total_value": float(total_value),
+            "avg_sale_price": float(avg_sale_price),
+            "reverb_sales": platform_totals.get("reverb", 0),
+            "ebay_sales": platform_totals.get("ebay", 0),
+            "shopify_sales": platform_totals.get("shopify", 0),
+            "vr_sales": platform_totals.get("vr", 0),
+        }
+
+        # Build WHERE clause for the trend query using the same filters as the
+        # table. (We only need this for the trend after the summary change.)
         summary_where_clauses = ["se.change_type = 'status_change'", "se.change_data->>'new' IN ('sold', 'ended')"]
         if cutoff_date:
             summary_where_clauses.append("se.detected_at >= :cutoff_date")
         if platform_filter:
             summary_where_clauses.append("se.platform_name = :platform")
         summary_where_sql = " WHERE " + " AND ".join(summary_where_clauses)
-        
-        summary_query = text(f"""
-            SELECT 
-                COUNT(DISTINCT p.id) as total_sold,
-                SUM(p.base_price) as total_value,
-                COUNT(DISTINCT p.id) FILTER (WHERE se.platform_name = 'reverb') as reverb_sales,
-                COUNT(DISTINCT p.id) FILTER (WHERE se.platform_name = 'ebay') as ebay_sales,
-                COUNT(DISTINCT p.id) FILTER (WHERE se.platform_name = 'shopify') as shopify_sales,
-                COUNT(DISTINCT p.id) FILTER (WHERE se.platform_name = 'vr') as vr_sales,
-                AVG(p.base_price) as avg_sale_price
-            FROM sync_events se
-            JOIN products p ON se.product_id = p.id
-            {summary_where_sql}
-        """)
-        
-        summary_result = await db.execute(summary_query, params)
-        summary_stats = dict(summary_result.fetchone()._mapping)
-        
+
         # Get daily sales trend
         trend_query = text(f"""
             SELECT 

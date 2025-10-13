@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timezone    
 from fastapi import HTTPException
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Set
 from urllib.parse import urlparse, parse_qs
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
@@ -552,12 +552,58 @@ class ReverbService:
             
             logger.info(f"Updated inventory for listing {listing.reverb_listing_id} to {quantity}")
             return True
-            
-        except Exception as e:
-            logger.error(f"Error updating inventory: {str(e)}")
-            if isinstance(e, (ListingNotFoundError, ReverbAPIError)):
-                raise
-            raise ReverbAPIError(f"Failed to update inventory: {str(e)}")
+        except Exception as exc:
+            logger.error("Failed to update Reverb inventory for listing %s: %s", reverb_listing_id, exc)
+            raise
+
+    async def apply_product_update(
+        self,
+        product: Product,
+        platform_link: PlatformCommon,
+        changed_fields: Set[str],
+    ) -> Dict[str, Any]:
+        if not platform_link.external_id:
+            return {"status": "skipped", "reason": "missing_external_id"}
+
+        payload: Dict[str, Any] = {}
+        if "title" in changed_fields and product.title:
+            payload["title"] = product.title
+        if "model" in changed_fields and product.model:
+            payload["model"] = product.model
+        if "description" in changed_fields:
+            payload["description"] = product.description or ""
+
+        if "quantity" in changed_fields:
+            payload["has_inventory"] = bool(product.is_stocked_item)
+            payload["inventory"] = int(product.quantity or 0) if product.is_stocked_item else 1
+
+        if not payload:
+            return {"status": "no_changes"}
+
+        try:
+            response = await self.client.update_listing(platform_link.external_id, payload)
+        except Exception as exc:
+            logger.error("Failed to update Reverb listing %s: %s", platform_link.external_id, exc, exc_info=True)
+            return {"status": "error", "message": str(exc)}
+
+        listing_stmt = select(ReverbListing).where(ReverbListing.platform_id == platform_link.id)
+        listing_result = await self.db.execute(listing_stmt)
+        listing = listing_result.scalar_one_or_none()
+        if listing:
+            if "title" in payload:
+                listing.title = payload["title"]
+            if "description" in payload:
+                listing.description = payload["description"]
+            if "inventory" in payload:
+                listing.inventory_quantity = payload["inventory"]
+            listing.updated_at = datetime.utcnow()
+            self.db.add(listing)
+
+        platform_link.last_sync = datetime.utcnow()
+        platform_link.sync_status = SyncStatus.SYNCED.value
+        self.db.add(platform_link)
+
+        return {"status": "updated", "response": response}
     
     async def publish_listing(self, reverb_listing_id: int) -> bool:
         """
@@ -1693,6 +1739,7 @@ class ReverbService:
             # likely success for an end_listing call that returns 200 OK but no body.
             if not response:
                 logger.warning(f"Reverb API returned an empty success response for {external_id}, likely because it was already ended. Treating as success.")
+                await self._mark_local_reverb_listing_ended(external_id)
                 return True
 
             # Scenario 2: The response has a body, so we inspect it for explicit confirmation.
@@ -1704,6 +1751,7 @@ class ReverbService:
 
             if is_ended_nested or is_ended_simple:
                 logger.info(f"Successfully CONFIRMED Reverb listing {external_id} is ended via response body.")
+                await self._mark_local_reverb_listing_ended(external_id)
                 return True
             else:
                 # This covers the case of a 200 OK but with an unexpected body.
@@ -1715,6 +1763,7 @@ class ReverbService:
             error_message = str(e)
             if "This listing has already ended" in error_message:
                 logger.warning(f"Reverb listing {external_id} is already ended (confirmed via 422 error). Treating as success.")
+                await self._mark_local_reverb_listing_ended(external_id)
                 return True 
             else:
                 logger.error(f"A genuine Reverb API Error occurred for listing {external_id}: {e}", exc_info=True)
@@ -1723,6 +1772,18 @@ class ReverbService:
             # Scenario 4: Any other exception (network error, etc.)
             logger.error(f"A non-API exception occurred while ending Reverb listing {external_id}: {e}", exc_info=True)
             return False
+
+    async def _mark_local_reverb_listing_ended(self, external_id: str) -> None:
+        """Update the local reverb_listings row to reflect an ended listing."""
+        stmt = select(ReverbListing).where(ReverbListing.reverb_listing_id == external_id)
+        listing_result = await self.db.execute(stmt)
+        listing = listing_result.scalar_one_or_none()
+        if listing:
+            listing.reverb_state = 'ended'
+            listing.inventory_quantity = 0
+            listing.has_inventory = False
+            listing.updated_at = datetime.utcnow()
+            self.db.add(listing)
 
     async def _fetch_local_live_reverb_ids(self) -> Dict[str, Dict]:
         """Fetches all Reverb listings marked as 'live' in the local DB."""

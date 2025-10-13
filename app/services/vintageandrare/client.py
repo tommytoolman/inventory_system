@@ -4,7 +4,9 @@ We also have CLI scripts set up in scripts/vr/ with optional argparses to run th
 
 import asyncio
 import logging
+import re
 import requests
+from bs4 import BeautifulSoup
 import re
 import io
 import json
@@ -16,7 +18,7 @@ import os
 import pandas as pd
 import shutil # Added for MediaHandler cleanup
 
-from typing import Dict, Any, Optional, List # Added List
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -158,6 +160,186 @@ class VintageAndRareClient:
             print(f"Authentication traceback: {traceback.format_exc()}")
             self.authenticated = False
             return False
+
+    def _extract_form_fields(self, html: str) -> List[Tuple[str, str]]:
+        soup = BeautifulSoup(html, "html.parser")
+        form = soup.find("form", id="frm_step1")
+        if not form:
+            raise ValueError("Unable to locate V&R edit form")
+
+        fields: List[Tuple[str, str]] = []
+
+        for input_el in form.find_all("input"):
+            name = input_el.get("name")
+            if not name:
+                continue
+            input_type = (input_el.get("type") or "text").lower()
+            if input_type in {"checkbox", "radio"}:
+                if not input_el.has_attr("checked"):
+                    continue
+                value = input_el.get("value", "on")
+            else:
+                value = input_el.get("value", "")
+            fields.append((name, value))
+
+        for textarea in form.find_all("textarea"):
+            name = textarea.get("name")
+            if not name:
+                continue
+            value = textarea.decode_contents() if hasattr(textarea, "decode_contents") else textarea.text
+            fields.append((name, value or ""))
+
+        for select in form.find_all("select"):
+            name = select.get("name")
+            if not name:
+                continue
+            option = select.find("option", selected=True)
+            if option is None:
+                option = select.find("option")
+            value = option.get("value", "") if option else ""
+            fields.append((name, value))
+
+        return fields
+
+    def _set_field_value(self, fields: List[Tuple[str, str]], name: str, value: str) -> None:
+        for index, (field_name, _) in enumerate(fields):
+            if field_name == name:
+                fields[index] = (name, value)
+                return
+        fields.append((name, value))
+
+    def update_listing_via_requests(self, item_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        def ensure_authenticated() -> None:
+            if self.authenticated:
+                return
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self.authenticate())
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
+
+        ensure_authenticated()
+
+        edit_url = f"https://www.vintageandrare.com/instruments/add_edit_item/{item_id}"
+        response = self.session.get(edit_url, headers=self.headers)
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to load V&R edit page ({response.status_code})")
+
+        fields = self._extract_form_fields(response.text)
+
+        allowed_name_pattern = re.compile(r"^[A-Za-z0-9._:-]+$")
+        filtered_fields: List[Tuple[str, str]] = []
+        dropped_fields: List[str] = []
+        for name, value in fields:
+            if allowed_name_pattern.fullmatch(name or ""):
+                filtered_fields.append((name, value))
+            else:
+                dropped_fields.append(name)
+
+        if dropped_fields:
+            logger.info(
+                "Dropping %d V&R form fields with unsupported names: %s",
+                len(dropped_fields),
+                ",".join(sorted(set(dropped_fields))),
+            )
+
+        fields = filtered_fields
+        field_names = {name for name, _ in fields}
+
+        logger.info(
+            "V&R edit field summary for %s: kept=%d dropped=%d",
+            item_id,
+            len(fields),
+            len(dropped_fields),
+        )
+
+        requested_fields = [key for key, value in updates.items() if value is not None]
+        applied_fields: List[str] = []
+
+        def set_if_present(candidates: List[str], value: Any, logical_name: str) -> None:
+            if value is None:
+                return
+            value_str = value if isinstance(value, str) else str(value)
+            for candidate in candidates:
+                if candidate in field_names:
+                    self._set_field_value(fields, candidate, value_str)
+                    applied_fields.append(logical_name)
+                    return
+
+        # Model/title field
+        if "model" in updates:
+            set_if_present(["model_name", "product_title", "title"], updates["model"], "model")
+
+        # Only fall back to title if model was not explicitly changed
+        if "title" in updates and "model" not in updates:
+            set_if_present(["model_name", "product_title", "title"], updates["title"], "title")
+
+        if "description" in updates:
+            set_if_present(["item_desc", "description"], updates["description"], "description")
+
+        if "brand" in updates:
+            set_if_present(["recipient_name", "brand"], updates["brand"], "brand")
+
+        if "price" in updates:
+            set_if_present(["price"], updates["price"], "price")
+
+        if "year" in updates:
+            set_if_present(["year"], updates["year"], "year")
+
+        if "finish" in updates:
+            set_if_present(["finish_color", "finish"], updates["finish"], "finish")
+
+        if requested_fields and not applied_fields:
+            logger.warning(
+                "V&R edit requested %s but no matching form fields were applied",
+                ",".join(requested_fields),
+            )
+
+        logger.info(
+            "Prepared V&R edit payload for %s: applied=%s",
+            item_id,
+            ",".join(applied_fields) or "<none>",
+        )
+
+        headers = self.headers.copy()
+        headers.update({
+            "Referer": edit_url,
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        })
+
+        submit_response = self.session.post(
+            edit_url,
+            data=fields,
+            headers=headers,
+            allow_redirects=False,
+        )
+
+        if submit_response.status_code not in (302, 303):
+            logger.error(
+                "V&R edit submission failed: status=%s body=%s",
+                submit_response.status_code,
+                submit_response.text[:500],
+            )
+            if submit_response.text:
+                logger.info(
+                    "V&R submission field names (kept): %s",
+                    ",".join(name for name, _ in fields),
+                )
+            return {
+                "status": "error",
+                "message": f"Unexpected response {submit_response.status_code}",
+                "body": submit_response.text[:1000],
+            }
+
+        return {
+            "status": "success",
+            "message": "Listing updated successfully",
+            "redirect": submit_response.headers.get("Location"),
+            "requested_fields": requested_fields,
+            "applied_fields": applied_fields,
+        }
 
     # --- Inventory Download Methods (from VRInventoryManager) ---
 

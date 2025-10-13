@@ -114,7 +114,7 @@ class SyncService:
     
     """Coordinates synchronization between inventory system and external platforms."""
     
-    def __init__(self, db: AsyncSession, stock_manager=None):
+    def __init__(self, db: AsyncSession, stock_manager=None, vr_executor=None):
         self.db = db
         self.stock_manager = stock_manager
         settings = get_settings()
@@ -125,6 +125,9 @@ class SyncService:
             "vr": VRService(db),
         }
         self.email_service = EmailNotificationService(settings)
+        self.vr_executor = vr_executor
+        self._vr_semaphore = asyncio.Semaphore(1)
+        self._background_tasks: Set[asyncio.Task] = set()
 
     async def _group_events_by_product(self, events: List[SyncEvent]) -> Dict[int, List[SyncEvent]]:
         """Group sync events by product_id for coordinated processing."""
@@ -247,12 +250,17 @@ class SyncService:
                         self.db.add(platform_link)
                         logger.info(f"Updated {event.platform_name} platform_common status to {platform_link.status}")
                 
-                # Propagate ending to other platforms
-                success_platforms, action_log, failed_count = await self._propagate_end_listing(
-                    product, 
-                    source_platforms,  # Pass set of platforms as source
-                    dry_run
-                )
+                # Propagate ending to other platforms (respect stocked-item rules)
+                platform_filter = self._get_end_listing_targets(product)
+                if platform_filter == set():
+                    success_platforms, action_log, failed_count = [], [], 0
+                else:
+                    success_platforms, action_log, failed_count = await self._propagate_end_listing(
+                        product,
+                        source_platforms,
+                        dry_run,
+                        platform_filter=platform_filter,
+                    )
                 
                 actions.extend(action_log)
                 
@@ -311,7 +319,9 @@ class SyncService:
                 success = await self._handle_price_change(event, summary, actions, dry_run)
             elif event.change_type == 'removed_listing':
                 success = await self._handle_removed_listing(event, summary, actions, dry_run)
-            
+            elif event.change_type == 'quantity_change':
+                success = await self._handle_quantity_change(event, summary, actions, dry_run)
+
             if success:
                 event.status = 'processed'
                 event.processed_at = datetime.now(timezone.utc)
@@ -734,14 +744,19 @@ class SyncService:
         # Propagate the change to other active platforms.
         # For non-stocked items: always propagate when sold
         # For stocked items: only propagate when quantity reaches 0
-        should_propagate = False
-        if not product.is_stocked_item:
-            should_propagate = True
-        elif product.is_stocked_item and product.quantity == 0:
-            should_propagate = True
-            
+        platform_filter = self._get_end_listing_targets(product)
+        if platform_filter == set():
+            should_propagate = False
+        else:
+            should_propagate = True if (platform_filter is None or platform_filter) else False
+
         if should_propagate:
-            successful_platforms, action_log, failed_count = await self._propagate_end_listing(product, event.platform_name, dry_run)
+            successful_platforms, action_log, failed_count = await self._propagate_end_listing(
+                product,
+                event.platform_name,
+                dry_run,
+                platform_filter=platform_filter,
+            )
             actions.extend(action_log)
             summary['actions_taken'] += len(action_log)
             
@@ -907,7 +922,28 @@ class SyncService:
             event.notes = f"Could not find matching platform_common record to mark as removed."
             return False
     
-    async def _propagate_end_listing(self, product: Product, source_platforms: Union[str, Set[str]], dry_run: bool) -> Tuple[List[str], List[str], int]:
+    def _get_end_listing_targets(self, product: Product) -> Optional[Set[str]]:
+        """Return which platforms should be ended when stock hits zero.
+
+        None => end all active platforms (used for one-off items).
+        Empty set => do not end anything.
+        Non-empty set => end only the specified platforms.
+        """
+        if not product.is_stocked_item:
+            return None
+
+        if product.quantity == 0:
+            return {"vr"}
+
+        return set()
+
+    async def _propagate_end_listing(
+        self,
+        product: Product,
+        source_platforms: Union[str, Set[str]],
+        dry_run: bool,
+        platform_filter: Optional[Set[str]] = None,
+    ) -> Tuple[List[str], List[str], int]:
         """
         Ends listings on other platforms.
         
@@ -931,6 +967,9 @@ class SyncService:
         tasks, task_map = [], {}
         for link in all_platform_links:
             if link.platform_name in source_platforms or link.status != ListingStatus.ACTIVE.value:
+                continue
+
+            if platform_filter is not None and link.platform_name not in platform_filter:
                 continue
             
             service = self.platform_services.get(link.platform_name)
@@ -1019,8 +1058,29 @@ class SyncService:
             service = self.platform_services.get(link.platform_name)
             if service and hasattr(service, 'update_listing_price'):
                 action_desc = f"[DRY RUN][ACTION] Would push master price £{new_price:.2f} to {link.platform_name.upper()} listing {link.external_id}."
-                
+
                 if not dry_run:
+                    if link.platform_name == "vr":
+                        snapshot = self._snapshot_product(product)
+                        logger.info(
+                            "Queueing VR background price update for %s",
+                            link.external_id,
+                        )
+                        task = asyncio.create_task(
+                            self._run_vr_update_background(
+                                snapshot,
+                                link.external_id,
+                                {"base_price"},
+                            )
+                        )
+                        self._track_background_task(task)
+                        action_desc = (
+                            f"[QUEUED] Scheduled VR price update to £{new_price:.2f}"
+                            f" for listing {link.external_id}."
+                        )
+                        successful_platforms.append(link.platform_name)
+                        action_log.append(action_desc)
+                        continue
                     try:
                         success = await service.update_listing_price(link.external_id, new_price)
                         if success:
@@ -1059,6 +1119,85 @@ class SyncService:
             return new_status in ['sold', 'ended']
             
         return False    
+
+    async def _handle_quantity_change(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
+        """Adjust local inventory when the platform reports a quantity change."""
+        if not event.product_id:
+            event.notes = "Event is missing product_id, cannot process quantity change."
+            return False
+
+        product = await self.db.get(Product, event.product_id)
+        if not product:
+            event.notes = f"Product with ID {event.product_id} not found."
+            return False
+
+        change_data = event.change_data or {}
+        new_quantity = change_data.get('new_quantity')
+        old_quantity = change_data.get('old_quantity')
+
+        try:
+            new_quantity_int = int(new_quantity)
+        except (TypeError, ValueError):
+            event.notes = f"Invalid new quantity value: {new_quantity}"
+            return False
+
+        try:
+            old_quantity_int = int(old_quantity) if old_quantity is not None else None
+        except (TypeError, ValueError):
+            old_quantity_int = None
+
+        summary['non_sale_changes'] += 1
+        action_desc = (
+            f"[{'DRY RUN' if dry_run else 'ACTION'}] eBay inventory change for Product #{product.id}: "
+            f"{old_quantity_int} -> {new_quantity_int}"
+        )
+
+        if dry_run:
+            actions.append(action_desc)
+            summary['actions_taken'] += 1
+            event.notes = "Dry run - quantity change acknowledged."
+            return True
+
+        product_was_stocked = bool(product.is_stocked_item)
+
+        if product_was_stocked:
+            product.quantity = new_quantity_int
+            if new_quantity_int > 0 and product.status == ProductStatus.SOLD:
+                product.status = ProductStatus.ACTIVE
+            if new_quantity_int == 0:
+                product.status = ProductStatus.SOLD
+        else:
+            # Non-stocked items should only ever show 0 or 1
+            if new_quantity_int == 0:
+                product.status = ProductStatus.SOLD
+        self.db.add(product)
+
+        # Update listing quantities if we have a link
+        platform_link = None
+        if event.platform_common_id:
+            platform_stmt = select(PlatformCommon).where(PlatformCommon.id == event.platform_common_id)
+            platform_link = (await self.db.execute(platform_stmt)).scalar_one_or_none()
+            if platform_link:
+                platform_link.status = ListingStatus.ACTIVE.value if new_quantity_int > 0 else ListingStatus.ENDED.value
+                platform_link.sync_status = SyncStatus.SYNCED.value
+                self.db.add(platform_link)
+
+            listing_stmt = select(EbayListing).where(EbayListing.platform_id == event.platform_common_id)
+            listing = (await self.db.execute(listing_stmt)).scalar_one_or_none()
+            if listing:
+                listing.quantity_available = new_quantity_int
+                total_quantity = change_data.get('total_quantity')
+                if total_quantity is not None:
+                    try:
+                        listing.quantity = int(total_quantity)
+                    except (TypeError, ValueError):
+                        pass
+                self.db.add(listing)
+
+        actions.append(action_desc)
+        summary['actions_taken'] += 1
+        event.notes = f"Quantity updated to {new_quantity_int}."
+        return True
 
     async def sync_product_to_platforms(
         self, 
@@ -1200,6 +1339,243 @@ class SyncService:
         except Exception as e:
             logger.exception(f"Error propagating stock update: {str(e)}")
             return False
+
+    async def propagate_product_edit(
+        self,
+        product_id: int,
+        original_values: Dict[str, Any],
+        changed_fields: Set[str],
+    ) -> Dict[str, Any]:
+        product = await self.db.get(Product, product_id)
+        if not product:
+            return {"status": "error", "message": "product_not_found"}
+
+        platform_links = (
+            await self.db.execute(
+                select(PlatformCommon).where(PlatformCommon.product_id == product_id)
+            )
+        ).scalars().all()
+
+        results: Dict[str, Any] = {}
+
+        non_vr_links = [link for link in platform_links if link.platform_name != "vr"]
+        vr_links = [link for link in platform_links if link.platform_name == "vr"]
+
+        tasks = []
+        task_platforms: List[str] = []
+
+        for link in non_vr_links:
+            service = self.platform_services.get(link.platform_name)
+            if not service or not hasattr(service, "apply_product_update"):
+                continue
+            task_platforms.append(link.platform_name)
+            tasks.append(service.apply_product_update(product, link, changed_fields))
+
+        if tasks:
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
+            for platform_name, response in zip(task_platforms, responses):
+                if isinstance(response, Exception):
+                    logger.error(
+                        "Error applying update for %s: %s",
+                        platform_name,
+                        response,
+                        exc_info=True,
+                    )
+                    results[f"{platform_name}_error"] = str(response)
+                else:
+                    results[platform_name] = response
+
+        if "base_price" in changed_fields:
+            new_price = float(product.base_price or 0)
+            for link in non_vr_links:
+                if not link.external_id:
+                    continue
+                service = self.platform_services.get(link.platform_name)
+                if not service or not hasattr(service, "update_listing_price"):
+                    continue
+                try:
+                    success = await service.update_listing_price(link.external_id, new_price)
+                except Exception as exc:
+                    logger.error(
+                        "Error updating price for %s listing %s: %s",
+                        link.platform_name,
+                        link.external_id,
+                        exc,
+                        exc_info=True,
+                    )
+                    results[f"{link.platform_name}_price_error"] = str(exc)
+                    continue
+
+                status_key = f"{link.platform_name}_price"
+                if success:
+                    results[status_key] = "updated"
+                    timestamp = datetime.utcnow()
+
+                    if link.platform_name == "shopify":
+                        listing_stmt = select(ShopifyListing).where(ShopifyListing.platform_id == link.id)
+                        listing_result = await self.db.execute(listing_stmt)
+                        listing = listing_result.scalar_one_or_none()
+                        if listing:
+                            listing.price = new_price
+                            listing.updated_at = timestamp
+                            listing.last_synced_at = timestamp
+                            self.db.add(listing)
+                    elif link.platform_name == "ebay":
+                        listing_stmt = select(EbayListing).where(EbayListing.platform_id == link.id)
+                        listing_result = await self.db.execute(listing_stmt)
+                        listing = listing_result.scalar_one_or_none()
+                        if listing:
+                            listing.price = new_price
+                            listing.updated_at = timestamp
+                            listing.last_synced_at = timestamp
+                            self.db.add(listing)
+                    elif link.platform_name == "reverb":
+                        listing_stmt = select(ReverbListing).where(ReverbListing.platform_id == link.id)
+                        listing_result = await self.db.execute(listing_stmt)
+                        listing = listing_result.scalar_one_or_none()
+                        if listing:
+                            listing.list_price = new_price
+                            listing.updated_at = timestamp
+                            listing.last_synced_at = timestamp
+                            self.db.add(listing)
+
+                    platform_data = dict(link.platform_specific_data or {})
+                    platform_data["price"] = new_price
+                    link.platform_specific_data = platform_data
+                    link.last_sync = timestamp
+                    link.sync_status = SyncStatus.SYNCED.value
+                    self.db.add(link)
+                else:
+                    results[status_key] = "failed"
+
+        # Handle VR quantity going to zero (end listing)
+        for link in vr_links:
+            service = self.platform_services.get("vr")
+            if "quantity" in changed_fields and link.external_id:
+                old_qty = int(original_values.get("quantity") or 0)
+                new_qty = int(product.quantity or 0)
+                if old_qty > 0 and new_qty == 0 and service and hasattr(service, "mark_item_as_sold"):
+                    try:
+                        await service.mark_item_as_sold(link.external_id)
+                        link.status = ListingStatus.ENDED.value
+                        self.db.add(link)
+                        results["vr"] = "ended"
+                    except Exception as exc:
+                        logger.error("Failed to mark VR listing %s as sold: %s", link.external_id, exc)
+                        results["vr_error"] = str(exc)
+
+        # Schedule VR detail updates in the background
+        vr_fields = {"title", "model", "description", "brand", "base_price"}
+        if vr_links and (changed_fields & vr_fields):
+            snapshot = self._snapshot_product(product)
+            for link in vr_links:
+                if not link.external_id:
+                    continue
+                logger.info(
+                    "Queueing VR background update for %s (fields: %s)",
+                    link.external_id,
+                    ",".join(sorted(changed_fields & vr_fields)),
+                )
+                task = asyncio.create_task(
+                    self._run_vr_update_background(snapshot, link.external_id, changed_fields)
+                )
+                self._track_background_task(task)
+            results["vr_detail_update"] = "queued"
+
+        await self.db.commit()
+        return results
+
+    def _snapshot_product(self, product: Product) -> Dict[str, Any]:
+        return {
+            "sku": product.sku,
+            "brand": product.brand,
+            "model": product.model,
+            "title": product.title,
+            "description": product.description,
+            "base_price": float(product.base_price or 0),
+            "year": product.year,
+            "finish": product.finish,
+            "category": product.category,
+            "primary_image": product.primary_image,
+            "additional_images": product.additional_images,
+            "video_url": product.video_url,
+        }
+
+    def _track_background_task(self, task: asyncio.Task) -> None:
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _run_vr_update_background(
+        self,
+        product_snapshot: Dict[str, Any],
+        external_id: str,
+        changed_fields: Set[str],
+    ) -> None:
+        logger.info(
+            "Starting VR background update for %s (fields: %s)",
+            external_id,
+            ",".join(sorted(changed_fields)),
+        )
+        semaphore = self._vr_semaphore
+        async with semaphore:
+            service = self.platform_services.get("vr")
+            if not service or not hasattr(service, "apply_product_update_from_snapshot"):
+                logger.info("VR service does not support detail updates; skipping")
+                return
+
+            try:
+                loop = asyncio.get_running_loop()
+                if self.vr_executor:
+                    result = await loop.run_in_executor(
+                        self.vr_executor,
+                        lambda: service.apply_product_update_from_snapshot(
+                            product_snapshot,
+                            external_id,
+                            changed_fields,
+                        ),
+                    )
+                else:
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda: service.apply_product_update_from_snapshot(
+                            product_snapshot,
+                            external_id,
+                            changed_fields,
+                        ),
+                    )
+                logger.info("VR background update for %s completed: %s", external_id, result)
+
+                if isinstance(result, dict):
+                    status = result.get("status")
+                    if status == "success":
+                        applied_fields = result.get("applied_fields")
+                        await service.update_local_listing_metadata(
+                            external_id,
+                            product_snapshot,
+                            changed_fields,
+                            applied_fields=applied_fields,
+                        )
+                    else:
+                        logger.warning(
+                            "VR edit for %s completed with status %s: %s",
+                            external_id,
+                            status,
+                            result,
+                        )
+                else:
+                    logger.warning(
+                        "VR edit for %s returned unexpected response type: %s",
+                        external_id,
+                        type(result),
+                    )
+            except Exception as exc:
+                logger.error(
+                    "Error running VR background update for %s: %s",
+                    external_id,
+                    exc,
+                    exc_info=True,
+                )
+        logger.info("Finished VR background update for %s", external_id)
     
     async def _update_platform_common(
         self, 

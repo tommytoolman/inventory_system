@@ -4,6 +4,7 @@ import asyncio
 import os
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.staticfiles import StaticFiles
@@ -80,7 +81,14 @@ async def lifespan(app: FastAPI):
     print("Starting periodic Dropbox refresh task...")
     asyncio.create_task(periodic_dropbox_refresh(app))
 
-    yield  # This is where the app runs
+    # Initialise shared executors
+    app.state.vr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vr-worker")
+    try:
+        yield  # This is where the app runs
+    finally:
+        executor = getattr(app.state, "vr_executor", None)
+        if executor:
+            executor.shutdown(wait=False)
 
 app = FastAPI(
     title="Realtime Inventory Form Flows",

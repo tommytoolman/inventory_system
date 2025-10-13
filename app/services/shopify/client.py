@@ -117,6 +117,9 @@ class ShopifyGraphQLClient:
         print(f"ShopifyGraphQLClient initialized for {self.store_domain} (Effective API Version: {self.api_version})") # Make sure this prints
         print(f"Initial safety buffer points: {self.safety_buffer_points}")
 
+    def execute(self, query: str, variables: dict | None = None, estimated_cost: int = 10):
+        return self._make_request(query, variables, estimated_cost)
+
     def _update_throttle_status(self, extensions):
         if extensions and "cost" in extensions:
             cost_data = extensions["cost"]
@@ -1346,6 +1349,38 @@ class ShopifyGraphQLClient:
                 print(f"Response content: {e.response.text}")
             return None
 
+    async def update_product_variant_price(self, product_gid: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Update the primary variant price for a product using REST via executor."""
+
+        if not payload or "price" not in payload:
+            raise ValueError("Payload must include 'price' for Shopify variant updates")
+
+        price_value = payload["price"]
+
+        def _update_price() -> Dict[str, Any]:
+            product_data = self.get_product_snapshot_by_id(product_gid, num_variants=1)
+            if not product_data:
+                raise ValueError(f"Unable to load product snapshot for {product_gid}")
+
+            variants = (product_data.get("variants") or {}).get("edges") or []
+            if not variants:
+                raise ValueError(f"Product {product_gid} has no variants to update")
+
+            variant_node = variants[0].get("node") or {}
+            variant_gid = variant_node.get("id")
+            if not variant_gid:
+                raise ValueError(f"Variant ID missing for product {product_gid}")
+
+            self.update_variant_rest(variant_gid, {"price": price_value})
+            return {"success": True, "variant_id": variant_gid, "price": price_value}
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _update_price)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to update Shopify variant price for %s: %s", product_gid, exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
     def _update_inventory_rest(self, variant_id: str, inventory_quantities: list):
         """
         Updates inventory quantities using REST API. Private helper.
@@ -1472,4 +1507,3 @@ class ShopifyGraphQLClient:
         
         data = self._make_request(mutation, variables, estimated_cost=estimated_cost)
         return data["publishablePublish"] if data and "publishablePublish" in data else None
-

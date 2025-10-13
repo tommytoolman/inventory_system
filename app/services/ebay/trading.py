@@ -229,6 +229,60 @@ class EbayTradingLegacyAPI:
         response = await self._make_request('ReviseFixedPriceItem', xml_request)
         return response.get('ReviseFixedPriceItemResponse', {})
 
+    async def revise_listing_quantity(self, item_id: str, quantity: int, sku: Optional[str] = None) -> Dict[str, Any]:
+        """Update the quantity for a FixedPriceItem listing, preferring SKU-based revision when possible."""
+        safe_quantity = max(int(quantity), 0)
+        auth_token = await self._get_auth_token()
+
+        if sku:
+            escaped_sku = self._escape_xml_chars(sku)
+        else:
+            escaped_sku = None
+
+        # Attempt to update via ReviseInventoryStatus when a SKU is available
+        if escaped_sku:
+            inventory_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+            <ReviseInventoryStatusRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+                <RequesterCredentials>
+                    <eBayAuthToken>{auth_token}</eBayAuthToken>
+                </RequesterCredentials>
+                <InventoryStatus>
+                    <ItemID>{item_id}</ItemID>
+                    <SKU>{escaped_sku}</SKU>
+                    <Quantity>{safe_quantity}</Quantity>
+                </InventoryStatus>
+            </ReviseInventoryStatusRequest>"""
+
+            inventory_response = await self._make_request('ReviseInventoryStatus', inventory_xml)
+            inventory_payload = inventory_response.get('ReviseInventoryStatusResponse', {})
+            ack = inventory_payload.get('Ack')
+            if ack in ('Success', 'Warning'):
+                return {
+                    'method': 'ReviseInventoryStatus',
+                    'ack': ack,
+                    'payload': inventory_payload,
+                }
+
+        # Fallback to ReviseFixedPriceItem with a direct quantity update
+        quantity_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+        <ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{auth_token}</eBayAuthToken>
+            </RequesterCredentials>
+            <Item>
+                <ItemID>{item_id}</ItemID>
+                <Quantity>{safe_quantity}</Quantity>
+            </Item>
+        </ReviseFixedPriceItemRequest>"""
+
+        quantity_response = await self._make_request('ReviseFixedPriceItem', quantity_xml)
+        quantity_payload = quantity_response.get('ReviseFixedPriceItemResponse', {})
+        return {
+            'method': 'ReviseFixedPriceItem',
+            'ack': quantity_payload.get('Ack'),
+            'payload': quantity_payload,
+        }
+
     async def revise_listing_images(self, item_id: str, images: List[str]) -> Dict:
         """Revises the images of an existing FixedPriceItem listing."""
         # Build PictureDetails XML
@@ -249,6 +303,52 @@ class EbayTradingLegacyAPI:
             </Item>
         </ReviseFixedPriceItemRequest>"""
         
+        response = await self._make_request('ReviseFixedPriceItem', xml_request)
+        return response.get('ReviseFixedPriceItemResponse', {})
+
+    async def revise_listing_details(
+        self,
+        item_id: str,
+        *,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        item_specifics: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        if not (title or description or item_specifics):
+            return {"Ack": "NoChange"}
+
+        specifics_xml = ""
+        if item_specifics:
+            name_value_blocks = []
+            for name, value in item_specifics.items():
+                if not value:
+                    continue
+                escaped_name = self._escape_xml_chars(name)
+                escaped_value = self._escape_xml_chars(str(value))
+                name_value_blocks.append(
+                    f"<NameValueList><Name>{escaped_name}</Name><Value>{escaped_value}</Value></NameValueList>"
+                )
+            if name_value_blocks:
+                specifics_xml = f"<ItemSpecifics>{''.join(name_value_blocks)}</ItemSpecifics>"
+
+        title_xml = f"<Title>{self._escape_xml_chars(title)}</Title>" if title else ""
+        description_xml = (
+            f"<Description><![CDATA[{description}]]></Description>" if description else ""
+        )
+
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <Item>
+                <ItemID>{item_id}</ItemID>
+                {title_xml}
+                {description_xml}
+                {specifics_xml}
+            </Item>
+        </ReviseFixedPriceItemRequest>"""
+
         response = await self._make_request('ReviseFixedPriceItem', xml_request)
         return response.get('ReviseFixedPriceItemResponse', {})
 

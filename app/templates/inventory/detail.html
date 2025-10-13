@@ -263,15 +263,15 @@
                                 <!-- Line 1: Platform Name + Status -->
                                 <div class="flex justify-between items-center mb-2">
                                     <span class="font-medium">
+                                        {% if platform_entry.name|lower == 'ebay' and platform_entry.details.uses_crazylister %}
+                                            <span class="inline-flex items-center mr-2" title="CrazyLister template detected">
+                                                <img src="https://www.google.com/s2/favicons?sz=32&domain=crazylister.com" alt="CrazyLister" class="w-[18px] h-[18px]">
+                                            </span>
+                                        {% endif %}
                                         {% if platform_entry.name|lower == 'vr' %}
                                             Vintage & Rare
                                         {% else %}
                                             {{ platform_entry.name|title }}
-                                        {% endif %}
-                                        {% if platform_entry.name|lower == 'ebay' and platform_entry.details.uses_crazylister %}
-                                            <span class="ml-2 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-100 text-indigo-700" title="CrazyLister template detected">
-                                                CrazyLister
-                                            </span>
                                         {% endif %}
                                     </span>
                                     {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}

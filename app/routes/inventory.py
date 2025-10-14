@@ -1747,11 +1747,18 @@ async def add_product(
                 enriched_data = None
 
         # If no enriched data from Reverb, create from product data
-        if not enriched_data and len(platforms_to_sync) > 0:
+        if not enriched_data and platforms_to_sync:
             logger.info("No Reverb data available - creating enriched data from product")
 
-        # Create enriched data from product if needed
-        if not enriched_data:
+            # Ensure product attributes are loaded after any rollback in downstream services
+            try:
+                await db.refresh(product)
+            except Exception:
+                # If refresh fails (e.g. product already expired), fall back to re-querying
+                product = await product_service.get_product_model_instance(product.id)
+                if not product:
+                    raise ValueError(f"Could not re-load product with ID {product_read.id} after platform failure")
+
             enriched_data = {
                 "title": f"{product.year} {product.brand} {product.model}" if product.year else f"{product.brand} {product.model}",
                 "description": product.description,

@@ -460,22 +460,12 @@ class ReverbService:
             stats_block = listing_data.get("stats") if isinstance(listing_data.get("stats"), dict) else {}
             price_block = listing_data.get("price") if isinstance(listing_data.get("price"), dict) else {}
 
-            created_at = None
-            created_raw = listing_data.get("created_at")
-            if created_raw:
-                try:
-                    created_at = iso8601.parse_date(created_raw)
-                except Exception:
-                    created_at = None
+            created_at = self._normalize_datetime(listing_data.get("created_at"))
 
             published_at = None
             for key in ("published_at", "reverb_published_at"):
-                value = listing_data.get(key)
-                if value:
-                    try:
-                        published_at = iso8601.parse_date(value)
-                    except Exception:
-                        published_at = None
+                published_at = self._normalize_datetime(listing_data.get(key))
+                if published_at:
                     break
 
             state_normalized = (listing_state or "").lower() if listing_state else None
@@ -1967,3 +1957,24 @@ class ReverbService:
             return None
     
     
+    @staticmethod
+    def _normalize_datetime(value: Optional[Any]) -> Optional[datetime]:
+        if not value:
+            return None
+
+        parsed: Optional[datetime] = None
+        try:
+            if isinstance(value, datetime):
+                parsed = value
+            elif isinstance(value, str):
+                parsed = iso8601.parse_date(value)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Failed to parse datetime value %s: %s", value, exc)
+            return None
+
+        if parsed is None:
+            return None
+
+        if parsed.tzinfo:
+            return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed

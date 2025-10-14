@@ -1,4 +1,5 @@
 # app.services.reverb_service.py
+import asyncio
 import json
 import time
 import uuid
@@ -138,6 +139,49 @@ class ReverbService:
             if isinstance(e, ReverbAPIError):
                 raise
             raise ReverbAPIError(f"Failed to fetch conditions: {str(e)}")
+
+    async def _refresh_listing_until_state(
+        self,
+        listing_id: str,
+        desired_state: str,
+        max_attempts: int = 5,
+        delay_seconds: float = 1.5,
+    ) -> Optional[Dict[str, Any]]:
+        """Poll Reverb until a listing reaches the desired state.
+
+        Args:
+            listing_id: Reverb listing identifier.
+            desired_state: Expected state slug, e.g. "live".
+            max_attempts: Number of retrieval attempts before giving up.
+            delay_seconds: Seconds to wait between attempts.
+
+        Returns:
+            The latest listing payload (even if the desired state was not reached).
+        """
+
+        last_payload: Optional[Dict[str, Any]] = None
+        normalized_target = (desired_state or "").lower()
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                payload = await self.client.get_listing(listing_id)
+                listing_payload = payload.get("listing", payload)
+                last_payload = listing_payload
+                current_state = listing_payload.get("state", {}).get("slug") or listing_payload.get("state")
+                if (current_state or "").lower() == normalized_target:
+                    return listing_payload
+            except Exception as exc:
+                logger.debug(
+                    "Attempt %s to refresh Reverb listing %s failed: %s",
+                    attempt,
+                    listing_id,
+                    exc,
+                )
+
+            if attempt < max_attempts:
+                await asyncio.sleep(delay_seconds)
+
+        return last_payload
 
     async def create_listing_from_product(
         self,
@@ -334,6 +378,23 @@ class ReverbService:
                     "details": response,
                 }
 
+            listing_state = listing_data.get("state", {}).get("slug") or listing_data.get("state")
+            publish_errors: List[str] = []
+            if publish and listing_state != "live":
+                try:
+                    await self.client.publish_listing(reverb_id)
+                    refreshed_listing = await self._refresh_listing_until_state(reverb_id, desired_state="live")
+                    if refreshed_listing:
+                        listing_data = refreshed_listing
+                        listing_state = listing_data.get("state", {}).get("slug") or listing_data.get("state")
+                except Exception as exc:
+                    publish_errors.append(str(exc))
+                    logger.warning(
+                        "Failed to publish listing %s immediately after creation: %s",
+                        reverb_id,
+                        exc,
+                    )
+
             # Upsert platform_common
             existing_common_query = select(PlatformCommon).where(
                 PlatformCommon.product_id == product.id,
@@ -346,9 +407,15 @@ class ReverbService:
             if not listing_url:
                 listing_url = f"https://reverb.com/item/{reverb_id}"
 
+            platform_status_value = (
+                ListingStatus.ACTIVE.value
+                if (listing_state or "").lower() == "live"
+                else ListingStatus.DRAFT.value
+            )
+
             if platform_common:
                 platform_common.external_id = reverb_id
-                platform_common.status = ListingStatus.ACTIVE.value
+                platform_common.status = platform_status_value
                 platform_common.listing_url = listing_url
                 platform_common.platform_specific_data = listing_data
                 platform_common.sync_status = SyncStatus.SYNCED.value
@@ -358,7 +425,7 @@ class ReverbService:
                     product_id=product.id,
                     platform_name="reverb",
                     external_id=reverb_id,
-                    status=ListingStatus.ACTIVE.value,
+                    status=platform_status_value,
                     listing_url=listing_url,
                     platform_specific_data=listing_data,
                     sync_status=SyncStatus.SYNCED.value,
@@ -379,19 +446,92 @@ class ReverbService:
             category_uuid = category_uuid or (
                 listing_data.get("categories", [{}])[0] or {}
             ).get("uuid")
-            listing_state = listing_data.get("state", {}).get("slug", "live")
+
+            slug = listing_data.get("slug")
+            shipping_profile_value = None
+            shipping_profile_data = listing_data.get("shipping_profile")
+            if isinstance(shipping_profile_data, dict):
+                shipping_profile_value = shipping_profile_data.get("id") or shipping_profile_data.get("uuid")
+            elif listing_data.get("shipping_profile_id"):
+                shipping_profile_value = str(listing_data.get("shipping_profile_id"))
+            elif listing_payload.get("shipping_profile_id"):
+                shipping_profile_value = str(listing_payload.get("shipping_profile_id"))
+
+            stats_block = listing_data.get("stats") if isinstance(listing_data.get("stats"), dict) else {}
+            price_block = listing_data.get("price") if isinstance(listing_data.get("price"), dict) else {}
+
+            created_at = None
+            created_raw = listing_data.get("created_at")
+            if created_raw:
+                try:
+                    created_at = iso8601.parse_date(created_raw)
+                except Exception:
+                    created_at = None
+
+            published_at = None
+            for key in ("published_at", "reverb_published_at"):
+                value = listing_data.get(key)
+                if value:
+                    try:
+                        published_at = iso8601.parse_date(value)
+                    except Exception:
+                        published_at = None
+                    break
+
+            state_normalized = (listing_state or "").lower() if listing_state else None
 
             if reverb_listing:
                 reverb_listing.reverb_category_uuid = category_uuid
-                reverb_listing.reverb_state = listing_state
+                reverb_listing.reverb_state = state_normalized
+                reverb_listing.reverb_slug = slug
+                reverb_listing.shipping_profile_id = shipping_profile_value or reverb_listing.shipping_profile_id
+                reverb_listing.inventory_quantity = listing_data.get("inventory") or reverb_listing.inventory_quantity
+                if listing_data.get("has_inventory") is not None:
+                    reverb_listing.has_inventory = listing_data.get("has_inventory")
+                if listing_data.get("offers_enabled") is not None:
+                    reverb_listing.offers_enabled = listing_data.get("offers_enabled")
+                if listing_data.get("auction") is not None:
+                    reverb_listing.is_auction = listing_data.get("auction")
+                if price_block.get("amount") is not None:
+                    try:
+                        reverb_listing.list_price = float(price_block.get("amount"))
+                    except (TypeError, ValueError):
+                        pass
+                if price_block.get("currency"):
+                    reverb_listing.listing_currency = price_block.get("currency")
+                if stats_block.get("views") is not None:
+                    reverb_listing.view_count = stats_block.get("views")
+                if stats_block.get("watches") is not None:
+                    reverb_listing.watch_count = stats_block.get("watches")
+                reverb_listing.reverb_created_at = created_at or reverb_listing.reverb_created_at
+                reverb_listing.reverb_published_at = published_at or reverb_listing.reverb_published_at
                 reverb_listing.extended_attributes = listing_data
                 reverb_listing.platform_id = platform_common.id
             else:
+                list_price_value = None
+                if price_block.get("amount") is not None:
+                    try:
+                        list_price_value = float(price_block.get("amount"))
+                    except (TypeError, ValueError):
+                        list_price_value = None
+
                 reverb_listing = ReverbListing(
                     platform_id=platform_common.id,
                     reverb_listing_id=reverb_id,
                     reverb_category_uuid=category_uuid,
-                    reverb_state=listing_state,
+                    reverb_state=state_normalized,
+                    reverb_slug=slug,
+                    shipping_profile_id=shipping_profile_value,
+                    inventory_quantity=listing_data.get("inventory"),
+                    has_inventory=listing_data.get("has_inventory"),
+                    offers_enabled=listing_data.get("offers_enabled"),
+                    is_auction=listing_data.get("auction"),
+                    list_price=list_price_value,
+                    listing_currency=price_block.get("currency"),
+                    view_count=stats_block.get("views"),
+                    watch_count=stats_block.get("watches"),
+                    reverb_created_at=created_at,
+                    reverb_published_at=published_at,
                     extended_attributes=listing_data,
                 )
                 self.db.add(reverb_listing)
@@ -404,6 +544,7 @@ class ReverbService:
                 "platform_common_id": platform_common.id,
                 "listing_url": listing_url,
                 "listing_data": listing_data,
+                "publish_errors": publish_errors,
             }
 
         except ReverbAPIError as api_error:

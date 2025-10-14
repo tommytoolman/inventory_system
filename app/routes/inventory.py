@@ -1608,6 +1608,29 @@ async def add_product(
                     else:
                         platform_data[platform][field] = value
 
+        # Map shipping profile to Reverb ID if needed
+        reverb_options = platform_data.get("reverb")
+        if reverb_options and reverb_options.get("shipping_profile"):
+            shipping_value = reverb_options.get("shipping_profile")
+            profile_id = None
+            try:
+                profile_id = int(shipping_value)
+            except (TypeError, ValueError):
+                profile_id = None
+
+            if profile_id is not None:
+                profile_result = await db.execute(
+                    select(ShippingProfile).where(ShippingProfile.id == profile_id)
+                )
+                profile_record = profile_result.scalar_one_or_none()
+                if profile_record and profile_record.reverb_profile_id:
+                    reverb_options["shipping_profile"] = profile_record.reverb_profile_id
+                else:
+                    logger.warning(
+                        "Reverb shipping profile %s has no reverb_profile_id; leaving value unchanged",
+                        shipping_value,
+                    )
+
         # Create product data
         product_data = ProductCreate(
             brand=brand,

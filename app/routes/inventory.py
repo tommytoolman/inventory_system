@@ -1728,6 +1728,16 @@ async def add_product(
         if not product:
             raise ValueError(f"Could not retrieve created product with ID {product_read.id}")
 
+        if selected_shipping_profile_id and getattr(product, "shipping_profile_id", None) != selected_shipping_profile_id:
+            logger.info(
+                "Persisting shipping_profile_id %s on product %s (%s)",
+                selected_shipping_profile_id,
+                product.id,
+                product.sku,
+            )
+            product.shipping_profile_id = selected_shipping_profile_id
+            await db.flush()
+
         # Step 2: Determine which platforms to sync
         platforms_to_sync = []
         if sync_all == "true":

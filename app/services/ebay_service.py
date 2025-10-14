@@ -833,22 +833,26 @@ class EbayService:
         logger.info("Mapping Reverb shipping to eBay format")
         
         # Default/fallback shipping configuration - ARRAYS for eBay API
-        # Using UK_DHL and UK_CollectInPersonInternational based on existing listings
+        DOMESTIC_SERVICE = "UK_RoyalMailSpecialDelivery"
+        INTERNATIONAL_SERVICE = "UK_RoyalMailInternationalTrackedSigned"
+
         default_shipping = {
             "ShippingType": "Flat",
             "ShippingServiceOptions": [
                 {
                     "ShippingServicePriority": "1",
-                    "ShippingService": "UK_DHL",  # DHL service as used in existing listings
-                    "ShippingServiceCost": "60.00"
+                    "ShippingService": DOMESTIC_SERVICE,
+                    "ShippingServiceCost": "60.00",
+                    "ShippingServiceAdditionalCost": "0.00",
                 }
             ],
             "InternationalShippingServiceOption": [
                 {
                     "ShippingServicePriority": "1",
-                    "ShippingService": "UK_CollectInPersonInternational",  # International collect in person
+                    "ShippingService": INTERNATIONAL_SERVICE,
                     "ShippingServiceCost": "200.00",
-                    "ShipToLocation": "Worldwide"
+                    "ShippingServiceAdditionalCost": "0.00",
+                    "ShipToLocation": "Worldwide",
                 }
             ]
         }
@@ -875,17 +879,24 @@ class EbayService:
                 logger.info(f"Found Reverb shipping rate: {region_code} = {rate_amount}")
         
         # Map to eBay structure - ARRAYS for eBay API
+        def _format_cost(value: Any, default: str) -> str:
+            try:
+                return f"{float(value):.2f}"
+            except (TypeError, ValueError):
+                return default
+
         shipping_details = {
             "ShippingType": "Flat",
             "ShippingServiceOptions": [
                 {
                     "ShippingServicePriority": "1",
-                    "ShippingService": "UK_DHL",  # Using UK_DHL based on existing listings
-                    "ShippingServiceCost": region_rates.get('GB', '60.00')  # Use GB rate or default
+                    "ShippingService": DOMESTIC_SERVICE,
+                    "ShippingServiceCost": _format_cost(region_rates.get('GB'), "60.00"),
+                    "ShippingServiceAdditionalCost": "0.00",
                 }
             ]
         }
-        
+
         # Handle international shipping
         # Priority: US rate, then EUR_EU, then XX (worldwide), then default
         intl_rate = (region_rates.get('US') or 
@@ -896,12 +907,13 @@ class EbayService:
         shipping_details["InternationalShippingServiceOption"] = [
             {
                 "ShippingServicePriority": "1",
-                "ShippingService": "UK_RoyalMailInternationalTracked",  # Changed from UK_InternationalStandard
-                "ShippingServiceCost": intl_rate,
-                "ShipToLocation": "Worldwide"
+                "ShippingService": INTERNATIONAL_SERVICE,
+                "ShippingServiceCost": _format_cost(intl_rate, "200.00"),
+                "ShippingServiceAdditionalCost": "0.00",
+                "ShipToLocation": "Worldwide",
             }
         ]
-        
+
         logger.info(f"Mapped shipping - Domestic: £{shipping_details['ShippingServiceOptions'][0]['ShippingServiceCost']}, "
                    f"International: £{intl_rate}")
         

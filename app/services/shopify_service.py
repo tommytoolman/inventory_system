@@ -666,6 +666,8 @@ class ShopifyService:
             # Import image transformation utilities
             from app.core.utils import ImageTransformer, ImageQuality
             
+            final_price: Optional[float] = None
+
             # 1. Prepare the data payload for the Shopify API
             tags = []
             
@@ -811,14 +813,14 @@ class ShopifyService:
                     override_price = None
                     if platform_options:
                         override_price = platform_options.get("price") or platform_options.get("price_display")
-                    final_price = None
+                    local_final_price = None
                     if override_price is not None:
                         try:
-                            final_price = float(str(override_price).replace(",", ""))
+                            local_final_price = float(str(override_price).replace(",", ""))
                         except ValueError:
                             logger.warning("Invalid Shopify override price '%s'", override_price)
 
-                    if final_price is None:
+                    if local_final_price is None:
                         source_price = self._extract_source_price(product, reverb_data)
                         shopify_price = None
                         if source_price:
@@ -827,10 +829,12 @@ class ShopifyService:
                             except ValueError:
                                 logger.warning("Invalid source price %s for Shopify calculation", source_price)
 
-                        final_price = shopify_price if shopify_price else float(product.base_price or 0)
+                        local_final_price = shopify_price if shopify_price else float(product.base_price or 0)
+
+                    final_price = local_final_price
 
                     variant_update = {
-                        "price": str(final_price),
+                        "price": str(local_final_price),
                         "sku": product.sku,
                         "inventory": inventory_qty,
                         "inventoryPolicy": "DENY",  # Don't allow purchase when out of stock
@@ -852,6 +856,7 @@ class ShopifyService:
                 logger.warning(f"Failed to update variant: {e}")
             
             # Step 4: Add images if available
+            created_images: List[str] = []
             if all_images:
                 try:
                     # Filter out any None values and use the validated format
@@ -861,6 +866,7 @@ class ShopifyService:
                         media_input = [{"src": url} for url in valid_images]
                         self.client.create_product_images(product_gid, media_input)
                         logger.info(f"Added {len(valid_images)} images (best quality available) to product")
+                        created_images = valid_images
                     else:
                         logger.warning("No valid image URLs after filtering")
                 except Exception as e:
@@ -868,6 +874,7 @@ class ShopifyService:
             
             # Step 5: Set category if we have Reverb category mapping or platform override
             category_gid_override = None
+            category_gid_assigned = None
             if platform_options:
                 category_gid_override = platform_options.get("category_gid") or platform_options.get("category")
 
@@ -876,6 +883,7 @@ class ShopifyService:
                     category_result = self.client.set_product_category(product_gid, category_gid_override)
                     if category_result:
                         logger.info("✅ Category set using platform override")
+                        category_gid_assigned = category_gid_override
                 except Exception as e:
                     logger.warning(f"Failed to set category via override: {e}")
             elif reverb_data:
@@ -903,6 +911,7 @@ class ShopifyService:
                                 category_result = self.client.set_product_category(product_gid, category_gid)
                                 if category_result:
                                     logger.info("✅ Category set successfully")
+                                    category_gid_assigned = category_gid
                                 else:
                                     logger.warning("Failed to set product category")
                         else:
@@ -925,16 +934,32 @@ class ShopifyService:
             except Exception as e:
                 logger.warning(f"Failed to publish product: {e}")
             
-            if product_legacy_id:
-                logger.info(f"Successfully created Shopify product with ID: {product_legacy_id}")
-                return {
-                    "status": "success",
-                    "external_id": product_legacy_id,
-                    "shopify_product_id": product_legacy_id,
-                    "product_gid": product_gid,
-                }
-            else:
+            if not product_legacy_id:
                 return {"status": "error", "message": "No legacy ID returned"}
+
+            logger.info(f"Successfully created Shopify product with ID: {product_legacy_id}")
+
+            snapshot = None
+            try:
+                snapshot = self.client.get_product_snapshot_by_id(
+                    product_gid,
+                    num_variants=10,
+                    num_images=20,
+                    num_metafields=0,
+                )
+            except Exception as snapshot_error:
+                logger.warning(f"Failed to fetch Shopify snapshot for {product_gid}: {snapshot_error}")
+
+            return {
+                "status": "success",
+                "external_id": product_legacy_id,
+                "shopify_product_id": product_legacy_id,
+                "product_gid": product_gid,
+                "price": final_price,
+                "images": created_images,
+                "category_gid": category_gid_assigned,
+                "snapshot": snapshot,
+            }
 
         except Exception as e:
             logger.error(f"Exception while creating Shopify listing for SKU {product.sku}: {e}", exc_info=True)

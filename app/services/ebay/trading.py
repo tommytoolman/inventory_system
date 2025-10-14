@@ -703,8 +703,14 @@ class EbayTradingLegacyAPI:
                     xml_parts.append(f"<ShippingServicePriority>{service.get('ShippingServicePriority', '1')}</ShippingServicePriority>")
                     xml_parts.append(f"<ShippingService>{service.get('ShippingService', 'UK_OtherCourier24')}</ShippingService>")
                     xml_parts.append(f"<ShippingServiceCost currencyID=\"GBP\">{service.get('ShippingServiceCost', '0.0')}</ShippingServiceCost>")
+                    if service.get('ShippingServiceAdditionalCost') is not None:
+                        xml_parts.append(
+                            f"<ShippingServiceAdditionalCost currencyID=\"GBP\">{service.get('ShippingServiceAdditionalCost')}</ShippingServiceAdditionalCost>"
+                        )
+                    if service.get('FreeShipping'):
+                        xml_parts.append("<FreeShipping>true</FreeShipping>")
                     xml_parts.append("</ShippingServiceOptions>")
-            
+
             # Add international shipping options
             if "InternationalShippingServiceOption" in shipping_details:
                 intl_services = shipping_details["InternationalShippingServiceOption"]
@@ -716,7 +722,16 @@ class EbayTradingLegacyAPI:
                     xml_parts.append(f"<ShippingServicePriority>{intl_service.get('ShippingServicePriority', '1')}</ShippingServicePriority>")
                     xml_parts.append(f"<ShippingService>{intl_service.get('ShippingService', 'UK_InternationalStandard')}</ShippingService>")
                     xml_parts.append(f"<ShippingServiceCost currencyID=\"GBP\">{intl_service.get('ShippingServiceCost', '0.0')}</ShippingServiceCost>")
-                    xml_parts.append(f"<ShipToLocation>{intl_service.get('ShipToLocation', 'Worldwide')}</ShipToLocation>")
+                    if intl_service.get('ShippingServiceAdditionalCost') is not None:
+                        xml_parts.append(
+                            f"<ShippingServiceAdditionalCost currencyID=\"GBP\">{intl_service.get('ShippingServiceAdditionalCost')}</ShippingServiceAdditionalCost>"
+                        )
+                    ship_to = intl_service.get('ShipToLocation', 'Worldwide')
+                    if isinstance(ship_to, (list, tuple, set)):
+                        for destination in ship_to:
+                            xml_parts.append(f"<ShipToLocation>{destination}</ShipToLocation>")
+                    else:
+                        xml_parts.append(f"<ShipToLocation>{ship_to}</ShipToLocation>")
                     xml_parts.append("</InternationalShippingServiceOption>")
             
             xml_parts.append("</ShippingDetails>")

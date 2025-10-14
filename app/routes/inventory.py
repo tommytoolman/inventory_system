@@ -5,6 +5,7 @@ import base64
 import asyncio
 import aiofiles
 import logging
+import iso8601
 
 from decimal import Decimal
 from enum import Enum
@@ -49,7 +50,6 @@ from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
 from app.services.shopify_service import ShopifyService
-from app.services.shopify.client import ShopifyGraphQLClient
 from app.services.vr_service import VRService
 from app.services.vintageandrare.brand_validator import VRBrandValidator
 from app.services.vintageandrare.client import VintageAndRareClient
@@ -106,6 +106,21 @@ def _decimal_to_str(value: Decimal) -> str:
         return format(value.quantize(Decimal("0.01")), "f")
     except Exception:
         return format(value, "f")
+
+
+def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = iso8601.parse_date(value)
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    except Exception:
+        try:
+            normalized = value.replace("Z", "+00:00")
+            return datetime.fromisoformat(normalized)
+        except Exception:
+            logger.warning("Unable to parse ISO datetime value '%s'", value)
+            return None
 
 
 async def _upload_local_image_to_dropbox(
@@ -1813,6 +1828,8 @@ async def add_product(
                 logger.info(f"Shopify result: {result}")
 
                 if result.get("status") == "success":
+                    snapshot_payload = result.get("snapshot") or {}
+                    platform_payload = snapshot_payload or result
                     external_id = str(result.get("external_id") or result.get("shopify_product_id") or "")
                     product_gid = result.get("product_gid") or (f"gid://shopify/Product/{external_id}" if external_id else None)
 
@@ -1827,20 +1844,43 @@ async def add_product(
                     platform_common = existing_platform_common.scalar_one_or_none()
 
                     handle = generate_shopify_handle(product.brand, product.model, product.sku)
-                    listing_url = None
+                    if snapshot_payload:
+                        handle = snapshot_payload.get("handle") or handle
 
-                    if product_gid:
-                        try:
-                            shopify_client = ShopifyGraphQLClient()
-                            snapshot = shopify_client.get_product_snapshot_by_id(product_gid)
-                            if snapshot:
-                                listing_url = snapshot.get("onlineStoreUrl") or snapshot.get("onlineStorePreviewUrl")
-                                handle = snapshot.get("handle", handle) or handle
-                        except Exception as fetch_error:
-                            logger.warning("Could not fetch Shopify listing snapshot: %s", fetch_error)
+                    listing_url = snapshot_payload.get("onlineStoreUrl") or snapshot_payload.get("onlineStorePreviewUrl")
 
                     if not listing_url and settings.SHOPIFY_SHOP_URL and handle:
                         listing_url = f"{settings.SHOPIFY_SHOP_URL.rstrip('/')}/products/{handle}"
+
+                    seo_data = snapshot_payload.get("seo") if isinstance(snapshot_payload.get("seo"), dict) else {}
+                    seo_title = seo_data.get("title")
+                    seo_description = seo_data.get("description")
+
+                    category_gid = (
+                        shopify_options.get("category")
+                        or shopify_options.get("category_gid")
+                        or result.get("category_gid")
+                    )
+                    category_name = None
+                    category_full_name = None
+                    category_assigned_at = None
+                    category_assignment_status = None
+
+                    if snapshot_payload:
+                        category_node = snapshot_payload.get("category") or {}
+                        taxonomy_node = (
+                            snapshot_payload.get("productCategory", {})
+                            .get("productTaxonomyNode", {})
+                            if isinstance(snapshot_payload.get("productCategory", {}), dict)
+                            else {}
+                        )
+                        category_gid = category_gid or category_node.get("id")
+                        category_name = category_node.get("name") or taxonomy_node.get("name")
+                        category_full_name = category_node.get("fullName") or taxonomy_node.get("fullName")
+                        category_assignment_status = "assigned" if category_gid else "pending"
+                        category_assigned_at = _parse_iso_datetime(snapshot_payload.get("updatedAt")) if category_gid else None
+
+                    snapshot_tags = snapshot_payload.get("tags") if isinstance(snapshot_payload.get("tags"), list) else None
 
                     if platform_common:
                         platform_common.external_id = external_id
@@ -1848,7 +1888,7 @@ async def add_product(
                         platform_common.listing_url = listing_url
                         platform_common.sync_status = SyncStatus.SYNCED.value
                         platform_common.last_sync = datetime.utcnow()
-                        platform_common.platform_specific_data = result
+                        platform_common.platform_specific_data = platform_payload
                     else:
                         platform_common = PlatformCommon(
                             product_id=product.id,
@@ -1858,7 +1898,7 @@ async def add_product(
                             listing_url=listing_url,
                             sync_status=SyncStatus.SYNCED.value,
                             last_sync=datetime.utcnow(),
-                            platform_specific_data=result
+                            platform_specific_data=platform_payload
                         )
                         db.add(platform_common)
 
@@ -1870,15 +1910,18 @@ async def add_product(
                     shopify_listing = existing_listing.scalar_one_or_none()
 
                     price_decimal = _parse_price_to_decimal(
-                        shopify_options.get("price") or shopify_options.get("price_display")
+                        result.get("price")
+                        or shopify_options.get("price")
+                        or shopify_options.get("price_display")
                     ) or _parse_price_to_decimal(product.base_price)
                     price_float = float(price_decimal) if price_decimal is not None else None
 
-                    category_gid = shopify_options.get("category") or shopify_options.get("category_gid")
                     seo_keywords_raw = shopify_options.get("seo_keywords")
                     seo_keywords = None
                     if seo_keywords_raw:
                         seo_keywords = [kw.strip() for kw in seo_keywords_raw.split(',') if kw.strip()]
+                    elif snapshot_tags:
+                        seo_keywords = snapshot_tags
 
                     if shopify_listing:
                         shopify_listing.shopify_product_id = product_gid
@@ -1889,8 +1932,14 @@ async def add_product(
                         shopify_listing.vendor = product.brand
                         shopify_listing.price = price_float
                         shopify_listing.category_gid = category_gid
+                        shopify_listing.category_name = category_name
+                        shopify_listing.category_full_name = category_full_name
+                        shopify_listing.category_assigned_at = category_assigned_at
+                        shopify_listing.category_assignment_status = category_assignment_status
+                        shopify_listing.seo_title = seo_title
+                        shopify_listing.seo_description = seo_description
                         shopify_listing.seo_keywords = seo_keywords
-                        shopify_listing.extended_attributes = result
+                        shopify_listing.extended_attributes = platform_payload
                         shopify_listing.last_synced_at = datetime.utcnow()
                     else:
                         shopify_listing = ShopifyListing(
@@ -1903,8 +1952,14 @@ async def add_product(
                             vendor=product.brand,
                             price=price_float,
                             category_gid=category_gid,
+                            category_name=category_name,
+                            category_full_name=category_full_name,
+                            category_assigned_at=category_assigned_at,
+                            category_assignment_status=category_assignment_status,
+                            seo_title=seo_title,
+                            seo_description=seo_description,
                             seo_keywords=seo_keywords,
-                            extended_attributes=result,
+                            extended_attributes=platform_payload,
                             last_synced_at=datetime.utcnow()
                         )
                         db.add(shopify_listing)

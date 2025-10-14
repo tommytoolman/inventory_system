@@ -305,6 +305,23 @@ class ReverbService:
                     "error": "Reverb requires at least one publicly accessible image URL (http/https)."
                 }
 
+            override_price = None
+            for price_key in ("price", "price_display", "reverb_price"):
+                if reverb_options.get(price_key):
+                    override_price = reverb_options[price_key]
+                    break
+
+            def _coerce_price(value: Any, fallback: float) -> float:
+                if value is None:
+                    return fallback
+                try:
+                    return float(str(value).replace(",", ""))
+                except (TypeError, ValueError):
+                    return fallback
+
+            base_price_value = float(product.base_price or 0)
+            reverb_price_value = _coerce_price(override_price, base_price_value)
+
             listing_payload: Dict[str, Any] = {
                 "title": product.title or f"{product.brand} {product.model}".strip(),
                 "make": product.brand,
@@ -314,7 +331,7 @@ class ReverbService:
                 "condition": {"uuid": condition_uuid},
                 "categories": [{"uuid": category_uuid}] if category_uuid else [],
                 "price": {
-                    "amount": f"{float(product.base_price):.2f}",
+                    "amount": f"{reverb_price_value:.2f}",
                     "currency": "GBP",
                 },
                 "shipping": {
@@ -486,7 +503,9 @@ class ReverbService:
                     try:
                         reverb_listing.list_price = float(price_block.get("amount"))
                     except (TypeError, ValueError):
-                        pass
+                        reverb_listing.list_price = reverb_price_value
+                elif reverb_price_value is not None:
+                    reverb_listing.list_price = reverb_price_value
                 if price_block.get("currency"):
                     reverb_listing.listing_currency = price_block.get("currency")
                 if stats_block.get("views") is not None:
@@ -504,6 +523,8 @@ class ReverbService:
                         list_price_value = float(price_block.get("amount"))
                     except (TypeError, ValueError):
                         list_price_value = None
+                if list_price_value is None:
+                    list_price_value = reverb_price_value
 
                 reverb_listing = ReverbListing(
                     platform_id=platform_common.id,

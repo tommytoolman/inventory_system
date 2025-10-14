@@ -763,6 +763,9 @@ class VRService:
 
                 await self.db.commit()
                 result["platform_common_id"] = platform_common.id
+                result.setdefault("payload", product_data)
+                result.setdefault("images", all_images)
+                result.setdefault("category_ids", category_ids)
             else:
                 await self.db.rollback()
 

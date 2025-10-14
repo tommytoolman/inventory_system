@@ -1640,19 +1640,27 @@ async def add_product(
             except (TypeError, ValueError):
                 profile_id = None
 
+            profile_record = None
             if profile_id is not None:
                 profile_result = await db.execute(
                     select(ShippingProfile).where(ShippingProfile.id == profile_id)
                 )
                 profile_record = profile_result.scalar_one_or_none()
-                if profile_record and profile_record.reverb_profile_id:
-                    reverb_options["shipping_profile"] = profile_record.reverb_profile_id
-                    selected_shipping_profile_id = profile_record.id
-                else:
-                    logger.warning(
-                        "Reverb shipping profile %s has no reverb_profile_id; leaving value unchanged",
-                        shipping_value,
-                    )
+
+            if profile_record is None:
+                profile_result = await db.execute(
+                    select(ShippingProfile).where(ShippingProfile.reverb_profile_id == str(shipping_value))
+                )
+                profile_record = profile_result.scalar_one_or_none()
+
+            if profile_record and profile_record.reverb_profile_id:
+                reverb_options["shipping_profile"] = profile_record.reverb_profile_id
+                selected_shipping_profile_id = profile_record.id
+            else:
+                logger.warning(
+                    "Could not resolve shipping profile '%s' to a known record; leaving value unchanged",
+                    shipping_value,
+                )
 
         if selected_shipping_profile_id is None:
             raw_profile = form_data.get("shipping_profile_id") or form_data.get("shipping_profile")

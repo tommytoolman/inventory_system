@@ -1671,343 +1671,40 @@ async def add_product(
 
         # If Reverb is selected, create it FIRST to get enriched data
         if "reverb" in platforms_to_sync:
-            logger.info(f"=== CREATING REVERB LISTING FIRST ===")
+            logger.info("=== CREATING REVERB LISTING FIRST ===")
             logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
 
             try:
-                # Initialize Reverb client
-                from app.services.reverb.client import ReverbClient
-                reverb_client = ReverbClient(api_key=settings.REVERB_API_KEY)
+                reverb_options = platform_data.get("reverb", {})
+                result = await reverb_service.create_listing_from_product(
+                    product_id=product.id,
+                    platform_options=reverb_options,
+                    publish=True,
+                )
 
-                # Check if a Reverb listing already exists for this SKU
-                logger.info(f"Checking if Reverb listing already exists for SKU: {product.sku}")
-                existing_listings = await reverb_client.find_listing_by_sku(product.sku)
-
-                if existing_listings.get('total', 0) > 0:
-                    # Listing already exists, update it with new data
-                    existing_listing = existing_listings['listings'][0]
-                    reverb_id = str(existing_listing['id'])
-                    logger.info(f"Found existing Reverb listing with ID: {reverb_id} - will update it")
-
-                    # Prepare update data with photos and shipping
-                    update_data = {}
-
-                    # Add photos if we have valid URLs
-                    valid_photos = []
-                    if product.primary_image and product.primary_image.startswith(('http://', 'https://')):
-                        valid_photos.append(product.primary_image)
-                    if product.additional_images:
-                        for img_url in product.additional_images:
-                            if img_url.startswith(('http://', 'https://')):
-                                valid_photos.append(img_url)
-
-                    if valid_photos:
-                        update_data["photos"] = valid_photos
-                        logger.info(f"Updating with {len(valid_photos)} photos")
-
-                    # Add shipping profile if provided
-                    shipping_profile_id = platform_data.get("reverb", {}).get("shipping_profile")
-                    if shipping_profile_id:
-                        update_data["shipping_profile_id"] = shipping_profile_id
-                        logger.info(f"Updating with shipping profile ID: {shipping_profile_id}")
-
-                    # Update the listing if we have changes
-                    if update_data:
-                        logger.info(f"Updating Reverb listing {reverb_id} with: {list(update_data.keys())}")
-                        updated_listing = await reverb_client.update_listing(reverb_id, update_data)
-                        # Reverb often returns an empty body for async updates; fetch the listing to get fresh data
-                        reverb_response = updated_listing or {}
-                        if not reverb_response or not reverb_response.get("listing"):
-                            logger.info("Fetching latest Reverb listing snapshot after update")
-                            reverb_response = await reverb_client.get_listing(reverb_id)
-                    else:
-                        logger.info("No updates needed for existing Reverb listing")
-                        # Get full listing details
-                        reverb_response = await reverb_client.get_listing(reverb_id)
-
-                    listing_data = reverb_response.get("listing", reverb_response) or {}
-
-                    # Check if local database entries already exist
-                    existing_platform_common = await db.execute(
-                        select(PlatformCommon)
-                        .where(
-                            and_(
-                                PlatformCommon.product_id == product.id,
-                                PlatformCommon.platform_name == "reverb"
-                            )
-                        )
-                    )
-                    platform_common = existing_platform_common.scalar_one_or_none()
-
-                    if platform_common:
-                        # Update existing platform_common
-                        logger.info(f"Found existing PlatformCommon record for product {product.id}, updating it")
-                        platform_common.external_id = reverb_id
-                        platform_common.status = "ACTIVE"
-                        platform_common.listing_url = f"https://reverb.com/item/{reverb_id}"
-                        platform_common.platform_specific_data = listing_data
-                        platform_common.last_sync = datetime.utcnow()
-                    else:
-                        # Create new platform_common entry
-                        logger.info(f"Creating new PlatformCommon record for product {product.id}")
-                        platform_common = PlatformCommon(
-                            product_id=product.id,
-                            platform_name="reverb",
-                            external_id=reverb_id,
-                            status="ACTIVE",
-                            listing_url=f"https://reverb.com/item/{reverb_id}",
-                            platform_specific_data=listing_data,
-                            last_sync=datetime.utcnow()
-                        )
-                        db.add(platform_common)
-
-                    await db.flush()
-
-                    # Extract category UUID
-                    category_uuid = reverb_options.get("primary_category")
-                    if not category_uuid:
-                        categories_payload = listing_data.get('categories') or reverb_response.get('categories')
-                        if categories_payload:
-                            first_category = categories_payload[0] if isinstance(categories_payload, list) else categories_payload
-                            if isinstance(first_category, dict):
-                                category_uuid = first_category.get('uuid')
-
-                    # Check if reverb_listing already exists by reverb_listing_id
-                    existing_reverb_listing = await db.execute(
-                        select(ReverbListing)
-                        .where(ReverbListing.reverb_listing_id == reverb_id)
-                    )
-                    reverb_listing = existing_reverb_listing.scalar_one_or_none()
-
-                    if reverb_listing:
-                        # Update existing reverb_listing
-                        logger.info(f"Found existing ReverbListing record for reverb ID {reverb_id}, updating it")
-                        reverb_listing.reverb_listing_id = reverb_id
-                        reverb_listing.reverb_category_uuid = category_uuid
-                        reverb_listing.reverb_state = (listing_data.get('state', {}) or {}).get('slug', 'draft')
-                        reverb_listing.extended_attributes = listing_data
-                    else:
-                        # Create new reverb_listing entry
-                        logger.info(f"Creating new ReverbListing record for reverb ID {reverb_id}")
-                        reverb_listing = ReverbListing(
-                            platform_id=platform_common.id,
-                            reverb_listing_id=reverb_id,
-                            reverb_category_uuid=category_uuid,
-                            reverb_state=(listing_data.get('state', {}) or {}).get('slug', 'draft'),
-                            extended_attributes=listing_data
-                        )
-                        db.add(reverb_listing)
-
-                    await db.commit()
-
+                if result.get("status") == "success":
                     platform_statuses["reverb"] = {
                         "status": "success",
-                        "message": f"Listed on Reverb with ID: {reverb_id}"
+                        "message": f"Listed on Reverb with ID: {result.get('reverb_listing_id')}"
                     }
 
-                    # Use the listing as enriched data for other platforms
-                    enriched_data = listing_data
-
-                    # Remove Reverb from platforms_to_sync since we handled it
+                    enriched_data = result.get("listing_data") or {}
                     platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
                 else:
-                    # No existing listing, proceed with creation
-                    logger.info("No existing Reverb listing found, creating new one")
-
-                    # Prepare listing data for Reverb
-                    # Build title from product attributes since ProductRead doesn't have title
-                    title = f"{product.year} {product.brand} {product.model}" if product.year else f"{product.brand} {product.model}"
-                    # Get condition UUID - either from platform_data or map it
-                    condition_uuid = platform_data.get("reverb", {}).get("condition_uuid")
-                    if not condition_uuid and product.condition:
-                            # Load condition mappings from JSON file
-                            import json
-                            from pathlib import Path
-                            mappings_file = Path(__file__).parent.parent.parent / "data" / "reverb_condition_mappings.json"
-                            with open(mappings_file, 'r') as f:
-                                mappings_data = json.load(f)
-                            condition_map = {k: v["uuid"] for k, v in mappings_data["condition_mappings"].items()}
-                            condition_uuid = condition_map.get(product.condition.upper(), "df268ad1-c462-4ba6-b6db-e007e23922ea")  # Default to Excellent
-                            logger.info(f"Mapped condition '{product.condition}' to UUID: {condition_uuid}")
-
-                    reverb_options = platform_data.get("reverb", {})
-                    reverb_price_override = _parse_price_to_decimal(
-                        reverb_options.get("price") or reverb_options.get("price_display")
-                    )
-                    price_amount = reverb_price_override or _parse_price_to_decimal(product.base_price)
-                    if price_amount is None:
-                        price_amount = Decimal(str(product.base_price or 0))
-
-                    reverb_listing_data = {
-                        "title": title,
-                        "make": product.brand,
-                        "model": product.model,
-                        "description": product.description or f"{product.brand} {product.model} in {product.condition} condition",
-                        "condition": {"uuid": condition_uuid} if condition_uuid else None,
-                        "categories": [{"uuid": platform_data.get("reverb", {}).get("primary_category")}],
-                        "price": {
-                            "amount": _decimal_to_str(price_amount),
-                            "currency": "GBP"
-                        },
-                        "shipping": {
-                            "local": product.local_pickup if hasattr(product, 'local_pickup') else False,
-                            "rates": []  # Will use shipping profile if provided
-                        },
-                        "has_inventory": product.is_stocked_item if hasattr(product, 'is_stocked_item') else False,
-                        "inventory": product.quantity if product.is_stocked_item else 1,
-                        "finish": product.finish,
-                        "year": str(product.year) if product.year else None,
-                        "sku": product.sku,
-                        "publish": True,  # Publish immediately
-                        "photos": []
-                    }
-
-                    # Handle images - use URLs directly
-                    valid_photos = []
-
-                    # Process primary image
-                    if product.primary_image:
-                        # Skip local server paths and base64 - Reverb needs external URLs
-                        if product.primary_image.startswith('/static/'):
-                            logger.warning(f"Skipping local server image {product.primary_image} - Reverb requires external URLs")
-                        elif product.primary_image.startswith('data:'):
-                            logger.warning(f"Skipping base64 image - Reverb requires external URLs")
-                        elif product.primary_image.startswith(('http://', 'https://')):
-                            # It's a valid external URL (Dropbox or other)
-                            valid_photos.append(product.primary_image)
-                        else:
-                            logger.warning(f"Skipping invalid image URL: {product.primary_image}")
-
-                    # Process additional images
-                    if product.additional_images:
-                        for idx, img_url in enumerate(product.additional_images):
-                            if img_url.startswith('/static/'):
-                                logger.warning(f"Skipping local server image {img_url} - Reverb requires external URLs")
-                            elif img_url.startswith('data:'):
-                                logger.warning(f"Skipping base64 additional image {idx} - Reverb requires external URLs")
-                            elif img_url.startswith(('http://', 'https://')):
-                                valid_photos.append(img_url)
-                            else:
-                                logger.warning(f"Skipping invalid additional image {idx}: {img_url}")
-
-                    # Only add photos if we have valid URLs
-                    if valid_photos:
-                        reverb_listing_data["photos"] = valid_photos
-                        logger.info(f"Added {len(valid_photos)} photos to Reverb listing")
-                    else:
-                        logger.warning("No valid external image URLs for Reverb after processing")
-                        # Remove photos key entirely if no valid URLs
-                        if "photos" in reverb_listing_data:
-                            del reverb_listing_data["photos"]
-
-                    # Add shipping profile if provided
-                    shipping_profile_id = platform_data.get("reverb", {}).get("shipping_profile")
-                    if shipping_profile_id:
-                        reverb_listing_data["shipping_profile_id"] = shipping_profile_id
-                        logger.info(f"Using shipping profile ID: {shipping_profile_id}")
-                    else:
-                        logger.warning("No shipping profile ID provided for Reverb listing")
-
-                    # Create the listing on Reverb
-                    # Log data without images to avoid massive base64 strings in terminal
-                    log_data = {k: v for k, v in reverb_listing_data.items() if k != 'photos'}
-                    log_data['photos'] = f"[{len(reverb_listing_data.get('photos', []))} images]"
-                    logger.info(f"Creating Reverb listing with data: {json.dumps(log_data, indent=2)}")
-                    reverb_response = await reverb_client.create_listing(reverb_listing_data)
-
-                    listing_data = reverb_response.get("listing", reverb_response) or {}
-                    reverb_id_value = listing_data.get("id") or listing_data.get("uuid")
-                    if not reverb_id_value:
-                        raise RuntimeError("Reverb API response did not include a listing ID")
-
-                    reverb_id = str(reverb_id_value)
-                    logger.info(f"✅ Created Reverb listing with ID: {reverb_id}")
-
-                    # Create or update local database entries
-                    # 1. Check if platform_common entry exists
-                    existing_platform_common = await db.execute(
-                        select(PlatformCommon)
-                        .where(
-                            and_(
-                                PlatformCommon.product_id == product.id,
-                                PlatformCommon.platform_name == "reverb"
-                            )
-                        )
-                    )
-                    platform_common = existing_platform_common.scalar_one_or_none()
-
-                    if platform_common:
-                        # Update existing platform_common
-                        logger.info(f"Found existing PlatformCommon record for product {product.id}, updating it")
-                        platform_common.external_id = reverb_id
-                        platform_common.status = "ACTIVE"
-                        platform_common.listing_url = f"https://reverb.com/item/{reverb_id}"
-                        platform_common.platform_specific_data = listing_data
-                        platform_common.last_sync = datetime.utcnow()
-                    else:
-                        # Create new platform_common entry
-                        logger.info(f"Creating new PlatformCommon record for product {product.id}")
-                        platform_common = PlatformCommon(
-                            product_id=product.id,
-                            platform_name="reverb",
-                            external_id=reverb_id,
-                            status="ACTIVE",
-                            listing_url=f"https://reverb.com/item/{reverb_id}",
-                            platform_specific_data=listing_data,
-                            last_sync=datetime.utcnow()
-                        )
-                        db.add(platform_common)
-
-                    await db.flush()
-
-                    # 2. Create or update reverb_listings entry
-                    # Extract category UUID from the request data
-                    category_uuid = reverb_options.get("primary_category")
-                    if not category_uuid:
-                        categories_payload = listing_data.get('categories') or reverb_response.get('categories')
-                        if categories_payload:
-                            first_category = categories_payload[0] if isinstance(categories_payload, list) else categories_payload
-                            if isinstance(first_category, dict):
-                                category_uuid = first_category.get('uuid')
-
-                    # Check if reverb_listing already exists by reverb_listing_id
-                    existing_reverb_listing = await db.execute(
-                        select(ReverbListing)
-                        .where(ReverbListing.reverb_listing_id == reverb_id)
-                    )
-                    reverb_listing = existing_reverb_listing.scalar_one_or_none()
-
-                    if reverb_listing:
-                        # Update existing reverb_listing
-                        logger.info(f"Found existing ReverbListing record for reverb ID {reverb_id}, updating it")
-                        reverb_listing.reverb_listing_id = reverb_id
-                        reverb_listing.reverb_category_uuid = category_uuid
-                        reverb_listing.reverb_state = (listing_data.get("state", {}) or {}).get("slug", "live")
-                        reverb_listing.extended_attributes = listing_data
-                    else:
-                        # Create new reverb_listing entry
-                        logger.info(f"Creating new ReverbListing record for reverb ID {reverb_id}")
-                        reverb_listing = ReverbListing(
-                            platform_id=platform_common.id,
-                            reverb_listing_id=reverb_id,
-                            reverb_category_uuid=category_uuid,
-                            reverb_state=(listing_data.get("state", {}) or {}).get("slug", "live"),
-                            extended_attributes=listing_data
-                        )
-                        db.add(reverb_listing)
-
-                    await db.commit()
-
                     platform_statuses["reverb"] = {
-                        "status": "success",
-                        "message": f"Listed on Reverb with ID: {reverb_id}"
+                        "status": "error",
+                        "message": result.get("error", "Failed to create Reverb listing")
                     }
 
-                    # NOW use the Reverb response as enriched data for other platforms
-                    enriched_data = reverb_response
-
-                    # Remove Reverb from platforms_to_sync since we already created it
-                    platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
+                    logger.warning("❌ Reverb creation failed - skipping other platforms")
+                    for platform in ["ebay", "shopify", "vr"]:
+                        if platform in platforms_to_sync:
+                            platform_statuses[platform] = {
+                                "status": "info",
+                                "message": "Skipped - Reverb creation failed"
+                            }
+                    platforms_to_sync = []
+                    enriched_data = None
 
             except Exception as e:
                 logger.error(f"Reverb listing error: {str(e)}", exc_info=True)
@@ -2016,18 +1713,13 @@ async def add_product(
                     "message": f"Error: {str(e)}"
                 }
 
-                # If Reverb fails, DO NOT create on other platforms
                 logger.warning("❌ Reverb creation failed - skipping other platforms")
-
-                # Set other platforms as skipped
                 for platform in ["ebay", "shopify", "vr"]:
                     if platform in platforms_to_sync:
                         platform_statuses[platform] = {
                             "status": "info",
                             "message": "Skipped - Reverb creation failed"
                         }
-
-                # Clear platforms_to_sync so no other platforms are attempted
                 platforms_to_sync = []
                 enriched_data = None
 

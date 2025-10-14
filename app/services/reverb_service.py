@@ -403,6 +403,7 @@ class ReverbService:
                 "reverb_listing_id": reverb_id,
                 "platform_common_id": platform_common.id,
                 "listing_url": listing_url,
+                "listing_data": listing_data,
             }
 
         except ReverbAPIError as api_error:

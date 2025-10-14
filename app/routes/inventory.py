@@ -1714,9 +1714,11 @@ async def add_product(
                     enriched_data = result.get("listing_data") or {}
                     platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
                 else:
+                    duplicate_sku = result.get("error", "").lower().startswith("unexpected error: validation failed: sku")
                     platform_statuses["reverb"] = {
                         "status": "error",
-                        "message": result.get("error", "Failed to create Reverb listing")
+                        "message": result.get("error", "Failed to create Reverb listing"),
+                        "sku_conflict": duplicate_sku,
                     }
 
                     logger.warning("❌ Reverb creation failed - skipping other platforms")
@@ -1724,7 +1726,8 @@ async def add_product(
                         if platform in platforms_to_sync:
                             platform_statuses[platform] = {
                                 "status": "info",
-                                "message": "Skipped - Reverb creation failed"
+                                "message": "Skipped - Reverb creation failed",
+                                "sku_conflict": duplicate_sku,
                             }
                     platforms_to_sync = []
                     enriched_data = None

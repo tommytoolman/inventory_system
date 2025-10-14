@@ -1715,11 +1715,17 @@ async def add_product(
                     if update_data:
                         logger.info(f"Updating Reverb listing {reverb_id} with: {list(update_data.keys())}")
                         updated_listing = await reverb_client.update_listing(reverb_id, update_data)
-                        reverb_response = updated_listing
+                        # Reverb often returns an empty body for async updates; fetch the listing to get fresh data
+                        reverb_response = updated_listing or {}
+                        if not reverb_response or not reverb_response.get("listing"):
+                            logger.info("Fetching latest Reverb listing snapshot after update")
+                            reverb_response = await reverb_client.get_listing(reverb_id)
                     else:
                         logger.info("No updates needed for existing Reverb listing")
                         # Get full listing details
                         reverb_response = await reverb_client.get_listing(reverb_id)
+
+                    listing_data = reverb_response.get("listing", reverb_response) or {}
 
                     # Check if local database entries already exist
                     existing_platform_common = await db.execute(
@@ -1778,8 +1784,8 @@ async def add_product(
                         logger.info(f"Found existing ReverbListing record for reverb ID {reverb_id}, updating it")
                         reverb_listing.reverb_listing_id = reverb_id
                         reverb_listing.reverb_category_uuid = category_uuid
-                        reverb_listing.reverb_state = reverb_response.get('state', {}).get('slug', 'draft')
-                        reverb_listing.extended_attributes = reverb_response
+                        reverb_listing.reverb_state = (listing_data.get('state', {}) or {}).get('slug', 'draft')
+                        reverb_listing.extended_attributes = listing_data
                     else:
                         # Create new reverb_listing entry
                         logger.info(f"Creating new ReverbListing record for reverb ID {reverb_id}")
@@ -1787,8 +1793,8 @@ async def add_product(
                             platform_id=platform_common.id,
                             reverb_listing_id=reverb_id,
                             reverb_category_uuid=category_uuid,
-                            reverb_state=reverb_response.get('state', {}).get('slug', 'draft'),
-                            extended_attributes=reverb_response
+                            reverb_state=(listing_data.get('state', {}) or {}).get('slug', 'draft'),
+                            extended_attributes=listing_data
                         )
                         db.add(reverb_listing)
 

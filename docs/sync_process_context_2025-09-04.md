@@ -5,6 +5,12 @@ Processing sync event 12259 - a Reverb "rogue listing" that needs to be imported
 
 ## Key Fixes Applied Today
 
+### 2025-10-12 – Reverb listing publication
+- Files: `app/services/reverb_service.py`, `app/routes/inventory.py`
+- Behavior: `create_listing_from_product` now publishes new Reverb listings immediately, polls until `state.slug == "live"`, and records `shipping_profile_id`, slug, pricing, and stats back into `reverb_listings`/`platform_common`.
+- Form mapping: `/inventory/add` converts local `shipping_profiles.id` into the Reverb `reverb_profile_id` before calling the service.
+- Notes: Service response includes `publish_errors` if Reverb delays publication; callers should surface these warnings.
+
 ### 1. Fixed eBay Category Parsing (`app/services/ebay/trading.py`)
 - Issue: `'list' object has no attribute 'get'` error
 - Cause: eBay API sometimes returns Category as a list instead of dict

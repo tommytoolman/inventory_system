@@ -22,6 +22,7 @@
 - [ ] **Dropbox media refresh is inconsistent** – stabilise cache refresh, keep folder tiles a consistent size, and reduce redundant re-renders after multiple reloads.
 - [ ] **Fully automate sync pipeline** – move from operator-triggered runs to scheduled execution; confirm cronjob/worker (including Dropbox refresh) is running and instrument failure alerts.
 - [x] **Offload platform sync workloads** – move long-running sync jobs (especially Vintage & Rare) into background workers/threads so the FastAPI app stays responsive during imports and item creation.
+- [ ] **Sync-all queue follow-up** – reconcile the queued `/api/sync/all` background orchestrator with the current batched implementation (status polling, history retention, websocket notifications) so the endpoint remains non-blocking without regressing the latest changes.
 - [ ] **Platform stats ingestion gaps** – fill in watches/likes/views for eBay, Shopify, VR, matching the partial Reverb feed and surface them on dashboards.
 - [ ] **Field coverage audit** – verify every sync run populates mandatory listing fields (shipping, condition, attributes, compliance text) across platforms.
 - [ ] **eBay listing backfill script** – write a job that refreshes ebay_listings rows from master product data, preserves/detects CrazyLister payloads, and keeps descriptions in sync (e.g., item 257112518866).

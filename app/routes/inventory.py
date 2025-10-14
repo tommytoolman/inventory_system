@@ -2001,8 +2001,9 @@ async def add_product(
             try:
                 # Get policies from platform data
                 ebay_options = platform_data.get("ebay", {})
+                DEFAULT_EBAY_SHIPPING_PROFILE_ID = "254638064017"
                 ebay_policies = {
-                    "shipping_profile_id": ebay_options.get("shipping_policy"),
+                    "shipping_profile_id": ebay_options.get("shipping_policy") or DEFAULT_EBAY_SHIPPING_PROFILE_ID,
                     "payment_profile_id": ebay_options.get("payment_policy"),
                     "return_profile_id": ebay_options.get("return_policy")
                 }

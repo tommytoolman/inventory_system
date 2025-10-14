@@ -277,17 +277,36 @@ class ReverbService:
             # Map condition to Reverb UUID
             condition_uuid = reverb_options.get("condition_uuid")
             if not condition_uuid and product.condition:
-                try:
-                    mappings_file = Path(__file__).parent.parent / "data" / "reverb_condition_mappings.json"
-                    with open(mappings_file, "r") as f:
-                        condition_map_data = json.load(f)
-                    condition_map = {
-                        key.upper(): value["uuid"]
-                        for key, value in condition_map_data.get("condition_mappings", {}).items()
-                    }
-                    condition_uuid = condition_map.get(str(product.condition).upper())
-                except Exception as mapping_error:
-                    logger.warning(f"Failed to map condition for product {product.sku}: {mapping_error}")
+                mapping_paths = [
+                    Path(__file__).resolve().parent.parent / "data" / "reverb_condition_mappings.json",
+                    Path(__file__).resolve().parents[2] / "data" / "reverb_condition_mappings.json",
+                    Path.cwd() / "data" / "reverb_condition_mappings.json",
+                ]
+                mapping_loaded = False
+                for mapping_file in mapping_paths:
+                    if mapping_file.exists():
+                        try:
+                            with open(mapping_file, "r") as f:
+                                condition_map_data = json.load(f)
+                            condition_map = {
+                                key.upper(): value["uuid"]
+                                for key, value in condition_map_data.get("condition_mappings", {}).items()
+                            }
+                            condition_uuid = condition_map.get(str(product.condition).upper())
+                            mapping_loaded = True
+                            break
+                        except Exception as mapping_error:
+                            logger.warning(
+                                "Failed to parse condition mapping file %s for product %s: %s",
+                                mapping_file,
+                                product.sku,
+                                mapping_error,
+                            )
+                if not mapping_loaded:
+                    logger.warning(
+                        "Failed to map condition for product %s: condition mapping file not found",
+                        product.sku,
+                    )
 
             if not condition_uuid:
                 logger.warning(

@@ -1656,6 +1656,12 @@ async def add_product(
             if profile_record and profile_record.reverb_profile_id:
                 reverb_options["shipping_profile"] = profile_record.reverb_profile_id
                 selected_shipping_profile_id = profile_record.id
+                logger.info(
+                    "Resolved shipping profile '%s' to local id %s / reverb id %s",
+                    shipping_value,
+                    profile_record.id,
+                    profile_record.reverb_profile_id,
+                )
             else:
                 logger.warning(
                     "Could not resolve shipping profile '%s' to a known record; leaving value unchanged",
@@ -1667,6 +1673,7 @@ async def add_product(
             if raw_profile not in (None, ""):
                 try:
                     selected_shipping_profile_id = int(str(raw_profile).strip())
+                    logger.info("Using raw shipping_profile value %s", selected_shipping_profile_id)
                 except (TypeError, ValueError):
                     logger.warning("Invalid shipping_profile value '%s'", raw_profile)
 
@@ -1704,6 +1711,12 @@ async def add_product(
             video_url=video_url,
             external_link=external_link,
             shipping_profile_id=selected_shipping_profile_id,
+        )
+
+        logger.info(
+            "Creating product %s with shipping_profile_id=%s",
+            sku,
+            selected_shipping_profile_id,
         )
 
         # Step 1: Create the product

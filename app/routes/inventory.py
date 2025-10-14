@@ -123,6 +123,12 @@ def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
             return None
 
 
+def _ensure_url_scheme(value: Optional[str]) -> Optional[str]:
+    if value and not value.startswith(("http://", "https://")):
+        return f"https://{value.lstrip('/')}"
+    return value
+
+
 async def _upload_local_image_to_dropbox(
     local_url: str,
     sku: str,
@@ -1851,6 +1857,8 @@ async def add_product(
 
                     if not listing_url and settings.SHOPIFY_SHOP_URL and handle:
                         listing_url = f"{settings.SHOPIFY_SHOP_URL.rstrip('/')}/products/{handle}"
+
+                    listing_url = _ensure_url_scheme(listing_url)
 
                     seo_data = snapshot_payload.get("seo") if isinstance(snapshot_payload.get("seo"), dict) else {}
                     seo_title = seo_data.get("title")

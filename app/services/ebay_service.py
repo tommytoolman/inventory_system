@@ -833,8 +833,8 @@ class EbayService:
         logger.info("Mapping Reverb shipping to eBay format")
         
         # Default/fallback shipping configuration - ARRAYS for eBay API
-        DOMESTIC_SERVICE = "UK_RoyalMailSpecialDelivery"
-        INTERNATIONAL_SERVICE = "UK_RoyalMailInternationalTrackedSigned"
+        DOMESTIC_SERVICE = "UK_OtherCourier24"
+        INTERNATIONAL_SERVICE = "UK_OtherCourierInternational"
 
         default_shipping = {
             "ShippingType": "Flat",

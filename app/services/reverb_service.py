@@ -183,6 +183,41 @@ class ReverbService:
 
         return last_payload
 
+    async def _wait_for_listing_assets(
+        self,
+        listing_id: str,
+        max_attempts: int = 6,
+        delay_seconds: float = 1.5,
+    ) -> Optional[Dict[str, Any]]:
+        """Poll until Reverb has processed photos and shipping data."""
+
+        def _assets_ready(payload: Dict[str, Any]) -> bool:
+            photos = payload.get("photos") or []
+            shipping_profile = payload.get("shipping_profile")
+            shipping_rates = payload.get("shipping", {}).get("rates") if isinstance(payload.get("shipping"), dict) else None
+            return bool(photos) and (shipping_profile or shipping_rates)
+
+        last_payload: Optional[Dict[str, Any]] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                payload = await self.client.get_listing(listing_id)
+                listing_payload = payload.get("listing", payload)
+                last_payload = listing_payload
+                if _assets_ready(listing_payload):
+                    return listing_payload
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "Attempt %s to wait for listing %s assets failed: %s",
+                    attempt,
+                    listing_id,
+                    exc,
+                )
+
+            if attempt < max_attempts:
+                await asyncio.sleep(delay_seconds)
+
+        return last_payload
+
     async def create_listing_from_product(
         self,
         product_id: int,
@@ -397,20 +432,27 @@ class ReverbService:
 
             listing_state = listing_data.get("state", {}).get("slug") or listing_data.get("state")
             publish_errors: List[str] = []
-            if publish and listing_state != "live":
-                try:
-                    await self.client.publish_listing(reverb_id)
-                    refreshed_listing = await self._refresh_listing_until_state(reverb_id, desired_state="live")
-                    if refreshed_listing:
-                        listing_data = refreshed_listing
-                        listing_state = listing_data.get("state", {}).get("slug") or listing_data.get("state")
-                except Exception as exc:
-                    publish_errors.append(str(exc))
-                    logger.warning(
-                        "Failed to publish listing %s immediately after creation: %s",
-                        reverb_id,
-                        exc,
-                    )
+
+            if publish and reverb_id:
+                ready_payload = await self._wait_for_listing_assets(reverb_id)
+                if ready_payload:
+                    listing_data = ready_payload
+                    listing_state = listing_data.get("state", {}).get("slug") or listing_data.get("state")
+
+                if listing_state != "live":
+                    try:
+                        await self.client.publish_listing(reverb_id)
+                        refreshed_listing = await self._refresh_listing_until_state(reverb_id, desired_state="live")
+                        if refreshed_listing:
+                            listing_data = refreshed_listing
+                            listing_state = listing_data.get("state", {}).get("slug") or listing_data.get("state")
+                    except Exception as exc:
+                        publish_errors.append(str(exc))
+                        logger.warning(
+                            "Failed to publish listing %s immediately after creation: %s",
+                            reverb_id,
+                            exc,
+                        )
 
             # Upsert platform_common
             existing_common_query = select(PlatformCommon).where(

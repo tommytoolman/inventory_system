@@ -1630,6 +1630,7 @@ async def add_product(
                         platform_data[platform][field] = value
 
         # Map shipping profile to Reverb ID if needed
+        selected_shipping_profile_id: Optional[int] = None
         reverb_options = platform_data.get("reverb")
         if reverb_options and reverb_options.get("shipping_profile"):
             shipping_value = reverb_options.get("shipping_profile")
@@ -1646,11 +1647,20 @@ async def add_product(
                 profile_record = profile_result.scalar_one_or_none()
                 if profile_record and profile_record.reverb_profile_id:
                     reverb_options["shipping_profile"] = profile_record.reverb_profile_id
+                    selected_shipping_profile_id = profile_record.id
                 else:
                     logger.warning(
                         "Reverb shipping profile %s has no reverb_profile_id; leaving value unchanged",
                         shipping_value,
                     )
+
+        if selected_shipping_profile_id is None:
+            raw_profile = form_data.get("shipping_profile_id") or form_data.get("shipping_profile")
+            if raw_profile not in (None, ""):
+                try:
+                    selected_shipping_profile_id = int(str(raw_profile).strip())
+                except (TypeError, ValueError):
+                    logger.warning("Invalid shipping_profile value '%s'", raw_profile)
 
         # Create product data
         product_data = ProductCreate(
@@ -1684,7 +1694,8 @@ async def add_product(
             primary_image=primary_image,
             additional_images=additional_images,
             video_url=video_url,
-            external_link=external_link
+            external_link=external_link,
+            shipping_profile_id=selected_shipping_profile_id,
         )
 
         # Step 1: Create the product

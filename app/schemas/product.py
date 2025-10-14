@@ -128,6 +128,7 @@ class ProductBase(ProductValidationMixin): # Inherit Mixin (gets config + valida
     available_for_shipment: Optional[bool] = True
     is_stocked_item: Optional[bool] = False
     quantity: Optional[int] = None
+    shipping_profile_id: Optional[int] = None
 
     # Media and links
     primary_image: Optional[str] = None
@@ -176,6 +177,7 @@ class ProductUpdate(ProductValidationMixin): # Inherit Mixin (gets config + vali
     show_vat: Optional[bool] = None
     local_pickup: Optional[bool] = None
     available_for_shipment: Optional[bool] = None
+    shipping_profile_id: Optional[int] = None
     primary_image: Optional[str] = None
     additional_images: Optional[List[str]] = None # Allows update to None or new list
     video_url: Optional[str] = None

@@ -297,8 +297,17 @@
                             </span>
                         {% endif %}
                     </td>
+                    {% set status_val = product.status.value|upper if product.status else '' %}
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        <a href="/inventory/product/{{ product.id }}" class="text-blue-600 hover:text-blue-900">View</a>
+                        {% if status_val == 'DRAFT' %}
+                            <a href="/inventory/add?draft_id={{ product.id }}" class="text-indigo-600 hover:text-indigo-900">
+                                Resume Draft
+                            </a>
+                        {% else %}
+                            <a href="/inventory/product/{{ product.id }}" class="text-blue-600 hover:text-blue-900">
+                                View
+                            </a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

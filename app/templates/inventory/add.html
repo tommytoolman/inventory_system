@@ -1281,14 +1281,31 @@
 <script>
 // Store the last known category value to prevent it being cleared
 let lastKnownCategoryValue = '';
+const prefillDraftId = {{ prefill_draft_id if prefill_draft_id is not none else 'null' }};
 
 document.addEventListener('DOMContentLoaded', function() {
     
     // Load shipping profiles from Reverb
     loadShippingProfiles();
 
-    // Load drafts
-    loadDrafts();
+    // Load drafts (and resume if requested)
+    loadDrafts().then(() => {
+        if (prefillDraftId) {
+            const draftSelector = document.getElementById('draftSelector');
+            const loadDraftButton = document.getElementById('loadDraftButton');
+            if (draftSelector) {
+                draftSelector.value = prefillDraftId.toString();
+                draftSelector.dispatchEvent(new Event('change'));
+            }
+            if (loadDraftButton) {
+                setTimeout(() => {
+                    if (!loadDraftButton.disabled) {
+                        loadDraftButton.click();
+                    }
+                }, 100);
+            }
+        }
+    });
     
     // Platform sync radio button handling
     const syncAllYes = document.getElementById('sync_all_yes');

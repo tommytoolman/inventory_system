@@ -1334,7 +1334,8 @@ async def handle_create_platform_listing_from_detail(
 async def add_product_form(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings),
+    draft_id: Optional[int] = None,
 ):
     # Get existing brands for dropdown (alphabetically sorted)
     existing_brands = await db.execute(
@@ -1363,6 +1364,14 @@ async def add_product_form(
     )
     existing_products = existing_products_result.scalars().all()
 
+    prefill_draft_id: Optional[int] = None
+    form_data: Optional[Dict[str, Any]] = None
+    if draft_id is not None:
+        draft = await db.get(Product, draft_id)
+        if draft and draft.status == ProductStatus.DRAFT:
+            prefill_draft_id = draft.id
+            form_data = _serialize_draft_product(draft)
+
     return templates.TemplateResponse(
         "inventory/add.html",
         {
@@ -1374,7 +1383,9 @@ async def add_product_form(
             "reverb_status": "pending",
             "vr_status": "pending",
             "shopify_status": "pending",
-            "tinymce_api_key": settings.TINYMCE_API_KEY  # This is important
+            "tinymce_api_key": settings.TINYMCE_API_KEY,  # This is important
+            "form_data": form_data,
+            "prefill_draft_id": prefill_draft_id,
         }
     )
 
@@ -2969,18 +2980,56 @@ async def get_drafts(
     }
 
 
-@router.get("/drafts/{draft_id}", response_class=JSONResponse)
-async def get_draft_details(
-    draft_id: int,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get details of a specific draft for editing"""
-    draft = await db.get(Product, draft_id)
-    if not draft or draft.status != "DRAFT":
-        raise HTTPException(status_code=404, detail="Draft not found")
+def _serialize_draft_product(draft: Product) -> Dict[str, Any]:
+    """Produce a serialisable representation of a draft product."""
+    additional_images: Any = draft.additional_images or []
+    if isinstance(additional_images, str):
+        try:
+            parsed = json.loads(additional_images)
+            if isinstance(parsed, list):
+                additional_images = parsed
+            elif parsed:
+                additional_images = [parsed]
+            else:
+                additional_images = []
+        except json.JSONDecodeError:
+            additional_images = [additional_images]
 
-    # Return all draft data including platform data - only fields that exist in Product model
-    draft_data = {
+    status_value = None
+    if hasattr(draft.status, "value"):
+        status_value = draft.status.value
+    elif draft.status is not None:
+        status_value = draft.status
+
+    base_price = None
+    if draft.base_price is not None:
+        try:
+            base_price = float(draft.base_price)
+        except (TypeError, ValueError):
+            base_price = draft.base_price
+
+    offer_discount = None
+    if draft.offer_discount is not None:
+        try:
+            offer_discount = float(draft.offer_discount)
+        except (TypeError, ValueError):
+            offer_discount = draft.offer_discount
+
+    quantity = None
+    if draft.quantity is not None:
+        try:
+            quantity = int(draft.quantity)
+        except (TypeError, ValueError):
+            quantity = draft.quantity
+
+    processing_time = None
+    if draft.processing_time is not None:
+        try:
+            processing_time = int(draft.processing_time)
+        except (TypeError, ValueError):
+            processing_time = draft.processing_time
+
+    draft_data: Dict[str, Any] = {
         "id": draft.id,
         "sku": draft.sku,
         "brand": draft.brand,
@@ -2988,14 +3037,15 @@ async def get_draft_details(
         "title": draft.title,
         "category": draft.category,
         "condition": draft.condition,
-        "base_price": draft.base_price,
-        "quantity": draft.quantity,
+        "status": status_value,
+        "base_price": base_price,
+        "quantity": quantity,
         "description": draft.description,
         "decade": draft.decade,
         "year": draft.year,
         "finish": draft.finish,
-        "processing_time": draft.processing_time,
-        "offer_discount": draft.offer_discount,
+        "processing_time": processing_time,
+        "offer_discount": offer_discount,
         "in_collective": draft.in_collective,
         "in_inventory": draft.in_inventory,
         "in_reseller": draft.in_reseller,
@@ -3006,16 +3056,29 @@ async def get_draft_details(
         "available_for_shipment": draft.available_for_shipment,
         "is_stocked_item": draft.is_stocked_item,
         "primary_image": draft.primary_image,
-        "additional_images": draft.additional_images or [],
+        "additional_images": additional_images,
         "video_url": draft.video_url,
-        "external_link": draft.external_link
+        "external_link": draft.external_link,
     }
 
-    # Extract platform data from package_dimensions (temporary location)
-    if draft.package_dimensions and "platform_data" in draft.package_dimensions:
-        draft_data["platform_data"] = draft.package_dimensions["platform_data"]
+    package_dimensions = draft.package_dimensions or {}
+    if isinstance(package_dimensions, dict) and "platform_data" in package_dimensions:
+        draft_data["platform_data"] = package_dimensions["platform_data"]
 
     return draft_data
+
+
+@router.get("/drafts/{draft_id}", response_class=JSONResponse)
+async def get_draft_details(
+    draft_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get details of a specific draft for editing"""
+    draft = await db.get(Product, draft_id)
+    if not draft or draft.status != "DRAFT":
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    return _serialize_draft_product(draft)
 
 
 @router.get("/products/{product_id}/edit")

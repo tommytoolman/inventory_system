@@ -724,7 +724,7 @@ class ShopifyService:
             
             # Extract and transform images to MAX_RES (same logic as VR)
             all_images = []
-            
+
             # First try to get images from reverb_data if provided
             if reverb_data:
                 cloudinary_photos = reverb_data.get('cloudinary_photos', [])
@@ -740,9 +740,9 @@ class ShopifyService:
                         if image_url:
                             # Transform to MAX_RES for Shopify
                             max_res_url = ImageTransformer.transform_reverb_url(image_url, ImageQuality.MAX_RES)
-                            if max_res_url:  # Only add non-None URLs
-                                all_images.append(max_res_url)
-                                logger.debug(f"Added Cloudinary image: {max_res_url[:80]}...")
+                        if max_res_url:  # Only add non-None URLs
+                            all_images.append(max_res_url)
+                            logger.debug(f"Added Cloudinary image: {max_res_url[:80]}...")
                 
                 # Fallback to regular photos if no cloudinary photos
                 if not all_images:
@@ -765,14 +765,16 @@ class ShopifyService:
                                     all_images.append(max_res_url)
             
             # Fallback to product's stored images if no Reverb data
-            if not all_images:
-                if product.primary_image:
-                    max_res_url = ImageTransformer.transform_reverb_url(product.primary_image, ImageQuality.MAX_RES)
-                    if max_res_url:  # Only add non-None URLs
-                        all_images.append(max_res_url)
-                if hasattr(product, 'additional_images') and product.additional_images:
-                    for img_url in product.additional_images[:9]:  # Limit to 10 total
-                        max_res_url = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
+            product_image_urls: List[str] = []
+            if product.primary_image:
+                product_image_urls.append(product.primary_image)
+            if hasattr(product, 'additional_images') and product.additional_images:
+                product_image_urls.extend(product.additional_images)
+
+            if product_image_urls:
+                for img_url in product_image_urls:
+                    max_res_url = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
+                    if max_res_url and max_res_url not in all_images:
                         all_images.append(max_res_url)
             
             logger.info(f"Prepared {len(all_images)} MAX_RES images for Shopify")

@@ -592,6 +592,17 @@ class VRService:
                         all_images.append(max_res_url)
                 logger.info(f"Using and transformed {len(all_images)} images from product record")
 
+            product_images: List[str] = []
+            if product.primary_image:
+                product_images.append(product.primary_image)
+            if hasattr(product, 'additional_images') and product.additional_images:
+                product_images.extend(product.additional_images)
+            if product_images:
+                for img_url in product_images:
+                    max_res_url = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
+                    if max_res_url and max_res_url not in all_images:
+                        all_images.append(max_res_url)
+
             logger.info("VR image payload for %s: %s", product.sku, all_images)
 
             # Set primary_image and additional_images in the format expected by VR client

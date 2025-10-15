@@ -1631,8 +1631,13 @@ async def add_product(
 
         # Map shipping profile to Reverb ID if needed
         selected_shipping_profile_id: Optional[int] = None
+        logger.info("Raw shipping_profile from form: %s", form_data.get("shipping_profile"))
         reverb_options = platform_data.get("reverb")
         if reverb_options and reverb_options.get("shipping_profile"):
+            logger.info(
+                "Reverb platform shipping_profile value before resolution: %s",
+                reverb_options.get("shipping_profile"),
+            )
             shipping_value = reverb_options.get("shipping_profile")
             profile_id = None
             try:
@@ -1737,6 +1742,11 @@ async def add_product(
             )
             product.shipping_profile_id = selected_shipping_profile_id
             await db.flush()
+        logger.info(
+            "Product %s saved with shipping_profile_id=%s",
+            product.id,
+            product.shipping_profile_id,
+        )
 
         # Step 2: Determine which platforms to sync
         platforms_to_sync = []

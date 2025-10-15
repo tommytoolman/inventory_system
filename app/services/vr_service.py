@@ -591,7 +591,9 @@ class VRService:
                         max_res_url = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
                         all_images.append(max_res_url)
                 logger.info(f"Using and transformed {len(all_images)} images from product record")
-            
+
+            logger.info("VR image payload for %s: %s", product.sku, all_images)
+
             # Set primary_image and additional_images in the format expected by VR client
             if all_images:
                 product_data['primary_image'] = all_images[0]
@@ -696,6 +698,14 @@ class VRService:
             )
             
             logger.info(f"V&R creation result: {result}")
+            if isinstance(result, dict):
+                logger.info("V&R payload keys: %s", list(result.keys()))
+                logger.info(
+                    "V&R listing %s response payload primary/additional: %s / %s",
+                    result.get("vr_listing_id"),
+                    result.get("payload", {}).get("primary_image"),
+                    result.get("payload", {}).get("additional_images"),
+                )
 
             if result.get("status") == "success":
                 needs_resolution = result.get("needs_id_resolution", False)

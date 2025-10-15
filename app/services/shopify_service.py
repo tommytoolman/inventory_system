@@ -862,8 +862,10 @@ class ShopifyService:
                     # Filter out any None values and use the validated format
                     valid_images = [url for url in all_images if url]
                     if valid_images:
+                        logger.info("Shopify image payload (first 3): %s", valid_images[:3])
                         # Use the same format as the validated script for consistency
                         media_input = [{"src": url} for url in valid_images]
+                        logger.debug("Shopify media_input: %s", media_input)
                         self.client.create_product_images(product_gid, media_input)
                         logger.info(f"Added {len(valid_images)} images (best quality available) to product")
                         created_images = valid_images
@@ -947,6 +949,13 @@ class ShopifyService:
                     num_images=20,
                     num_metafields=0,
                 )
+                if snapshot:
+                    logger.info(
+                        "Shopify snapshot for %s contains %s images (first 2: %s)",
+                        product_gid,
+                        len(snapshot.get("images", {}).get("edges", [])),
+                        snapshot.get("images", {}).get("edges", [])[:2],
+                    )
             except Exception as snapshot_error:
                 logger.warning(f"Failed to fetch Shopify snapshot for {product_gid}: {snapshot_error}")
 

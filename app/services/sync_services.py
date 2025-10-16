@@ -1866,7 +1866,7 @@ class ChangeDetector:
                 query = text("""
                     SELECT pc.external_id, pc.product_id, pc.status, pc.last_sync,
                            p.sku, p.brand, p.model, p.title, p.base_price,
-                           el.current_price, el.listing_status
+                           el.price AS price, el.listing_status
                     FROM platform_common pc
                     JOIN products p ON pc.product_id = p.id
                     LEFT JOIN ebay_listings el ON pc.external_id = el.ebay_item_id
@@ -1876,7 +1876,7 @@ class ChangeDetector:
                 query = text("""
                     SELECT pc.external_id, pc.product_id, pc.status, pc.last_sync,
                            p.sku, p.brand, p.model, p.title, p.base_price,
-                           rl.price_display, rl.reverb_state
+                           rl.list_price, rl.reverb_state
                     FROM platform_common pc
                     JOIN products p ON pc.product_id = p.id
                     LEFT JOIN reverb_listings rl ON CONCAT('REV-', pc.external_id) = rl.reverb_listing_id
@@ -1982,16 +1982,28 @@ class ChangeDetector:
                 platform_price = platform_item.get('price_notax')
             else:
                 continue
-            
-            # Get local price
-            local_price = local_item.get('base_price')
-            
+
+            # Get local price (prefer platform-specific field, fall back to master price)
+            if platform == "ebay":
+                local_price = local_item.get('price')
+            elif platform == "reverb":
+                local_price = local_item.get('list_price')
+            elif platform == "shopify":
+                local_price = local_item.get('price')
+            elif platform == "vr":
+                local_price = local_item.get('price_notax')
+            else:
+                local_price = None
+
+            if local_price is None:
+                local_price = local_item.get('base_price')
+
             # Compare prices (with tolerance for floating point)
-            if platform_price and local_price:
+            if platform_price is not None and local_price is not None:
                 try:
                     platform_price_float = float(platform_price)
                     local_price_float = float(local_price)
-                    
+
                     # Consider significant if difference > 1% or > £1
                     price_diff = abs(platform_price_float - local_price_float)
                     if price_diff > max(1.0, local_price_float * 0.01):

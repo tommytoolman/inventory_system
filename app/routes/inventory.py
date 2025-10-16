@@ -2360,49 +2360,15 @@ async def add_product(
     except HTTPException as exc:
         raise exc
     except Exception as e:
-        print(f"Overall error (detail): {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-
-        # Handle all other exceptions
+        logger.exception("Unhandled error while creating product")
         await db.rollback()
 
-        # Convert existing_products to simple dictionaries to avoid SQLAlchemy async issues
-        existing_products_dicts = []
-        # Re-fetch existing products after rollback to avoid detached instance issues
-        try:
-            existing_products_result = await db.execute(
-                select(Product)
-                .order_by(desc(Product.created_at))
-                .limit(100)
-            )
-            existing_products = existing_products_result.scalars().all()
-            for product in existing_products:
-                existing_products_dicts.append({
-                    "id": product.id,
-                    "brand": product.brand or "Unknown Brand",
-                    "model": product.model or ""
-                })
-        except Exception as fetch_error:
-            logger.error(f"Error fetching existing products after rollback: {fetch_error}")
-            # Use empty list if we can't fetch products
-            existing_products_dicts = []
-
-        return templates.TemplateResponse(
-            "inventory/add.html",
+        return JSONResponse(
             {
-                "request": request,
+                "status": "error",
                 "error": f"Failed to create product: {str(e)}",
-                "form_data": dict(form_data),
-                "existing_brands": existing_brands,
-                "categories": categories,
-                "existing_products": existing_products_dicts,
-                "ebay_status": "error",
-                "reverb_status": "error",
-                "vr_status": "error",
-                "shopify_status": "error"
             },
-            status_code=400
+            status_code=400,
         )
 
 

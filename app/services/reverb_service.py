@@ -1098,6 +1098,7 @@ class ReverbService:
         payload: Dict[str, str] = {
             "type": "youtube",
             "url": normalized_url,
+            "link": normalized_url,
         }
         if video_id:
             payload["video_id"] = video_id

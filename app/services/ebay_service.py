@@ -713,7 +713,9 @@ class EbayService:
                 if db_quantity_available is None:
                     db_quantity_available = db_data.get('product_quantity')
 
-                if api_quantity_available is not None and db_quantity_available is not None and api_quantity_available != db_quantity_available:
+                is_stocked_item = bool(db_data.get('product_is_stocked'))
+
+                if is_stocked_item and api_quantity_available is not None and db_quantity_available is not None and api_quantity_available != db_quantity_available:
                     if (external_id, 'quantity_change') not in pending_events:
                         events_to_log.append({
                             'sync_run_id': sync_run_id,
@@ -727,7 +729,7 @@ class EbayService:
                                 'new_quantity': api_quantity_available,
                                 'total_quantity': api_data.get('quantity_total'),
                                 'quantity_sold': api_data.get('quantity_sold'),
-                                'is_stocked_item': db_data.get('product_is_stocked'),
+                                'is_stocked_item': is_stocked_item,
                                 'item_id': external_id
                             },
                             'status': 'pending'

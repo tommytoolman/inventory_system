@@ -30,6 +30,10 @@ class EmailNotificationService:
         platform: str,
         sale_price: Optional[float] = None,
         external_id: Optional[str] = None,
+        sale_status: Optional[str] = None,
+        listing_url: Optional[str] = None,
+        detected_at: Optional[str] = None,
+        propagated_platforms: Optional[Sequence[str]] = None,
         recipients: Optional[Sequence[str]] = None,
         additional_lines: Optional[Sequence[str]] = None,
     ) -> bool:
@@ -63,13 +67,26 @@ class EmailNotificationService:
             f"Platform: {platform}",
         ]
 
+        if sale_status:
+            lines.append(f"Status: {sale_status.upper()}")
+
         if sale_price is not None:
             lines.append(f"Sale price: £{sale_price:,.2f}")
         elif base_price is not None:
             lines.append(f"Listed price: £{base_price:,.2f}")
 
-        if external_id:
+        if detected_at:
+            lines.append(f"Detected at: {detected_at}")
+
+        if listing_url:
+            lines.append(f"Listing URL: {listing_url}")
+        elif external_id:
             lines.append(f"External reference: {external_id}")
+
+        if propagated_platforms:
+            joined = ", ".join(sorted({p.upper() for p in propagated_platforms if p}))
+            if joined:
+                lines.append(f"Listings ended on: {joined}")
 
         if getattr(product, "listing_url", None):
             lines.append(f"Listing URL: {product.listing_url}")

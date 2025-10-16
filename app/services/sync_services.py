@@ -12,7 +12,7 @@ This service coordinates:
 import asyncio
 import logging
 
-from typing import Dict, List, Any, Optional, Set, NamedTuple, Tuple, Union
+from typing import Dict, List, Any, Optional, Set, NamedTuple, Tuple, Union, Sequence
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
@@ -696,7 +696,12 @@ class SyncService:
         # Determine the EXACT new status ('sold' or 'ended') from the event data.
         is_sale_signal = self._is_sale_event(event.platform_name, event.change_data)
         new_status = event.change_data.get('new', 'ended').lower()
-        
+
+        # Gather platform metadata for email/reporting context.
+        platform_common = await self._get_platform_common(product.id, event.platform_name)
+        platform_common_id = platform_common.id if platform_common else None
+        listing_url = platform_common.listing_url if platform_common else None
+
         # This handler should only process sale/ended signals.
         if not is_sale_signal:
             event.notes = f"Acknowledged non-sale status change '{new_status}' with no action."
@@ -706,6 +711,13 @@ class SyncService:
         sale_alert_needed = False
         sale_platform = event.platform_name
         sale_price = event.change_data.get('sale_price') if event.change_data else None
+        try:
+            sale_price = float(sale_price) if sale_price is not None else None
+        except (TypeError, ValueError):
+            sale_price = None
+
+        if sale_price is None and platform_common_id:
+            sale_price = await self._derive_sale_price_from_listing(event.platform_name, platform_common_id)
         external_reference = event.external_id
 
         if product.is_stocked_item:
@@ -750,6 +762,8 @@ class SyncService:
         else:
             should_propagate = True if (platform_filter is None or platform_filter) else False
 
+        propagated_platforms: List[str] = []
+
         if should_propagate:
             successful_platforms, action_log, failed_count = await self._propagate_end_listing(
                 product,
@@ -759,7 +773,8 @@ class SyncService:
             )
             actions.extend(action_log)
             summary['actions_taken'] += len(action_log)
-            
+            propagated_platforms = successful_platforms.copy()
+
             if not dry_run and successful_platforms:
                 logger.info(f"Updating local status for successfully ended platforms: {successful_platforms}")
                 for platform in successful_platforms:
@@ -775,12 +790,42 @@ class SyncService:
                 return False
 
         if sale_alert_needed and not dry_run:
-            await self._send_sale_alert(product, sale_platform, sale_price=sale_price, external_reference=external_reference)
+            sale_status_label = self._describe_sale_status(event.platform_name, new_status)
+            detected_at_str = None
+            if event.detected_at:
+                dt = event.detected_at
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                else:
+                    dt = dt.astimezone(timezone.utc)
+                detected_at_str = dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+            await self._send_sale_alert(
+                product,
+                sale_platform,
+                sale_price=sale_price,
+                external_reference=external_reference,
+                sale_status=sale_status_label,
+                listing_url=listing_url,
+                detected_at=detected_at_str,
+                propagated_platforms=propagated_platforms,
+            )
 
         event.notes = "Sale signal processed and platform consistency enforced."
         return True   
 
-    async def _send_sale_alert(self, product: Product, platform: str, *, sale_price: Optional[float], external_reference: Optional[str]) -> None:
+    async def _send_sale_alert(
+        self,
+        product: Product,
+        platform: str,
+        *,
+        sale_price: Optional[float],
+        external_reference: Optional[str],
+        sale_status: Optional[str],
+        listing_url: Optional[str],
+        detected_at: Optional[str],
+        propagated_platforms: Optional[Sequence[str]],
+    ) -> None:
         if not getattr(self, "email_service", None):
             return
 
@@ -790,6 +835,10 @@ class SyncService:
                 platform=platform,
                 sale_price=sale_price,
                 external_id=external_reference,
+                sale_status=sale_status,
+                listing_url=listing_url,
+                detected_at=detected_at,
+                propagated_platforms=propagated_platforms,
             )
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("Failed to queue sale alert email for product %s: %s", product.id, exc, exc_info=True)
@@ -936,6 +985,68 @@ class SyncService:
             return {"vr"}
 
         return set()
+
+    async def _get_platform_common(self, product_id: int, platform_name: str) -> Optional[PlatformCommon]:
+        stmt = (
+            select(PlatformCommon)
+            .where(PlatformCommon.product_id == product_id)
+            .where(PlatformCommon.platform_name == platform_name)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def _derive_sale_price_from_listing(self, platform_name: str, platform_common_id: Optional[int]) -> Optional[float]:
+        if not platform_common_id:
+            return None
+
+        price_sources = {
+            'reverb': (ReverbListing, ReverbListing.list_price),
+            'ebay': (EbayListing, EbayListing.price),
+            'shopify': (ShopifyListing, ShopifyListing.price),
+            'vr': (VRListing, VRListing.price_notax),
+        }
+
+        config = price_sources.get(platform_name)
+        if not config:
+            return None
+
+        table, column = config
+        stmt = select(column).where(table.platform_id == platform_common_id)
+        value = (await self.db.execute(stmt)).scalar_one_or_none()
+
+        if value is None:
+            return None
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _describe_sale_status(self, platform_name: str, status: str) -> str:
+        status_lower = (status or '').lower()
+        platform_key = platform_name.lower()
+
+        if platform_key == 'reverb':
+            if status_lower == 'sold':
+                return 'Sold on Reverb'
+            if status_lower == 'ended':
+                return 'Ended on Reverb'
+        elif platform_key == 'ebay':
+            if status_lower in {'endedwithsales', 'completed'}:
+                return 'Sold on eBay'
+            if status_lower == 'ended':
+                return 'Ended on eBay'
+        elif platform_key == 'shopify':
+            if status_lower == 'archived':
+                return 'Sold on Shopify (archived)'
+        elif platform_key == 'vr':
+            if status_lower == 'sold':
+                return 'Sold on Vintage & Rare'
+            if status_lower == 'ended':
+                return 'Ended on Vintage & Rare'
+
+        if status_lower:
+            return f"{status_lower.capitalize()} on {platform_name.capitalize()}"
+        return f"Status unknown on {platform_name.capitalize()}"
 
     async def _propagate_end_listing(
         self,

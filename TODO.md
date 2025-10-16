@@ -41,6 +41,11 @@
 - [ ] **Document CLI sync utilities** – in addition to API routes, catalogue every `scripts/` entry point (imports, event processors, VR helpers) that touches the sync flow so the docs cover both web and command-line usage.
 
 ## 🟣 Backlog (Track, revisit as time allows)
+- **Database notes:** Products need `price` mirroring `base_price`, `quantity` defaulting to 1 when not stocked, and image URLs rewritten to Reverb CDN paths after sync runs.
+- **Database notes:** Platform common rows should normalise Shopify status casing, flip VR syncs from `pending` after the ID-resolution hop, save the canonical Shopify listing URL, and refresh `platform_specific_data` contents.
+- **Database notes:** Vintage & Rare listings stay `pending` despite the follow-up fetch; plan for persisting creation snapshots separately from later sync updates (possibly via a new JSON column).
+- **Database notes:** Reverb listings miss `reverb_slug` and `condition_rating`; the latest `extended_attributes` should be compared with older rows to ensure we still capture the full payload (price guide, shipping profile, etc.).
+- **Database notes:** Pricing validation should compare against each platform's stored price (e.g., VR price) rather than `products.base_price`, so intentional per-platform deltas stop raising mismatches.
 
 ## ✅ Completed
 - [x] **Shopify archive build-out** – populate the archive dataset and surface "archived" status in the dashboard for Shopify listings.

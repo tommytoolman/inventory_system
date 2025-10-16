@@ -1970,7 +1970,12 @@ class ChangeDetector:
                 continue
                 
             local_item = local_lookup[external_id]
-            
+
+            if platform == "vr":
+                # VR listings intentionally carry platform-specific markups; API feed also
+                # returns inconsistent values. Skip automated price-drift detection.
+                continue
+
             # Get price from platform data
             if platform == "ebay":
                 platform_price = platform_item.get('current_price') or platform_item.get('buyItNowPrice', {}).get('value')
@@ -1990,8 +1995,6 @@ class ChangeDetector:
                 local_price = local_item.get('list_price')
             elif platform == "shopify":
                 local_price = local_item.get('price')
-            elif platform == "vr":
-                local_price = local_item.get('price_notax')
             else:
                 local_price = None
 

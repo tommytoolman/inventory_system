@@ -1406,11 +1406,11 @@ async def add_product(
     decade: Optional[int] = Form(None),
     finish: Optional[str] = Form(None),
     status: str = Form("DRAFT"),
-    processing_time: Optional[int] = Form(None),
-    price: Optional[float] = Form(None),
-    price_notax: Optional[float] = Form(None),
-    collective_discount: Optional[float] = Form(None),
-    offer_discount: Optional[float] = Form(None),
+    processing_time: Optional[str] = Form(None),
+    price: Optional[str] = Form(None),
+    price_notax: Optional[str] = Form(None),
+    collective_discount: Optional[str] = Form(None),
+    offer_discount: Optional[str] = Form(None),
     # Checkbox fields
     in_collective: Optional[bool] = Form(False),
     in_inventory: Optional[bool] = Form(True),
@@ -1466,7 +1466,7 @@ async def add_product(
     print("Method:", request.method)
     form_data = await request.form()
 
-    # Parse quantity (allow blank strings from form submissions)
+    # Parse numeric fields from simple form values (allow blank strings)
     if quantity_raw in (None, "", " "):
         quantity = None
     else:
@@ -1474,6 +1474,26 @@ async def add_product(
             quantity = int(str(quantity_raw).strip())
         except ValueError:
             raise HTTPException(status_code=422, detail="Quantity must be a valid integer")
+
+    def _parse_float(value: Optional[str], default: Optional[float] = None, field_name: str = "value") -> Optional[float]:
+        if value in (None, "", " "):
+            return default
+        try:
+            return float(str(value).replace(",", ""))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail=f"{field_name} must be a valid number")
+
+    processed_processing_time: Optional[int] = None
+    if processing_time not in (None, "", " "):
+        try:
+            processed_processing_time = int(str(processing_time).strip())
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Processing time must be a valid integer")
+
+    parsed_price = _parse_float(price, field_name="price")
+    parsed_price_notax = _parse_float(price_notax, field_name="price_notax")
+    parsed_collective_discount = _parse_float(collective_discount, 0.0, field_name="collective_discount")
+    parsed_offer_discount = _parse_float(offer_discount, 0.0, field_name="offer_discount")
 
     # Sanitize form data for logging (remove base64 image data)
     log_form_data = {}
@@ -1707,10 +1727,10 @@ async def add_product(
             decade=decade,
             finish=finish,
             status=status_enum.value,
-            price=price,
-            price_notax=price_notax,
-            collective_discount=collective_discount,
-            offer_discount=offer_discount,
+            price=parsed_price,
+            price_notax=parsed_price_notax,
+            collective_discount=parsed_collective_discount,
+            offer_discount=parsed_offer_discount,
             in_collective=in_collective,
             in_inventory=in_inventory,
             in_reseller=in_reseller,
@@ -1721,7 +1741,7 @@ async def add_product(
             available_for_shipment=available_for_shipment,
             is_stocked_item=is_stocked_item,
             quantity=quantity if is_stocked_item else None,
-            processing_time=processing_time,
+            processing_time=processed_processing_time,
             primary_image=primary_image,
             additional_images=additional_images,
             video_url=video_url,

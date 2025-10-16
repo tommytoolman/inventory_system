@@ -1467,7 +1467,9 @@ async def add_product(
     form_data = await request.form()
 
     # Parse numeric fields from simple form values (allow blank strings)
-    if quantity_raw in (None, "", " "):
+    BLANK_SENTINELS = {None, "", " ", "null", "undefined"}
+
+    if quantity_raw in BLANK_SENTINELS:
         quantity = None
     else:
         try:
@@ -1476,7 +1478,7 @@ async def add_product(
             raise HTTPException(status_code=422, detail="Quantity must be a valid integer")
 
     def _parse_float(value: Optional[str], default: Optional[float] = None, field_name: str = "value") -> Optional[float]:
-        if value in (None, "", " "):
+        if value in BLANK_SENTINELS:
             return default
         try:
             return float(str(value).replace(",", ""))
@@ -1484,7 +1486,7 @@ async def add_product(
             raise HTTPException(status_code=422, detail=f"{field_name} must be a valid number")
 
     processed_processing_time: Optional[int] = None
-    if processing_time not in (None, "", " "):
+    if processing_time not in BLANK_SENTINELS:
         try:
             processed_processing_time = int(str(processing_time).strip())
         except ValueError:
@@ -2355,6 +2357,8 @@ async def add_product(
             },
             status_code=400
         )
+    except HTTPException as exc:
+        raise exc
     except Exception as e:
         print(f"Overall error (detail): {type(e).__name__}: {str(e)}")
         import traceback

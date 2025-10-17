@@ -1077,12 +1077,27 @@ class SyncService:
 
         tasks, task_map = [], {}
         for link in all_platform_links:
-            if link.platform_name in source_platforms or link.status != ListingStatus.ACTIVE.value:
+            if link.platform_name in source_platforms:
                 continue
 
             if platform_filter is not None and link.platform_name not in platform_filter:
                 continue
-            
+
+            if link.status != ListingStatus.ACTIVE.value:
+                if dry_run:
+                    action_desc = (
+                        f"[DRY RUN][ACTION] Product #{product.id} (SKU: {product.sku}) already {link.status} on {link.platform_name.upper()}. "
+                        "Would ensure specialist tables reflect the ended status."
+                    )
+                else:
+                    action_desc = (
+                        f"[INFO] Product #{product.id} (SKU: {product.sku}) already {link.status} on {link.platform_name.upper()}. "
+                        "Syncing local specialist tables."
+                    )
+                action_log.append(action_desc)
+                successful_platforms.append(link.platform_name)
+                continue
+
             service = self.platform_services.get(link.platform_name)
             if service and hasattr(service, 'mark_item_as_sold'):
                 if dry_run:

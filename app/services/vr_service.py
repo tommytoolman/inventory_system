@@ -263,12 +263,15 @@ class VRService:
         for item in items:
             api_data, db_data = item['api_data'], item['db_data']
             
-            db_price_for_compare = float(db_data.get('base_price') or 0.0)
+            db_price_for_compare = db_data.get('price_notax')
+            if db_price_for_compare is None:
+                db_price_for_compare = db_data.get('base_price')
+            db_price_for_compare = float(db_price_for_compare or 0.0)
             if abs(api_data['price'] - db_price_for_compare) > 0.01:
                 all_events.append({
                     'sync_run_id': sync_run_id, 'platform_name': 'vr', 'product_id': db_data['product_id'],
                     'platform_common_id': db_data['platform_common_id'], 'external_id': api_data['vr_id'],
-                    'change_type': 'price', 'change_data': {'old': db_data.get('base_price'), 'new': api_data['price'], 'vr_id': api_data['vr_id']},
+                    'change_type': 'price', 'change_data': {'old': db_price_for_compare, 'new': api_data['price'], 'vr_id': api_data['vr_id']},
                     'status': 'pending'})
             
             api_status = 'sold' if api_data['is_sold'] else 'active'
@@ -326,13 +329,16 @@ class VRService:
 
                 # Only check for a price change if the item has NOT just been marked as sold.
                 if not new_status_is_sold:
-                    db_price_for_compare = float(db_data.get('base_price') or 0.0)
+                    db_price_for_compare = db_data.get('price_notax')
+                    if db_price_for_compare is None:
+                        db_price_for_compare = db_data.get('base_price')
+                    db_price_for_compare = float(db_price_for_compare or 0.0)
                     if abs(api_data['price'] - db_price_for_compare) > 0.01:
                         all_events.append({
                             'sync_run_id': sync_run_id, 'platform_name': 'vr',
                             'product_id': db_data['product_id'], 'platform_common_id': db_data['platform_common_id'],
                             'external_id': api_data['external_id'], 'change_type': 'price',
-                            'change_data': {'old': db_data.get('base_price'), 'new': api_data['price']},
+                            'change_data': {'old': db_price_for_compare, 'new': api_data['price']},
                             'status': 'pending'
                         })
                 # --- END NEW LOGIC ---
@@ -999,12 +1005,14 @@ class VRService:
             SELECT 
                 p.id as product_id, 
                 p.sku, 
-                p.base_price, -- For price comparison
+                p.base_price,
                 pc.id as platform_common_id, 
                 pc.external_id, 
-                pc.status as platform_common_status -- This is our source of truth
+                pc.status as platform_common_status,
+                vl.price_notax
             FROM platform_common pc
             LEFT JOIN products p ON p.id = pc.product_id
+            LEFT JOIN vr_listings vl ON vl.platform_id = pc.id
             WHERE pc.platform_name = 'vr'
         """)
         result = await self.db.execute(query)

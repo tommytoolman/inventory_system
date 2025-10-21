@@ -1051,7 +1051,49 @@ async def handle_create_platform_listing_from_detail(
     try:
         if platform_slug == "vr":
             logger.info(f"Processing Vintage & Rare listing for product {product.sku}.")
-            
+
+            # Prevent duplicate submissions from creating multiple VR listings
+            existing_vr_stmt = await db.execute(
+                select(PlatformCommon).where(
+                    PlatformCommon.product_id == product.id,
+                    PlatformCommon.platform_name == "vr"
+                )
+            )
+            existing_vr_link = existing_vr_stmt.scalar_one_or_none()
+
+            if existing_vr_link and existing_vr_link.external_id:
+                active_states = {"active", "live", "pending"}
+                existing_status = (existing_vr_link.status or "").lower()
+
+                latest_vr_state = None
+                if existing_vr_link.id:
+                    vr_state_result = await db.execute(
+                        select(VRListing.vr_state)
+                        .where(VRListing.platform_id == existing_vr_link.id)
+                        .order_by(VRListing.id.desc())
+                        .limit(1)
+                    )
+                    vr_state_row = vr_state_result.first()
+                    if vr_state_row:
+                        latest_vr_state = (vr_state_row[0] or "").lower()
+
+                if existing_status in active_states or (latest_vr_state and latest_vr_state in active_states):
+                    message = (
+                        f"Vintage & Rare listing already exists for SKU '{product.sku}' "
+                        f"(ID: {existing_vr_link.external_id})."
+                    )
+                    logger.info(
+                        "Skipping duplicate V&R listing for product %s - existing listing %s in state %s / %s",
+                        product.sku,
+                        existing_vr_link.external_id,
+                        existing_status,
+                        latest_vr_state,
+                    )
+                    return RedirectResponse(
+                        url=f"{redirect_url}?message={quote_plus(message)}&message_type=warning",
+                        status_code=303,
+                    )
+
             # Prepare the V&R payload using the helper function
             vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(product, db, logger) # NEW
         

@@ -1370,7 +1370,7 @@ class VintageAndRareClient:
                         show_vat=product.show_vat or True,
                         processing_time=product.processing_time,
                         inventory_quantity=1,
-                        vr_state="published",
+                        vr_state=ListingStatus.ACTIVE.value,
                         created_at=datetime.now(),  # ✅ Naive datetime
                         updated_at=datetime.now(),  # ✅ Naive datetime
                         last_synced_at=datetime.now(),  # ✅ Naive datetime
@@ -1380,7 +1380,7 @@ class VintageAndRareClient:
                 else:
                     # Update existing VRListing entry
                     vr_listing.vr_listing_id = vr_item_data['vr_id']  #✅ Correct field name, string field
-                    vr_listing.vr_state = "published"
+                    vr_listing.vr_state = ListingStatus.ACTIVE.value
                     vr_listing.updated_at = datetime.now()
                     vr_listing.last_synced_at = datetime.now()
                     logger.info(f"✅ Updated existing VRListing entry")

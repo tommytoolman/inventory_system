@@ -128,5 +128,21 @@
     "shopify_categories": {
       "shopify_category_path": "Bass Guitars / Left-Handed"
     }
+  },
+  "Acoustic Guitars / Resonator": {
+    "reverb_path": "Acoustic Guitars / Resonator",
+    "vr_categories": {
+      "vr_category_1_id": "51",
+      "vr_category_1_name": "Guitars",
+      "vr_category_2_id": "230",
+      "vr_category_2_name": "Resonator"
+    },
+    "ebay_categories": {
+      "ebay_category_id": "181219",
+      "ebay_category_path_for_reference": "Musical Instruments & Gear > Guitars & Basses > Resonators"
+    },
+    "shopify_categories": {
+      "shopify_category_path": "Acoustic Guitars / Resonator"
+    }
   }
 }

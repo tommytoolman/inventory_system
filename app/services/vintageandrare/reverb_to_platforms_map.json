@@ -1,17 +1,17 @@
 {
-  "Acoustic Guitars / Parlor": { 
+  "Acoustic Guitars / Parlor": {
     "reverb_path": "Acoustic Guitars / Parlor",
     "vr_categories": {
-      "vr_category_1_id": "51", 
+      "vr_category_1_id": "51",
       "vr_category_1_name": "Guitars",
       "vr_category_2_id": "87",
       "vr_category_2_name": "Flat top"
     },
-    "ebay_categories": { 
+    "ebay_categories": {
       "ebay_category_id": "PLEASE_FILL_IN_LATER",
       "ebay_category_path_for_reference": "To be filled"
     },
-    "shopify_categories": { 
+    "shopify_categories": {
       "shopify_category_path": "Acoustic Guitars / Parlor"
     }
   },
@@ -66,13 +66,13 @@
   "Electric Guitars / Solid Body": {
     "reverb_path": "Electric Guitars / Solid Body",
     "vr_categories": {
-      "vr_category_1_id": "51", 
+      "vr_category_1_id": "51",
       "vr_category_1_name": "Guitars",
       "vr_category_2_id": "83",
       "vr_category_2_name": "Electric solid body"
     },
     "ebay_categories": {
-      "ebay_category_id": "33034", 
+      "ebay_category_id": "33034",
       "ebay_category_path_for_reference": "Musical Instruments & Gear > Guitars & Basses > Electric Guitars"
     },
     "shopify_categories": {
@@ -82,14 +82,13 @@
   "Electric Guitars / Semi-Hollow": {
     "reverb_path": "Electric Guitars / Semi-Hollow",
     "vr_categories": {
-      "vr_category_1_id": "51", 
+      "vr_category_1_id": "51",
       "vr_category_1_name": "Guitars",
       "vr_category_2_id": "84",
       "vr_category_2_name": "Semi-hollow body"
-      
     },
     "ebay_categories": {
-      "ebay_category_id": "33034", 
+      "ebay_category_id": "33034",
       "ebay_category_path_for_reference": "Musical Instruments & Gear > Guitars & Basses > Electric Guitars"
     },
     "shopify_categories": {
@@ -97,9 +96,9 @@
     }
   },
   "Parts / Pickguards": {
-  "reverb_path": "Parts / Pickguard",
+    "reverb_path": "Parts / Pickguard",
     "vr_categories": {
-      "vr_category_1_id": "51", 
+      "vr_category_1_id": "51",
       "vr_category_1_name": "Guitars",
       "vr_category_2_id": "211",
       "vr_category_2_name": "Parts & accessories",
@@ -107,11 +106,27 @@
       "vr_category_3_name": "Pickguards"
     },
     "ebay_categories": {
-      "ebay_category_id": "33034", 
+      "ebay_category_id": "33034",
       "ebay_category_path_for_reference": "Musical Instruments & Gear > Guitars & Basses > Electric Guitars"
     },
     "shopify_categories": {
       "shopify_category_path": "Electric Guitars / Solid Body"
+    }
+  },
+  "Bass Guitars / Left-Handed": {
+    "reverb_path": "Bass Guitars / Left-Handed",
+    "vr_categories": {
+      "vr_category_1_id": "52",
+      "vr_category_1_name": "Basses",
+      "vr_category_2_id": "253",
+      "vr_category_2_name": "Lefthand"
+    },
+    "ebay_categories": {
+      "ebay_category_id": "4713",
+      "ebay_category_path_for_reference": "Musical Instruments & Gear > Guitars & Basses > Bass Guitars"
+    },
+    "shopify_categories": {
+      "shopify_category_path": "Bass Guitars / Left-Handed"
     }
   }
 }

@@ -482,7 +482,12 @@ async def _prepare_vr_payload_from_product_object(
     shipping_rates = default_shipping.copy()
 
     if getattr(product, "shipping_profile_id", None):
-        profile = getattr(product, "shipping_profile", None)
+        profile = None
+        try:
+            profile = getattr(product, "shipping_profile", None)
+        except Exception:
+            profile = None
+
         if profile is None:
             result = await db.execute(
                 select(ShippingProfile).where(ShippingProfile.id == product.shipping_profile_id)

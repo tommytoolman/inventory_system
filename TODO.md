@@ -28,6 +28,7 @@
 - [ ] **eBay listing backfill script** – write a job that refreshes ebay_listings rows from master product data, preserves/detects CrazyLister payloads, and keeps descriptions in sync (e.g., item 257112518866).
 - [ ] **Activity report tidy-up** – debug the report pipeline and trim noisy or duplicate rows so it is usable for daily review.
 - [ ] **Recent activity & sales report fixes** – address the minor bugs observed in the activity feeds and sales summaries.
+- [ ] **VR listing ID capture from instruments/show** – after Selenium submits a listing, scrape the authenticated `/instruments/show` page to grab the new product ID before falling back to the CSV export.
 - [x] **Price sync on edits** – re-run outbound pricing syncs whenever an operator updates a product’s pricing fields.
 
 ## 🔵 Low Priority (Enhancements)

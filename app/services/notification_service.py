@@ -94,6 +94,10 @@ class EmailNotificationService:
         if getattr(product, "video_url", None):
             lines.append(f"Video URL: {product.video_url}")
 
+        primary_image_url = getattr(product, "primary_image", None)
+        if primary_image_url:
+            lines.append(f"Primary image: {primary_image_url}")
+
         if additional_lines:
             lines.extend(additional_lines)
 
@@ -103,6 +107,11 @@ class EmailNotificationService:
 
         body_html_lines = ["<p><strong>Product Sold</strong></p>"]
         body_html_lines.extend(f"<p>{line}</p>" for line in lines[:-1])  # Skip the footer for HTML list
+        if primary_image_url:
+            body_html_lines.append(
+                f'<p><img src="{primary_image_url}" alt="Primary image" '
+                'style="max-width: 380px; border-radius: 6px;" /></p>'
+            )
         body_html_lines.append("<p><em>Sent automatically by Inventory System</em></p>")
         body_html = "".join(body_html_lines)
 

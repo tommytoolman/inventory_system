@@ -432,39 +432,91 @@ async def _prepare_vr_payload_from_product_object(
     payload['video_url'] = product.video_url
     payload['external_link'] = product.external_link
 
-    # # --- V&R Specific Fields (sourcing from Product model if attributes exist) ---
-    # payload['vr_show_vat'] = product.show_vat if hasattr(product, 'show_vat') and product.show_vat is not None else True
-    # payload['vr_in_collective'] = product.in_collective if hasattr(product, 'in_collective') and product.in_collective is not None else False
-    # payload['vr_in_inventory'] = product.in_inventory if hasattr(product, 'in_inventory') and product.in_inventory is not None else True
-    # payload['vr_in_reseller'] = product.in_reseller if hasattr(product, 'in_reseller') and product.in_reseller is not None else False
-    # # Add others like 'vr_call_for_price', 'vr_discounted_price', 'vr_collective_discount', 'vr_buy_now' if on Product model
+    # --- V&R Specific Flags & Commerce Fields ---
+    show_vat = product.show_vat if getattr(product, "show_vat", None) is not None else True
+    payload["vr_show_vat"] = bool(show_vat)
+    payload["vr_call_for_price"] = False
 
-    # payload['processing_time'] = str(product.processing_time) if hasattr(product, 'processing_time') and product.processing_time is not None else '3'
-    # # payload['time_unit'] = 'Days' # Default in client, or add from product if it varies
+    payload["vr_in_collective"] = bool(getattr(product, "in_collective", False))
+    payload["vr_in_inventory"] = bool(getattr(product, "in_inventory", True))
+    payload["vr_in_reseller"] = bool(getattr(product, "in_reseller", False))
+    payload["vr_buy_now"] = bool(getattr(product, "buy_now", False))
 
-    # payload['available_for_shipment'] = product.available_for_shipment if hasattr(product, 'available_for_shipment') and product.available_for_shipment is not None else True
-    # payload['local_pickup'] = product.local_pickup if hasattr(product, 'local_pickup') and product.local_pickup is not None else False
+    collective_discount_value = getattr(product, "collective_discount", None)
+    if collective_discount_value is None:
+        collective_discount_value = 0.0
+    try:
+        collective_discount_value = float(collective_discount_value)
+    except (TypeError, ValueError):
+        collective_discount_value = 0.0
 
-    # if not product.shipping_profile_id:
-    #     logger_instance.warning(f"No shipping profile ID for {product.sku}. V&R shipping details in client will use defaults.")
-    # # Else: If you have shipping profile logic, populate keys like 'shipping_europe_fee', etc.
-    # # payload['shipping_europe_fee'] = ...
+    payload["vr_collective_discount"] = (
+        f"{collective_discount_value:.2f}"
+        if collective_discount_value
+        else None
+    )
+    payload["collective_discount"] = collective_discount_value
 
+    price_notax_value = getattr(product, "price_notax", None)
+    if price_notax_value is None:
+        price_notax_value = product.base_price
+    payload["price_notax"] = price_notax_value
 
-    # --- Shipping --- (Placeholder - requires detailed logic)
-    if product.shipping_profile_id:
-        logger_instance.info(f"Shipping profile ID {product.shipping_profile_id} for {product.sku} needs mapping to V&R fields.")
-        # TODO: Implement logic to fetch ShippingProfile by ID, then extract and map details to:
-        # payload["ShippingAvailableForLocalPickup"] = resolved_profile.allows_pickup 
-        # payload["ShippingAvailableForShipment"] = resolved_profile.allows_shipment
-        # payload["ShippingCostsUK"] = resolved_profile.get_cost("UK") 
-        # payload["ShippingCostsEurope"] = resolved_profile.get_cost("Europe")
-        # payload["ShippingCostsUSA"] = resolved_profile.get_cost("USA")
-        # payload["ShippingCostsROW"] = resolved_profile.get_cost("ROW")
-        # This depends on your ShippingProfile model and how V&R expects these.
-        # For now, these fields will be omitted or rely on V&R exporter defaults if not explicitly set.
-    else:
-        logger_instance.warning(f"No shipping profile ID for {product.sku}. V&R shipping details will be default/minimal.")
+    processing_time_value = getattr(product, "processing_time", None)
+    if processing_time_value is None:
+        processing_time_value = 3
+    payload["processing_time"] = str(processing_time_value)
+    payload["time_unit"] = "Days"
+
+    payload["available_for_shipment"] = bool(getattr(product, "available_for_shipment", True))
+    payload["local_pickup"] = bool(getattr(product, "local_pickup", False))
+
+    # --- Shipping Fees ---
+    default_shipping = {
+        "uk": "75",
+        "europe": "50",
+        "usa": "100",
+        "world": "150",
+    }
+
+    shipping_rates = default_shipping.copy()
+
+    if getattr(product, "shipping_profile_id", None):
+        profile = getattr(product, "shipping_profile", None)
+        if profile is None:
+            result = await db.execute(
+                select(ShippingProfile).where(ShippingProfile.id == product.shipping_profile_id)
+            )
+            profile = result.scalar_one_or_none()
+
+        if profile and profile.rates:
+            def _format_rate(value: Any, fallback: str) -> str:
+                try:
+                    return (
+                        f"{float(value):.2f}".rstrip("0").rstrip(".")
+                        if value is not None
+                        else fallback
+                    )
+                except (TypeError, ValueError):
+                    return fallback
+
+            shipping_rates = {
+                "uk": _format_rate(profile.rates.get("uk"), shipping_rates["uk"]),
+                "europe": _format_rate(profile.rates.get("europe"), shipping_rates["europe"]),
+                "usa": _format_rate(profile.rates.get("usa"), shipping_rates["usa"]),
+                "world": _format_rate(profile.rates.get("row"), shipping_rates["world"]),
+            }
+
+    payload["shipping_uk_fee"] = shipping_rates["uk"]
+    payload["shipping_europe_fee"] = shipping_rates["europe"]
+    payload["shipping_usa_fee"] = shipping_rates["usa"]
+    payload["shipping_world_fee"] = shipping_rates["world"]
+    payload["shipping_fees"] = shipping_rates
+
+    if not getattr(product, "shipping_profile_id", None):
+        logger_instance.warning(
+            f"No shipping profile ID for {product.sku}. Using default V&R shipping fees."
+        )
 
     # Log the final payload before returning
     try:

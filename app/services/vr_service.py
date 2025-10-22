@@ -16,6 +16,7 @@ from app.models.product import Product
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.vr import VRListing
 from app.models.sync_event import SyncEvent
+from app.models.shipping import ShippingProfile
 
 logger = logging.getLogger(__name__)
 
@@ -475,23 +476,43 @@ class VRService:
                 'brand': product.brand or '',
                 'model': product.model or '',
                 'price': str(product.base_price) if product.base_price else '0',
-                'year': str(product.year) if product.year else None,  # Pass None not empty string for Selenium check
-                'finish': product.finish if product.finish else None,  # Pass None not empty string for Selenium check
+                'year': str(product.year) if product.year else None,
+                'finish': product.finish if product.finish else None,
                 'description': product.description or '',
-                'external_id': product.sku,  # Use SKU as external ID for V&R
-                
-                # V&R specific fields with defaults
-                'show_vat': True,
-                'call_for_price': False,
-                'in_collective': False,
-                'in_inventory': True,
-                'in_reseller': False,
-                'buy_now': False,
-                'processing_time': '3',
+                'external_id': product.sku,
+
+                # V&R specific fields
+                'vr_show_vat': bool(getattr(product, 'show_vat', True)),
+                'vr_call_for_price': False,
+                'vr_in_collective': bool(getattr(product, 'in_collective', False)),
+                'vr_in_inventory': bool(getattr(product, 'in_inventory', True)),
+                'vr_in_reseller': bool(getattr(product, 'in_reseller', False)),
+                'vr_buy_now': bool(getattr(product, 'buy_now', False)),
+                'processing_time': str(getattr(product, 'processing_time', 3) or 3),
                 'time_unit': 'Days',
-                'shipping': True,
-                'local_pickup': False,
+                'available_for_shipment': bool(getattr(product, 'available_for_shipment', True)),
+                'local_pickup': bool(getattr(product, 'local_pickup', False)),
             }
+
+            collective_discount_value = getattr(product, 'collective_discount', None)
+            if collective_discount_value is None:
+                collective_discount_value = 0.0
+            try:
+                collective_discount_value = float(collective_discount_value)
+            except (TypeError, ValueError):
+                collective_discount_value = 0.0
+
+            product_data['vr_collective_discount'] = (
+                f"{collective_discount_value:.2f}"
+                if collective_discount_value
+                else None
+            )
+            product_data['collective_discount'] = collective_discount_value
+
+            price_notax_value = getattr(product, 'price_notax', None)
+            if price_notax_value is None:
+                price_notax_value = product.base_price
+            product_data['price_notax'] = price_notax_value
 
             if override_price is not None:
                 try:
@@ -503,37 +524,72 @@ class VRService:
                 product_data['notes'] = vr_options['notes']
             
             # Add shipping fees (use defaults or extract from reverb_data if available)
+            default_shipping = {
+                'uk': '75',
+                'europe': '50',
+                'usa': '100',
+                'world': '150'
+            }
+
+            shipping_rates = default_shipping.copy()
+
             if reverb_data and 'shipping' in reverb_data:
-                # Try to extract shipping from Reverb data
-                shipping_rates = reverb_data.get('shipping', {}).get('rates', [])
-                shipping_fees = {
-                    'europe': '50',
-                    'usa': '100', 
-                    'uk': '45',
-                    'world': '150'
-                }
-                
-                for rate in shipping_rates:
+                shipping_data = reverb_data.get('shipping', {}).get('rates', [])
+                for rate in shipping_data:
                     region = rate.get('region_code', '')
                     amount = rate.get('rate', {}).get('amount', '')
-                    if region == 'GB' and amount:
-                        shipping_fees['uk'] = str(int(float(amount)))
-                    elif region == 'US' and amount:
-                        shipping_fees['usa'] = str(int(float(amount)))
-                    elif region in ['EUR_EU', 'EU'] and amount:
-                        shipping_fees['europe'] = str(int(float(amount)))
-                    elif region == 'XX' and amount:
-                        shipping_fees['world'] = str(int(float(amount)))
-                
-                product_data['shipping_fees'] = shipping_fees
-            else:
-                # Default shipping fees
-                product_data['shipping_fees'] = {
-                    'europe': '50',
-                    'usa': '100',
-                    'uk': '45',
-                    'world': '150'
-                }
+                    try:
+                        normalized = (
+                            f"{float(amount):.2f}".rstrip('0').rstrip('.')
+                            if amount is not None
+                            else None
+                        )
+                    except (TypeError, ValueError):
+                        normalized = None
+
+                    if not normalized:
+                        continue
+
+                    if region == 'GB':
+                        shipping_rates['uk'] = normalized
+                    elif region == 'US':
+                        shipping_rates['usa'] = normalized
+                    elif region in ['EUR_EU', 'EU']:
+                        shipping_rates['europe'] = normalized
+                    elif region == 'XX':
+                        shipping_rates['world'] = normalized
+
+            if getattr(product, 'shipping_profile_id', None):
+                profile = getattr(product, 'shipping_profile', None)
+                if profile is None:
+                    profile_result = await self.db.execute(
+                        select(ShippingProfile).where(ShippingProfile.id == product.shipping_profile_id)
+                    )
+                    profile = profile_result.scalar_one_or_none()
+
+                if profile and profile.rates:
+                    def _format_rate(value, fallback):
+                        try:
+                            return (
+                                f"{float(value):.2f}".rstrip('0').rstrip('.')
+                                if value is not None
+                                else fallback
+                            )
+                        except (TypeError, ValueError):
+                            return fallback
+
+                    shipping_rates = {
+                        'uk': _format_rate(profile.rates.get('uk'), shipping_rates['uk']),
+                        'europe': _format_rate(profile.rates.get('europe'), shipping_rates['europe']),
+                        'usa': _format_rate(profile.rates.get('usa'), shipping_rates['usa']),
+                        'world': _format_rate(profile.rates.get('row'), shipping_rates['world']),
+                    }
+
+            product_data['shipping_uk_fee'] = shipping_rates['uk']
+            product_data['shipping_europe_fee'] = shipping_rates['europe']
+            product_data['shipping_usa_fee'] = shipping_rates['usa']
+            product_data['shipping_world_fee'] = shipping_rates['world']
+            product_data['shipping_fees'] = shipping_rates
             
             # Extract images from Reverb API data and transform to MAX_RES
             all_images = []

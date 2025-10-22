@@ -717,6 +717,11 @@ class VintageAndRareClient:
                     lambda: self._run_selenium_automation(form_data, test_mode, db_session) # Pass prepared data
                 )
 
+                if result.get("status") == "success":
+                    result.setdefault("payload", product_data)
+                    result.setdefault("form_data", form_data)
+                    result.setdefault("shipping_fees", form_data.get("shipping_fees"))
+
                 # 4. If submission was successful and we need ID resolution, try VRExportService here
                 if (result.get("status") == "success" and 
                     result.get("needs_id_resolution") and 
@@ -737,7 +742,8 @@ class VintageAndRareClient:
                             expected_model=form_data.get('model_name', ''),
                             expected_year=form_data.get('year', ''),
                             expected_category=form_data.get('category', ''),
-                            expected_sku=product_data.get('external_id', '')  # ✅ Use original product_data SKU
+                            expected_sku=product_data.get('external_id', ''),  # ✅ Use original product_data SKU
+                            submission_payload=product_data
                         )
                         
                         if vr_id:
@@ -1170,13 +1176,14 @@ class VintageAndRareClient:
             return None
 
     async def _get_newly_created_item_id_with_verification(
-        self, 
-        db_session, 
-        expected_brand: str, 
-        expected_model: str, 
-        expected_year: str, 
+        self,
+        db_session,
+        expected_brand: str,
+        expected_model: str,
+        expected_year: str,
         expected_category: str,
-        expected_sku: str = ""  # ✅ Add SKU parameter
+        expected_sku: str = "",
+        submission_payload: Optional[Dict[str, Any]] = None,
     ):
         """
         Enhanced ID resolution using direct CSV download (single download)
@@ -1286,7 +1293,12 @@ class VintageAndRareClient:
                 logger.info(f"   Score: {best_match['match_score']}/10")
                 
                 # Create platform entries with correct SKU
-                await self._create_platform_entries(db_session, best_match, expected_sku)
+                await self._create_platform_entries(
+                    db_session,
+                    best_match,
+                    expected_sku,
+                    submission_payload=submission_payload,
+                )
                 
                 return best_match['vr_id']
             
@@ -1297,7 +1309,13 @@ class VintageAndRareClient:
             logger.error(f"Error in enhanced ID resolution: {str(e)}")
             return None
     
-    async def _create_platform_entries(self, db_session, vr_item_data, original_sku):
+    async def _create_platform_entries(
+        self,
+        db_session,
+        vr_item_data,
+        original_sku,
+        submission_payload: Optional[Dict[str, Any]] = None,
+    ):
         """Create platform_common and vr_listing entries for the newly created V&R item"""
         try:
             from app.models import PlatformCommon, VRListing, Product
@@ -1326,6 +1344,15 @@ class VintageAndRareClient:
             result = await db_session.execute(query)
             platform_common = result.scalar_one_or_none()
             
+            metadata = {
+                "vr_listing_id": vr_item_data['vr_id'],
+                "brand": vr_item_data.get('brand'),
+                "model": vr_item_data.get('model'),
+                "source": "vr_listing_creation",
+            }
+            if submission_payload:
+                metadata["payload"] = submission_payload
+
             if not platform_common:
                 # Create new platform_common entry
                 platform_common = PlatformCommon(
@@ -1336,7 +1363,8 @@ class VintageAndRareClient:
                     sync_status=SyncStatus.SYNCED,
                     last_sync=datetime.now(),
                     created_at=datetime.now(),
-                    listing_url=f"https://www.vintageandrare.com/product/{vr_item_data['vr_id']}"  # ✅ Added
+                    listing_url=f"https://www.vintageandrare.com/product/{vr_item_data['vr_id']}",
+                    platform_specific_data=metadata,
                 )
                 db_session.add(platform_common)
                 await db_session.flush()  # Get the ID
@@ -1347,7 +1375,10 @@ class VintageAndRareClient:
                 platform_common.status = ListingStatus.ACTIVE.value
                 platform_common.sync_status = SyncStatus.SYNCED
                 platform_common.last_sync = datetime.now()
-                platform_common.listing_url = f"https://www.vintageandrare.com/product/{vr_item_data['vr_id']}"  # ✅ Added 29/05/25
+                platform_common.listing_url = f"https://www.vintageandrare.com/product/{vr_item_data['vr_id']}"
+                existing_meta = dict(platform_common.platform_specific_data or {})
+                existing_meta.update(metadata)
+                platform_common.platform_specific_data = existing_meta
                 logger.info(f"✅ Updated existing platform_common entry with external_id={vr_item_data['vr_id']}")
                 
             
@@ -1357,6 +1388,11 @@ class VintageAndRareClient:
                 result = await db_session.execute(query)
                 vr_listing = result.scalar_one_or_none()
                 
+                price_notax_value = product.price_notax if product.price_notax is not None else product.base_price
+                processing_time_value = product.processing_time if product.processing_time is not None else 3
+                show_vat = product.show_vat if product.show_vat is not None else True
+                collective_discount_value = product.collective_discount if product.collective_discount is not None else 0.0
+
                 if not vr_listing:
                     # Create new VRListing entry
                     vr_listing = VRListing(
@@ -1365,15 +1401,19 @@ class VintageAndRareClient:
                         in_collective=product.in_collective or False,
                         in_inventory=product.in_inventory or True,
                         in_reseller=product.in_reseller or False,
-                        collective_discount=product.collective_discount,
-                        price_notax=product.price_notax,
-                        show_vat=product.show_vat or True,
-                        processing_time=product.processing_time,
+                        collective_discount=collective_discount_value,
+                        price_notax=price_notax_value,
+                        show_vat=show_vat,
+                        processing_time=processing_time_value,
                         inventory_quantity=1,
                         vr_state=ListingStatus.ACTIVE.value,
                         created_at=datetime.now(),  # ✅ Naive datetime
                         updated_at=datetime.now(),  # ✅ Naive datetime
                         last_synced_at=datetime.now(),  # ✅ Naive datetime
+                        extended_attributes={
+                            "match": vr_item_data,
+                            "payload": submission_payload,
+                        }
                     )
                     db_session.add(vr_listing)
                     logger.info(f"✅ Created new VRListing entry")
@@ -1383,6 +1423,18 @@ class VintageAndRareClient:
                     vr_listing.vr_state = ListingStatus.ACTIVE.value
                     vr_listing.updated_at = datetime.now()
                     vr_listing.last_synced_at = datetime.now()
+                    vr_listing.collective_discount = collective_discount_value
+                    vr_listing.processing_time = processing_time_value
+                    vr_listing.show_vat = show_vat
+                    vr_listing.in_collective = product.in_collective or False
+                    vr_listing.in_inventory = product.in_inventory or True
+                    vr_listing.in_reseller = product.in_reseller or False
+                    vr_listing.price_notax = price_notax_value
+                    existing_ext = dict(vr_listing.extended_attributes or {})
+                    existing_ext.update({"match": vr_item_data})
+                    if submission_payload:
+                        existing_ext["payload"] = submission_payload
+                    vr_listing.extended_attributes = existing_ext
                     logger.info(f"✅ Updated existing VRListing entry")
             except Exception as vr_listing_error:
                 logger.warning(f"⚠️  VRListing table not available or error: {str(vr_listing_error)}")

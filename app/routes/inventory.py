@@ -513,6 +513,12 @@ async def _prepare_vr_payload_from_product_object(
     payload["shipping_world_fee"] = shipping_rates["world"]
     payload["shipping_fees"] = shipping_rates
 
+    logger_instance.info(
+        "Prepared V&R payload shipping fees for %s: %s",
+        product.sku,
+        shipping_rates,
+    )
+
     if not getattr(product, "shipping_profile_id", None):
         logger_instance.warning(
             f"No shipping profile ID for {product.sku}. Using default V&R shipping fees."

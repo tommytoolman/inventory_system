@@ -469,13 +469,34 @@ def handle_shipping_fees(driver, item_data):
             
             region_row = ships_to_div.find_element(By.XPATH, region_xpath)
             
-            if region_key in shipping_fees and shipping_fees[region_key]:
-                # Update fee
-                print(f"Setting {region_text} shipping fee to {shipping_fees[region_key]}")
-                fee_inputs = region_row.find_elements(By.NAME, "shipping_fees_fee[]")
-                if fee_inputs:
-                    fee_input = fee_inputs[0]
-                    driver.execute_script("arguments[0].value = arguments[1];", fee_input, shipping_fees[region_key])
+                if region_key in shipping_fees and shipping_fees[region_key]:
+                    # Update fee
+                    print(f"Setting {region_text} shipping fee to {shipping_fees[region_key]}")
+                    fee_inputs = region_row.find_elements(By.NAME, "shipping_fees_fee[]")
+                    if fee_inputs:
+                        fee_input = fee_inputs[0]
+                        try:
+                            fee_input.clear()
+                        except Exception:
+                            driver.execute_script("arguments[0].value = '';", fee_input)
+
+                        # Use send_keys to trigger change events, then ensure value is set via JS as fallback
+                        try:
+                            fee_input.send_keys(str(shipping_fees[region_key]))
+                        except Exception:
+                            pass
+
+                        driver.execute_script(
+                            "arguments[0].value = arguments[1];",
+                            fee_input,
+                            shipping_fees[region_key],
+                        )
+
+                        # Trigger change event to ensure V&R registers the value
+                        driver.execute_script(
+                            "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));",
+                            fee_input,
+                        )
             else:
                 # Remove regions we don't want to keep
                 print(f"Removing {region_text} shipping option (no fee provided)")

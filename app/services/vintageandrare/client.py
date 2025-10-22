@@ -1360,7 +1360,7 @@ class VintageAndRareClient:
                     platform_name="vr",
                     external_id=vr_item_data['vr_id'],  # ✅ This is the V&R item ID (122816)
                     status=ListingStatus.ACTIVE.value,
-                    sync_status=SyncStatus.SYNCED,
+                    sync_status=SyncStatus.SYNCED.value.upper(),
                     last_sync=datetime.now(),
                     created_at=datetime.now(),
                     listing_url=f"https://www.vintageandrare.com/product/{vr_item_data['vr_id']}",
@@ -1373,7 +1373,7 @@ class VintageAndRareClient:
                 # Update existing platform_common entry
                 platform_common.external_id = vr_item_data['vr_id']
                 platform_common.status = ListingStatus.ACTIVE.value
-                platform_common.sync_status = SyncStatus.SYNCED
+                platform_common.sync_status = SyncStatus.SYNCED.value.upper()
                 platform_common.last_sync = datetime.now()
                 platform_common.listing_url = f"https://www.vintageandrare.com/product/{vr_item_data['vr_id']}"
                 existing_meta = dict(platform_common.platform_specific_data or {})

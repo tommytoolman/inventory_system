@@ -590,6 +590,12 @@ class VRService:
             product_data['shipping_usa_fee'] = shipping_rates['usa']
             product_data['shipping_world_fee'] = shipping_rates['world']
             product_data['shipping_fees'] = shipping_rates
+
+            logger.info(
+                "VRService payload shipping fees for %s: %s",
+                product.sku,
+                shipping_rates,
+            )
             
             # Extract images from Reverb API data and transform to MAX_RES
             all_images = []
@@ -792,7 +798,9 @@ class VRService:
                 )
                 platform_common = existing_platform_common.scalar_one_or_none()
 
-                sync_status = SyncStatus.PENDING.value if needs_resolution else SyncStatus.SYNCED.value
+                sync_status = (
+                    SyncStatus.PENDING.value if needs_resolution else SyncStatus.SYNCED.value
+                ).upper()
                 external_id = vr_listing_id or result.get("external_id") or product.sku
 
                 if platform_common:

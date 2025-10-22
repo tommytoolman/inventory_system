@@ -144,5 +144,21 @@
     "shopify_categories": {
       "shopify_category_path": "Acoustic Guitars / Resonator"
     }
+  },
+  "Electric Guitars / Lap Steel": {
+    "reverb_path": "Electric Guitars / Lap Steel",
+    "vr_categories": {
+      "vr_category_1_id": "51",
+      "vr_category_1_name": "Guitars",
+      "vr_category_2_id": "231",
+      "vr_category_2_name": "Lap & pedal steel"
+    },
+    "ebay_categories": {
+      "ebay_category_id": "181220",
+      "ebay_category_path_for_reference": "Musical Instruments & DJ Equipment:Guitars & Basses:Lap & Pedal Steel Guitars"
+    },
+    "shopify_categories": {
+      "shopify_category_path": "Electric Guitars / Lap Steel"
+    }
   }
 }

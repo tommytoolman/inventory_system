@@ -1249,7 +1249,7 @@ class EbayService:
                 platform_name='ebay',
                 external_id=ebay_item_id,
                 status=ListingStatus.ACTIVE,  # Changed from listing_status
-                sync_status=SyncStatus.SYNCED,
+                sync_status=SyncStatus.SYNCED.value.upper(),
                 last_sync=datetime.now(timezone.utc).replace(tzinfo=None),  # Changed from last_sync_date and removed timezone
                 listing_url=f"https://www.ebay.co.uk/itm/{ebay_item_id}",
                 platform_specific_data={
@@ -1480,7 +1480,7 @@ class EbayService:
                     .where(PlatformCommon.id == db_platform_id)
                     .values(
                         last_sync=timestamp,
-                        sync_status=SyncStatus.SYNCED,
+                        sync_status=SyncStatus.SYNCED.value.upper(),
                         updated_at=timestamp,
                     )
                 )

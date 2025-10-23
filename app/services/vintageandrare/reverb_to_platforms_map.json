@@ -160,5 +160,21 @@
     "shopify_categories": {
       "shopify_category_path": "Electric Guitars / Lap Steel"
     }
+  },
+  "Amps / Guitar Amps / Guitar Combos": {
+    "reverb_path": "Amps / Guitar Amps / Guitar Combos",
+    "vr_categories": {
+      "vr_category_1_id": "64",
+      "vr_category_1_name": "Amps & Cabinets",
+      "vr_category_2_id": "87",
+      "vr_category_2_name": "Guitar amplifiers"
+    },
+    "ebay_categories": {
+      "ebay_category_id": "121169",
+      "ebay_category_path_for_reference": "Musical Instruments & DJ Equipment > Guitars & Basses > Guitar Amplifiers"
+    },
+    "shopify_categories": {
+      "shopify_category_path": "Amps / Guitar Amps / Guitar Combos"
+    }
   }
 }

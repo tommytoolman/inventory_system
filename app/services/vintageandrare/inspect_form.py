@@ -1355,7 +1355,7 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
                 item_data['images'] = item_data['images'][:20]
             
             print(f"Processing {len(item_data['images'])} images...")
-            import os, sys
+            import sys
             project_root = os.path.expanduser('~/Documents/GitHub/PROJECTS/HANKS/inventory_system')
             sys.path.append(project_root)
             
@@ -1376,7 +1376,6 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
                             continue
                     else:
                         # Handle local file
-                        import os
                         base_path = Path(__file__).resolve().parent.parent.parent.parent
                         abs_path = os.path.join(str(base_path), "Wxke_YkD.jpeg")
                         print(f"Checking local file at: {abs_path}")

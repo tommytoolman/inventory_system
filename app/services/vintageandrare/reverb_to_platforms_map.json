@@ -164,10 +164,10 @@
   "Amps / Guitar Amps / Guitar Combos": {
     "reverb_path": "Amps / Guitar Amps / Guitar Combos",
     "vr_categories": {
-      "vr_category_1_id": "64",
-      "vr_category_1_name": "Amps & Cabinets",
-      "vr_category_2_id": "87",
-      "vr_category_2_name": "Guitar amplifiers"
+      "vr_category_1_id": "53",
+      "vr_category_1_name": "Amps",
+      "vr_category_2_id": "183",
+      "vr_category_2_name": "Combo"
     },
     "ebay_categories": {
       "ebay_category_id": "121169",

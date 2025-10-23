@@ -1,6 +1,7 @@
 # app/services/vintageandrare_service.py
 import asyncio
 import logging
+import os
 import uuid
 import pandas as pd
 import json
@@ -765,7 +766,6 @@ class VRService:
             
             # Create the listing using Selenium
             # Check for test mode from environment variable
-            import os
             test_mode = os.getenv('VR_TEST_MODE', 'false').lower() == 'true'
             
             logger.info(f"Creating V&R listing via Selenium for SKU: {product.sku} (test_mode={test_mode})")

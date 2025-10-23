@@ -28,7 +28,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
 
-from sqlalchemy import select, or_, distinct, func, desc, and_, delete
+from sqlalchemy import select, or_, distinct, func, desc, and_, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload
 
@@ -201,71 +201,6 @@ def generate_shopify_handle(brand: Optional[str], model: Optional[str], sku: Opt
     return text.strip('-')
 
 
-_reverb_to_platforms_map_cache = None
-_ebay_to_platforms_map_cache = None
-_vr_to_platforms_map_cache = None
-_shopify_to_platforms_map_cache = None
-
-def get_reverb_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
-    """Loads the Reverb to other platforms category mapping file."""
-    global _reverb_to_platforms_map_cache
-    if _reverb_to_platforms_map_cache is None:
-        map_path_str = "" # For logging in case of error before path is set
-        try:
-            # Path relative to this file (inventory.py in app/routes)
-            # to where you placed the new map file: app/services/vintageandrare/reverb_to_platforms_map.json
-            map_path = Path(__file__).parent.parent / "services" / "vintageandrare" / "reverb_to_platforms_map.json"
-            map_path_str = str(map_path) # For logging
-            with open(map_path, 'r') as f:
-                _reverb_to_platforms_map_cache = json.load(f)
-            logger_instance.info(f"Reverb-to-Platforms category map loaded successfully from {map_path_str}")
-        except FileNotFoundError:
-            logger_instance.error(f"CRITICAL: Reverb-to-Platforms category map file not found at {map_path_str}. V&R/eBay category mapping will fail.")
-            _reverb_to_platforms_map_cache = {} # Return empty dict to prevent repeated load attempts
-        except json.JSONDecodeError:
-            logger_instance.error(f"CRITICAL: Error decoding JSON from Reverb-to-Platforms map file at {map_path_str}.")
-            _reverb_to_platforms_map_cache = {}
-        except Exception as e:
-            logger_instance.error(f"CRITICAL: Failed to load Reverb-to-Platforms category map from {map_path_str}: {e}", exc_info=True)
-            _reverb_to_platforms_map_cache = {}
-    return _reverb_to_platforms_map_cache
-
-def get_ebay_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
-    """Placeholder for loading eBay to other platforms category mapping."""
-    # global _ebay_to_platforms_map_cache
-    # if _ebay_to_platforms_map_cache is None:
-    #     # Logic to load a map like:
-    #     # map_path = Path(__file__).parent.parent / "services" / "mappings" / "ebay_to_platforms_map.json"
-    #     # ... load logic ...
-    #     logger_instance.info("eBay-to-Platforms category map loaded (placeholder).")
-    # return _ebay_to_platforms_map_cache or {}
-    logger_instance.info("get_ebay_to_platforms_map is a placeholder and not yet implemented.")
-    return {} # Return empty dict for now
-
-def get_shopify_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
-    """Placeholder for loading &Shopify to other platforms category mapping."""
-    # global _vr_to_platforms_map_cache
-    # if _vr_to_platforms_map_cache is None:
-    #     # Logic to load a map like:
-    #     # map_path = Path(__file__).parent.parent / "services" / "mappings" / "vr_to_platforms_map.json"
-    #     # ... load logic ...
-    #     logger_instance.info("V&R-to-Platforms category map loaded (placeholder).")
-    # return _vr_to_platforms_map_cache or {}
-    logger_instance.info("get_shopify_to_platforms_map is a placeholder and not yet implemented.")
-    return {} # Return empty dict for now
-
-def get_vr_to_platforms_map(logger_instance: logging.Logger) -> Dict[str, Any]:
-    """Placeholder for loading V&R to other platforms category mapping."""
-    # global _vr_to_platforms_map_cache
-    # if _vr_to_platforms_map_cache is None:
-    #     # Logic to load a map like:
-    #     # map_path = Path(__file__).parent.parent / "services" / "mappings" / "vr_to_platforms_map.json"
-    #     # ... load logic ...
-    #     logger_instance.info("V&R-to-Platforms category map loaded (placeholder).")
-    # return _vr_to_platforms_map_cache or {}
-    logger_instance.info("get_vr_to_platforms_map is a placeholder and not yet implemented.")
-    return {} # Return empty dict for now
-
 async def _prepare_vr_payload_from_product_object(
     product: Product, 
     db: AsyncSession,
@@ -296,57 +231,94 @@ async def _prepare_vr_payload_from_product_object(
         logger_instance.error(f"Product SKU '{product.sku}' has no Reverb category (product.category is None or empty). Cannot map to V&R.")
         raise ValueError(f"Product SKU '{product.sku}' has no Reverb category set, which is needed for V&R mapping.")
 
-    # Load the new mapping file (reverb_to_platforms_map.json) using the new helper
-    reverb_map_data = get_reverb_to_platforms_map(logger_instance) 
-    
-    # Attempt to get the mapping for the product's Reverb category
-    # The keys in reverb_to_platforms_map.json are the Reverb category strings
-    platform_specific_mappings = reverb_map_data.get(product_reverb_category) 
+    # Resolve category mapping from platform_category_mappings instead of JSON cache
+    category_lookup_query = text(
+        """
+        SELECT
+            vr_category_id,
+            vr_subcategory_id,
+            vr_sub_subcategory_id,
+            vr_sub_sub_subcategory_id
+        FROM platform_category_mappings
+        WHERE source_platform = 'reverb'
+          AND target_platform = 'vintageandrare'
+          AND lower(source_category_name) = :category_name
+        ORDER BY COALESCE(is_verified, false) DESC,
+                 COALESCE(confidence_score, 0) DESC,
+                 id ASC
+        LIMIT 1
+        """
+    )
 
-    if not platform_specific_mappings:
-        logger_instance.error(f"No entry found for Reverb category '{product_reverb_category}' (SKU: '{product.sku}') in the reverb_to_platforms_map.json file.")
-        # This is where you'll later trigger the UI for user selection if you build that feature.
-        # For now, we raise an error to indicate the mapping is missing and needs to be added to the JSON map.
-        raise ValueError(f"Category mapping missing for Reverb category '{product_reverb_category}' (SKU: '{product.sku}'). Please add this Reverb category to the reverb_to_platforms_map.json file.")
+    mapping_result = await db.execute(
+        category_lookup_query,
+        {"category_name": product_reverb_category.lower()}
+    )
+    mapping_row = mapping_result.mappings().first()
 
-    vr_category_settings = platform_specific_mappings.get("vr_categories")
+    if not mapping_row:
+        # Fallback: try a prefix match to allow for minor label differences
+        logger_instance.warning(
+            "No exact V&R mapping found for '%s'; attempting prefix search in platform_category_mappings.",
+            product_reverb_category,
+        )
+        fuzzy_query = text(
+            """
+            SELECT
+                vr_category_id,
+                vr_subcategory_id,
+                vr_sub_subcategory_id,
+                vr_sub_sub_subcategory_id
+            FROM platform_category_mappings
+            WHERE source_platform = 'reverb'
+              AND target_platform = 'vintageandrare'
+              AND lower(source_category_name) LIKE :category_like
+            ORDER BY COALESCE(is_verified, false) DESC,
+                     COALESCE(confidence_score, 0) DESC,
+                     id ASC
+            LIMIT 1
+            """
+        )
+        fuzzy_result = await db.execute(
+            fuzzy_query,
+            {"category_like": f"{product_reverb_category.lower()}%"}
+        )
+        mapping_row = fuzzy_result.mappings().first()
 
-    if not vr_category_settings: # Check if the "vr_categories" sub-object exists in the map
-        logger_instance.error(f"'vr_categories' section not found in reverb_to_platforms_map.json for Reverb category '{product_reverb_category}' (SKU: '{product.sku}').")
-        raise ValueError(f"V&R category settings ('vr_categories' object) are missing in the map for '{product_reverb_category}' (SKU: '{product.sku}').")
-    
-    # Extract V&R category names from the map based on the structure we agreed on
-    # (e.g., {"vr_categories": {"vr_category_1_name": "...", "vr_category_2_name": "..."}})
-    payload["Category"] = vr_category_settings.get("vr_category_1_id")
-    payload["SubCategory1"] = vr_category_settings.get("vr_category_2_id")
-    payload["SubCategory2"] = vr_category_settings.get("vr_category_3_id")
-    payload["SubCategory3"] = vr_category_settings.get("vr_category_4_id") # For V&R, often up to 2 or 3 levels are used
+    if not mapping_row or not mapping_row.get("vr_category_id"):
+        logger_instance.error(
+            "No platform_category_mappings entry found for Reverb category '%s' (SKU '%s').",
+            product_reverb_category,
+            product.sku,
+        )
+        raise ValueError(
+            f"Category mapping missing for Reverb category '{product_reverb_category}' (SKU: '{product.sku}'). "
+            "Please add this category to the platform_category_mappings table."
+        )
 
-    if not payload["Category"]:
-        # i.e. mapping structure was present for the Reverb category but "vr_category_1_id" itself was missing or null within that structure.
-        logger_instance.error(f"V&R main category ('vr_category_1_id') is not defined or is null in reverb_to_platforms_map.json for Reverb category '{product_reverb_category}' (SKU: '{product.sku}'). This field is mandatory for V&R.")
-        raise ValueError(f"V&R main category (vr_category_1_id) is missing in the map details for '{product_reverb_category}' (SKU: '{product.sku}').")
+    payload["Category"] = mapping_row.get("vr_category_id")
+    if mapping_row.get("vr_subcategory_id"):
+        payload["SubCategory1"] = mapping_row.get("vr_subcategory_id")
+    if mapping_row.get("vr_sub_subcategory_id"):
+        payload["SubCategory2"] = mapping_row.get("vr_sub_subcategory_id")
+    if mapping_row.get("vr_sub_sub_subcategory_id"):
+        payload["SubCategory3"] = mapping_row.get("vr_sub_sub_subcategory_id")
 
-    # Clean up payload by removing any subcategory keys that ended up with a None value
-    # This prevents sending {"SubCategory2": null} if "vr_category_2_id" was missing or null in the map.
-    keys_to_delete = []
-    for i in range(1, 5): # Check SubCategory1 through SubCategory4 (assuming max 4 levels for now)
-        key = f"SubCategory{i}"
-        # Ensure the key was added to payload (i.e., it was in vr_category_settings) before checking if its value is None
-        if key in payload and payload[key] is None:
-            keys_to_delete.append(key)
-    for key in keys_to_delete:
-        del payload[key]
-    
     # Construct log message for mapped categories
     log_message_parts = [f"Cat1='{payload.get('Category')}'"]
-    if "SubCategory1" in payload: log_message_parts.append(f"Cat2='{payload.get('SubCategory1')}'")
-    if "SubCategory2" in payload: log_message_parts.append(f"Cat3='{payload.get('SubCategory2')}'")
-    if "SubCategory3" in payload: log_message_parts.append(f"Cat4='{payload.get('SubCategory3')}'") 
-    
+    if payload.get("SubCategory1"):
+        log_message_parts.append(f"Cat2='{payload.get('SubCategory1')}'")
+    if payload.get("SubCategory2"):
+        log_message_parts.append(f"Cat3='{payload.get('SubCategory2')}'")
+    if payload.get("SubCategory3"):
+        log_message_parts.append(f"Cat4='{payload.get('SubCategory3')}'")
+
     logger_instance.info(
-        f"Mapped Reverb category '{product_reverb_category}' to V&R categories: {', '.join(log_message_parts)} for SKU '{product.sku}'."
-    )    
+        "Mapped Reverb category '%s' to V&R categories: %s for SKU '%s'.",
+        product_reverb_category,
+        ', '.join(log_message_parts),
+        product.sku,
+    )
 
     # --- Brand / Maker (With fallback support) ---
     if not product.brand:

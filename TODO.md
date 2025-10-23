@@ -22,6 +22,7 @@
 - [ ] **Dropbox media refresh is inconsistent** – stabilise cache refresh, keep folder tiles a consistent size, and reduce redundant re-renders after multiple reloads.
 - [ ] **Fully automate sync pipeline** – move from operator-triggered runs to scheduled execution; confirm cronjob/worker (including Dropbox refresh) is running and instrument failure alerts.
 - [x] **Offload platform sync workloads** – move long-running sync jobs (especially Vintage & Rare) into background workers/threads so the FastAPI app stays responsive during imports and item creation.
+- [ ] **Product sold flag parity** – ensure `products.is_sold` flips appropriately when listings are ended versus genuine sale events so reporting stays accurate.
 - [ ] **Sync-all queue follow-up** – reconcile the queued `/api/sync/all` background orchestrator with the current batched implementation (status polling, history retention, websocket notifications) so the endpoint remains non-blocking without regressing the latest changes.
 - [ ] **Platform stats ingestion gaps** – fill in watches/likes/views for eBay, Shopify, VR, matching the partial Reverb feed and surface them on dashboards.
 - [ ] **Field coverage audit** – verify every sync run populates mandatory listing fields (shipping, condition, attributes, compliance text) across platforms.
@@ -40,6 +41,7 @@
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 - [ ] **NPI clustering report** – add a New Product Introduction cluster view grouped by category for merch planning.
 - [ ] **Document CLI sync utilities** – in addition to API routes, catalogue every `scripts/` entry point (imports, event processors, VR helpers) that touches the sync flow so the docs cover both web and command-line usage.
+- [ ] **Platform data JSON audit** – standardise how `platform_common.platform_specific_data` is populated across services and document which fields should graduate to structured columns.
 
 ## 🟣 Backlog (Track, revisit as time allows)
 - **Database notes:** Products need `price` mirroring `base_price`, `quantity` defaulting to 1 when not stocked, and image URLs rewritten to Reverb CDN paths after sync runs.

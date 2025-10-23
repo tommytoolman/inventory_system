@@ -7,7 +7,7 @@ import logging
 import json as json_module
 import os
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,7 @@ from app.models.reverb import ReverbListing
 from app.models.shopify import ShopifyListing
 from app.models.ebay import EbayListing
 from app.models.vr import VRListing
+from app.models.shipping import ShippingProfile
 
 from app.services.reverb_service import ReverbService
 from app.services.reverb.client import ReverbClient
@@ -324,10 +325,12 @@ async def _create_product_from_reverb(session: AsyncSession, reverb_data: dict) 
     condition_slug = reverb_data.get('condition', {}).get('slug', 'good')
     product_condition = condition_map.get(condition_slug, ProductCondition.GOOD)
 
-    # Extract processing time from shipping profile
+    # Extract processing time from shipping profile and keep reference
     processing_time = 3  # default
     shipping_profile = reverb_data.get('shipping_profile', {})
+    shipping_profile_id = None
     if shipping_profile and isinstance(shipping_profile, dict):
+        shipping_profile_id = shipping_profile.get('id')
         free_expedited_shipping = shipping_profile.get('free_expedited_shipping', False)
         processing_time = 1 if free_expedited_shipping else 3
 
@@ -363,6 +366,20 @@ async def _create_product_from_reverb(session: AsyncSession, reverb_data: dict) 
         additional_images=additional_images,  # Store additional images as list (will be JSONB)
         processing_time=processing_time
     )
+
+    # Link local shipping profile if we have a Reverb profile id
+    if shipping_profile_id:
+        stmt = select(ShippingProfile).where(ShippingProfile.reverb_profile_id == str(shipping_profile_id))
+        profile_result = await session.execute(stmt)
+        profile_record = profile_result.scalar_one_or_none()
+        if profile_record:
+            product.shipping_profile_id = profile_record.id
+
+    # Capture first video if available
+    videos = reverb_data.get('videos') or []
+    if videos and isinstance(videos, list):
+        first_video = videos[0] or {}
+        product.video_url = first_video.get('url') or product.video_url
 
     session.add(product)
     await session.flush()
@@ -447,6 +464,32 @@ async def _create_reverb_listing(session: AsyncSession, platform_common: Platfor
         reverb_state=reverb_data.get('state', {}).get('slug', 'live'),
         extended_attributes=reverb_data
     )
+
+    shipping_profile = reverb_data.get('shipping_profile') or {}
+    if isinstance(shipping_profile, dict) and shipping_profile.get('id'):
+        reverb_listing.shipping_profile_id = str(shipping_profile.get('id'))
+
+    categories = reverb_data.get('categories') or []
+    if categories:
+        first_category = categories[0] or {}
+        reverb_listing.reverb_category_uuid = first_category.get('uuid') or reverb_listing.reverb_category_uuid
+
+    created_at = reverb_data.get('created_at')
+    if created_at:
+        try:
+            dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            reverb_listing.reverb_created_at = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        except ValueError:
+            logger.debug("Unable to parse reverb created_at %s", created_at)
+
+    published_at = reverb_data.get('published_at')
+    if published_at:
+        try:
+            dt = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+            reverb_listing.reverb_published_at = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        except ValueError:
+            logger.debug("Unable to parse reverb published_at %s", published_at)
+
     session.add(reverb_listing)
     await session.flush()
     logger.info(f"Created reverb_listings entry with ID {reverb_listing.id}")
@@ -463,6 +506,12 @@ async def _create_ebay_listing(session: AsyncSession, product: Product, reverb_d
             'payment_profile_id': os.environ.get('EBAY_PAYMENT_PROFILE_ID', '252544577017'),
             'return_profile_id': os.environ.get('EBAY_RETURN_PROFILE_ID', '252277356017')
         }
+
+        # Override shipping policy if product is tied to a mapped profile
+        if product.shipping_profile_id:
+            shipping_profile = await session.get(ShippingProfile, product.shipping_profile_id)
+            if shipping_profile and shipping_profile.ebay_profile_id:
+                policies['shipping_profile_id'] = shipping_profile.ebay_profile_id
 
         logger.info(f"  Sandbox mode: {sandbox}")
         logger.info(f"  Using eBay policies: {policies}")
@@ -904,6 +953,8 @@ async def reconcile_vr_listing_for_product(session: AsyncSession, product: Produ
                 else:
                     vr_url = str(external_link)
                 platform_common.listing_url = vr_url
+                platform_common.status = ListingStatus.ACTIVE.value
+                platform_common.sync_status = SyncStatus.SYNCED.value
 
                 # Update or create vr_listings entry
                 vr_stmt = select(VRListing).where(VRListing.platform_id == platform_common.id)
@@ -912,6 +963,7 @@ async def reconcile_vr_listing_for_product(session: AsyncSession, product: Produ
 
                 if vr_listing:
                     vr_listing.vr_listing_id = vr_id
+                    vr_listing.vr_state = 'live'
                     logger.info(f"  ✅ Updated VR listing with real ID: {vr_id}")
                 else:
                     # Create vr_listings entry if missing
@@ -920,7 +972,7 @@ async def reconcile_vr_listing_for_product(session: AsyncSession, product: Produ
                         vr_listing_id=vr_id,
                         price_notax=product.base_price,
                         processing_time=product.processing_time or 3,
-                        vr_state='ACTIVE'
+                        vr_state='live'
                     )
                     session.add(vr_listing)
                     logger.info(f"  ✅ Created VR listing record with ID: {vr_id}")

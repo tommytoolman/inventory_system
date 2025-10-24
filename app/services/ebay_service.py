@@ -146,6 +146,10 @@ class EbayService:
             "181220", # Lap & Pedal Steel Guitars
             "159948", # Travel Guitars
             "181219", # Resonators
+            "10179",  # Mandolins & mandolin family
+            "181224", # Mandolas
+            "16218",  # Banjos & folk instruments
+            "16222",  # Ukuleles
         ]
         
         is_musical_instrument = category_id in musical_instrument_categories if category_id else True

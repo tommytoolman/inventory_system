@@ -699,7 +699,7 @@
                         <div class="mb-6">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Shipping Profile</label>
                             <div class="flex items-center space-x-2">
-                                <select id="shipping_profile" name="shipping_profile" 
+                                <select id="shipping_profile" name="shipping_profile" required
                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                     <option value="">-- Select a profile --</option>
                                     <!-- Profiles loaded from API -->
@@ -707,6 +707,7 @@
                                 <!-- Removing the Manage button as per your request -->
                             </div>
                             <p class="mt-2 text-sm text-gray-500">Select a predefined shipping profile or customize below</p>
+                            <p id="shippingProfileError" class="mt-1 text-sm text-red-600 hidden">Please select a shipping profile to enable product creation.</p>
                         </div>
 
                         <!-- Dimensions and Weight in a single row -->
@@ -1119,9 +1120,6 @@
                                     <div class="col-span-2">
                                         <label class="block text-sm font-medium text-gray-700">
                                             SEO Keywords (comma separated)
-                                            <button type="button" id="generate-seo" class="ml-2 px-2 py-1 text-xs bg-gray-200 rounded-md hover:bg-gray-300">
-                                                Generate
-                                            </button>
                                         </label>
                                         <input type="text" name="platform_data__shopify__seo_keywords" id="shopify_seo_keywords"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
@@ -1264,8 +1262,8 @@
                             class="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 font-medium">
                         Save as Draft
                     </button>
-                    <button type="submit"
-                            class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium">
+                    <button type="submit" id="createProductBtn" disabled
+                            class="bg-blue-600 text-white px-6 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium opacity-50 cursor-not-allowed">
                         Create Product
                     </button>
                     </div>
@@ -1284,7 +1282,61 @@ let lastKnownCategoryValue = '';
 const prefillDraftId = {{ prefill_draft_id if prefill_draft_id is not none else 'null' }};
 
 document.addEventListener('DOMContentLoaded', function() {
-    
+    const shippingProfileSelect = document.getElementById('shipping_profile');
+    const createProductBtn = document.getElementById('createProductBtn');
+    const shippingProfileError = document.getElementById('shippingProfileError');
+    let shippingProfilesLoaded = false;
+    let shippingProfilesCache = [];
+
+    function updateCreateButtonState() {
+        if (!createProductBtn) {
+            return;
+        }
+
+        const hasProfile = shippingProfileSelect && shippingProfileSelect.value && shippingProfileSelect.value.trim() !== '';
+
+        if (hasProfile) {
+            createProductBtn.disabled = false;
+            createProductBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            createProductBtn.classList.add('hover:bg-blue-700');
+            if (shippingProfileError) {
+                shippingProfileError.classList.add('hidden');
+            }
+            if (shippingProfileSelect) {
+                shippingProfileSelect.classList.remove('border-red-500');
+            }
+        } else {
+            createProductBtn.disabled = true;
+            createProductBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            createProductBtn.classList.remove('hover:bg-blue-700');
+            if (shippingProfileError) {
+                if (shippingProfilesLoaded) {
+                    shippingProfileError.classList.remove('hidden');
+                } else {
+                    shippingProfileError.classList.add('hidden');
+                }
+            }
+            if (shippingProfileSelect && shippingProfilesLoaded) {
+                shippingProfileSelect.classList.add('border-red-500');
+            }
+        }
+    }
+
+    if (shippingProfileSelect) {
+        shippingProfileSelect.addEventListener('change', () => {
+            updateCreateButtonState();
+
+            if (shippingProfilesCache.length > 0) {
+                const selectedProfile = shippingProfilesCache.find(profile => String(profile.id) === String(shippingProfileSelect.value));
+                if (selectedProfile) {
+                    populateShippingDetails(selectedProfile);
+                }
+            }
+        });
+    }
+
+    updateCreateButtonState();
+
     // Load shipping profiles from Reverb
     loadShippingProfiles();
 
@@ -1683,12 +1735,11 @@ document.addEventListener('DOMContentLoaded', function() {
     window.categoriesLoadPromise = loadPlatformCategories();
     
     async function loadShippingProfiles() {
-        const shippingProfileSelect = document.getElementById('shipping_profile');
         if (!shippingProfileSelect) {
             console.log('Shipping profile select not found');
             return;
         }
-        
+
         try {
             console.log('Loading shipping profiles...');
             // Fetch shipping profiles from the API
@@ -1700,6 +1751,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const profiles = await response.json();
             console.log('Loaded profiles:', profiles);
+            shippingProfilesCache = profiles;
             
             // Clear existing options
             shippingProfileSelect.innerHTML = '<option value="">-- Select a shipping profile --</option>';
@@ -1715,15 +1767,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 shippingProfileSelect.appendChild(option);
             });
             
-            // Add event listener to populate shipping details when a profile is selected
-            shippingProfileSelect.addEventListener('change', function() {
-                const selectedProfile = profiles.find(p => p.id === parseInt(this.value));
+            shippingProfilesLoaded = true;
+            updateCreateButtonState();
+
+            // Populate details if a profile was pre-selected (e.g., from draft)
+            if (shippingProfileSelect.value) {
+                const selectedProfile = profiles.find(p => String(p.id) === String(shippingProfileSelect.value));
                 if (selectedProfile) {
                     populateShippingDetails(selectedProfile);
                 }
-            });
+            }
         } catch (error) {
             console.error('Error loading shipping profiles:', error);
+            shippingProfilesLoaded = false;
+            updateCreateButtonState();
         }
     }
     
@@ -2066,7 +2123,56 @@ document.addEventListener('DOMContentLoaded', function() {
             titleInput.dataset.autoGenerated = 'true';
         });
     }
-    
+
+    const seoKeywordsInput = document.getElementById('shopify_seo_keywords');
+
+    function generateSeoKeywords(force = false) {
+        if (!seoKeywordsInput) {
+            return;
+        }
+
+        const inputIsEmpty = !seoKeywordsInput.value.trim();
+        const shouldGenerate = force ? inputIsEmpty : (inputIsEmpty || seoKeywordsInput.dataset.autoGenerated === 'true');
+        if (!shouldGenerate) {
+            return;
+        }
+
+        const brand = document.getElementById('brand')?.value || '';
+        const model = document.getElementById('model')?.value || '';
+        const category = document.getElementById('category')?.value || '';
+        const finish = document.getElementById('finish')?.value || '';
+
+        const keywords = [brand, model, category, finish, 'vintage', 'instrument']
+            .filter(word => word && word.trim() !== '')
+            .map(word => word.trim().toLowerCase())
+            .filter((word, index, self) => self.indexOf(word) === index);
+
+        if (keywords.length === 0) {
+            return;
+        }
+
+        seoKeywordsInput.value = keywords.join(', ');
+        seoKeywordsInput.dataset.autoGenerated = 'true';
+        seoKeywordsInput.dispatchEvent(new Event('input', { bubbles: true }));
+        seoKeywordsInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (seoKeywordsInput) {
+        seoKeywordsInput.addEventListener('input', () => {
+            seoKeywordsInput.dataset.autoGenerated = 'false';
+        });
+    }
+
+    ['brand', 'model', 'category', 'finish'].forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('input', () => generateSeoKeywords());
+            field.addEventListener('blur', () => generateSeoKeywords());
+        }
+    });
+
+    generateSeoKeywords(true);
+
     // Year/Decade interaction
     const yearInput = document.getElementById('year');
     const decadeSelect = document.getElementById('decade');
@@ -2781,6 +2887,16 @@ function initializeSortable() {
                 // Log each required field for debugging
                 if (field.id === 'category') {
                     console.log(`Validating ${field.id}: value="${field.value}", trimmed="${field.value.trim()}", empty=${!field.value.trim()}`);
+                }
+                if (field.id === 'shipping_profile') {
+                    if (!field.value.trim()) {
+                        isValid = false;
+                        shippingProfilesLoaded = true;
+                        updateCreateButtonState();
+                    } else {
+                        updateCreateButtonState();
+                    }
+                    return;
                 }
                 
                 if (!field.value.trim()) {
@@ -4167,52 +4283,59 @@ function initializeSortable() {
     
         // Make API request
         fetch(`/inventory/api/dropbox/folders?path=${encodeURIComponent(path)}`)
-            .then(response => {
-                // First check status code
-                if (response.status === 202) {
-                    // The operation is still processing
-                    return response.json().then(data => {
-                        console.log("Received 202 status - operation in progress", data);
-                        
-                        // Update loading message
-                        dropboxElements.loading.innerHTML = `
-                            <svg class="animate-spin h-6 w-6 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <p class="text-sm font-medium">${data.message || 'Processing Dropbox request...'}</p>
-                            <p class="text-xs text-gray-500 mt-1">Please wait, this may take a moment...</p>
-                            <button id="dropbox-retry" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-                                Check Again
-                            </button>
-                        `;
-                        
-                        // Add event listener to retry button
-                        const retryButton = document.getElementById('dropbox-retry');
-                        if (retryButton) {
-                            retryButton.addEventListener('click', function() {
-                                loadDropboxFolders(path);
-                            });
-                        }
-                        
-                        // Set a timer to automatically retry after 5 seconds
-                        // setTimeout(() => {
-                        //     loadDropboxFolders(path);
-                        // }, 5000);
-                        
-                        // Signal that this is a pending state, not an error
-                        throw new Error('PENDING');
-                    });
+            .then(async response => {
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (jsonError) {
+                    console.warn('Unable to parse Dropbox folders response as JSON', jsonError);
                 }
-                
-                // For all other status codes, proceed normally
-                return response.json();
+                return {
+                    status: response.status,
+                    ok: response.ok,
+                    data
+                };
             })
-            .then(data => {
-                console.log("Dropbox folder data:", data);
-                // Hide loading state
+            .then(({ status, ok, data }) => {
+                if (status === 202) {
+                    console.log("Received 202 status - operation in progress", data);
+
+                    dropboxElements.loading.innerHTML = `
+                        <svg class="animate-spin h-6 w-6 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="text-sm font-medium">${data?.message || 'Processing Dropbox request...'}</p>
+                        <p class="text-xs text-gray-500 mt-1">Please wait, this may take a moment...</p>
+                        <button id="dropbox-retry" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                            Check Again
+                        </button>
+                    `;
+
+                    const retryButton = document.getElementById('dropbox-retry');
+                    if (retryButton) {
+                        retryButton.addEventListener('click', function() {
+                            loadDropboxFolders(path);
+                        });
+                    }
+
+                    return;
+                }
+
+                if (!ok && status !== 503) {
+                    throw new Error(`HTTP error! Status: ${status}`);
+                }
+
                 dropboxElements.loading.classList.add('hidden');
-                
+
+                if (!ok && status === 503) {
+                    if (dropboxElements.error) {
+                        dropboxElements.error.textContent = data?.message || 'Dropbox credentials are not configured.';
+                        dropboxElements.error.classList.remove('hidden');
+                    }
+                    return;
+                }
+
                 if (data.error) {
                     if (dropboxElements.error) {
                         dropboxElements.error.textContent = data.error;
@@ -4220,7 +4343,9 @@ function initializeSortable() {
                     }
                     return;
                 }
-                
+
+                console.log("Dropbox folder data:", data);
+
                 // Clear items container
                 dropboxElements.items.innerHTML = '';
     
@@ -4316,11 +4441,10 @@ function initializeSortable() {
                 }
             })
             .catch(error => {
-                // Skip error handling for PENDING status
-                if (error.message === 'PENDING') {
+                if (error && error.message === 'PENDING') {
                     return;
                 }
-                
+
                 console.error('Error loading Dropbox folders:', error);
                 dropboxElements.loading.classList.add('hidden');
                 if (dropboxElements.error) {
@@ -5061,24 +5185,10 @@ function initializeSortable() {
             }
         })
         .catch(error => {
-            console.error('Dropbox error:', error);
-            // Provide a fallback UI for Dropbox tab
-            const dropboxTab = document.getElementById('content-dropbox');
-            if (dropboxTab) {
-                dropboxTab.innerHTML = `
-                    <div class="p-4 border rounded bg-yellow-50">
-                        <h3 class="font-medium text-yellow-800">Dropbox Integration Unavailable</h3>
-                        <p class="text-yellow-700 mt-2">The Dropbox integration is currently unavailable. Please use direct file upload instead.</p>
-                        <button type="button" class="mt-3 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600" 
-                            onclick="document.getElementById('tab-upload').click()">
-                            Switch to File Upload
-                        </button>
-                    </div>
-                `;
+            if (error && error.message === 'PENDING') {
+                return;
             }
-            
-            // Switch to upload tab
-            document.getElementById('tab-upload')?.click();
+            console.error('Dropbox initialisation error:', error);
         });
 }
 
@@ -5196,51 +5306,35 @@ if (syncAllYes && syncAllNo && platformSelection) {
 document.getElementById('addProductForm').addEventListener('submit', function(e) {
 
     // Previously we had logic to handle null values here for pricing but now handling in schemas.product.py in ProductCreate as this is better.
-    
+
+    const shippingSelect = document.getElementById('shipping_profile');
+    const shippingError = document.getElementById('shippingProfileError');
+    const submitBtn = document.getElementById('createProductBtn');
+
+    if (shippingSelect && (!shippingSelect.value || !shippingSelect.value.trim())) {
+        if (shippingError) {
+            shippingError.classList.remove('hidden');
+        }
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            submitBtn.classList.remove('hover:bg-blue-700');
+        }
+        shippingSelect.classList.add('border-red-500');
+        shippingSelect.focus();
+        e.preventDefault();
+        return;
+    }
+
     if (document.getElementById('sync_all_no') && document.getElementById('sync_all_no').checked) {
         const selectedPlatforms = Array.from(
             document.querySelectorAll('input[name="sync_platforms"]:checked')
         ).map(cb => cb.value);
-        
+
         if (selectedPlatforms.length === 0) {
             e.preventDefault();
             alert('Please select at least one platform to sync with, or choose "Sync All Platforms"');
         }
-    }
-});
-
-// Auto-generate SEO keywords
-document.getElementById('generate-seo')?.addEventListener('click', function() {
-    console.log('Generate SEO button clicked');
-
-    const brand = document.getElementById('brand')?.value || '';
-    const model = document.getElementById('model')?.value || '';
-    const category = document.getElementById('category')?.value || '';
-    const finish = document.getElementById('finish')?.value || '';
-
-    console.log('SEO generation values:', { brand, model, category, finish });
-
-    // Generate keywords from product info
-    const keywords = [brand, model, category, finish, 'vintage', 'guitar']
-        .filter(word => word && word.trim() !== '')  // Remove empty values
-        .map(word => word.trim().toLowerCase())      // Standardize format
-        .filter((word, index, self) => self.indexOf(word) === index); // Remove duplicates
-
-    console.log('Generated keywords:', keywords);
-
-    // Set the keywords field
-    const keywordsField = document.getElementById('shopify_seo_keywords');
-    console.log('Keywords field element:', keywordsField);
-
-    if (keywordsField) {
-        keywordsField.value = keywords.join(', ');
-        console.log('Set keywords field value to:', keywordsField.value);
-
-        // Trigger input event to ensure any listeners are notified
-        keywordsField.dispatchEvent(new Event('input', { bubbles: true }));
-        keywordsField.dispatchEvent(new Event('change', { bubbles: true }));
-    } else {
-        console.error('SEO keywords field not found!');
     }
 });
 
@@ -5638,23 +5732,6 @@ function initializeDropboxWithFallback() {
         })
         .catch(error => {
             console.error('Dropbox error:', error);
-            // Provide a fallback UI for Dropbox tab
-            const dropboxTab = document.getElementById('content-dropbox');
-            if (dropboxTab) {
-                dropboxTab.innerHTML = `
-                    <div class="p-4 border rounded bg-yellow-50">
-                        <h3 class="font-medium text-yellow-800">Dropbox Integration Unavailable</h3>
-                        <p class="text-yellow-700 mt-2">The Dropbox integration is currently unavailable. Please use direct file upload instead.</p>
-                        <button type="button" class="mt-3 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600" 
-                            onclick="document.getElementById('tab-upload').click()">
-                            Switch to File Upload
-                        </button>
-                    </div>
-                `;
-            }
-            
-            // Switch to upload tab
-            document.getElementById('tab-upload')?.click();
         });
 }
 

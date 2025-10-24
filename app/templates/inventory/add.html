@@ -1520,25 +1520,38 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
         
         // Override the value setter to detect programmatic changes
-        const originalValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        const valueDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        const originalValueSetter = valueDescriptor?.set;
+        const originalValueGetter = valueDescriptor?.get;
+
         Object.defineProperty(categoryField, 'value', {
+            configurable: true,
+            get: function() {
+                // Fall back to attribute only if the native getter is unavailable
+                return originalValueGetter ? originalValueGetter.call(this) : (this.getAttribute('value') || '');
+            },
             set: function(val) {
-                // Call the original setter
-                originalValueSetter.call(this, val);
-                
-                // Check if this is a new value
+                // Preserve the native setter behaviour
+                if (originalValueSetter) {
+                    originalValueSetter.call(this, val);
+                }
+
+                // Keep the attribute in sync so legacy code reading attributes still works
+                if (val === null || val === undefined) {
+                    this.removeAttribute('value');
+                } else {
+                    this.setAttribute('value', val);
+                }
+
+                // Trigger cross-platform category updates when the value actually changes
                 if (val && val !== lastCategoryUpdate) {
                     console.log('Category value set programmatically:', val);
                     lastCategoryUpdate = val;
-                    // Use a small timeout to ensure DOM is updated
                     setTimeout(() => {
                         updatePlatformCategories(val);
                         checkProAudioCategory(val);
                     }, 100);
                 }
-            },
-            get: function() {
-                return this.getAttribute('value') || '';
             }
         });
     } else {

@@ -413,6 +413,12 @@ class AsyncDropboxClient:
                         account_info = await response.json()
                         logger.info(f"Connected to Dropbox account: {account_info.get('email', 'unknown')}")
                         return True
+                except aiohttp.ClientResponseError as e:
+                    # Re-raise auth errors so execute_with_token_refresh can refresh the token
+                    if e.status == 401:
+                        raise
+                    logger.error(f"Dropbox connection response error: {e.status} - {e.message}")
+                    return False
                 except Exception as e:
                     logger.error(f"Error in test connection request: {str(e)}")
                     return False

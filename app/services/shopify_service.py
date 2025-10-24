@@ -879,6 +879,8 @@ class ShopifyService:
             # Step 5: Set category if we have Reverb category mapping or platform override
             category_gid_override = None
             category_gid_assigned = None
+            category_name_assigned = None
+            category_full_name_assigned = None
             if platform_options:
                 category_gid_override = platform_options.get("category_gid") or platform_options.get("category")
 
@@ -888,6 +890,8 @@ class ShopifyService:
                     if category_result:
                         logger.info("✅ Category set using platform override")
                         category_gid_assigned = category_gid_override
+                        category_full_name_assigned = None
+                        category_name_assigned = None
                 except Exception as e:
                     logger.warning(f"Failed to set category via override: {e}")
             elif reverb_data:
@@ -907,7 +911,7 @@ class ShopifyService:
                         except Exception as e:
                             logger.warning(f"Could not load category mappings: {e}")
                             mappings = {}
-                        
+
                         if category_uuid in mappings:
                             category_gid = mappings[category_uuid].get('shopify_gid')
                             if category_gid:
@@ -916,6 +920,9 @@ class ShopifyService:
                                 if category_result:
                                     logger.info("✅ Category set successfully")
                                     category_gid_assigned = category_gid
+                                    category_full_name_assigned = mappings[category_uuid].get('shopify_category')
+                                    if category_full_name_assigned:
+                                        category_name_assigned = category_full_name_assigned.split(' > ')[-1]
                                 else:
                                     logger.warning("Failed to set product category")
                         else:
@@ -969,6 +976,8 @@ class ShopifyService:
                 "price": final_price,
                 "images": created_images,
                 "category_gid": category_gid_assigned,
+                "category_name": category_name_assigned,
+                "category_full_name": category_full_name_assigned,
                 "snapshot": snapshot,
             }
 

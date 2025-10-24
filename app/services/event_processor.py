@@ -408,7 +408,7 @@ async def _ensure_platform_common_reverb(session: AsyncSession, product: Product
         platform_name='reverb',
         external_id=str(reverb_data['id']),
         status='active',
-        sync_status='synced',
+        sync_status=SyncStatus.SYNCED.value,
         last_sync=datetime.utcnow(),
         listing_url=reverb_url,
         platform_specific_data=reverb_data
@@ -582,7 +582,7 @@ async def _create_shopify_listing(session: AsyncSession, product: Product, rever
                 external_id=str(shopify_result.get('external_id', '')),
                 status='active',
                 last_sync=datetime.utcnow(),
-                sync_status='synced',
+                sync_status=SyncStatus.SYNCED.value,
                 listing_url=listing_url,
                 platform_specific_data=shopify_result
             )
@@ -612,6 +612,31 @@ async def _create_shopify_listing(session: AsyncSession, product: Product, rever
                 last_synced_at=datetime.utcnow()
             )
             session.add(shopify_listing)
+
+            # Enrich SEO metadata
+            seo_title = (product.title or f"{product.year or ''} {product.brand} {product.model}".strip()).strip()
+            if seo_title:
+                shopify_listing.seo_title = seo_title[:255]
+
+            description_source = product.description or (reverb_data.get('description') if reverb_data else '')
+            plain_description = _strip_html(description_source)
+            if plain_description:
+                shopify_listing.seo_description = plain_description[:320]
+
+            # Category enrichment
+            category_gid = shopify_result.get('category_gid')
+            category_full_name = shopify_result.get('category_full_name')
+            category_name = shopify_result.get('category_name') or (
+                category_full_name.split(' > ')[-1] if category_full_name else None
+            )
+
+            if category_gid:
+                shopify_listing.category_gid = category_gid
+                shopify_listing.category_name = category_name
+                shopify_listing.category_full_name = category_full_name
+                shopify_listing.category_assignment_status = 'ASSIGNED'
+                shopify_listing.category_assigned_at = datetime.utcnow()
+
             await session.flush()
 
             logger.info(f"Created shopify_listings entry with ID {shopify_listing.id}")

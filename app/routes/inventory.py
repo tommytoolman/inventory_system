@@ -1049,12 +1049,48 @@ async def product_detail(
                     })
 
         # 5. Prepare context for the template
+        prev_product_row = await db.execute(
+            select(Product.id, Product.title, Product.brand, Product.model)
+            .where(Product.id < product_id)
+            .order_by(Product.id.desc())
+            .limit(1)
+        )
+        prev_product = None
+        row = prev_product_row.first()
+        if row is not None:
+            mapping = row._mapping
+            prev_product = {
+                "id": mapping["id"],
+                "title": mapping["title"],
+                "brand": mapping["brand"],
+                "model": mapping["model"],
+            }
+
+        next_product_row = await db.execute(
+            select(Product.id, Product.title, Product.brand, Product.model)
+            .where(Product.id > product_id)
+            .order_by(Product.id.asc())
+            .limit(1)
+        )
+        next_product = None
+        row = next_product_row.first()
+        if row is not None:
+            mapping = row._mapping
+            next_product = {
+                "id": mapping["id"],
+                "title": mapping["title"],
+                "brand": mapping["brand"],
+                "model": mapping["model"],
+            }
+
         context = {
             "request": request,
             "product": product,
             "all_platforms_status": all_platforms_status,
             "platform_messages": platform_messages,
-            "show_status": show_status
+            "show_status": show_status,
+            "prev_product": prev_product,
+            "next_product": next_product,
         }
 
         return templates.TemplateResponse("inventory/detail.html", context)

@@ -19,9 +19,14 @@
                         {% endif %}
                     </div>
                     <div class="flex-1">
-                        <h1 class="text-2xl font-bold text-gray-900">
-                            {{ product.brand|title }} {{ product.model }}
-                        </h1>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">
+                                {{ product.title or 'Untitled Product' }}
+                            </h1>
+                            <p class="text-sm text-gray-500">
+                                {{ product.brand|title }} {{ product.model }}
+                            </p>
+                        </div>
                     </div>
                     
                     <!-- Status badges moved next to title -->
@@ -66,11 +71,48 @@
                     </div>
                 </div>
                 
-                <!-- Back button stays on far right -->
-                <div class="ml-4">
-                    <a href="/inventory" class="text-blue-600 hover:text-blue-800 font-medium">
+                <!-- Back button and navigation arrows -->
+                <div class="ml-4 flex items-center space-x-3">
+                    <a href="{{ url_for('list_products') }}" class="text-blue-600 hover:text-blue-800 font-medium">
                         ← Back to List
                     </a>
+                    <div class="flex items-center space-x-2">
+                        {% if prev_product %}
+                            <a
+                                href="{{ url_for('product_detail', product_id=prev_product.id) }}"
+                                class="p-2 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                title="Previous: {{ prev_product.title or (prev_product.brand ~ ' ' ~ prev_product.model) }}"
+                            >
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </a>
+                        {% else %}
+                            <span class="p-2 rounded-full border border-gray-200 text-gray-300 cursor-not-allowed">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </span>
+                        {% endif %}
+
+                        {% if next_product %}
+                            <a
+                                href="{{ url_for('product_detail', product_id=next_product.id) }}"
+                                class="p-2 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                title="Next: {{ next_product.title or (next_product.brand ~ ' ' ~ next_product.model) }}"
+                            >
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </a>
+                        {% else %}
+                            <span class="p-2 rounded-full border border-gray-200 text-gray-300 cursor-not-allowed">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </span>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>

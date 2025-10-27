@@ -19,37 +19,35 @@
                         {% endif %}
                     </div>
                     <div class="flex-1">
-                        <div>
-                            <h1 class="text-2xl font-bold text-gray-900">
-                                {{ product.title or 'Untitled Product' }}
-                            </h1>
-                            <p class="text-sm text-gray-500">
-                                {{ product.brand|title }} {{ product.model }}
-                            </p>
+                        <div class="flex items-start space-x-3">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-900">
+                                    {{ product.title or 'Untitled Product' }}
+                                </h1>
+                                <p class="text-sm text-gray-500">
+                                    {{ product.brand|title }} {{ product.model }}
+                                </p>
+                            </div>
+                            {% set status_val = product.status.value|upper if product.status else '' %}
+                            <div class="mt-1">
+                                {% if status_val == 'SOLD' %}
+                                    <span class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800">Sold</span>
+                                {% elif status_val == 'DRAFT' %}
+                                    <span class="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800">Draft</span>
+                                {% elif status_val == 'ARCHIVED' %}
+                                    <span class="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800">Archived</span>
+                                {% elif status_val %}
+                                    <span class="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800">{{ status_val|title }}</span>
+                                {% else %}
+                                    <span class="px-3 py-1 text-sm rounded-full bg-gray-100 text-gray-500">Status Unknown</span>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
-                    
+
                     <!-- Status badges moved next to title -->
                     <div class="flex items-center space-x-3 mr-4">
-                        <!-- Product Status -->
-                        {% set status_val = product.status.value|upper if product.status else '' %}
-                        {% if status_val == 'SOLD' %}
-                            <span class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800">
-                                Sold
-                            </span>
-                        {% elif status_val == 'DRAFT' %}
-                            <span class="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800">
-                                Draft
-                            </span>
-                        {% elif status_val == 'ARCHIVED' %}
-                            <span class="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800">
-                                Archived
-                            </span>
-                        {% else %}
-                            <span class="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800">
-                                {{ status_val|title }}
-                            </span>
-                        {% endif %}
+                        {% set active_platforms = [] %}
 
                         <!-- End All Listings button - only show if there are active listings -->
                         {% set active_platforms = [] %}
@@ -62,12 +60,7 @@
                             {% endif %}
                         {% endfor %}
 
-                        {% if active_platforms|length > 0 %}
-                            <button onclick="endAllListings()"
-                                class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300">
-                                End All Listings
-                            </button>
-                        {% endif %}
+
                     </div>
                 </div>
                 
@@ -198,7 +191,7 @@
             <!-- Basic Info -->
             <div>
                 <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-lg font-semibold">Product Information</h2>
+                    <h2 class="text-lg font-semibold pl-2">Product Information</h2>
                     {% set status_val = product.status.value|upper if product.status else '' %}
                     {% if status_val in ['SOLD', 'ARCHIVED'] %}
                         <button type="button" disabled
@@ -299,7 +292,15 @@
 
             <!-- Platform Listings -->
             <div>
-                <h2 class="text-lg font-semibold mb-4">Platform Listings</h2>
+                <div class="flex items-center mb-4">
+                    <h2 class="text-lg font-semibold mr-3 pl-2">Platform Listings</h2>
+                    {% if active_platforms|length > 0 %}
+                        <button onclick="endAllListings()"
+                            class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300">
+                            End All Listings
+                        </button>
+                    {% endif %}
+                </div>
                 <div class="border rounded p-4 pb-3 h-full">
                     <div class="space-y-3">
                     {% if all_platforms_status %}

@@ -619,7 +619,7 @@ async def _create_shopify_listing(session: AsyncSession, product: Product, rever
                 shopify_listing.seo_title = seo_title[:255]
 
             description_source = product.description or (reverb_data.get('description') if reverb_data else '')
-            plain_description = _strip_html(description_source)
+            plain_description = ShopifyService.strip_html_to_plain_text(description_source)
             if plain_description:
                 shopify_listing.seo_description = plain_description[:320]
 

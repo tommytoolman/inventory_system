@@ -1,6 +1,7 @@
 # app/services/shopify_service.py
 import logging
 import math
+import re
 import uuid
 import json
 from datetime import datetime, timezone
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import select
+from html.parser import HTMLParser
 
 from app.models.product import Product, ProductCondition, ProductStatus
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
@@ -21,6 +23,21 @@ from app.services.reverb_service import ReverbService # We might need this for d
 
 
 logger = logging.getLogger(__name__)
+
+
+class _PlainTextHTMLParser(HTMLParser):
+    """Simple HTML parser that collects text nodes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._chunks: List[str] = []
+
+    def handle_data(self, data: str) -> None:  # noqa: D401 (inherited docs)
+        if data and data.strip():
+            self._chunks.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._chunks)
 
 class ShopifyService:
     """Service for managing Shopify products and synchronization."""
@@ -37,6 +54,18 @@ class ShopifyService:
         # Initialize Shopify client - it loads settings internally
         self.client = ShopifyGraphQLClient()
         logger.debug(f"ShopifyService initialized")
+
+    @staticmethod
+    def strip_html_to_plain_text(value: Optional[str]) -> str:
+        """Return value with HTML removed and whitespace normalised."""
+        if not value:
+            return ""
+
+        parser = _PlainTextHTMLParser()
+        parser.feed(value)
+        parser.close()
+        text = parser.get_text()
+        return re.sub(r"\s+", " ", text).strip()
 
     # ------------------------------------------------------------------
     # Utility helpers reused by scripts and edit-propagation

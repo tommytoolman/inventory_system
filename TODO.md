@@ -13,6 +13,7 @@
 
 ## 🟡 Medium Priority (Stability and automation)
 - [ ] **Category mapping migration** – move the JSON mappings into a database table with Alembic migrations and seeding.
+- [ ] **Reinstate Shopify SEO keyword generator button** – revert the auto-fill experiment and restore the manual generate flow (with richer keyword logic) once requirements are clarified.
 - [ ] **Platform error handling standardisation** – unify logging/alerts and ensure retries work the same across eBay, Reverb, VR, and Shopify.
 - [ ] **"Where sold" logic improvements** – refine attribution so reporting shows the definitive sale source for each SKU (tie into sold notifications and sale channel attribution).
 - [ ] **Async listing publication flow** – move manual listing actions (especially VR create/update) into the same background queue model so operators aren’t blocked during long Selenium/HTTP cycles.

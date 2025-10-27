@@ -473,6 +473,55 @@ class ReverbService:
                             exc,
                         )
 
+            # Fetch the finalised listing data (captures complete image set once Reverb finishes processing)
+            if reverb_id:
+                try:
+                    detailed_response = await self.client.get_listing_details(reverb_id)
+                    detailed_listing = detailed_response.get("listing", detailed_response)
+                    if detailed_listing:
+                        listing_data = detailed_listing
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Unable to fetch detailed Reverb listing data for %s: %s",
+                        reverb_id,
+                        exc,
+                    )
+
+            # Update product media with the CDN URLs returned from Reverb if available
+            photo_urls: List[str] = []
+            for photo in listing_data.get("photos") or []:
+                link = (
+                    (photo.get("_links") or {})
+                    .get("full", {})
+                    .get("href")
+                )
+                if link and link not in photo_urls:
+                    photo_urls.append(link)
+
+            if not photo_urls:
+                # Fall back to Cloudinary entries if the main photo array is still sparse
+                for photo in listing_data.get("cloudinary_photos") or []:
+                    link = photo.get("preview_url")
+                    if not link and photo.get("path"):
+                        link = f"https://rvb-img.reverb.com/image/upload/{photo['path']}"
+                    if link and link not in photo_urls:
+                        photo_urls.append(link)
+
+            if photo_urls:
+                current_additional = product.additional_images or []
+                if (
+                    product.primary_image != photo_urls[0]
+                    or list(current_additional) != photo_urls[1:]
+                ):
+                    product.primary_image = photo_urls[0]
+                    product.additional_images = photo_urls[1:]
+                    logger.info(
+                        "Updated product %s media from Reverb listing %s",
+                        product.sku,
+                        reverb_id,
+                    )
+                    await self.db.flush()
+
             # Upsert platform_common
             existing_common_query = select(PlatformCommon).where(
                 PlatformCommon.product_id == product.id,

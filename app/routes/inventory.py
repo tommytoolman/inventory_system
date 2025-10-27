@@ -2054,7 +2054,7 @@ async def add_product(
 
                     if platform_common:
                         platform_common.external_id = external_id
-                        platform_common.status = "ACTIVE"
+                        platform_common.status = "active"
                         platform_common.listing_url = listing_url
                         platform_common.sync_status = SyncStatus.SYNCED.value
                         platform_common.last_sync = datetime.utcnow()
@@ -2064,7 +2064,7 @@ async def add_product(
                             product_id=product.id,
                             platform_name="shopify",
                             external_id=external_id,
-                            status="ACTIVE",
+                            status="active",
                             listing_url=listing_url,
                             sync_status=SyncStatus.SYNCED.value,
                             last_sync=datetime.utcnow(),
@@ -3869,44 +3869,6 @@ async def get_dropbox_folders(
             app_secret=app_secret
         )
 
-        # Try to hydrate cached temp links alongside the folder structure
-        existing_map = getattr(request.app.state, 'dropbox_map', None)
-        if existing_map is None:
-            existing_map = {}
-
-        # Merge folder structure from cache if available
-        if client.folder_structure:
-            existing_structure = existing_map.get('folder_structure', {})
-            existing_structure.update(client.folder_structure)
-            existing_map['folder_structure'] = existing_structure
-
-        # Merge temporary links cache (handles both new + legacy formats)
-        temp_links_cache = client.load_temp_links_from_cache()
-        if not temp_links_cache:
-            try:
-                temp_links_cache = {}
-                now = datetime.now()
-                for path, cache_entry in getattr(client, 'file_links_cache', {}).items():
-                    if isinstance(cache_entry, tuple) and len(cache_entry) == 2:
-                        link, expiry = cache_entry
-                        if link and expiry > now:
-                            temp_links_cache[path] = link
-            except Exception as cache_error:
-                logger.warning(f"Unable to build temp link cache from file cache: {cache_error}")
-
-        if temp_links_cache:
-            existing_temp_links = existing_map.get('temp_links', {})
-            existing_temp_links.update(temp_links_cache)
-            existing_map['temp_links'] = existing_temp_links
-
-        if existing_map:
-            request.app.state.dropbox_map = existing_map
-            request.app.state.dropbox_last_updated = datetime.now()
-        else:
-            # Ensure we don't leave an empty dict that downstream code interprets as valid cache
-            if hasattr(request.app.state, 'dropbox_map') and not request.app.state.dropbox_map:
-                delattr(request.app.state, 'dropbox_map')
-
         # Check if we need to initialize a scan
         if (not hasattr(request.app.state, 'dropbox_map') or
             request.app.state.dropbox_map is None):
@@ -3916,10 +3878,10 @@ async def get_dropbox_folders(
             if client.folder_structure:
                 logger.info("Found cached folder structure in service, using it")
 
-                # Ensure app state has the merged cache we built above
-                request.app.state.dropbox_map = existing_map or {
+                # Also update app state for consistency
+                request.app.state.dropbox_map = {
                     'folder_structure': client.folder_structure,
-                    'temp_links': temp_links_cache or {}
+                    'temp_links': {}
                 }
                 request.app.state.dropbox_last_updated = datetime.now()
 
@@ -3971,16 +3933,7 @@ async def get_dropbox_folders(
             )
 
         # Get cached data
-        dropbox_map = getattr(request.app.state, 'dropbox_map', None)
-        if not dropbox_map:
-            return JSONResponse(
-                content={
-                    "folders": [],
-                    "files": [],
-                    "current_path": path,
-                    "message": "Dropbox cache empty. Please use the sync button to load data."
-                }
-            )
+        dropbox_map = request.app.state.dropbox_map
         logger.info(f"App state dropbox_map exists: {dropbox_map is not None}, has structure: {'folder_structure' in dropbox_map if dropbox_map else False}")
 
         # If the token might be expired, verify it
@@ -4812,20 +4765,12 @@ async def generate_folder_links(
 ):
     """Generate temporary links for all images in a specific folder"""
     try:
-        # Get credentials for the Dropbox client
+        # Get access token
         access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
-        refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None) or os.environ.get('DROPBOX_REFRESH_TOKEN')
-        app_key = getattr(settings, 'DROPBOX_APP_KEY', None) or os.environ.get('DROPBOX_APP_KEY')
-        app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None) or os.environ.get('DROPBOX_APP_SECRET')
-
+        
         # Create client
         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
-        client = AsyncDropboxClient(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            app_key=app_key,
-            app_secret=app_secret
-        )
+        client = AsyncDropboxClient(access_token=access_token)
         
         # Check connection
         test_result = await client.test_connection()

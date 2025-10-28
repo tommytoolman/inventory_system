@@ -856,6 +856,9 @@ async def list_products(
         start_item = 1 if total > 0 else 0
         end_item = total
     
+    message = request.query_params.get("message")
+    message_type = request.query_params.get("message_type", "info")
+
     return templates.TemplateResponse(
         "inventory/list.html",
         {
@@ -880,6 +883,8 @@ async def list_products(
             "has_next": page < total_pages,
             "current_sort": sort,          # NEW: Pass current sort
             "current_order": order,        # NEW: Pass current order
+            "message": message,
+            "message_type": message_type,
         }
     )
 
@@ -1519,6 +1524,7 @@ async def add_product(
     decade: Optional[int] = Form(None),
     finish: Optional[str] = Form(None),
     status: str = Form("DRAFT"),
+    title: Optional[str] = Form(None),
     processing_time: Optional[str] = Form(None),
     price: Optional[str] = Form(None),
     price_notax: Optional[str] = Form(None),
@@ -1534,7 +1540,7 @@ async def add_product(
     local_pickup: Optional[bool] = Form(False),
     available_for_shipment: Optional[bool] = Form(True),
     is_stocked_item: Optional[bool] = Form(False),
-    quantity_raw: Optional[str] = Form(None),
+    quantity: Optional[str] = Form(None),
     # Media fields
     primary_image_file: Optional[UploadFile] = File(None),
     primary_image_url: Optional[str] = Form(None),
@@ -1579,14 +1585,14 @@ async def add_product(
     print("Method:", request.method)
     form_data = await request.form()
 
-    # Parse numeric fields from simple form values (allow blank strings)
+    # Normalise basic numeric fields from simple form values (allow blank strings)
     BLANK_SENTINELS = {None, "", " ", "null", "undefined"}
 
-    if quantity_raw in BLANK_SENTINELS:
-        quantity = None
+    if quantity in BLANK_SENTINELS:
+        parsed_quantity = None
     else:
         try:
-            quantity = int(str(quantity_raw).strip())
+            parsed_quantity = int(str(quantity).strip())
         except ValueError:
             raise HTTPException(status_code=422, detail="Quantity must be a valid integer")
 
@@ -1609,6 +1615,13 @@ async def add_product(
     parsed_price_notax = _parse_float(price_notax, field_name="price_notax")
     parsed_collective_discount = _parse_float(collective_discount, 0.0, field_name="collective_discount")
     parsed_offer_discount = _parse_float(offer_discount, 0.0, field_name="offer_discount")
+
+    # Ensure decade derives from year when not explicitly supplied
+    if decade is None and year is not None:
+        try:
+            decade = (int(year) // 10) * 10
+        except (TypeError, ValueError):
+            decade = None
 
     # Sanitize form data for logging (remove base64 image data)
     log_form_data = {}
@@ -1855,7 +1868,7 @@ async def add_product(
             local_pickup=local_pickup,
             available_for_shipment=available_for_shipment,
             is_stocked_item=is_stocked_item,
-            quantity=quantity if is_stocked_item else None,
+            quantity=parsed_quantity if is_stocked_item else None,
             processing_time=processed_processing_time,
             primary_image=primary_image,
             additional_images=additional_images,
@@ -1879,6 +1892,32 @@ async def add_product(
         if not product:
             raise ValueError(f"Could not retrieve created product with ID {product_read.id}")
 
+        # Persist manually supplied title/decade/quantity values if provided
+        updated = False
+        shipping_profile_changed = False
+
+        if title:
+            cleaned_title = title.strip()
+            if cleaned_title and product.title != cleaned_title:
+                product.title = cleaned_title
+                updated = True
+        elif not product.title:
+            # Ensure we at least store the generated title so downstream consumers see it
+            generated_title = product.generate_title()
+            if generated_title:
+                product.title = generated_title
+                updated = True
+
+        if decade is not None and product.decade != decade:
+            product.decade = decade
+            updated = True
+
+        if parsed_quantity is not None:
+            # For stocked items we store the explicit quantity; for unique items we keep as provided
+            if product.quantity != parsed_quantity:
+                product.quantity = parsed_quantity
+                updated = True
+
         if selected_shipping_profile_id and getattr(product, "shipping_profile_id", None) != selected_shipping_profile_id:
             logger.info(
                 "Persisting shipping_profile_id %s on product %s (%s)",
@@ -1887,7 +1926,12 @@ async def add_product(
                 product.sku,
             )
             product.shipping_profile_id = selected_shipping_profile_id
-            await db.flush()
+            shipping_profile_changed = True
+
+        if updated or shipping_profile_changed:
+            await db.commit()
+            await db.refresh(product)
+
         logger.info(
             "Product %s saved with shipping_profile_id=%s",
             product.id,
@@ -2913,6 +2957,13 @@ async def save_draft(
         # Initialize product service
         product_service = ProductService(db)
 
+        # Auto-derive decade from year when the dropdown was left unset
+        if decade is None and year is not None:
+            try:
+                decade = (int(year) // 10) * 10
+            except (TypeError, ValueError):
+                decade = None
+
         # Process images
         primary_image = None
         additional_images = []
@@ -3081,6 +3132,26 @@ async def get_drafts(
             for d in drafts
         ]
     }
+
+
+@router.post("/drafts/{draft_id}/delete")
+async def delete_draft(
+    draft_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    draft = await db.get(Product, draft_id)
+    if not draft or draft.status != ProductStatus.DRAFT:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    sku = draft.sku or f"Draft-{draft_id}"
+    await db.delete(draft)
+    await db.commit()
+
+    message = f"{sku} deleted"
+    return RedirectResponse(
+        url=f"/inventory?message={quote_plus(message)}&message_type=error",
+        status_code=303,
+    )
 
 
 def _serialize_draft_product(draft: Product) -> Dict[str, Any]:

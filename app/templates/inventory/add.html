@@ -1257,7 +1257,15 @@
                 </div>
 
                 <!-- Submit Buttons -->
-                <div class="flex justify-end mt-6 space-x-3">
+                <div class="flex justify-end mt-6 space-x-3 items-center">
+                    {% if prefill_draft_id %}
+                        <button type="button"
+                                id="deleteDraftBtn"
+                                data-sku="{{ form_data.sku if form_data and form_data.sku else '' }}"
+                                class="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 font-medium">
+                            Delete Draft
+                        </button>
+                    {% endif %}
                     <button type="button" id="saveDraftBtn"
                             class="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 font-medium">
                         Save as Draft
@@ -1272,6 +1280,9 @@
         </div>
     </div>
 </form>
+{% if prefill_draft_id %}
+<form id="deleteDraftForm" method="post" action="/inventory/drafts/{{ prefill_draft_id }}/delete" class="hidden"></form>
+{% endif %}
 </div>
 {% endblock %}
 
@@ -1287,6 +1298,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const shippingProfileError = document.getElementById('shippingProfileError');
     let shippingProfilesLoaded = false;
     let shippingProfilesCache = [];
+
+    const deleteDraftBtn = document.getElementById('deleteDraftBtn');
+    if (deleteDraftBtn) {
+        deleteDraftBtn.addEventListener('click', function () {
+            const sku = deleteDraftBtn.dataset.sku || 'this draft';
+            const confirmed = confirm(`Are you sure you want to delete ${sku}? This action cannot be undone.`);
+            if (confirmed) {
+                const deleteForm = document.getElementById('deleteDraftForm');
+                if (deleteForm) {
+                    deleteForm.submit();
+                }
+            }
+        });
+    }
 
     function updateCreateButtonState() {
         if (!createProductBtn) {

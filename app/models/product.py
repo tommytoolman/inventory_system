@@ -62,9 +62,18 @@ class Product(Base):
         return f"{self.brand} {self.model} {self.year}".strip()
 
     def generate_title(self):
-        """Generate title from attributes."""
-        parts = [self.brand, self.model, str(self.finish) if self.finish else None, str(self.year) if self.year else None]
-        return " ".join(p for p in parts if p)
+        """Generate title from attributes with decade fallback."""
+        finish_part = str(self.finish).strip() if self.finish else None
+
+        if self.year:
+            time_part = str(self.year)
+        elif self.decade:
+            time_part = f"{self.decade}s"
+        else:
+            time_part = None
+
+        parts = [self.brand, self.model, finish_part, time_part]
+        return " ".join(part.strip() for part in parts if part)
     
     
     def get_overall_sync_status(self) -> str:

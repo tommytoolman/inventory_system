@@ -77,6 +77,35 @@ logger = logging.getLogger(__name__)
 UPLOAD_DIR_PATH = Path(UPLOAD_DIR)
 DROPBOX_UPLOAD_ROOT = "/InventorySystem/auto-uploads"
 
+STANDARD_DESCRIPTION_FOOTER = (
+    "<br/><br/>\n"
+    "<p><strong>ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID</strong></p>\n"
+    "<p>All purchases include EU Taxes / Duties paid, i.e., nothing further is due on receipt of goods to any EU State.</p>\n"
+    "<br/>\n"
+    "<p><strong>WHY BUY FROM US</strong></p>\n"
+    "<p>We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping, each item will be fully serviced and professionally packed.</p>\n"
+    "<br/>\n"
+    "<p><strong>SELL - TRADE - CONSIGN</strong></p>\n"
+    "<p>If you are looking to sell, trade, or consign any of your classic gear, please contact us by message.</p>\n"
+    "<br/>\n"
+    "<p><strong>WORLDWIDE COLLECTION - DELIVERY</strong></p>\n"
+    "<p>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam, and Chicago.</p>\n"
+    "<br/>\n"
+    "<p><strong>VALUATION SERVICE</strong></p>\n"
+    "<p>If you require a valuation of any of your classic gear, please forward a brief description and pictures, and we will come back to you ASAP.</p>"
+)
+
+
+def ensure_description_has_standard_footer(description: Optional[str]) -> str:
+    """Append the standard footer when the description has content and lacks it."""
+    if not description or not description.strip():
+        return description or ""
+
+    if "ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID" in description:
+        return description
+
+    return f"{description.rstrip()}{STANDARD_DESCRIPTION_FOOTER}"
+
 
 def _is_local_upload(url: Optional[str]) -> bool:
     return bool(url and url.startswith("/static/uploads/"))
@@ -2617,28 +2646,10 @@ async def inspect_payload(
             images_array.extend(additional)
         except:
             pass
-    
-    # Add standard footer to description if not already present
-    standard_footer = '''<br/><br/>
-<p><strong>ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID</strong></p>
-<p>All purchases include EU Taxes / Duties paid, i.e., nothing further is due on receipt of goods to any EU State.</p>
-<br/>
-<p><strong>WHY BUY FROM US</strong></p>
-<p>We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping, each item will be fully serviced and professionally packed.</p>
-<br/>
-<p><strong>SELL - TRADE - CONSIGN</strong></p>
-<p>If you are looking to sell, trade, or consign any of your classic gear, please contact us by message.</p>
-<br/>
-<p><strong>WORLDWIDE COLLECTION - DELIVERY</strong></p>
-<p>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam, and Chicago.</p>
-<br/>
-<p><strong>VALUATION SERVICE</strong></p>
-<p>If you require a valuation of any of your classic gear, please forward a brief description and pictures, and we will come back to you ASAP.</p>'''
-    
-    if description and standard_footer not in description:
-        description_with_footer = description + standard_footer
-    else:
-        description_with_footer = description or ""
+
+    # Ensure the standard footer is present when we have body copy
+    description = ensure_description_has_standard_footer(description)
+    description_with_footer = description or ""
     
     # Map condition to Reverb condition UUID
     import json
@@ -2953,6 +2964,8 @@ async def save_draft(
         # Debug logging
         print(f"[SAVE DRAFT] Received description: {description[:100] if description else 'NONE'}...")
         print(f"[SAVE DRAFT] Description length: {len(description) if description else 0}")
+
+        description = ensure_description_has_standard_footer(description)
 
         # Initialize product service
         product_service = ProductService(db)

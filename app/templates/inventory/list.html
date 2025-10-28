@@ -4,7 +4,8 @@
 <div class="container mx-auto px-4 py-8 mb-16">
     {% if message %}
     <div class="mb-6">
-        <div class="px-4 py-3 rounded-lg border text-sm shadow-sm
+        <div id="inventory-flash-message"
+             class="px-4 py-3 rounded-lg border text-sm shadow-sm transition ease-in-out duration-300 transform
                     {% if message_type == 'error' %}bg-red-50 border-red-200 text-red-800{% endif %}
                     {% if message_type == 'success' %}bg-green-50 border-green-200 text-green-800{% endif %}
                     {% if message_type == 'warning' %}bg-yellow-50 border-yellow-200 text-yellow-800{% endif %}
@@ -430,6 +431,14 @@
         // Run on load and resize
         adjustTableContainer();
         window.addEventListener('resize', adjustTableContainer);
+
+        const flashMessage = document.getElementById('inventory-flash-message');
+        if (flashMessage) {
+            setTimeout(() => {
+                flashMessage.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => flashMessage.remove(), 400);
+            }, 10000);
+        }
     });
 
     //search debouncing

@@ -128,13 +128,29 @@ def generate_vr_payload(form_data: Dict[str, Any], shipping_profile: ShippingPro
 
 def generate_shopify_payload(form_data: Dict[str, Any], shipping_profile: ShippingProfile) -> Dict:
     """Generate Shopify API payload from form data."""
+
+    description_html = ensure_description_has_standard_footer(form_data.get("description", ""))
+    keywords = generate_shopify_keywords(
+        brand=form_data.get("brand"),
+        model=form_data.get("model"),
+        finish=form_data.get("finish"),
+        year=form_data.get("year"),
+        decade=form_data.get("decade"),
+        category=form_data.get("shopify_category"),
+        condition=form_data.get("condition"),
+        description_html=description_html,
+    )
+
+    fallback_title = (form_data.get("title") or f"{form_data.get('brand', '')} {form_data.get('model', '')}").strip()
+    short_description = generate_shopify_short_description(description_html, fallback=fallback_title)
+
     payload = {
         "product": {
             "title": form_data.get("title", ""),
-            "body_html": form_data.get("description", ""),
+            "body_html": description_html,
             "vendor": form_data.get("brand", ""),
             "product_type": form_data.get("shopify_category", ""),
-            "tags": form_data.get("shopify_seo_keywords", ""),
+            "tags": keywords,
             "status": "draft" if not form_data.get("shopify_publish") else "active",
             "variants": [{
                 "price": str(form_data.get("base_price", "")),
@@ -164,11 +180,25 @@ def generate_shopify_payload(form_data: Dict[str, Any], shipping_profile: Shippi
                     "key": "model",
                     "value": form_data.get("model", ""),
                     "type": "single_line_text_field"
-                }
-            ]
+                },
+                {
+                    "namespace": "custom",
+                    "key": "short_description",
+                    "value": short_description,
+                    "type": "multi_line_text_field",
+                },
+            ],
         }
     }
-    
+
+    seo_block = {}
+    if fallback_title:
+        seo_block["title"] = fallback_title[:255]
+    if short_description:
+        seo_block["description"] = short_description
+    if seo_block:
+        payload["product"]["seo"] = seo_block
+
     # Add images
     if form_data.get("primary_image_url"):
         payload["product"]["images"].append({"src": form_data["primary_image_url"]})
@@ -176,7 +206,7 @@ def generate_shopify_payload(form_data: Dict[str, Any], shipping_profile: Shippi
         for img in form_data.get("additional_images_urls", []):
             if img:
                 payload["product"]["images"].append({"src": img})
-    
+
     return payload
 
 @router.post("/inspect-payload")

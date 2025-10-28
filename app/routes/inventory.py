@@ -50,6 +50,11 @@ from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
 from app.services.shopify_service import ShopifyService
+from app.services.shopify.utils import (
+    ensure_description_has_standard_footer,
+    generate_shopify_keywords,
+    generate_shopify_short_description,
+)
 from app.services.vr_service import VRService
 from app.services.vintageandrare.brand_validator import VRBrandValidator
 from app.services.vintageandrare.client import VintageAndRareClient
@@ -76,36 +81,6 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_DIR_PATH = Path(UPLOAD_DIR)
 DROPBOX_UPLOAD_ROOT = "/InventorySystem/auto-uploads"
-
-STANDARD_DESCRIPTION_FOOTER = (
-    "<br/><br/>\n"
-    "<p><strong>ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID</strong></p>\n"
-    "<p>All purchases include EU Taxes / Duties paid, i.e., nothing further is due on receipt of goods to any EU State.</p>\n"
-    "<br/>\n"
-    "<p><strong>WHY BUY FROM US</strong></p>\n"
-    "<p>We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping, each item will be fully serviced and professionally packed.</p>\n"
-    "<br/>\n"
-    "<p><strong>SELL - TRADE - CONSIGN</strong></p>\n"
-    "<p>If you are looking to sell, trade, or consign any of your classic gear, please contact us by message.</p>\n"
-    "<br/>\n"
-    "<p><strong>WORLDWIDE COLLECTION - DELIVERY</strong></p>\n"
-    "<p>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam, and Chicago.</p>\n"
-    "<br/>\n"
-    "<p><strong>VALUATION SERVICE</strong></p>\n"
-    "<p>If you require a valuation of any of your classic gear, please forward a brief description and pictures, and we will come back to you ASAP.</p>"
-)
-
-
-def ensure_description_has_standard_footer(description: Optional[str]) -> str:
-    """Append the standard footer when the description has content and lacks it."""
-    if not description or not description.strip():
-        return description or ""
-
-    if "ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID" in description:
-        return description
-
-    return f"{description.rstrip()}{STANDARD_DESCRIPTION_FOOTER}"
-
 
 def _is_local_upload(url: Optional[str]) -> bool:
     return bool(url and url.startswith("/static/uploads/"))
@@ -2195,12 +2170,12 @@ async def add_product(
                     ) or _parse_price_to_decimal(product.base_price)
                     price_float = float(price_decimal) if price_decimal is not None else None
 
-                    seo_keywords_raw = shopify_options.get("seo_keywords")
-                    seo_keywords = None
-                    if seo_keywords_raw:
-                        seo_keywords = [kw.strip() for kw in seo_keywords_raw.split(',') if kw.strip()]
-                    elif snapshot_tags:
-                        seo_keywords = snapshot_tags
+                    if not seo_title and shopify_generated_seo_title:
+                        seo_title = shopify_generated_seo_title
+                    if not seo_description and shopify_generated_short_description:
+                        seo_description = shopify_generated_short_description
+
+                    resolved_keywords = snapshot_tags or shopify_generated_keywords or None
 
                     if shopify_listing:
                         shopify_listing.shopify_product_id = product_gid
@@ -2217,7 +2192,7 @@ async def add_product(
                         shopify_listing.category_assignment_status = category_assignment_status
                         shopify_listing.seo_title = seo_title
                         shopify_listing.seo_description = seo_description
-                        shopify_listing.seo_keywords = seo_keywords
+                        shopify_listing.seo_keywords = resolved_keywords
                         shopify_listing.extended_attributes = platform_payload
                         shopify_listing.last_synced_at = datetime.utcnow()
                     else:
@@ -2237,7 +2212,7 @@ async def add_product(
                             category_assignment_status=category_assignment_status,
                             seo_title=seo_title,
                             seo_description=seo_description,
-                            seo_keywords=seo_keywords,
+                            seo_keywords=resolved_keywords,
                             extended_attributes=platform_payload,
                             last_synced_at=datetime.utcnow()
                         )
@@ -2663,6 +2638,10 @@ async def inspect_payload(
     # Build response with payloads for each platform
     payloads = {}
     
+    shopify_generated_keywords: List[str] = []
+    shopify_generated_short_description: Optional[str] = None
+    shopify_generated_seo_title: Optional[str] = None
+
     # Shopify payload
     if sync_shopify:
         # Build title with year if available
@@ -2673,7 +2652,25 @@ async def inspect_payload(
         if finish:
             title_parts.append(finish)
         title = " ".join(filter(None, title_parts))
-        
+
+        shopify_generated_keywords = generate_shopify_keywords(
+            brand=brand,
+            model=model,
+            finish=finish,
+            year=year,
+            decade=decade,
+            category=shopify_product_type or category,
+            condition=condition,
+            description_html=description_with_footer,
+        )
+
+        fallback_title = title or f"{brand} {model}".strip()
+        shopify_generated_seo_title = (fallback_title or "").strip()[:255] or None
+        shopify_generated_short_description = generate_shopify_short_description(
+            description_with_footer,
+            fallback=fallback_title,
+        )
+
         shopify_payload = {
             "platform": "shopify",
             "product_data": {
@@ -2682,13 +2679,22 @@ async def inspect_payload(
                 "vendor": brand,
                 "productType": shopify_product_type or category,  # Changed from product_type
                 "status": "ACTIVE",  # Changed from "active" to uppercase
-                "tags": [condition, category, brand],
+                "tags": shopify_generated_keywords,
                 # Note: variants and images are added via separate API calls in the actual service
                 "images": [{"src": url} for url in images_array],
             },
             "category_gid": shopify_category_gid
         }
-        
+
+        if shopify_generated_seo_title or shopify_generated_short_description:
+            seo_block: Dict[str, str] = {}
+            if shopify_generated_seo_title:
+                seo_block["title"] = shopify_generated_seo_title
+            if shopify_generated_short_description:
+                seo_block["description"] = shopify_generated_short_description
+            if seo_block:
+                shopify_payload["product_data"]["seo"] = seo_block
+
         # Add metafields if needed (these are added via separate API calls in the actual service)
         metafields = []
         if decade:
@@ -2705,9 +2711,16 @@ async def inspect_payload(
                 "value": str(year),
                 "type": "number_integer"
             })
+        if shopify_generated_short_description:
+            metafields.append({
+                "namespace": "custom",
+                "key": "short_description",
+                "value": shopify_generated_short_description,
+                "type": "multi_line_text_field",
+            })
         if metafields:
             shopify_payload["product_data"]["metafields"] = metafields
-        
+
         payloads["shopify"] = shopify_payload
     
     # eBay payload
@@ -2954,7 +2967,6 @@ async def save_draft(
     shopify_category_gid: Optional[str] = Form(None),
     shopify_price: Optional[float] = Form(None),
     shopify_product_type: Optional[str] = Form(None),
-    shopify_seo_keywords: Optional[str] = Form(None),
     # Draft ID for updating existing draft
     draft_id: Optional[int] = Form(None)
 ):
@@ -3072,8 +3084,7 @@ async def save_draft(
             "shopify": {
                 "category_gid": shopify_category_gid,
                 "price": shopify_price,
-                "product_type": shopify_product_type,
-                "seo_keywords": shopify_seo_keywords
+                "product_type": shopify_product_type
             }
         }
 
@@ -5006,9 +5017,9 @@ async def get_platform_categories(
         result = await db.execute(query)
         categories = [
             {
-                "id": row[0], 
-                "name": row[1],  # merchant_type as display name
-                "full_name": row[2]  # full category path
+                "id": row[0],
+                "name": row[1] or row[2] or row[0],  # prefer merchant_type, fallback to full name or gid
+                "full_name": row[2] or row[1] or row[0],
             }
             for row in result.fetchall()
         ]

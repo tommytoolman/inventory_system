@@ -22,18 +22,18 @@ def _supersize_url(url: str) -> str:
 
     transformed = url
     if "f_auto,t_large" in transformed:
-        transformed = transformed.replace("f_auto,t_large", "f_auto,t_supersize")
+        transformed = transformed.replace("f_auto,t_large/", "")
+        transformed = transformed.replace("f_auto,t_large", "")
     elif "t_card-square" in transformed:
-        transformed = transformed.replace("t_card-square", "t_supersize")
-    elif "/image/upload/" in transformed and "t_supersize" not in transformed:
+        transformed = transformed.replace("t_card-square/", "")
+        transformed = transformed.replace("t_card-square", "")
+    elif "/image/upload/" in transformed:
         prefix, remainder = transformed.split("/image/upload/", 1)
         if remainder.startswith("s--"):
             marker, _, rest = remainder.partition("/")
-            if rest and not rest.startswith("f_auto"):
-                transformed = f"{prefix}/image/upload/{marker}/f_auto,t_supersize/{rest}"
+            transformed = f"{prefix}/image/upload/{marker}/{rest}"
         else:
-            if not remainder.startswith("f_auto"):
-                transformed = f"{prefix}/image/upload/f_auto,t_supersize/{remainder}"
+            transformed = f"{prefix}/image/upload/{remainder}"
 
     return transformed
 

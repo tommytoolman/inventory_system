@@ -2,12 +2,21 @@ from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select
+from sqlalchemy.orm import selectinload
+import json
 from typing import Optional, List, Dict, Any
+from datetime import datetime
+from collections import Counter
 from app.database import get_session
 from app.core.templates import templates
 from app.core.config import Settings, get_settings
 from app.services.reconciliation_service import process_reconciliation
 from app.models import SyncEvent
+from app.models.product import Product, ProductStatus
+from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
+from app.models.ebay import EbayListing
+from app.models.shopify import ShopifyListing
+from app.models.vr import VRListing
 from scripts.product_matcher import ProductMatcher
 import logging
 
@@ -113,6 +122,206 @@ async def status_mismatches_report(
             "platform_b": platform_b,
             "total_value": sum(float(item['price'] or 0) for item in mismatches),
             "platforms": ["reverb", "ebay", "shopify", "vr"]
+        })
+
+
+@router.get("/listing-health", response_class=HTMLResponse)
+async def listing_health_report(
+    request: Request,
+    status: Optional[str] = Query("ALL", description="Filter by product status"),
+    issues_only: bool = Query(False, description="Show only rows with warnings or errors"),
+    limit: int = Query(200, ge=1, le=500)
+):
+    """Traffic-light view of product listing health across platforms."""
+
+    platform_defs = [
+        ("shopify", "Shopify", "shopify_listing"),
+        ("reverb", "Reverb", "reverb_listing"),
+        ("ebay", "eBay", "ebay_listing"),
+        ("vr", "Vintage & Rare", "vr_listing"),
+    ]
+
+    def _determine_status(errors: List[str], warnings: List[str]) -> str:
+        if errors:
+            return "error"
+        if warnings:
+            return "warning"
+        return "ok"
+
+    def _evaluate_core(product: Product) -> Dict[str, Any]:
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        title_candidate = product.title or product.generate_title()
+        if not title_candidate:
+            errors.append("Missing product title")
+
+        if not product.category:
+            errors.append("Missing category")
+
+        if product.is_stocked_item:
+            if product.quantity is None:
+                warnings.append("Quantity not set for stocked item")
+            elif product.quantity <= 0:
+                errors.append("Stocked item has zero quantity")
+
+        if not product.description:
+            warnings.append("No description")
+
+        if product.status == ProductStatus.ACTIVE and not product.shipping_profile_id:
+            warnings.append("No shipping profile selected")
+
+        status_value = _determine_status(errors, warnings)
+        return {
+            "status": status_value,
+            "issues": errors + warnings or ["All checks passed"],
+        }
+
+    def _evaluate_media(product: Product) -> Dict[str, Any]:
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        if not product.primary_image:
+            errors.append("Missing primary image")
+        if not product.additional_images:
+            warnings.append("No gallery images")
+
+        status_value = _determine_status(errors, warnings)
+        return {
+            "status": status_value,
+            "issues": errors + warnings or ["All checks passed"],
+        }
+
+    def _evaluate_platform(product: Product, platform_name: str, label: str, attr: str) -> Dict[str, Any]:
+        commons = [pc for pc in product.platform_listings if (pc.platform_name or "").lower() == platform_name]
+        if not commons:
+            return {
+                "label": label,
+                "status": "not_listed",
+                "issues": [f"Not listed on {label}"],
+            }
+
+        common = commons[0]
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        if not common.external_id:
+            errors.append("Missing external ID")
+        if not common.listing_url:
+            warnings.append("Missing listing URL")
+
+        sync_state = (common.sync_status or "").lower()
+        if sync_state not in {"synced", "ok", "success"}:
+            warnings.append(f"Sync status is '{common.sync_status or 'unknown'}'")
+
+        listing = getattr(common, attr, None)
+        if listing is None:
+            errors.append("No platform listing record")
+        else:
+            if platform_name == "shopify" and not getattr(listing, "category_gid", None):
+                warnings.append("Shopify category not assigned")
+            if platform_name == "ebay" and not getattr(listing, "listing_status", None):
+                warnings.append("eBay listing status unknown")
+            if platform_name == "reverb" and not getattr(listing, "reverb_state", None):
+                warnings.append("Reverb state missing")
+
+        status_value = _determine_status(errors, warnings)
+        return {
+            "label": label,
+            "status": status_value,
+            "issues": errors + warnings or ["All checks passed"],
+            "platform_common": common,
+        }
+
+    status_filter = (status or "ALL").upper()
+
+    async with get_session() as db:
+        query = (
+            select(Product)
+            .options(
+                selectinload(Product.platform_listings)
+                .selectinload(PlatformCommon.shopify_listing),
+                selectinload(Product.platform_listings)
+                .selectinload(PlatformCommon.reverb_listing),
+                selectinload(Product.platform_listings)
+                .selectinload(PlatformCommon.ebay_listing),
+                selectinload(Product.platform_listings)
+                .selectinload(PlatformCommon.vr_listing),
+            )
+            .order_by(Product.created_at.desc())
+            .limit(limit)
+        )
+
+        if status_filter != "ALL":
+            try:
+                status_enum = ProductStatus[status_filter]
+                query = query.where(Product.status == status_enum)
+            except KeyError:
+                logger.warning("Unknown status filter '%s' supplied to listing health report", status_filter)
+
+        products = (await db.execute(query)).scalars().all()
+
+        status_priority = {"error": 0, "warning": 1, "ok": 2, "not_listed": 3}
+
+        health_rows: List[Dict[str, Any]] = []
+        for product in products:
+            core = _evaluate_core(product)
+            media = _evaluate_media(product)
+
+            platforms = {
+                name: _evaluate_platform(product, name, label, attr)
+                for name, label, attr in platform_defs
+            }
+
+            statuses_to_consider = [core["status"], media["status"]]
+            statuses_to_consider.extend(
+                info["status"]
+                for info in platforms.values()
+                if info["status"] != "not_listed"
+            )
+
+            if statuses_to_consider:
+                overall_status = min(statuses_to_consider, key=lambda s: status_priority.get(s, 4))
+            else:
+                overall_status = "not_listed"
+
+            health_rows.append({
+                "product": product,
+                "core": core,
+                "media": media,
+                "platforms": platforms,
+                "overall_status": overall_status,
+            })
+
+        if issues_only:
+            health_rows = [row for row in health_rows if row["overall_status"] in {"warning", "error"}]
+
+        summary_counts = Counter(row["overall_status"] for row in health_rows)
+
+        status_options = ["ALL"] + list(ProductStatus.__members__.keys())
+        status_labels = {
+            "ok": "Healthy",
+            "warning": "Warning",
+            "error": "Issue",
+            "not_listed": "Not listed",
+        }
+        status_classes = {
+            "ok": "bg-green-100 text-green-800",
+            "warning": "bg-yellow-100 text-yellow-800",
+            "error": "bg-red-100 text-red-800",
+            "not_listed": "bg-gray-100 text-gray-600",
+        }
+
+        return templates.TemplateResponse("reports/listing_health_report.html", {
+            "request": request,
+            "rows": health_rows,
+            "status_filter": status_filter,
+            "status_options": status_options,
+            "issues_only": issues_only,
+            "summary_counts": summary_counts,
+            "status_labels": status_labels,
+            "status_classes": status_classes,
+            "platform_defs": platform_defs,
         })
 
 
@@ -663,6 +872,17 @@ async def sync_events_report(
         detailed_result = await db.execute(detailed_query, params)
         sync_events = [dict(row._mapping) for row in detailed_result.fetchall()]
 
+        for event in sync_events:
+            change_data = event.get('change_data')
+            if isinstance(change_data, str):
+                try:
+                    change_data = json.loads(change_data)
+                except json.JSONDecodeError:
+                    change_data = {}
+            event['change_data'] = change_data or {}
+            event['match_candidate'] = event['change_data'].get('match_candidate')
+            event['suggested_action'] = event['change_data'].get('suggested_action')
+
     available_platforms = ["reverb", "ebay", "shopify", "vr"]
     available_change_types = [
         "new_listing", "price_change", "status_change", "removed_listing", "title", "description"
@@ -788,10 +1008,21 @@ async def platform_coverage_report(
 @router.post("/sync-events/process/{event_id}")
 async def process_sync_event(
     event_id: int,
+    request: Request,
     settings: Settings = Depends(get_settings)
 ):
     """Process a single sync event - handles all event types including new listings."""
     try:
+        try:
+            payload = await request.json()
+            if not isinstance(payload, dict):
+                payload = {}
+        except Exception:
+            payload = {}
+
+        action = payload.get('action', 'process')
+        product_identifier = payload.get('product_id') or payload.get('product_identifier') or payload.get('sku')
+
         async with get_session() as db:
             # Check the event type first
             stmt = select(SyncEvent).where(SyncEvent.id == event_id)
@@ -803,6 +1034,26 @@ async def process_sync_event(
                     "status": "error",
                     "message": f"Sync event {event_id} not found"
                 }
+
+            if action == 'delete':
+                return await _apply_manual_delete(db, event)
+
+            if action == 'match':
+                product = await _resolve_product_identifier(db, product_identifier)
+                if not product:
+                    return {
+                        "status": "error",
+                        "message": f"Unable to locate product '{product_identifier}'"
+                    }
+
+                change_data = event.change_data or {}
+                change_data['manual_match'] = {
+                    'product_id': product.id,
+                    'identifier': product_identifier,
+                }
+                event.change_data = change_data
+                event.product_id = product.id
+                await db.commit()
 
             # Route based on event type
             if event.change_type == 'new_listing':
@@ -855,6 +1106,80 @@ async def process_sync_event(
     except Exception as e:
         logger.error(f"Error processing sync event {event_id}: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}
+
+
+async def _resolve_product_identifier(db: AsyncSession, identifier: Optional[str]) -> Optional[Product]:
+    if not identifier:
+        return None
+
+    identifier_str = str(identifier).strip()
+    if not identifier_str:
+        return None
+
+    if identifier_str.isdigit():
+        product = await db.get(Product, int(identifier_str))
+        if product:
+            return product
+
+    stmt = select(Product).where(func.lower(Product.sku) == identifier_str.lower())
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def _apply_manual_delete(db: AsyncSession, event: SyncEvent) -> Dict[str, Any]:
+    product = None
+    if event.product_id:
+        product = await db.get(Product, event.product_id)
+
+    if product:
+        stmt = select(PlatformCommon).where(
+            PlatformCommon.product_id == product.id,
+            PlatformCommon.platform_name == event.platform_name,
+        )
+        platform_common = (await db.execute(stmt)).scalar_one_or_none()
+
+        if platform_common:
+            platform_common.status = ListingStatus.ENDED.value if hasattr(ListingStatus, 'ENDED') else 'ENDED'
+            platform_common.sync_status = SyncStatus.SYNCED.value
+            platform_common.last_sync = datetime.utcnow()
+            platform_common.platform_specific_data = platform_common.platform_specific_data or {}
+
+            if event.platform_name == 'ebay':
+                stmt = select(EbayListing).where(EbayListing.platform_id == platform_common.id)
+                listing = (await db.execute(stmt)).scalar_one_or_none()
+                if listing:
+                    listing.listing_status = 'ENDED'
+                    listing.quantity_available = 0
+                    listing.last_synced_at = datetime.utcnow()
+
+            elif event.platform_name == 'shopify':
+                stmt = select(ShopifyListing).where(ShopifyListing.platform_id == platform_common.id)
+                listing = (await db.execute(stmt)).scalar_one_or_none()
+                if listing:
+                    listing.status = 'ARCHIVED'
+                    listing.last_synced_at = datetime.utcnow()
+
+            elif event.platform_name == 'vr':
+                stmt = select(VRListing).where(VRListing.platform_id == platform_common.id)
+                listing = (await db.execute(stmt)).scalar_one_or_none()
+                if listing:
+                    listing.vr_state = 'ended'
+                    listing.last_synced_at = datetime.utcnow()
+
+    event.status = 'processed'
+    event.processed_at = datetime.utcnow()
+    notes_payload = {
+        'action': 'manual_delete',
+        'timestamp': datetime.utcnow().isoformat(),
+    }
+    event.notes = json.dumps(notes_payload)
+
+    await db.commit()
+
+    return {
+        'status': 'success',
+        'message': 'Listing marked as deleted locally. Please ensure the platform listing is removed if necessary.'
+    }
 
 
 @router.get("/sync-stats", response_class=HTMLResponse)

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Listing Health Report{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-6 flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 mb-1">Listing Health</h1>
+            <p class="text-gray-600">Traffic-light overview of product health across RIFF and sales channels.</p>
+        </div>
+        <a href="/reports" class="text-blue-600 hover:text-blue-800">← Back to Reports</a>
+    </div>
+
+    <form method="get" class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="flex flex-col md:flex-row md:items-end md:space-x-6 space-y-4 md:space-y-0">
+            <div>
+                <label for="status" class="block text-sm font-medium text-gray-700">Product status</label>
+                <select id="status" name="status"
+                        class="mt-1 block w-48 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    {% for option in status_options %}
+                        <option value="{{ option }}" {% if status_filter == option %}selected{% endif %}>{{ option.title() if option != 'ALL' else 'All' }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center space-x-2">
+                <input id="issues_only" type="checkbox" name="issues_only" value="true"
+                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                       {% if issues_only %}checked{% endif %}>
+                <label for="issues_only" class="text-sm text-gray-700">Show only warnings and issues</label>
+            </div>
+            <div>
+                <label for="limit" class="block text-sm font-medium text-gray-700">Max rows</label>
+                <input id="limit" name="limit" type="number" min="1" max="500" value="{{ request.query_params.get('limit', 200) }}"
+                       class="mt-1 block w-24 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
+            <div class="md:ml-auto">
+                <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Apply</button>
+            </div>
+        </div>
+    </form>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {% for status_key, count in summary_counts.items() %}
+            <div class="bg-white shadow rounded-lg p-4 flex flex-col">
+                <span class="text-sm text-gray-500">{{ status_labels.get(status_key, status_key.title()) }}</span>
+                <span class="mt-2 text-2xl font-semibold text-gray-900">{{ count }}</span>
+            </div>
+        {% endfor %}
+        {% if summary_counts|length == 0 %}
+            <div class="bg-white shadow rounded-lg p-4">
+                <span class="text-gray-600">No products found for the current filters</span>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                    <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Core</th>
+                    <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Media</th>
+                    {% for platform_name, platform_label, _ in platform_defs %}
+                        <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">{{ platform_label }}</th>
+                    {% endfor %}
+                    <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Overall</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+            {% for row in rows %}
+                {% set product = row.product %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 align-top">
+                        <div class="flex flex-col">
+                            <span class="font-medium text-gray-900">{{ product.title or product.generate_title() or 'Untitled Product' }}</span>
+                            <span class="text-sm text-gray-500">SKU: {{ product.sku }}</span>
+                            <span class="text-sm text-gray-500">Status: {{ product.status.value if product.status else 'UNKNOWN' }}</span>
+                        </div>
+                    </td>
+                    {% set core = row.core %}
+                    <td class="px-3 py-3 text-center align-top">
+                        {% set issues_text = '; '.join(core.issues) %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(core.status, 'bg-gray-100 text-gray-600') }}" title="{{ issues_text }}">
+                            {{ status_labels.get(core.status, core.status.title()) }}
+                        </span>
+                        <div class="mt-2 text-xs text-gray-500 text-left">{{ issues_text }}</div>
+                    </td>
+                    {% set media = row.media %}
+                    <td class="px-3 py-3 text-center align-top">
+                        {% set media_issues = '; '.join(media.issues) %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(media.status, 'bg-gray-100 text-gray-600') }}" title="{{ media_issues }}">
+                            {{ status_labels.get(media.status, media.status.title()) }}
+                        </span>
+                        <div class="mt-2 text-xs text-gray-500 text-left">{{ media_issues }}</div>
+                    </td>
+                    {% for platform_name, platform_label, _ in platform_defs %}
+                        {% set platform = row.platforms.get(platform_name) %}
+                        {% set platform_issues = '; '.join(platform.issues) %}
+                        <td class="px-3 py-3 text-center align-top">
+                            <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(platform.status, 'bg-gray-100 text-gray-600') }}" title="{{ platform_issues }}">
+                                {{ status_labels.get(platform.status, platform.status.title()) }}
+                            </span>
+                            <div class="mt-2 text-xs text-gray-500 text-left">{{ platform_issues }}</div>
+                        </td>
+                    {% endfor %}
+                    <td class="px-3 py-3 text-center align-top">
+                        <span class="inline-flex px-3 py-1 text-xs font-semibold rounded-full {{ status_classes.get(row.overall_status, 'bg-gray-100 text-gray-600') }}">
+                            {{ status_labels.get(row.overall_status, row.overall_status.title()) }}
+                        </span>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

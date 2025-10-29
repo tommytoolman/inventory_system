@@ -2469,7 +2469,25 @@ async def add_product(
                 # Initialize Shopify service if not already done
                 if 'shopify_service' not in locals():
                     shopify_service = ShopifyService(db, settings)
-                
+
+                description_with_footer = ensure_description_has_standard_footer(product.description or "")
+                fallback_title = product.title or product.generate_title()
+                shopify_generated_keywords = generate_shopify_keywords(
+                    brand=product.brand,
+                    model=product.model,
+                    finish=product.finish,
+                    year=product.year,
+                    decade=product.decade,
+                    category=product.category,
+                    condition=product.condition.value if getattr(product.condition, "value", None) else product.condition,
+                    description_html=description_with_footer,
+                )
+                shopify_generated_short_description = generate_shopify_short_description(
+                    description_with_footer,
+                    fallback=fallback_title,
+                )
+                shopify_generated_seo_title = (fallback_title or "").strip()[:255] or None
+
                 shopify_options = platform_data.get("shopify", {})
                 logger.info("Calling shopify_service.create_listing_from_product()...")
                 result = await shopify_service.create_listing_from_product(

@@ -26,6 +26,7 @@ from app.models.sync_event import SyncEvent
 from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
+from app.services.match_utils import suggest_product_match
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,133 @@ class ReverbService:
         # api_key = self.settings.REVERB_SANDBOX_API_KEY if use_sandbox else self.settings.REVERB_API_KEY
         
         self.client = ReverbClient(api_key=self.settings.REVERB_API_KEY, use_sandbox=use_sandbox)
-    
+
+    @staticmethod
+    def _normalize_image_url(url: Optional[str]) -> Optional[str]:
+        if not url:
+            return url
+        if "f_auto,t_supersize" in url:
+            return url
+
+        transformed = url
+        if "f_auto,t_large" in transformed:
+            transformed = transformed.replace("f_auto,t_large/", "").replace("f_auto,t_large", "")
+        if "t_card-square" in transformed:
+            transformed = transformed.replace("t_card-square/", "").replace("t_card-square", "")
+
+        if "/image/upload/" in transformed:
+            prefix, remainder = transformed.split("/image/upload/", 1)
+            if remainder.startswith("s--"):
+                marker, _, rest = remainder.partition("/")
+                transformed = f"{prefix}/image/upload/{marker}/{rest}"
+            else:
+                transformed = f"{prefix}/image/upload/{remainder}"
+
+        return transformed
+
+    @classmethod
+    def _extract_image_urls(cls, listing_data: Dict[str, Any]) -> List[str]:
+        urls: List[str] = []
+
+        for photo in listing_data.get("photos") or []:
+            link = (photo.get("_links") or {}).get("full", {}).get("href")
+            link = cls._normalize_image_url(link)
+            if link and link not in urls:
+                urls.append(link)
+
+        if not urls:
+            for photo in listing_data.get("cloudinary_photos") or []:
+                link = photo.get("preview_url")
+                if not link and photo.get("path"):
+                    link = f"https://rvb-img.reverb.com/image/upload/{photo['path']}"
+                link = cls._normalize_image_url(link)
+                if link and link not in urls:
+                    urls.append(link)
+
+        return urls
+
+    async def refresh_product_images_from_listing(self, reverb_id: str, retries: int = 3, delay_seconds: float = 1.5) -> bool:
+        photo_urls: List[str] = []
+        last_error: Optional[Exception] = None
+
+        for attempt in range(1, retries + 1):
+            try:
+                details = await self.client.get_listing_details(reverb_id)
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                logger.warning(
+                    "Attempt %s/%s: failed to fetch Reverb listing %s for image refresh: %s",
+                    attempt,
+                    retries,
+                    reverb_id,
+                    exc,
+                )
+            else:
+                listing_data = details.get("listing", details) or {}
+                photo_urls = self._extract_image_urls(listing_data)
+                if photo_urls:
+                    break
+                logger.info(
+                    "Attempt %s/%s: Reverb listing %s returned no photos yet",
+                    attempt,
+                    retries,
+                    reverb_id,
+                )
+
+            if attempt < retries:
+                await asyncio.sleep(delay_seconds)
+
+        if not photo_urls:
+            if last_error:
+                logger.warning(
+                    "Giving up refreshing images for Reverb listing %s after %s attempts: %s",
+                    reverb_id,
+                    retries,
+                    last_error,
+                )
+            else:
+                logger.warning(
+                    "Reverb listing %s did not return any image URLs after %s attempts",
+                    reverb_id,
+                    retries,
+                )
+            return False
+
+        stmt = (
+            select(PlatformCommon)
+            .options(selectinload(PlatformCommon.product))
+            .where(
+                PlatformCommon.platform_name == "reverb",
+                PlatformCommon.external_id == str(reverb_id),
+            )
+        )
+        result = await self.db.execute(stmt)
+        platform_common = result.scalars().first()
+
+        if not platform_common or not platform_common.product_id:
+            logger.warning("No platform_common entry found for Reverb listing %s", reverb_id)
+            return False
+
+        product = platform_common.product or await self.db.get(Product, platform_common.product_id)
+        if not product:
+            logger.warning(
+                "PlatformCommon %s references missing product %s while refreshing images",
+                platform_common.id,
+                platform_common.product_id,
+            )
+            return False
+
+        product.primary_image = photo_urls[0]
+        product.additional_images = photo_urls[1:]
+        await self.db.flush()
+        logger.info(
+            "Refreshed product %s images from Reverb listing %s (total %s)",
+            product.id,
+            reverb_id,
+            len(photo_urls),
+        )
+        return True
+
     async def get_categories(self) -> Dict:
         """
         Get all categories from Reverb.
@@ -1398,6 +1525,37 @@ class ReverbService:
                     },
                     'status': 'pending'
                 }
+
+                match = await suggest_product_match(
+                    self.db,
+                    'reverb',
+                    {
+                        'title': item.get('title'),
+                        'price': item.get('price'),
+                        'state': item.get('state'),
+                        'sku': item.get('sku'),
+                        'brand': item.get('brand'),
+                        'model': item.get('model'),
+                        'raw_data': item.get('_raw'),
+                    },
+                )
+
+                if match:
+                    event_data['change_data']['match_candidate'] = {
+                        'product_id': match.product.id,
+                        'sku': match.product.sku,
+                        'title': match.product.title,
+                        'brand': match.product.brand,
+                        'model': match.product.model,
+                        'status': match.product.status.value if getattr(match.product.status, 'value', None) else str(match.product.status) if match.product.status else None,
+                        'base_price': match.product.base_price,
+                        'primary_image': match.product.primary_image,
+                        'confidence': match.confidence,
+                        'reason': match.reason,
+                        'existing_platforms': match.existing_platforms,
+                    }
+                    event_data['change_data']['suggested_action'] = 'create'
+
                 events_to_create.append(event_data)
                 created_count += 1
             except Exception as e:

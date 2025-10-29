@@ -2378,6 +2378,14 @@ async def add_product(
                         "message": f"Listed on Reverb with ID: {result.get('reverb_listing_id')}"
                     }
 
+                    reverb_listing_id = result.get("reverb_listing_id")
+                    if reverb_listing_id:
+                        refreshed = await reverb_service.refresh_product_images_from_listing(str(reverb_listing_id))
+                        if not refreshed:
+                            logger.info(
+                                "Reverb image refresh deferred for listing %s", reverb_listing_id
+                            )
+
                     enriched_data = result.get("listing_data") or {}
                     platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
                 else:

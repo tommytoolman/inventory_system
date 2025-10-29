@@ -883,15 +883,10 @@ class ShopifyService:
                             logger.warning("Invalid Shopify override price '%s'", override_price)
 
                     if local_final_price is None:
-                        source_price = self._extract_source_price(product, reverb_data)
-                        shopify_price = None
-                        if source_price:
-                            try:
-                                shopify_price = self._calculate_shopify_price(source_price)
-                            except ValueError:
-                                logger.warning("Invalid source price %s for Shopify calculation", source_price)
-
-                        local_final_price = shopify_price if shopify_price else float(product.base_price or 0)
+                        source_price = product.base_price
+                        if source_price is None:
+                            raise ValueError("Product base_price is required for Shopify listings")
+                        local_final_price = float(source_price)
 
                     final_price = local_final_price
 

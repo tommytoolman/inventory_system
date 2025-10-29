@@ -10,56 +10,15 @@ from app.database import async_session
 from app.models.platform_common import PlatformCommon
 from app.models.product import Product
 from app.services.reverb.client import ReverbClient
+from app.services.reverb_service import ReverbService
 
 
 def _supersize_url(url: str) -> str:
-    """Return a Cloudinary URL that requests the t_supersize rendition."""
-    if not url:
-        return url
-
-    if "f_auto,t_supersize" in url:
-        return url
-
-    transformed = url
-    if "f_auto,t_large" in transformed:
-        transformed = transformed.replace("f_auto,t_large/", "")
-        transformed = transformed.replace("f_auto,t_large", "")
-    elif "t_card-square" in transformed:
-        transformed = transformed.replace("t_card-square/", "")
-        transformed = transformed.replace("t_card-square", "")
-    elif "/image/upload/" in transformed:
-        prefix, remainder = transformed.split("/image/upload/", 1)
-        if remainder.startswith("s--"):
-            marker, _, rest = remainder.partition("/")
-            transformed = f"{prefix}/image/upload/{marker}/{rest}"
-        else:
-            transformed = f"{prefix}/image/upload/{remainder}"
-
-    return transformed
+    return ReverbService._normalize_image_url(url)
 
 
 def _extract_image_urls(listing_data: dict) -> List[str]:
-    """Build an ordered list of CDN URLs from the Reverb listing payload."""
-    urls: List[str] = []
-
-    for photo in listing_data.get("photos") or []:
-        link = (photo.get("_links") or {}).get("full", {}).get("href")
-        if link:
-            link = _supersize_url(link)
-        if link and link not in urls:
-            urls.append(link)
-
-    if not urls:
-        for photo in listing_data.get("cloudinary_photos") or []:
-            link = photo.get("preview_url")
-            if not link and photo.get("path"):
-                link = f"https://rvb-img.reverb.com/image/upload/f_auto,t_supersize/{photo['path']}"
-            else:
-                link = _supersize_url(link)
-            if link and link not in urls:
-                urls.append(link)
-
-    return urls
+    return ReverbService._extract_image_urls(listing_data)
 
 
 async def backfill_images(reverb_ids: Iterable[str]) -> None:

@@ -20,6 +20,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import ShopifyAPIError
 from app.services.shopify.client import ShopifyGraphQLClient  # You'll need to create this
 from app.services.reverb_service import ReverbService # We might need this for data mapping later
+from app.services.match_utils import suggest_product_match
 
 
 logger = logging.getLogger(__name__)
@@ -425,6 +426,36 @@ class ShopifyService:
                     },
                     'status': 'pending'
                 }
+
+                match = await suggest_product_match(
+                    self.db,
+                    'shopify',
+                    {
+                        'title': item.get('title'),
+                        'price': item.get('price'),
+                        'status': item.get('status'),
+                        'vendor': item.get('vendor'),
+                        'product_type': item.get('product_type'),
+                        'raw_data': item.get('_raw'),
+                    },
+                )
+
+                if match:
+                    event_data['change_data']['match_candidate'] = {
+                        'product_id': match.product.id,
+                        'sku': match.product.sku,
+                        'title': match.product.title,
+                        'brand': match.product.brand,
+                        'model': match.product.model,
+                        'status': match.product.status.value if getattr(match.product.status, 'value', None) else str(match.product.status) if match.product.status else None,
+                        'base_price': match.product.base_price,
+                        'primary_image': match.product.primary_image,
+                        'confidence': match.confidence,
+                        'reason': match.reason,
+                        'existing_platforms': match.existing_platforms,
+                    }
+                    event_data['change_data']['suggested_action'] = 'match'
+
                 events_to_create.append(event_data)
                 created_count += 1
             except Exception as e:
@@ -872,13 +903,20 @@ class ShopifyService:
                         "inventoryItem": {"tracked": True}  # Track inventory
                     }
                     
-                    # Add inventory location if we have a default location
-                    # You may need to set this based on your Shopify configuration
-                    DEFAULT_LOCATION_GID = "gid://shopify/Location/109766639956"  # Update this to your location
-                    if DEFAULT_LOCATION_GID:
+                    # Add inventory location if configured
+                    location_gid = None
+                    try:
+                        location_gid = self._resolve_location_gid()
+                    except ValueError as location_error:
+                        logger.warning(
+                            "Shopify location GID not configured; skipping inventory sync: %s",
+                            location_error,
+                        )
+
+                    if location_gid:
                         variant_update["inventoryQuantities"] = [{
-                            "availableQuantity": inventory_qty,
-                            "locationId": DEFAULT_LOCATION_GID
+                            "availableQuantity": max(int(inventory_qty), 0),
+                            "locationId": location_gid
                         }]
                     
                     self.client.update_variant_rest(variant_gid, variant_update)

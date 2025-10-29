@@ -12,12 +12,40 @@ from app.models.product import Product
 from app.services.reverb.client import ReverbClient
 
 
+def _supersize_url(url: str) -> str:
+    """Return a Cloudinary URL that requests the t_supersize rendition."""
+    if not url:
+        return url
+
+    if "f_auto,t_supersize" in url:
+        return url
+
+    transformed = url
+    if "f_auto,t_large" in transformed:
+        transformed = transformed.replace("f_auto,t_large", "f_auto,t_supersize")
+    elif "t_card-square" in transformed:
+        transformed = transformed.replace("t_card-square", "t_supersize")
+    elif "/image/upload/" in transformed and "t_supersize" not in transformed:
+        prefix, remainder = transformed.split("/image/upload/", 1)
+        if remainder.startswith("s--"):
+            marker, _, rest = remainder.partition("/")
+            if rest and not rest.startswith("f_auto"):
+                transformed = f"{prefix}/image/upload/{marker}/f_auto,t_supersize/{rest}"
+        else:
+            if not remainder.startswith("f_auto"):
+                transformed = f"{prefix}/image/upload/f_auto,t_supersize/{remainder}"
+
+    return transformed
+
+
 def _extract_image_urls(listing_data: dict) -> List[str]:
     """Build an ordered list of CDN URLs from the Reverb listing payload."""
     urls: List[str] = []
 
     for photo in listing_data.get("photos") or []:
         link = (photo.get("_links") or {}).get("full", {}).get("href")
+        if link:
+            link = _supersize_url(link)
         if link and link not in urls:
             urls.append(link)
 
@@ -25,7 +53,9 @@ def _extract_image_urls(listing_data: dict) -> List[str]:
         for photo in listing_data.get("cloudinary_photos") or []:
             link = photo.get("preview_url")
             if not link and photo.get("path"):
-                link = f"https://rvb-img.reverb.com/image/upload/{photo['path']}"
+                link = f"https://rvb-img.reverb.com/image/upload/f_auto,t_supersize/{photo['path']}"
+            else:
+                link = _supersize_url(link)
             if link and link not in urls:
                 urls.append(link)
 

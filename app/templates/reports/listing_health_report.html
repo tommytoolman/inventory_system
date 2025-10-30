@@ -12,46 +12,48 @@
         <a href="/reports" class="text-blue-600 hover:text-blue-800">← Back to Reports</a>
     </div>
 
-    <form method="get" class="bg-white rounded-lg shadow p-4 mb-6">
-        <div class="flex flex-col md:flex-row md:items-end md:space-x-6 space-y-4 md:space-y-0">
-            <div>
-                <label for="status" class="block text-sm font-medium text-gray-700">Product status</label>
-                <select id="status" name="status"
-                        class="mt-1 block w-48 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    {% for option in status_options %}
-                        <option value="{{ option }}" {% if status_filter == option %}selected{% endif %}>{{ option.title() if option != 'ALL' else 'All' }}</option>
-                    {% endfor %}
-                </select>
+    <div class="mb-6 space-y-4 md:space-y-0 md:flex md:items-start md:space-x-4">
+        <form id="listing-health-filter" method="get" class="bg-white rounded-lg shadow p-4 md:flex-1">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:space-x-6 space-y-4 lg:space-y-0 w-full">
+                <div class="flex items-center space-x-2">
+                    <label for="status" class="text-sm font-medium text-gray-700">Product status:</label>
+                    <select id="status" name="status"
+                            class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm">
+                        {% for option in status_options %}
+                            <option value="{{ option }}" {% if status_filter == option %}selected{% endif %}>{{ option.title() if option != 'ALL' else 'All' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <label for="limit" class="text-sm font-medium text-gray-700">Max rows:</label>
+                    <select id="limit" name="limit"
+                            class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm">
+                        {% for option in ['25', '50', '100', 'ALL'] %}
+                            <option value="{{ option }}" {% if limit_param == option %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2 lg:ml-auto">
+                    <input id="issues_only" type="checkbox" name="issues_only" value="true"
+                           class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                           {% if issues_only %}checked{% endif %}>
+                    <label for="issues_only" class="text-sm text-gray-700 leading-none">Show only warnings and issues</label>
+                </div>
             </div>
-            <div class="flex items-center space-x-2">
-                <input id="issues_only" type="checkbox" name="issues_only" value="true"
-                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                       {% if issues_only %}checked{% endif %}>
-                <label for="issues_only" class="text-sm text-gray-700">Show only warnings and issues</label>
-            </div>
-            <div>
-                <label for="limit" class="block text-sm font-medium text-gray-700">Max rows</label>
-                <input id="limit" name="limit" type="number" min="1" max="500" value="{{ request.query_params.get('limit', 200) }}"
-                       class="mt-1 block w-24 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-            </div>
-            <div class="md:ml-auto">
-                <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Apply</button>
+        </form>
+
+        <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-3 sm:space-y-0">
+            {% if healthy_count > 0 %}
+                <div class="bg-white shadow rounded-lg p-4 flex items-center space-x-3">
+                    <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-green-100 text-green-800">Healthy</span>
+                    <span class="text-2xl font-semibold text-gray-900">{{ healthy_count }}</span>
+                </div>
+            {% endif %}
+            <div class="bg-white shadow rounded-lg p-4 flex items-center space-x-3">
+                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-yellow-100 text-yellow-800">Warning(s)</span>
+                <span class="text-2xl font-semibold text-gray-900">{{ warning_count }}</span>
             </div>
         </div>
-    </form>
-
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        {% for status_key, count in summary_counts.items() %}
-            <div class="bg-white shadow rounded-lg p-4 flex flex-col">
-                <span class="text-sm text-gray-500">{{ status_labels.get(status_key, status_key.title()) }}</span>
-                <span class="mt-2 text-2xl font-semibold text-gray-900">{{ count }}</span>
-            </div>
-        {% endfor %}
-        {% if summary_counts|length == 0 %}
-            <div class="bg-white shadow rounded-lg p-4">
-                <span class="text-gray-600">No products found for the current filters</span>
-            </div>
-        {% endif %}
     </div>
 
     <div class="bg-white shadow rounded-lg overflow-hidden">
@@ -71,37 +73,53 @@
             {% for row in rows %}
                 {% set product = row.product %}
                 <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-3 align-top">
-                        <div class="flex flex-col">
-                            <span class="font-medium text-gray-900">{{ product.title or product.generate_title() or 'Untitled Product' }}</span>
-                            <span class="text-sm text-gray-500">SKU: {{ product.sku }}</span>
-                            <span class="text-sm text-gray-500">Status: {{ product.status.value if product.status else 'UNKNOWN' }}</span>
+                    <td class="px-4 py-3 align-top w-64">
+                        {% set full_title = product.title or product.generate_title() or 'Untitled Product' %}
+                        {% set truncated_title = full_title[:40].rstrip() ~ (' …' if full_title|length > 40 else '') %}
+                        <div class="flex flex-col space-y-1">
+                            <span class="font-medium text-gray-900 truncate" title="{{ full_title }}">{{ truncated_title }}</span>
+                            {% set product_status_value = product.status.value if product.status else 'UNKNOWN' %}
+                            {% set product_status_key = product_status_value.upper() %}
+                            {% set product_status_label = product_status_value.replace('_', ' ').title() %}
+                            <div class="flex items-center space-x-2">
+                                <a href="/inventory/product/{{ product.id }}" target="_blank" rel="noopener"
+                                   class="text-sm text-blue-600 hover:text-blue-800 whitespace-nowrap">SKU: {{ product.sku }}</a>
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ product_status_classes.get(product_status_key, 'bg-gray-100 text-gray-600') }} whitespace-nowrap">
+                                    {{ product_status_label }}
+                                </span>
+                            </div>
                         </div>
                     </td>
                     {% set core = row.core %}
-                    <td class="px-3 py-3 text-center align-top">
+                    <td class="px-3 py-3 text-center align-top whitespace-nowrap">
                         {% set issues_text = '; '.join(core.issues) %}
                         <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(core.status, 'bg-gray-100 text-gray-600') }}" title="{{ issues_text }}">
                             {{ status_labels.get(core.status, core.status.title()) }}
                         </span>
-                        <div class="mt-2 text-xs text-gray-500 text-left">{{ issues_text }}</div>
+                        {% if issues_text %}
+                        <div class="mt-2 text-xs text-gray-500 text-center whitespace-nowrap">{{ issues_text }}</div>
+                        {% endif %}
                     </td>
                     {% set media = row.media %}
-                    <td class="px-3 py-3 text-center align-top">
+                    <td class="px-3 py-3 text-center align-top whitespace-nowrap">
                         {% set media_issues = '; '.join(media.issues) %}
                         <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(media.status, 'bg-gray-100 text-gray-600') }}" title="{{ media_issues }}">
                             {{ status_labels.get(media.status, media.status.title()) }}
                         </span>
-                        <div class="mt-2 text-xs text-gray-500 text-left">{{ media_issues }}</div>
+                        {% if media_issues %}
+                        <div class="mt-2 text-xs text-gray-500 text-center whitespace-nowrap">{{ media_issues }}</div>
+                        {% endif %}
                     </td>
                     {% for platform_name, platform_label, _ in platform_defs %}
                         {% set platform = row.platforms.get(platform_name) %}
                         {% set platform_issues = '; '.join(platform.issues) %}
-                        <td class="px-3 py-3 text-center align-top">
+                        <td class="px-3 py-3 text-center align-top whitespace-nowrap">
                             <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(platform.status, 'bg-gray-100 text-gray-600') }}" title="{{ platform_issues }}">
                                 {{ status_labels.get(platform.status, platform.status.title()) }}
                             </span>
-                            <div class="mt-2 text-xs text-gray-500 text-left">{{ platform_issues }}</div>
+                            {% if platform_issues %}
+                            <div class="mt-2 text-xs text-gray-500 text-center whitespace-nowrap">{{ platform_issues }}</div>
+                            {% endif %}
                         </td>
                     {% endfor %}
                     <td class="px-3 py-3 text-center align-top">
@@ -112,7 +130,40 @@
                 </tr>
             {% endfor %}
             </tbody>
-        </table>
+</table>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const filterForm = document.getElementById('listing-health-filter');
+        if (!filterForm) {
+            return;
+        }
+
+        const statusSelect = document.getElementById('status');
+        const issuesCheckbox = document.getElementById('issues_only');
+        const limitSelect = document.getElementById('limit');
+        let limitTimer = null;
+
+        if (statusSelect) {
+            statusSelect.addEventListener('change', () => filterForm.submit());
+        }
+
+        if (issuesCheckbox) {
+            issuesCheckbox.addEventListener('change', () => filterForm.submit());
+        }
+
+        if (limitSelect) {
+            limitSelect.addEventListener('change', function () {
+                if (limitTimer) {
+                    clearTimeout(limitTimer);
+                }
+                limitTimer = setTimeout(() => {
+                    filterForm.submit();
+                }, 2000);
+            });
+        }
+    });
+</script>
 {% endblock %}

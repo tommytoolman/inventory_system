@@ -23,6 +23,7 @@ from fastapi import (
     Form, 
     File, 
     UploadFile,
+    Query,
 )
 
 from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse, JSONResponse
@@ -38,6 +39,7 @@ from app.core.events import StockUpdateEvent
 from app.core.exceptions import ProductCreationError, PlatformIntegrationError
 from app.dependencies import get_db, templates
 from app.models.product import Product, ProductStatus, ProductCondition
+from app.models.category_mappings import ReverbCategory
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.shipping import ShippingProfile
 from app.models.vr import VRListing
@@ -1433,6 +1435,11 @@ async def product_detail(
                 "model": mapping["model"],
             }
 
+        reverb_listing_id = None
+        reverb_listing = common_listings_map.get("REVERB")
+        if reverb_listing and reverb_listing.external_id:
+            reverb_listing_id = reverb_listing.external_id
+
         context = {
             "request": request,
             "product": product,
@@ -1441,6 +1448,7 @@ async def product_detail(
             "show_status": show_status,
             "prev_product": prev_product,
             "next_product": next_product,
+            "reverb_listing_id": reverb_listing_id,
         }
 
         return templates.TemplateResponse("inventory/detail.html", context)
@@ -1448,6 +1456,42 @@ async def product_detail(
     except Exception as e:
         logger.error(f"Error in product_detail for product_id {product_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+
+@router.post("/product/{product_id}/refresh_images", response_class=JSONResponse)
+async def refresh_product_images(
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
+):
+    stmt = (
+        select(PlatformCommon)
+        .where(
+            PlatformCommon.product_id == product_id,
+            PlatformCommon.platform_name == "reverb",
+        )
+    )
+    result = await db.execute(stmt)
+    platform_common = result.scalars().first()
+
+    if not platform_common or not platform_common.external_id:
+        return JSONResponse(
+            {"status": "error", "message": "No Reverb listing found for this product."},
+            status_code=400,
+        )
+
+    service = ReverbService(db, settings)
+    refreshed = await service.refresh_product_images_from_listing(str(platform_common.external_id))
+
+    if refreshed:
+        await db.commit()
+        return JSONResponse({"status": "success"})
+
+    await db.rollback()
+    return JSONResponse(
+        {"status": "error", "message": "Reverb did not provide any images yet. Please try again shortly."},
+        status_code=409,
+    )
 
 @router.post("/product/{product_id}/list_on/{platform_slug}", name="create_platform_listing_from_detail")
 async def handle_create_platform_listing_from_detail(
@@ -1868,14 +1912,23 @@ async def add_product_form(
     )
     existing_brands = [b[0] for b in existing_brands.all() if b[0]]
 
-    # Get existing categories for dropdown (alphabetically sorted)
-    categories_result = await db.execute(
-        select(Product.category)
-        .distinct()
-        .filter(Product.category.isnot(None))
-        .order_by(Product.category)
+    # Canonical category suggestions (full Reverb taxonomy, alphabetically sorted)
+    canonical_query = (
+        select(ReverbCategory.full_path)
+        .filter(ReverbCategory.full_path.isnot(None))
+        .order_by(ReverbCategory.full_path)
     )
-    categories = [c[0] for c in categories_result.all() if c[0]]
+    canonical_result = await db.execute(canonical_query)
+    canonical_categories: List[str] = []
+    seen_categories: set[str] = set()
+    for (full_path,) in canonical_result.all():
+        if not full_path:
+            continue
+        normalized = full_path.strip()
+        if not normalized or normalized in seen_categories:
+            continue
+        canonical_categories.append(normalized)
+        seen_categories.add(normalized)
 
     # Get existing products for "copy from" feature
     # Limit to 100 most recent products
@@ -1899,7 +1952,7 @@ async def add_product_form(
         {
             "request": request,
             "existing_brands": existing_brands,
-            "categories": categories,
+            "canonical_categories": canonical_categories,
             "existing_products": existing_products,
             "ebay_status": "pending",
             "reverb_status": "pending",
@@ -5379,6 +5432,46 @@ async def get_platform_categories(
         return {"error": f"Unknown platform: {platform}"}
     
     return {"categories": categories}
+
+@router.get("/category-search")
+async def search_reverb_categories(
+    q: str = Query("", min_length=1, description="Search term for Reverb categories"),
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of categories to return"),
+    db: AsyncSession = Depends(get_db),
+):
+    term = (q or "").strip()
+    if not term:
+        return {"categories": []}
+
+    pattern = f"%{term}%"
+
+    stmt = (
+        select(ReverbCategory.uuid, ReverbCategory.name, ReverbCategory.full_path)
+        .where(
+            or_(
+                ReverbCategory.full_path.ilike(pattern),
+                ReverbCategory.name.ilike(pattern),
+            )
+        )
+        .order_by(func.length(ReverbCategory.full_path), ReverbCategory.full_path)
+        .limit(limit)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    categories = [
+        {
+            "uuid": uuid,
+            "name": name,
+            "full_path": full_path or name,
+        }
+        for uuid, name, full_path in rows
+        if (full_path or name)
+    ]
+
+    return {"categories": categories}
+
 
 @router.get("/category-mappings/{reverb_category:path}")
 async def get_category_mappings(

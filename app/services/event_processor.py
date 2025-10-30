@@ -147,45 +147,81 @@ async def _process_new_listing(
     result = EventProcessingResult()
 
     try:
-        # Only process Reverb new listings for now
+        change_data = event.change_data or {}
+
+        product: Optional[Product] = None
+        if event.product_id:
+            product = await session.get(Product, event.product_id)
+
+        candidate = change_data.get('match_candidate') if isinstance(change_data, dict) else None
+        if not product and candidate and candidate.get('product_id'):
+            candidate_product = await session.get(Product, candidate['product_id'])
+            if candidate_product:
+                product = candidate_product
+                event.product_id = candidate_product.id
+
         if event.platform_name != 'reverb':
-            result.message = f"New listing processing only supported for Reverb, not {event.platform_name}"
+            if not product:
+                result.message = "No product selected to match this listing."
+                return result
+
+            message = await _attach_existing_listing(session, event, product)
+            result.success = True
+            result.product_id = product.id
+            result.message = message
+            result.platforms_created.append(event.platform_name)
             return result
 
+        # Reverb-specific handling below
+
         # Check if product already exists with this SKU
-        sku = f"REV-{event.external_id}"
-        stmt = select(Product).where(Product.sku == sku)
-        db_result = await session.execute(stmt)
-        existing_product = db_result.scalar_one_or_none()
+        reverb_listing_dict = change_data.get('raw_data') if isinstance(change_data, dict) else None
 
-        if existing_product:
-            logger.info(f"Found existing product {existing_product.id}: {existing_product.title}")
-            product = existing_product
-            result.product_id = product.id
-        else:
-            # Fetch Reverb listing data
-            logger.info(f"Fetching Reverb listing {event.external_id}...")
+        if not product:
+            sku = f"REV-{event.external_id}"
+            stmt = select(Product).where(Product.sku == sku)
+            db_result = await session.execute(stmt)
+            existing_product = db_result.scalar_one_or_none()
+
+            if existing_product:
+                logger.info(f"Found existing product {existing_product.id}: {existing_product.title}")
+                product = existing_product
+                result.product_id = product.id
+            else:
+                # Fetch Reverb listing data if not already available
+                if not reverb_listing_dict:
+                    logger.info(f"Fetching Reverb listing {event.external_id}...")
+                    settings = get_settings()
+                    reverb_client = ReverbClient(
+                        api_key=settings.REVERB_API_KEY,
+                        use_sandbox=settings.REVERB_USE_SANDBOX
+                    )
+                    reverb_listing_dict = await reverb_client.get_listing_details(event.external_id)
+
+                if not reverb_listing_dict:
+                    result.message = f"Failed to fetch Reverb listing {event.external_id}"
+                    return result
+
+                # Create new product
+                logger.info("Creating new product from Reverb data...")
+                product = await _create_product_from_reverb(session, reverb_listing_dict)
+                result.product_id = product.id
+
+                # Update sync event with product_id
+                event.product_id = product.id
+                logger.info(f"Updated sync event {event.id} with product_id {product.id}")
+
+        if not reverb_listing_dict:
+            # Ensure we have listing data for downstream use
             settings = get_settings()
-
-            # Use the client directly for fetching data (matching original script)
             reverb_client = ReverbClient(
                 api_key=settings.REVERB_API_KEY,
                 use_sandbox=settings.REVERB_USE_SANDBOX
             )
             reverb_listing_dict = await reverb_client.get_listing_details(event.external_id)
-
             if not reverb_listing_dict:
                 result.message = f"Failed to fetch Reverb listing {event.external_id}"
                 return result
-
-            # Create new product
-            logger.info("Creating new product from Reverb data...")
-            product = await _create_product_from_reverb(session, reverb_listing_dict)
-            result.product_id = product.id
-
-            # Update sync event with product_id
-            event.product_id = product.id
-            logger.info(f"Updated sync event {event.id} with product_id {product.id}")
 
         # Create platform_common entry for Reverb
         await _ensure_platform_common_reverb(session, product, reverb_listing_dict)
@@ -493,6 +529,323 @@ async def _create_reverb_listing(session: AsyncSession, platform_common: Platfor
     session.add(reverb_listing)
     await session.flush()
     logger.info(f"Created reverb_listings entry with ID {reverb_listing.id}")
+
+
+async def _attach_existing_listing(session: AsyncSession, event: SyncEvent, product: Product) -> str:
+    """Attach an externally created listing to an existing product."""
+
+    change_data = event.change_data or {}
+    raw_data = change_data.get('raw_data') or change_data.get('extended_attributes') or {}
+    listing_url = change_data.get('listing_url') or change_data.get('external_link')
+
+    status_value = change_data.get('status') or change_data.get('state')
+    if change_data.get('is_sold'):
+        status_value = 'sold'
+
+    platform_payload = {
+        'source': 'manual_match',
+        'matched_at': datetime.utcnow().isoformat(),
+        'raw_data': raw_data,
+        'change_snapshot': change_data,
+    }
+
+    platform_common = await _ensure_platform_common_generic(
+        session=session,
+        product=product,
+        platform=event.platform_name,
+        external_id=str(event.external_id),
+        status=status_value,
+        listing_url=listing_url,
+        platform_payload=platform_payload,
+    )
+
+    if event.platform_name == 'ebay':
+        await _upsert_ebay_listing_from_change(session, platform_common, change_data)
+    elif event.platform_name == 'shopify':
+        await _upsert_shopify_listing_from_change(session, platform_common, change_data)
+    elif event.platform_name == 'vr':
+        await _upsert_vr_listing_from_change(session, platform_common, change_data)
+    else:
+        raise ValueError(f"Unsupported platform for manual match: {event.platform_name}")
+
+    return f"Linked {event.platform_name.title()} listing to product {product.sku}"
+
+
+def _default_listing_url(platform: str, external_id: str) -> Optional[str]:
+    if not external_id:
+        return None
+    if platform == 'ebay':
+        return f"https://www.ebay.co.uk/itm/{external_id}"
+    if platform == 'shopify':
+        return f"https://londonvintageguitars.myshopify.com/products/{external_id}"
+    if platform == 'vr':
+        return f"https://www.vintageandrare.com/product/{external_id}"
+    if platform == 'reverb':
+        return f"https://reverb.com/item/{external_id}"
+    return None
+
+
+async def _ensure_platform_common_generic(
+    session: AsyncSession,
+    product: Product,
+    platform: str,
+    external_id: str,
+    status: Optional[str],
+    listing_url: Optional[str],
+    platform_payload: Dict[str, Any],
+) -> PlatformCommon:
+    """Create or update a platform_common entry for manual matches."""
+
+    stmt = select(PlatformCommon).where(
+        PlatformCommon.product_id == product.id,
+        PlatformCommon.platform_name == platform,
+    )
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+
+    normalised_status = (status or 'active').lower()
+    listing_url = listing_url or _default_listing_url(platform, external_id)
+
+    if existing:
+        existing.external_id = external_id
+        existing.status = normalised_status
+        existing.listing_url = listing_url or existing.listing_url
+        existing.sync_status = SyncStatus.SYNCED.value.upper()
+        existing.last_sync = datetime.utcnow()
+        existing.platform_specific_data = platform_payload
+        platform_common = existing
+    else:
+        platform_common = PlatformCommon(
+            product_id=product.id,
+            platform_name=platform,
+            external_id=external_id,
+            status=normalised_status,
+            listing_url=listing_url,
+            sync_status=SyncStatus.SYNCED.value.upper(),
+            last_sync=datetime.utcnow(),
+            platform_specific_data=platform_payload,
+        )
+        session.add(platform_common)
+        await session.flush()
+
+    return platform_common
+
+
+async def _upsert_ebay_listing_from_change(
+    session: AsyncSession,
+    platform_common: PlatformCommon,
+    change_data: Dict[str, Any],
+) -> None:
+    raw_data = change_data.get('raw_data') or {}
+
+    stmt = select(EbayListing).where(EbayListing.platform_id == platform_common.id)
+    listing = (await session.execute(stmt)).scalar_one_or_none()
+
+    listing_status = (change_data.get('status') or 'active').upper()
+    price = change_data.get('price')
+    listing_url = change_data.get('listing_url') or platform_common.listing_url
+
+    quantity_total = raw_data.get('Quantity') or raw_data.get('quantity_total')
+    quantity_available = raw_data.get('QuantityAvailable') or change_data.get('quantity_available')
+    quantity_sold = raw_data.get('SellingStatus', {}).get('QuantitySold') if isinstance(raw_data, dict) else None
+
+    picture_urls = []
+    if isinstance(raw_data, dict):
+        details = raw_data.get('PictureDetails') or {}
+        urls = details.get('PictureURL')
+        if isinstance(urls, list):
+            picture_urls = urls
+        elif urls:
+            picture_urls = [urls]
+
+    if listing:
+        listing.listing_status = listing_status
+        listing.title = change_data.get('title') or listing.title
+        listing.price = float(price) if price is not None else listing.price
+        listing.quantity = quantity_total or listing.quantity
+        listing.quantity_available = quantity_available if quantity_available is not None else listing.quantity_available
+        listing.quantity_sold = quantity_sold if quantity_sold is not None else listing.quantity_sold
+        listing.listing_url = listing_url or listing.listing_url
+        if picture_urls:
+            listing.picture_urls = picture_urls
+        listing.gallery_url = raw_data.get('GalleryURL') or listing.gallery_url
+        listing.listing_data = raw_data or listing.listing_data
+        listing.last_synced_at = datetime.utcnow()
+    else:
+        listing = EbayListing(
+            platform_id=platform_common.id,
+            ebay_item_id=platform_common.external_id,
+            listing_status=listing_status,
+            title=change_data.get('title'),
+            price=float(price) if price is not None else None,
+            listing_url=listing_url,
+            quantity=quantity_total,
+            quantity_available=quantity_available,
+            quantity_sold=quantity_sold,
+            picture_urls=picture_urls or None,
+            gallery_url=raw_data.get('GalleryURL') if isinstance(raw_data, dict) else None,
+            listing_data=raw_data,
+        )
+        session.add(listing)
+
+    await session.flush()
+
+
+async def _upsert_shopify_listing_from_change(
+    session: AsyncSession,
+    platform_common: PlatformCommon,
+    change_data: Dict[str, Any],
+) -> None:
+    raw_data = change_data.get('raw_data') or {}
+
+    stmt = select(ShopifyListing).where(ShopifyListing.platform_id == platform_common.id)
+    listing = (await session.execute(stmt)).scalar_one_or_none()
+
+    variants = raw_data.get('variants', {})
+    if isinstance(variants, dict):
+        variant_nodes = variants.get('nodes', [])
+    elif isinstance(variants, list):
+        variant_nodes = variants
+    else:
+        variant_nodes = []
+
+    price = change_data.get('price')
+    if price is None and variant_nodes:
+        try:
+            price = float(variant_nodes[0].get('price'))
+        except (TypeError, ValueError):
+            price = None
+
+    shopify_product_id = raw_data.get('id') or change_data.get('full_gid')
+    shopify_legacy_id = raw_data.get('legacyResourceId') or change_data.get('external_id')
+    handle = raw_data.get('handle')
+    vendor = raw_data.get('vendor') or change_data.get('vendor')
+    status = (raw_data.get('status') or change_data.get('status') or 'active').lower()
+
+    category_gid = None
+    category_name = None
+    category_full_name = None
+    product_category = raw_data.get('productCategory') if isinstance(raw_data, dict) else None
+    if isinstance(product_category, dict):
+        taxonomy = product_category.get('productTaxonomyNode') or {}
+        category_gid = taxonomy.get('id')
+        category_name = taxonomy.get('name')
+        category_full_name = taxonomy.get('fullName')
+
+    seo_data = raw_data.get('seo') if isinstance(raw_data, dict) else {}
+
+    generated_keywords = generate_shopify_keywords(
+        brand=product.brand,
+        model=product.model,
+        finish=product.finish,
+        year=product.year,
+        decade=product.decade,
+        category=category_name,
+        condition=product.condition.value if product.condition else None,
+        description_html=change_data.get('description'),
+    ) if product else []
+
+    short_description = generate_shopify_short_description(
+        change_data.get('description'),
+        fallback=product.title if product else None,
+    )
+
+    if listing:
+        listing.shopify_product_id = shopify_product_id or listing.shopify_product_id
+        listing.shopify_legacy_id = shopify_legacy_id or listing.shopify_legacy_id
+        listing.handle = handle or listing.handle
+        listing.title = change_data.get('title') or listing.title
+        listing.vendor = vendor or listing.vendor
+        listing.status = status
+        listing.price = price if price is not None else listing.price
+        listing.category_gid = category_gid or listing.category_gid
+        listing.category_name = category_name or listing.category_name
+        listing.category_full_name = category_full_name or listing.category_full_name
+        listing.seo_title = seo_data.get('title') or listing.seo_title
+        listing.seo_description = seo_data.get('description') or listing.seo_description or short_description or listing.seo_description
+        listing.seo_keywords = generated_keywords or listing.seo_keywords
+        listing.extended_attributes = raw_data or listing.extended_attributes
+        listing.last_synced_at = datetime.utcnow()
+    else:
+        listing = ShopifyListing(
+            platform_id=platform_common.id,
+            shopify_product_id=shopify_product_id,
+            shopify_legacy_id=str(shopify_legacy_id) if shopify_legacy_id else None,
+            handle=handle,
+            title=change_data.get('title'),
+            vendor=vendor,
+            status=status,
+            price=price,
+            category_gid=category_gid,
+            category_name=category_name,
+            category_full_name=category_full_name,
+            category_assignment_status='ASSIGNED' if category_gid else None,
+            category_assigned_at=datetime.utcnow() if category_gid else None,
+            seo_title=seo_data.get('title'),
+            seo_description=seo_data.get('description') or short_description,
+            seo_keywords=generated_keywords,
+            extended_attributes=raw_data,
+            last_synced_at=datetime.utcnow(),
+        )
+        session.add(listing)
+
+    await session.flush()
+
+
+async def _upsert_vr_listing_from_change(
+    session: AsyncSession,
+    platform_common: PlatformCommon,
+    change_data: Dict[str, Any],
+) -> None:
+    raw_data = change_data.get('extended_attributes') or change_data.get('raw_data') or {}
+
+    stmt = select(VRListing).where(VRListing.platform_id == platform_common.id)
+    listing = (await session.execute(stmt)).scalar_one_or_none()
+
+    vr_state = 'sold' if change_data.get('is_sold') else (change_data.get('state') or 'active')
+    price = change_data.get('price')
+
+    collective_discount = change_data.get('collective_discount')
+    try:
+        collective_discount = float(collective_discount)
+    except (TypeError, ValueError):
+        collective_discount = 0.0
+
+    processing_time = change_data.get('processing_time') or raw_data.get('processing_time')
+    try:
+        processing_time = int(str(processing_time).split()[0]) if processing_time else 3
+    except (TypeError, ValueError):
+        processing_time = 3
+
+    extended_attributes = {
+        'source': 'manual_match',
+        'raw_data': raw_data,
+        'change_data': change_data,
+    }
+
+    if listing:
+        listing.vr_listing_id = str(platform_common.external_id)
+        listing.vr_state = vr_state
+        listing.price_notax = price if price is not None else listing.price_notax
+        listing.inventory_quantity = raw_data.get('inventory') if isinstance(raw_data, dict) else listing.inventory_quantity
+        listing.collective_discount = collective_discount
+        listing.processing_time = processing_time
+        listing.extended_attributes = extended_attributes
+        listing.last_synced_at = datetime.utcnow()
+    else:
+        listing = VRListing(
+            platform_id=platform_common.id,
+            vr_listing_id=str(platform_common.external_id),
+            vr_state=vr_state,
+            price_notax=price,
+            inventory_quantity=raw_data.get('inventory') if isinstance(raw_data, dict) else 1,
+            collective_discount=collective_discount,
+            processing_time=processing_time,
+            extended_attributes=extended_attributes,
+            last_synced_at=datetime.utcnow(),
+        )
+        session.add(listing)
+
+    await session.flush()
 
 async def _create_ebay_listing(session: AsyncSession, product: Product, reverb_data: dict, sandbox: bool) -> dict:
     """Create eBay listing"""

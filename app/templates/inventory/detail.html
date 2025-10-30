@@ -442,31 +442,43 @@
             </div>
 
             <!-- Media Section -->
-            {% if product.primary_image or product.additional_images %}
             <div class="md:col-span-2">
-                <h2 class="text-lg font-semibold mb-4">Images</h2>
-                <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
-                    {% if product.primary_image %}
-                    <div class="aspect-w-4 aspect-h-3">
-                        <img src="{{ product.primary_image }}" 
-                            alt="Primary image" 
-                            class="product-image clickable-image primary-image" 
-                            data-full-url="{{ product.primary_image }}"
-                            title="Primary image - Click to view full size">
-                    </div>
+                <div class="flex items-end mb-4 space-x-2">
+                    <h2 class="text-lg font-semibold leading-none pb-0">Images</h2>
+                    {% if reverb_listing_id %}
+                        <button id="refresh-images-btn"
+                                data-refresh-url="{{ url_for('refresh_product_images', product_id=product.id) }}"
+                                class="text-xs text-blue-600 hover:text-blue-800 pb-0.5">
+                            (Check Images)
+                        </button>
                     {% endif %}
-                    {% for image in product.additional_images %}
-                    <div class="aspect-w-4 aspect-h-3">
-                        <img src="{{ image }}" 
-                            alt="Additional image" 
-                            class="product-image clickable-image"
-                            data-full-url="{{ image }}"
-                            title="Click to view full size">
-                    </div>
-                    {% endfor %}
                 </div>
+
+                {% if product.primary_image or product.additional_images %}
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+                        {% if product.primary_image %}
+                        <div class="aspect-w-4 aspect-h-3">
+                            <img src="{{ product.primary_image }}" 
+                                alt="Primary image" 
+                                class="product-image clickable-image primary-image" 
+                                data-full-url="{{ product.primary_image }}"
+                                title="Primary image - Click to view full size">
+                        </div>
+                        {% endif %}
+                        {% for image in product.additional_images %}
+                        <div class="aspect-w-4 aspect-h-3">
+                            <img src="{{ image }}" 
+                                alt="Additional image" 
+                                class="product-image clickable-image"
+                                data-full-url="{{ image }}"
+                                title="Click to view full size">
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-sm text-gray-500">No images are currently stored for this product.</p>
+                {% endif %}
             </div>
-            {% endif %}
 
 
         </div>
@@ -521,7 +533,36 @@
                 }
             });
         });
-        
+
+        const refreshButton = document.getElementById('refresh-images-btn');
+        if (refreshButton) {
+            refreshButton.addEventListener('click', async () => {
+                const originalText = refreshButton.textContent;
+                refreshButton.textContent = 'Checking…';
+                refreshButton.disabled = true;
+
+                try {
+                    const response = await fetch(refreshButton.dataset.refreshUrl, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        window.location.reload();
+                    } else {
+                        alert(data.message || 'Reverb has not provided images yet.');
+                        refreshButton.textContent = originalText;
+                        refreshButton.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Failed to refresh images', error);
+                    alert('Unable to refresh images at this time.');
+                    refreshButton.textContent = originalText;
+                    refreshButton.disabled = false;
+                }
+            });
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         const message = urlParams.get('message');
         const messageType = urlParams.get('message_type');

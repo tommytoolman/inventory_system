@@ -144,6 +144,7 @@
                             {% set image_url = event.primary_image or (event.change_data.primary_image_url if event.change_data else None) %}
                             {% set product_title = event.brand ~ ' ' ~ event.model if event.brand and event.model else (event.change_data.title if event.change_data and event.change_data.title else 'Unknown Product') %}
 
+                            {% set candidate = event.match_candidate %}
                             {% if event.change_type == 'new_listing' %}
                                 <div class="flex items-start space-x-3">
                                     {% if event.change_data.primary_image_url %}
@@ -186,6 +187,32 @@
                                         {% endif %}
                                     </div>
                                 </div>
+                                {% if candidate %}
+                                <div class="mt-3 border border-blue-100 bg-blue-50/60 rounded-md p-3 text-xs">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-semibold text-blue-700">Suggested Match</span>
+                                        <span class="text-blue-600">Confidence {{ (candidate.confidence * 100)|round(0) }}%</span>
+                                    </div>
+                                    <div class="mt-2 text-gray-700">
+                                        <div class="font-semibold text-sm text-gray-900">{{ candidate.title or 'Untitled Product' }}</div>
+                                        <div class="mt-1 text-gray-500">
+                                            {% if candidate.brand %}{{ candidate.brand }}{% endif %}
+                                            {% if candidate.model %} {{ candidate.model }}{% endif %}
+                                            {% if candidate.base_price %}
+                                                <span class="text-gray-400">• £{{ "{:,.0f}".format(candidate.base_price|float) }}</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="mt-1 text-gray-400">SKU: {{ candidate.sku }}</div>
+                                        {% if candidate.existing_platforms %}
+                                        <div class="mt-1 text-gray-400">Platforms: {{ candidate.existing_platforms | join(', ') }}</div>
+                                        {% endif %}
+                                        <div class="mt-1 text-gray-500 italic">{{ candidate.reason }}</div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <a href="/inventory/product/{{ candidate.product_id }}" class="text-blue-600 hover:text-blue-800 text-xs" target="_blank">View Product ↗</a>
+                                    </div>
+                                </div>
+                                {% endif %}
                             {% elif event.change_type == 'price' or event.change_type == 'price_change' %}
                                 <div class="flex items-start space-x-3">
                                     {% if has_image %}
@@ -321,7 +348,7 @@
                                     {% if event.change_data and event.change_data.new in ['sold', 'ended'] %}
                                     <button class="px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors" 
                                             title="Remove from all platforms"
-                                            onclick="processSyncEvent({{ event.id }}, 'Remove / End')"
+                                            onclick="processSyncEvent({{ event.id }}, 'Remove / End', {}, this)"
                                             data-event-id="{{ event.id }}">
                                         <span>Remove / End</span>
                                     </button>
@@ -331,25 +358,59 @@
                                 {% if event.status == 'pending' and event.change_type == 'removed_listing' %}
                                 <button class="px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors" 
                                         title="Mark this removal as processed"
-                                        onclick="processSyncEvent({{ event.id }}, 'Confirm Removal')"
+                                        onclick="processSyncEvent({{ event.id }}, 'Confirm Removal', {}, this)"
                                         data-event-id="{{ event.id }}">
                                     <span>Confirm</span>
                                 </button>
                                 {% endif %}
                                 
                                 {% if event.status == 'pending' and event.change_type == 'new_listing' %}
-                                <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors" 
-                                        title="Create listing on other platforms"
-                                        onclick="processSyncEvent({{ event.id }}, 'Create Listings')"
+                                    {% set platform = event.platform_name %}
+                                    {% set candidate = event.match_candidate %}
+
+                                    {% if platform in ['ebay', 'shopify', 'vr'] %}
+                                        {% if candidate %}
+                                        <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors" 
+                                                title="Match to suggested product"
+                                                onclick="matchSyncEvent({{ event.id }}, {{ candidate.product_id }}, this)"
+                                                data-event-id="{{ event.id }}">
+                                            <span>Match {{ candidate.sku }}</span>
+                                        </button>
+                                        {% endif %}
+                                        <button class="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                                title="Select a product to match"
+                                                onclick="manualMatchSyncEvent({{ event.id }}, this)"
+                                                data-event-id="{{ event.id }}">
+                                            <span>Manual Match</span>
+                                        </button>
+                                        <button class="px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                                                title="Mark this listing as deleted"
+                                                onclick="deleteSyncEvent({{ event.id }}, this)"
+                                                data-event-id="{{ event.id }}">
+                                            <span>Delete Listing</span>
+                                        </button>
+                                    {% else %}
+                                        <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors" 
+                                                title="Create listing on other platforms"
+                                        onclick="processSyncEvent({{ event.id }}, 'Create Listings', { action: 'create' }, this)"
                                         data-event-id="{{ event.id }}">
-                                    <span>Create</span>
-                                </button>
+                                            <span>Create</span>
+                                        </button>
+                                        {% if candidate %}
+                                        <button class="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                                title="Match to suggested product"
+                                                onclick="matchSyncEvent({{ event.id }}, {{ candidate.product_id }}, this)"
+                                                data-event-id="{{ event.id }}">
+                                            <span>Match Instead</span>
+                                        </button>
+                                        {% endif %}
+                                    {% endif %}
                                 {% endif %}
                                 
                                 {% if event.status == 'pending' and event.change_type == 'price_change' %}
                                 <button class="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors" 
                                         title="Update price on all platforms"
-                                        onclick="processSyncEvent({{ event.id }}, 'Update Price')"
+                                        onclick="processSyncEvent({{ event.id }}, 'Update Price', {}, this)"
                                         data-event-id="{{ event.id }}">
                                     <span>Update</span>
                                 </button>
@@ -419,8 +480,9 @@
     });
     
     // Function to process sync events
-    async function processSyncEvent(eventId, actionName) {
-        const requiresConfirmation = actionName !== 'Create Listings';
+    async function processSyncEvent(eventId, actionName, options = {}, buttonEl = null) {
+        const action = options.action || 'process';
+        const requiresConfirmation = action !== 'create' && action !== 'process';
 
         if (requiresConfirmation) {
             const confirmed = confirm(`Are you sure you want to ${actionName}? This will process the event and any related events for the same product.`);
@@ -428,49 +490,96 @@
                 return;
             }
         }
-        
-        // Disable the button to prevent double-clicks
-        const button = document.querySelector(`button[data-event-id="${eventId}"]`);
+
+        const button = buttonEl || document.querySelector(`button[data-event-id="${eventId}"]`);
+        let originalContent = null;
+
         if (button) {
+            originalContent = button.innerHTML;
             button.disabled = true;
-            const originalContent = button.innerHTML;
             button.innerHTML = '<svg class="animate-spin h-3 w-3 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-            
-            try {
-                const response = await fetch(`/reports/sync-events/process/${eventId}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    alert(`Success: ${result.message}`);
-                    // Reload the page to show updated statuses
-                    window.location.reload();
-                } else if (result.status === 'warning') {
-                    alert(`Warning: ${result.message}`);
-                    // Re-enable button
-                    button.disabled = false;
-                    button.innerHTML = originalContent;
-                } else {
-                    alert(`Error: ${result.message}`);
-                    // Re-enable button
+        }
+
+        try {
+            const payload = { action };
+            Object.entries(options).forEach(([key, value]) => {
+                if (key !== 'action' && value !== undefined && value !== null) {
+                    payload[key] = value;
+                }
+            });
+
+            const hasCustomPayload = Object.keys(payload).length > 1 || action !== 'process';
+
+            const fetchOptions = {
+                method: 'POST',
+                headers: {},
+            };
+
+            if (hasCustomPayload) {
+                fetchOptions.headers['Content-Type'] = 'application/json';
+                fetchOptions.body = JSON.stringify(payload);
+            }
+
+            const response = await fetch(`/reports/sync-events/process/${eventId}`, fetchOptions);
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                alert(`Success: ${result.message}`);
+                window.location.reload();
+            } else if (result.status === 'warning') {
+                alert(`Warning: ${result.message}`);
+                if (button) {
                     button.disabled = false;
                     button.innerHTML = originalContent;
                 }
-            } catch (error) {
-                alert(`Failed to process event: ${error.message}`);
-                // Re-enable button
+            } else {
+                alert(`Error: ${result.message}`);
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = originalContent;
+                }
+            }
+        } catch (error) {
+            alert(`Failed to process event: ${error.message}`);
+            if (button) {
                 button.disabled = false;
                 button.innerHTML = originalContent;
             }
         }
     }
-    
-    // Make function globally accessible
+
+    async function matchSyncEvent(eventId, productIdentifier, buttonEl) {
+        let identifier = productIdentifier;
+        if (!identifier) {
+            const input = prompt('Enter product ID or SKU to match:');
+            if (!input) {
+                return;
+            }
+            identifier = input.trim();
+        }
+
+        await processSyncEvent(eventId, 'Match Listing', { action: 'match', product_identifier: identifier }, buttonEl);
+    }
+
+    async function manualMatchSyncEvent(eventId, buttonEl) {
+        const input = prompt('Enter product ID or SKU to match:');
+        if (!input) {
+            return;
+        }
+        await matchSyncEvent(eventId, input.trim(), buttonEl);
+    }
+
+    async function deleteSyncEvent(eventId, buttonEl) {
+        const confirmed = confirm('Are you sure you want to mark this platform listing as deleted?');
+        if (!confirmed) {
+            return;
+        }
+        await processSyncEvent(eventId, 'Delete Listing', { action: 'delete' }, buttonEl);
+    }
+
     window.processSyncEvent = processSyncEvent;
+    window.matchSyncEvent = matchSyncEvent;
+    window.manualMatchSyncEvent = manualMatchSyncEvent;
+    window.deleteSyncEvent = deleteSyncEvent;
 </script>
 {% endblock %}

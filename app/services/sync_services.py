@@ -16,9 +16,10 @@ from typing import Dict, List, Any, Optional, Set, NamedTuple, Tuple, Union, Seq
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
-from sqlalchemy import select, text, update, cast, or_
+from sqlalchemy import select, text, update, cast, or_, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from difflib import SequenceMatcher
 
 from app.models.product import Product, ProductCondition, ProductStatus
 from app.models.platform_common import PlatformCommon
@@ -56,6 +57,7 @@ class DetectedChange:
     new_value: Any
     confidence: float = 1.0  # How confident we are this is a real change
     requires_propagation: bool = True  # Should this sync to other platforms?
+    metadata: Optional[Dict[str, Any]] = None  # Extra context for UI/scripts
 
 @dataclass
 class SyncReport:
@@ -2086,21 +2088,202 @@ class ChangeDetector:
         changes = []
         
         for external_id, platform_item in platform_lookup.items():
-            if external_id not in local_lookup:
-                # This is a new listing not in our system
-                changes.append(DetectedChange(
-                    platform=platform,
-                    external_id=external_id,
-                    product_id=None,
-                    sku=platform_item.get('sku', 'unknown'),
-                    change_type="new_listing",
-                    field="listing",
-                    old_value=None,
-                    new_value=platform_item.get('title', 'New listing'),
-                    requires_propagation=False  # Don't propagate new unknown listings
-                ))
-        
+            if external_id in local_lookup:
+                continue
+
+            # Attempt to suggest a match for specific platforms
+            if platform == "vr":
+                match_candidate = await self._suggest_vr_match(platform_item)
+                if match_candidate:
+                    changes.append(DetectedChange(
+                        platform=platform,
+                        external_id=external_id,
+                        product_id=match_candidate["product"].id,
+                        sku=match_candidate["product"].sku,
+                        change_type="match_candidate",
+                        field="listing",
+                        old_value=match_candidate["platform_common"].external_id if match_candidate["platform_common"] else None,
+                        new_value=external_id,
+                        confidence=match_candidate["score"],
+                        requires_propagation=False,
+                        metadata={
+                            "matched_by": "heuristic",
+                            "score": match_candidate["score"],
+                            "reason": match_candidate["reason"],
+                            "candidate_product_id": match_candidate["product"].id,
+                            "candidate_product_title": match_candidate["product"].title,
+                        }
+                    ))
+                    continue
+
+            # Default: treat as unknown new listing
+            changes.append(DetectedChange(
+                platform=platform,
+                external_id=external_id,
+                product_id=None,
+                sku=platform_item.get('sku', 'unknown'),
+                change_type="new_listing",
+                field="listing",
+                old_value=None,
+                new_value=platform_item.get('title', 'New listing'),
+                requires_propagation=False
+            ))
+
         return changes
+
+    async def _suggest_vr_match(self, platform_item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Attempt to match a V&R listing without a local record to an existing product."""
+
+        sku = str(platform_item.get('sku') or platform_item.get('product_sku') or '').strip()
+        brand_value = str(platform_item.get('brand_name') or platform_item.get('brand name') or '').lower().strip()
+        model_value = str(platform_item.get('product_model_name') or platform_item.get('product model name') or '').lower().strip()
+        finish_value = str(platform_item.get('product_finish') or platform_item.get('product finish') or '').lower().strip()
+        year_value = str(platform_item.get('product_year') or platform_item.get('product year') or '').strip()
+        description_value = str(platform_item.get('product_description') or platform_item.get('product description') or '').lower()
+
+        try:
+            price_value = float(platform_item.get('product_price') or platform_item.get('product price') or 0)
+        except (TypeError, ValueError):
+            price_value = 0.0
+
+        candidates: List[Tuple[Product, Optional[PlatformCommon]]] = []
+        seen_product_ids: Set[int] = set()
+
+        # Direct SKU lookup
+        if sku:
+            product_stmt = select(Product).where(Product.sku == sku)
+            product = await self.db.scalar(product_stmt)
+            if product:
+                pc_stmt = select(PlatformCommon).where(
+                    PlatformCommon.product_id == product.id,
+                    PlatformCommon.platform_name == 'vr'
+                )
+                platform_common = await self.db.scalar(pc_stmt)
+                candidates.append((product, platform_common))
+                seen_product_ids.add(product.id)
+
+        if not brand_value:
+            return None
+
+        # Pending VR platform entries with matching brand
+        pending_stmt = (
+            select(Product, PlatformCommon)
+            .outerjoin(
+                PlatformCommon,
+                (PlatformCommon.product_id == Product.id)
+                & (PlatformCommon.platform_name == 'vr')
+            )
+            .where(func.lower(Product.brand) == brand_value)
+        )
+
+        pending_rows = await self.db.execute(pending_stmt)
+        for product, platform_common in pending_rows.all():
+            if product.id in seen_product_ids:
+                continue
+
+            if platform_common:
+                if platform_common.sync_status == SyncStatus.SYNCED.value:
+                    continue
+                if platform_common.external_id and platform_common.external_id not in (None, '', product.sku):
+                    continue
+            candidates.append((product, platform_common))
+            seen_product_ids.add(product.id)
+
+        if not candidates:
+            return None
+
+        candidate_ids = [product.id for product, _ in candidates]
+        other_counts: Dict[int, int] = {}
+        if candidate_ids:
+            other_stmt = (
+                select(PlatformCommon.product_id, func.count())
+                .where(
+                    PlatformCommon.product_id.in_(candidate_ids),
+                    PlatformCommon.platform_name != 'vr'
+                )
+                .group_by(PlatformCommon.product_id)
+            )
+            other_counts = {pid: count for pid, count in (await self.db.execute(other_stmt)).all()}
+
+        best_match = None
+        best_score = 0
+        def _normalize(text: Optional[str]) -> str:
+            return (text or '').lower().strip()
+
+        for product, platform_common in candidates:
+            score = 0
+            reasons: List[str] = []
+
+            product_brand = _normalize(product.brand)
+            product_model = _normalize(product.model)
+            product_finish = _normalize(product.finish)
+            product_year = str(product.year or '').strip()
+
+            # Brand match is mandatory
+            if product_brand and product_brand == brand_value:
+                score += 35
+                reasons.append('brand')
+            else:
+                continue
+
+            if model_value and product_model:
+                if product_model == model_value:
+                    score += 30
+                    reasons.append('model')
+
+            if finish_value and product_finish and product_finish == finish_value:
+                score += 5
+                reasons.append('finish')
+
+            if year_value and product_year:
+                if product_year == year_value:
+                    score += 10
+                    reasons.append('year')
+                elif year_value.endswith('s') and product_year.startswith(year_value[:3]):
+                    score += 6
+                    reasons.append('decade')
+
+            base_price = product.base_price or product.price or 0
+            expected_vr_price = round(base_price * 1.05) if base_price else 0
+            if price_value > 0 and expected_vr_price > 0:
+                price_ratio = abs(price_value - expected_vr_price) / max(price_value, expected_vr_price)
+                if price_ratio <= 0.03:
+                    score += 10
+                    reasons.append('price')
+                elif price_ratio <= 0.06:
+                    score += 6
+                    reasons.append('price_close')
+
+            if description_value and product.description:
+                product_desc = product.description.lower()
+                if product.sku and product.sku.lower() in description_value:
+                    score += 15
+                    reasons.append('sku_in_description')
+                else:
+                    ratio = SequenceMatcher(None, product_desc[:200], description_value[:200]).ratio()
+                    if ratio >= 0.4:
+                        score += 8
+                        reasons.append('description')
+
+            # Bonus if product already has other platforms but VR pending
+            other_platforms = other_counts.get(product.id, 0)
+            if other_platforms and (not platform_common or not platform_common.external_id or platform_common.external_id in ('', product.sku)):
+                score += 5
+                reasons.append('platform_gap')
+
+            if score > best_score:
+                best_score = score
+                best_match = {
+                    "product": product,
+                    "platform_common": platform_common,
+                    "score": min(score / 100.0, 1.0),
+                    "reason": ", ".join(reasons)
+                }
+
+        if best_match and best_score >= 60:
+            return best_match
+
+        return None
     
     async def _detect_removed_listings(
         self, 
@@ -2268,6 +2451,8 @@ class InboundSyncScheduler:
                 propagate = "🔄" if change.requires_propagation else "ℹ️"
                 print(f"  {propagate} {change.change_type.upper()}: {change.sku}")
                 print(f"     {change.field}: {change.old_value} → {change.new_value}")
+                if change.metadata:
+                    print(f"     info: {change.metadata}")
                 
             if len(report.changes_detected) > 10:
                 print(f"     ... and {len(report.changes_detected) - 10} more changes")

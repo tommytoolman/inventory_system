@@ -130,7 +130,7 @@ async def listing_health_report(
     request: Request,
     status: Optional[str] = Query("ALL", description="Filter by product status"),
     issues_only: bool = Query(False, description="Show only rows with warnings or errors"),
-    limit: int = Query(200, ge=1, le=500)
+    limit: Optional[str] = Query("100", description="Maximum rows to display (or ALL)")
 ):
     """Traffic-light view of product listing health across platforms."""
 
@@ -169,27 +169,35 @@ async def listing_health_report(
             warnings.append("No description")
 
         if product.status == ProductStatus.ACTIVE and not product.shipping_profile_id:
-            warnings.append("No shipping profile selected")
+            warnings.append("No shipping profile")
 
         status_value = _determine_status(errors, warnings)
+        issues = errors + warnings
         return {
             "status": status_value,
-            "issues": errors + warnings or ["All checks passed"],
+            "issues": issues,
         }
 
     def _evaluate_media(product: Product) -> Dict[str, Any]:
         errors: List[str] = []
         warnings: List[str] = []
 
-        if not product.primary_image:
-            errors.append("Missing primary image")
-        if not product.additional_images:
-            warnings.append("No gallery images")
+        primary_missing = not bool(product.primary_image)
+        gallery_missing = not bool(product.additional_images)
+
+        if primary_missing and gallery_missing:
+            errors.append("Missing ALL images")
+        else:
+            if primary_missing:
+                errors.append("Missing primary image")
+            if gallery_missing:
+                warnings.append("No Additional Images")
 
         status_value = _determine_status(errors, warnings)
+        issues = errors + warnings
         return {
             "status": status_value,
-            "issues": errors + warnings or ["All checks passed"],
+            "issues": issues,
         }
 
     def _evaluate_platform(product: Product, platform_name: str, label: str, attr: str) -> Dict[str, Any]:
@@ -198,7 +206,7 @@ async def listing_health_report(
             return {
                 "label": label,
                 "status": "not_listed",
-                "issues": [f"Not listed on {label}"],
+                "issues": [],
             }
 
         common = commons[0]
@@ -219,17 +227,18 @@ async def listing_health_report(
             errors.append("No platform listing record")
         else:
             if platform_name == "shopify" and not getattr(listing, "category_gid", None):
-                warnings.append("Shopify category not assigned")
+                warnings.append("Category missing")
             if platform_name == "ebay" and not getattr(listing, "listing_status", None):
                 warnings.append("eBay listing status unknown")
             if platform_name == "reverb" and not getattr(listing, "reverb_state", None):
                 warnings.append("Reverb state missing")
 
         status_value = _determine_status(errors, warnings)
+        issues = errors + warnings
         return {
             "label": label,
             "status": status_value,
-            "issues": errors + warnings or ["All checks passed"],
+            "issues": issues,
             "platform_common": common,
         }
 
@@ -249,8 +258,22 @@ async def listing_health_report(
                 .selectinload(PlatformCommon.vr_listing),
             )
             .order_by(Product.created_at.desc())
-            .limit(limit)
         )
+
+        limit_param = (limit or "100").upper()
+        limit_value: Optional[int]
+        if limit_param == "ALL":
+            limit_value = None
+        else:
+            try:
+                limit_value = max(1, min(500, int(limit_param)))
+                limit_param = str(limit_value)
+            except ValueError:
+                limit_value = 100
+                limit_param = "100"
+
+        if limit_value is not None:
+            query = query.limit(limit_value)
 
         if status_filter != "ALL":
             try:
@@ -294,9 +317,13 @@ async def listing_health_report(
             })
 
         if issues_only:
-            health_rows = [row for row in health_rows if row["overall_status"] in {"warning", "error"}]
+            health_rows = [row for row in health_rows if row["overall_status"] in {"warning", "error", "not_listed"}]
 
-        summary_counts = Counter(row["overall_status"] for row in health_rows)
+        status_totals = Counter(row["overall_status"] for row in health_rows)
+        warning_count = sum(
+            status_totals.get(key, 0) for key in ("warning", "error", "not_listed")
+        )
+        healthy_count = status_totals.get("ok", 0)
 
         status_options = ["ALL"] + list(ProductStatus.__members__.keys())
         status_labels = {
@@ -312,16 +339,26 @@ async def listing_health_report(
             "not_listed": "bg-gray-100 text-gray-600",
         }
 
+        product_status_classes = {
+            "ACTIVE": "bg-green-100 text-green-800",
+            "DRAFT": "bg-yellow-100 text-yellow-800",
+            "SOLD": "bg-red-100 text-red-800",
+            "ARCHIVED": "bg-purple-100 text-purple-800",
+        }
+
         return templates.TemplateResponse("reports/listing_health_report.html", {
             "request": request,
             "rows": health_rows,
             "status_filter": status_filter,
             "status_options": status_options,
             "issues_only": issues_only,
-            "summary_counts": summary_counts,
             "status_labels": status_labels,
             "status_classes": status_classes,
             "platform_defs": platform_defs,
+            "product_status_classes": product_status_classes,
+            "warning_count": warning_count,
+            "healthy_count": healthy_count,
+            "limit_param": limit_param,
         })
 
 

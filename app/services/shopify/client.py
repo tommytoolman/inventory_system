@@ -554,7 +554,7 @@ class ShopifyGraphQLClient:
         """
 
         query = f"""
-        query getProductSnapshot($id: ID!, $numVariants: Int!, $numImages: Int!, $numMetafields: Int!) {{
+        query getProductSnapshot($id: ID!, $numVariants: Int!, $numImages: Int!{', $numMetafields: Int!' if metafields_query_part else ''}) {{
           node(id: $id) {{
             ... on Product {{
               id

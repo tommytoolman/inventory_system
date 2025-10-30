@@ -18,6 +18,7 @@ from app.models.sync_event import SyncEvent
 from app.core.config import Settings
 from app.core.exceptions import EbayAPIError
 from app.services.ebay.trading import EbayTradingLegacyAPI
+from app.services.match_utils import suggest_product_match
 
 logger = logging.getLogger(__name__)
 
@@ -641,8 +642,10 @@ class EbayService:
                 
                 # Check if a 'new_listing' event is already pending for this item
                 if (external_id, 'new_listing') not in pending_events:
-                    logger.warning(f"Rogue SKU Detected: eBay item {external_id} ('{item.get('title')}') not found in local DB. Logging to sync_events for later processing.")
-                    
+                    logger.warning(
+                        f"Rogue SKU Detected: eBay item {external_id} ('{item.get('title')}') not found in local DB. Logging to sync_events for later processing."
+                    )
+
                     event_data = {
                         'sync_run_id': sync_run_id,
                         'platform_name': 'ebay',
@@ -659,6 +662,35 @@ class EbayService:
                         },
                         'status': 'pending'
                     }
+
+                    match = await suggest_product_match(
+                        self.db,
+                        'ebay',
+                        {
+                            'title': item.get('title'),
+                            'price': item.get('price'),
+                            'status': item.get('status'),
+                            'listing_url': item.get('listing_url'),
+                            'raw_data': item.get('_raw'),
+                        },
+                    )
+
+                    if match:
+                        event_data['change_data']['match_candidate'] = {
+                            'product_id': match.product.id,
+                            'sku': match.product.sku,
+                            'title': match.product.title,
+                            'brand': match.product.brand,
+                            'model': match.product.model,
+                            'status': match.product.status.value if getattr(match.product.status, 'value', None) else str(match.product.status) if match.product.status else None,
+                            'base_price': match.product.base_price,
+                            'primary_image': match.product.primary_image,
+                            'confidence': match.confidence,
+                            'reason': match.reason,
+                            'existing_platforms': match.existing_platforms,
+                        }
+                        event_data['change_data']['suggested_action'] = 'match'
+
                     events_to_log.append(event_data)
                 else:
                     logger.info(f"Skipping duplicate pending 'new_listing' event for eBay item {external_id}")

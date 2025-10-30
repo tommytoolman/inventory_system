@@ -4,7 +4,7 @@ import math
 import re
 import uuid
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple, Set
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -210,6 +210,111 @@ class ShopifyService:
         if errors:
             logger.error("Shopify inventory update errors for %s: %s", product.sku, errors)
             raise ShopifyAPIError(f"Inventory update errors: {errors}")
+
+    async def apply_category_assignment(
+        self,
+        platform_link: PlatformCommon,
+        category_gid: str,
+        *,
+        category_full_name: Optional[str] = None,
+        category_name: Optional[str] = None,
+    ) -> bool:
+        """Assign a Shopify taxonomy category to an existing product.
+
+        Args:
+            platform_link: The Shopify ``PlatformCommon`` instance being updated.
+            category_gid: Shopify taxonomy GID (e.g. ``gid://shopify/TaxonomyCategory/ae-2-8-7-2-4``).
+            category_full_name: Optional full taxonomy path (e.g. ``Arts & Entertainment > …``).
+            category_name: Optional short label (e.g. ``Electric Guitars``). Falls back to
+                the trailing segment of ``category_full_name`` when omitted.
+
+        Returns:
+            ``True`` when Shopify confirmed the category change, ``False`` otherwise.
+
+        Example:
+            >>> await service.apply_category_assignment(
+            ...     platform_link,
+            ...     "gid://shopify/TaxonomyCategory/ae-2-8-7-2-4",
+            ...     category_full_name=(
+            ...         "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments"
+            ...         " > Electric Guitars"
+            ...     ),
+            ...     category_name="Electric Guitars",
+            ... )
+            True
+        """
+
+        listing = platform_link.shopify_listing
+        if not listing:
+            logger.warning(
+                "Shopify category assignment skipped: platform_common %s has no Shopify listing",
+                platform_link.id,
+            )
+            return False
+
+        if not category_gid:
+            logger.warning(
+                "Shopify category assignment skipped: no category GID provided for platform_common %s",
+                platform_link.id,
+            )
+            return False
+
+        product_gid = self._resolve_product_gid(platform_link, listing)
+        if not product_gid:
+            logger.warning(
+                "Unable to resolve Shopify product GID for platform_common %s; skipping category assignment",
+                platform_link.id,
+            )
+            return False
+
+        if (
+            listing.category_gid == category_gid
+            and (listing.category_assignment_status or "").upper() == "ASSIGNED"
+        ):
+            logger.info(
+                "Category %s already assigned to Shopify product %s; skipping API call.",
+                category_gid,
+                product_gid,
+            )
+            return True
+
+        logger.info(
+            "Assigning Shopify category %s to product %s (platform_common %s)",
+            category_gid,
+            product_gid,
+            platform_link.id,
+        )
+
+        try:
+            success = self.client.set_product_category(product_gid, category_gid)
+        except Exception as exc:  # pragma: no cover - network failure path
+            logger.error(
+                "Error assigning Shopify category %s to product %s: %s",
+                category_gid,
+                product_gid,
+                exc,
+            )
+            success = False
+
+        now = datetime.utcnow()
+
+        if success:
+            listing.category_gid = category_gid
+            if category_full_name is not None:
+                listing.category_full_name = category_full_name
+            if category_name is not None:
+                listing.category_name = category_name
+            elif category_full_name:
+                listing.category_name = category_full_name.split(" > ")[-1].strip()
+            listing.category_assigned_at = now
+            listing.category_assignment_status = "ASSIGNED"
+            platform_link.sync_status = SyncStatus.SYNCED.value
+        else:
+            listing.category_assignment_status = "FAILED"
+            listing.category_assigned_at = listing.category_assigned_at or now
+
+        await self.db.flush()
+        return success
 
 
 

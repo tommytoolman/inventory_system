@@ -209,15 +209,27 @@ async def end_vr_listing(
         result = await vr_client.mark_item_as_sold(listing_id)
 
         if result.get("success"):
-            # Update local database status
-            query = text("""
-                UPDATE platform_common pc
-                SET status = 'ENDED',
-                    last_sync = CURRENT_TIMESTAMP
-                WHERE pc.platform_name = 'vr'
-                AND pc.external_id = :listing_id
-            """)
-            await db.execute(query, {"listing_id": listing_id})
+            await db.execute(
+                text("""
+                    UPDATE platform_common pc
+                    SET status = 'ended',
+                        sync_status = 'SYNCED',
+                        last_sync = CURRENT_TIMESTAMP
+                    WHERE pc.platform_name = 'vr'
+                    AND pc.external_id = :listing_id
+                """),
+                {"listing_id": listing_id},
+            )
+
+            await db.execute(
+                text("""
+                    UPDATE vr_listings
+                    SET vr_state = 'ended',
+                        last_synced_at = CURRENT_TIMESTAMP
+                    WHERE vr_listing_id = :listing_id
+                """),
+                {"listing_id": listing_id},
+            )
 
             # Log activity
             activity_logger = ActivityLogger(db)
@@ -269,15 +281,27 @@ async def delete_vr_listing(
         result = await vr_client.delete_item(listing_id)
 
         if result.get("success"):
-            # Update local database status
-            query = text("""
-                UPDATE platform_common pc
-                SET status = 'REMOVED',
-                    last_sync = CURRENT_TIMESTAMP
-                WHERE pc.platform_name = 'vr'
-                AND pc.external_id = :listing_id
-            """)
-            await db.execute(query, {"listing_id": listing_id})
+            await db.execute(
+                text("""
+                    UPDATE platform_common pc
+                    SET status = 'archived',
+                        sync_status = 'SYNCED',
+                        last_sync = CURRENT_TIMESTAMP
+                    WHERE pc.platform_name = 'vr'
+                    AND pc.external_id = :listing_id
+                """),
+                {"listing_id": listing_id},
+            )
+
+            await db.execute(
+                text("""
+                    UPDATE vr_listings
+                    SET vr_state = 'deleted',
+                        last_synced_at = CURRENT_TIMESTAMP
+                    WHERE vr_listing_id = :listing_id
+                """),
+                {"listing_id": listing_id},
+            )
 
             # Log activity
             activity_logger = ActivityLogger(db)

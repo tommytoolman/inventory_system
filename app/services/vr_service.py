@@ -16,6 +16,7 @@ from app.services.vintageandrare.client import VintageAndRareClient
 from app.models.product import Product
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.vr import VRListing
+from app.services.match_utils import suggest_product_match
 from app.models.sync_event import SyncEvent
 from app.models.shipping import ShippingProfile
 
@@ -240,11 +241,38 @@ class VRService:
                     'sku': f"VR-{item['external_id']}",
                     'is_sold': item['status'] == 'sold',
                     'listing_url': raw_data.get('external_link'),
-                    'extended_attributes': raw_data},
+                    'extended_attributes': raw_data
+                },
                 'status': 'pending'}
+
+            match = await suggest_product_match(
+                self.db,
+                'vr',
+                {
+                    'title': event_data['change_data']['title'],
+                    'price': item.get('price'),
+                    'status': item.get('status'),
+                    'raw_data': raw_data,
+                },
+            )
+            if match:
+                event_data['change_data']['match_candidate'] = {
+                    'product_id': match.product.id,
+                    'sku': match.product.sku,
+                    'title': match.product.title,
+                    'brand': match.product.brand,
+                    'model': match.product.model,
+                    'status': match.product.status.value if getattr(match.product.status, 'value', None) else str(match.product.status) if match.product.status else None,
+                    'base_price': match.product.base_price,
+                    'primary_image': match.product.primary_image,
+                    'confidence': match.confidence,
+                    'reason': match.reason,
+                    'existing_platforms': match.existing_platforms,
+                }
+                event_data['change_data']['suggested_action'] = 'match'
             events_to_create.append(event_data)
             created_count += 1
-        
+
         if events_to_create:
             try:
                 stmt = insert(SyncEvent).values(events_to_create)

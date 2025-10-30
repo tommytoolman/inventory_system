@@ -64,6 +64,14 @@
 - [x] **Product grid layout tweak** – cap category column width on the Products table so “View”/status controls remain visible without horizontal scrolling.
 - [x] **EU data hard-code review** – remove any remaining hard-coded EU shipping/tax details and move to configuration or platform data.
 
+## Image Bug
+- *Context:* When a product is listed simultaneously to Reverb, Shopify, and eBay, the non-Reverb platforms sometimes end up with only a single image because Reverb takes time to publish the gallery. The “Check Images” button already refreshes the product from Reverb; we also need to ensure Shopify/eBay receive the full set once images are ready (without relying on delays).
+- [ ] **Detect missing images on Shopify/eBay** – before downloading, inspect each platform (Shopify product images, eBay PictureDetails) and skip when the galleries are already complete.
+- [ ] **Download canonical gallery to temp storage** – when gaps exist, fetch the Reverb URLs, normalise them, and stream each image into a temporary folder (clean up afterward).
+- [ ] **Re-upload missing images** – post the downloaded files to Shopify via `productCreateMedia`/`productImageCreate`, and revise eBay listings with the same assets so all platforms share the full gallery.
+- [ ] **Update local records** – after successful uploads/revisions, update `platform_common` and the platform-specific tables with the new image data to keep the health report accurate.
+- [ ] **Integrate with UI “Check Images” flow** – hook the new backend process into the detail-page button so operators can trigger the end-to-end refresh once Reverb has processed the gallery.
+
 ---
 
 Add new items directly under the matching priority heading; keep finished work in a separate "Completed" section only after verification.

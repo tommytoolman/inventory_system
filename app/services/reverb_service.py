@@ -122,7 +122,7 @@ class ReverbService:
             otherwise.
         """
 
-        delays = retry_delays or [1.5, 1.5, 1.5]
+        delays = retry_delays or [2.0, 2.0, 2.0, 5.0, 5.0, 10.0, 10.0]
         attempts = len(delays) + 1
 
         collected_urls: List[str] = []

@@ -1401,22 +1401,31 @@ async def product_detail(
         
         logger.debug(f"Constructed all_platforms_status for product {product_id}: {all_platforms_status}")
 
-        # 4. Check for platform status messages from Add Product redirect
-        platform_messages = []
-        show_status = request.query_params.get("show_status") == "true"
+        # 4. Load platform status messages from flash cookie (fallback to query string for legacy URLs)
+        platform_messages: List[Dict[str, str]] = []
+        flash_cookie = request.cookies.get("flash_status")
+        if flash_cookie:
+            try:
+                parsed_messages = json.loads(flash_cookie)
+                if isinstance(parsed_messages, list):
+                    platform_messages = [msg for msg in parsed_messages if isinstance(msg, dict)]
+            except json.JSONDecodeError:
+                platform_messages = []
 
-        if show_status:
+        if not platform_messages:
             from urllib.parse import unquote
-            for platform in ["reverb", "ebay", "shopify", "vr"]:
-                status = request.query_params.get(f"{platform}_status")
-                message = request.query_params.get(f"{platform}_message")
+            show_status = request.query_params.get("show_status") == "true"
+            if show_status:
+                for platform in ["reverb", "ebay", "shopify", "vr"]:
+                    status = request.query_params.get(f"{platform}_status")
+                    message = request.query_params.get(f"{platform}_message")
 
-                if status and message:
-                    platform_messages.append({
-                        "platform": platform.upper(),
-                        "status": status,
-                        "message": unquote(message)
-                    })
+                    if status and message:
+                        platform_messages.append({
+                            "platform": platform.upper(),
+                            "status": status,
+                            "message": unquote(message),
+                        })
 
         # 5. Prepare context for the template
         prev_product_row = await db.execute(
@@ -1463,13 +1472,16 @@ async def product_detail(
             "product": product,
             "all_platforms_status": all_platforms_status,
             "platform_messages": platform_messages,
-            "show_status": show_status,
             "prev_product": prev_product,
             "next_product": next_product,
             "reverb_listing_id": reverb_listing_id,
         }
 
-        return templates.TemplateResponse("inventory/detail.html", context)
+        response = templates.TemplateResponse("inventory/detail.html", context)
+        if flash_cookie:
+            response.delete_cookie("flash_status")
+
+        return response
 
     except Exception as e:
         logger.error(f"Error in product_detail for product_id {product_id}: {str(e)}", exc_info=True)
@@ -2876,28 +2888,37 @@ async def add_product(
 
         print("About to return redirect response")
 
-        # Step 5: Redirect to product detail page with platform status
-        # Encode platform statuses as query parameters for display
-        query_params = []
-        for platform, status_info in platform_statuses.items():
-            if status_info["status"] != "pending":  # Only show platforms that were processed
-                query_params.append(f"{platform}_status={status_info['status']}")
-                # URL encode the message to handle special characters
-                from urllib.parse import quote
-                query_params.append(f"{platform}_message={quote(status_info['message'])}")
-
-        query_string = "&".join(query_params) if query_params else ""
+        # Step 5: Prepare flash messages for redirect and return JSON response
         redirect_url = f"/inventory/product/{product.id}"
-        if query_string:
-            redirect_url += f"?{query_string}&show_status=true"
+        flash_messages: List[Dict[str, str]] = []
+        for platform, status_info in platform_statuses.items():
+            if status_info["status"] != "pending":
+                flash_messages.append({
+                    "platform": platform.upper(),
+                    "status": status_info["status"],
+                    "message": status_info["message"],
+                })
 
-        # Return JSON response for AJAX request
-        return JSONResponse({
+        response = JSONResponse({
             "status": "success",
             "product_id": product.id,
             "redirect_url": redirect_url,
-            "platform_statuses": platform_statuses
+            "platform_statuses": platform_statuses,
         })
+
+        if flash_messages:
+            try:
+                response.set_cookie(
+                    "flash_status",
+                    json.dumps(flash_messages),
+                    max_age=60,
+                    httponly=True,
+                    samesite="lax",
+                )
+            except Exception as cookie_error:
+                logger.debug("Failed to set flash_status cookie: %s", cookie_error)
+
+        return response
 
     except ProductCreationError as e:
         # Handle specific product creation errors

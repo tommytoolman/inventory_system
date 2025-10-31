@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 from urllib.parse import quote_plus, urlparse
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, Tuple
 
 from fastapi import (
     APIRouter, 
@@ -36,6 +36,7 @@ from app.core.config import Settings, get_settings
 from app.core.enums import PlatformName, ProductCondition
 from app.core.events import StockUpdateEvent
 from app.core.exceptions import ProductCreationError, PlatformIntegrationError
+from app.database import async_session
 from app.dependencies import get_db, templates
 from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.category_mappings import ReverbCategory
@@ -522,6 +523,40 @@ async def ensure_remote_media_urls(
         converted_additional.append(await convert(image_url))
 
     return converted_primary, converted_additional
+
+
+def schedule_reverb_image_refresh(
+    reverb_listing_id: Optional[str],
+    *,
+    expected_count: Optional[int],
+    settings: Settings,
+) -> None:
+    """Run the Reverb image refresh in the background once the request completes."""
+
+    if not reverb_listing_id:
+        return
+
+    async def _runner() -> None:
+        async with async_session() as session:
+            service = ReverbService(session, settings)
+            try:
+                updated = await service.refresh_product_images_from_listing(
+                    str(reverb_listing_id),
+                    expected_count=expected_count,
+                    retry_delays=[2.0, 2.0, 2.0, 5.0, 5.0, 10.0, 10.0],
+                )
+                if updated:
+                    await session.commit()
+                else:
+                    await session.rollback()
+            except Exception:  # pragma: no cover - background path
+                logger.exception(
+                    "Background Reverb image refresh failed for listing %s",
+                    reverb_listing_id,
+                )
+                await session.rollback()
+
+    asyncio.create_task(_runner())
 
 
 def generate_shopify_handle(brand: Optional[str], model: Optional[str], sku: Optional[str]) -> str:
@@ -2107,6 +2142,8 @@ async def add_product(
         "shopify": {"status": "pending", "message": "Waiting for sync"}
     }
 
+    pending_reverb_refresh: List[Tuple[str, Optional[int]]] = []
+
     try:
         # Initialize services
         product_service = ProductService(db)
@@ -2435,14 +2472,12 @@ async def add_product(
 
                         reverb_listing_id = result.get("reverb_listing_id")
                         if reverb_listing_id:
-                            refreshed = await reverb_service.refresh_product_images_from_listing(
-                                str(reverb_listing_id)
-                            )
-                            if not refreshed:
-                                logger.info(
-                                    "Reverb image refresh deferred for listing %s",
-                                    reverb_listing_id,
+                            pending_reverb_refresh.append(
+                                (
+                                    str(reverb_listing_id),
+                                    initial_gallery_expected_count or None,
                                 )
+                            )
 
                         enriched_data = result.get("listing_data") or {}
                         platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
@@ -2681,6 +2716,18 @@ async def add_product(
         # Reverb is already handled above if it was selected
         
         # Log final summary
+        for listing_id, expected in pending_reverb_refresh:
+            logger.info(
+                "Scheduling background Reverb image refresh for listing %s (expected %s images)",
+                listing_id,
+                expected,
+            )
+            schedule_reverb_image_refresh(
+                listing_id,
+                expected_count=expected,
+                settings=settings,
+            )
+
         logger.info(f"=== PLATFORM SYNC SUMMARY ===")
         for platform, status in platform_statuses.items():
             if status["status"] == "success":

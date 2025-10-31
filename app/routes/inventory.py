@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import base64
 import asyncio
 import aiofiles
 import logging
@@ -46,7 +45,7 @@ from app.models.vr import VRListing
 from app.models.reverb import ReverbListing
 from app.models.ebay import EbayListing
 from app.models.shopify import ShopifyListing
-from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+# from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
 from app.services.category_mapping_service import CategoryMappingService
 from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
@@ -82,7 +81,7 @@ logger = logging.getLogger(__name__)
 
 
 UPLOAD_DIR_PATH = Path(UPLOAD_DIR)
-DROPBOX_UPLOAD_ROOT = "/InventorySystem/auto-uploads"
+# DROPBOX_UPLOAD_ROOT = "/InventorySystem/auto-uploads"
 
 def _is_local_upload(url: Optional[str]) -> bool:
     return bool(url and url.startswith("/static/uploads/"))
@@ -479,31 +478,22 @@ async def _persist_shopify_listing(
 async def _upload_local_image_to_dropbox(
     local_url: str,
     sku: str,
-    dropbox_client: AsyncDropboxClient,
-    dropbox_root: str,
+    *args: Any,
+    **kwargs: Any,
 ) -> Optional[str]:
-    try:
-        filename = os.path.basename(local_url)
-        local_path = UPLOAD_DIR_PATH / filename
-        if not local_path.exists():
-            logger.warning("Local upload missing on disk: %s", local_path)
-            return None
+    """Placeholder while Dropbox uploads are disabled.
 
-        async with aiofiles.open(local_path, "rb") as fh:
-            data = await fh.read()
+    Uploading to Dropbox currently requires the `files.content.write` scope,
+    which is not enabled on the connected app. Keep the helper in place so it
+    can be reactivated quickly once the permissions are updated.
+    """
 
-        base64_payload = base64.b64encode(data).decode("utf-8")
-        dropbox_path = f"{dropbox_root.rstrip('/')}/{sku}/{filename}"
-        if not dropbox_path.startswith("/"):
-            dropbox_path = f"/{dropbox_path}"
-
-        remote_url = await dropbox_client.upload_base64_image(base64_payload, dropbox_path)
-        if remote_url:
-            logger.info("Uploaded image %s to Dropbox path %s", filename, dropbox_path)
-        return remote_url
-    except Exception as exc:
-        logger.warning("Failed to upload %s to Dropbox: %s", local_url, exc)
-        return None
+    logger.debug(
+        "Dropbox upload disabled; returning local URL for %s (SKU %s)",
+        local_url,
+        sku,
+    )
+    return None
 
 
 async def ensure_remote_media_urls(
@@ -512,26 +502,19 @@ async def ensure_remote_media_urls(
     sku: str,
     settings: Settings,
 ) -> tuple[Optional[str], List[str]]:
-    dropbox_client: Optional[AsyncDropboxClient] = None
-    dropbox_available = bool(settings.DROPBOX_ACCESS_TOKEN)
-    dropbox_root = getattr(settings, "DROPBOX_UPLOAD_ROOT", DROPBOX_UPLOAD_ROOT)
+    notice_logged = False  # Disabled 2025-10-31: Dropbox upload path paused (missing Dropbox scope)
 
     async def convert(url: Optional[str]) -> Optional[str]:
-        nonlocal dropbox_client
+        nonlocal notice_logged
         if not _is_local_upload(url):
             return url
-        if not dropbox_available:
-            logger.warning("Local image %s will be used as-is (Dropbox not configured)", url)
-            return url
-        if dropbox_client is None:
-            dropbox_client = AsyncDropboxClient(
-                access_token=settings.DROPBOX_ACCESS_TOKEN,
-                refresh_token=settings.DROPBOX_REFRESH_TOKEN,
-                app_key=settings.DROPBOX_APP_KEY,
-                app_secret=settings.DROPBOX_APP_SECRET,
+        if not notice_logged:
+            logger.info(
+                "Skipping Dropbox upload for %s (app lacks files.content.write scope)",
+                url,
             )
-        remote = await _upload_local_image_to_dropbox(url, sku, dropbox_client, dropbox_root)
-        return remote or url
+            notice_logged = True
+        return url
 
     converted_primary = await convert(primary_image) if primary_image else primary_image
     converted_additional = []
@@ -2221,6 +2204,10 @@ async def add_product(
             settings,
         )
 
+        initial_gallery_expected_count = int(bool(primary_image))
+        if additional_images:
+            initial_gallery_expected_count += len([img for img in additional_images if img])
+
         if primary_image:
             primary_image = make_full_url(primary_image)
         additional_images = [make_full_url(img) for img in additional_images]
@@ -2417,36 +2404,72 @@ async def add_product(
             logger.info("=== CREATING REVERB LISTING FIRST ===")
             logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
 
-            try:
-                reverb_options = platform_data.get("reverb", {})
-                result = await reverb_service.create_listing_from_product(
-                    product_id=product.id,
-                    platform_options=reverb_options,
-                    publish=True,
-                )
+            if initial_gallery_expected_count == 0:
+                message = "Cannot publish to Reverb without at least one image"
+                logger.error("%s; skipping platform sync", message)
+                platform_statuses["reverb"] = {
+                    "status": "error",
+                    "message": message,
+                }
+                for platform in ["ebay", "shopify", "vr"]:
+                    if platform in platforms_to_sync:
+                        platform_statuses[platform] = {
+                            "status": "info",
+                            "message": "Skipped - Reverb listing aborted due to missing images",
+                        }
+                platforms_to_sync = []
+            else:
+                try:
+                    reverb_options = platform_data.get("reverb", {})
+                    result = await reverb_service.create_listing_from_product(
+                        product_id=product.id,
+                        platform_options=reverb_options,
+                        publish=True,
+                    )
 
-                if result.get("status") == "success":
-                    platform_statuses["reverb"] = {
-                        "status": "success",
-                        "message": f"Listed on Reverb with ID: {result.get('reverb_listing_id')}"
-                    }
+                    if result.get("status") == "success":
+                        platform_statuses["reverb"] = {
+                            "status": "success",
+                            "message": f"Listed on Reverb with ID: {result.get('reverb_listing_id')}"
+                        }
 
-                    reverb_listing_id = result.get("reverb_listing_id")
-                    if reverb_listing_id:
-                        refreshed = await reverb_service.refresh_product_images_from_listing(str(reverb_listing_id))
-                        if not refreshed:
-                            logger.info(
-                                "Reverb image refresh deferred for listing %s", reverb_listing_id
+                        reverb_listing_id = result.get("reverb_listing_id")
+                        if reverb_listing_id:
+                            refreshed = await reverb_service.refresh_product_images_from_listing(
+                                str(reverb_listing_id)
                             )
+                            if not refreshed:
+                                logger.info(
+                                    "Reverb image refresh deferred for listing %s",
+                                    reverb_listing_id,
+                                )
 
-                    enriched_data = result.get("listing_data") or {}
-                    platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
-                else:
-                    duplicate_sku = result.get("error", "").lower().startswith("unexpected error: validation failed: sku")
+                        enriched_data = result.get("listing_data") or {}
+                        platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
+                    else:
+                        duplicate_sku = result.get("error", "").lower().startswith("unexpected error: validation failed: sku")
+                        platform_statuses["reverb"] = {
+                            "status": "error",
+                            "message": result.get("error", "Failed to create Reverb listing"),
+                            "sku_conflict": duplicate_sku,
+                        }
+
+                        logger.warning("❌ Reverb creation failed - skipping other platforms")
+                        for platform in ["ebay", "shopify", "vr"]:
+                            if platform in platforms_to_sync:
+                                platform_statuses[platform] = {
+                                    "status": "info",
+                                    "message": "Skipped - Reverb creation failed",
+                                    "sku_conflict": duplicate_sku,
+                                }
+                        platforms_to_sync = []
+                        enriched_data = None
+
+                except Exception as e:
+                    logger.error(f"Reverb listing error: {str(e)}", exc_info=True)
                     platform_statuses["reverb"] = {
                         "status": "error",
-                        "message": result.get("error", "Failed to create Reverb listing"),
-                        "sku_conflict": duplicate_sku,
+                        "message": f"Error: {str(e)}"
                     }
 
                     logger.warning("❌ Reverb creation failed - skipping other platforms")
@@ -2454,28 +2477,10 @@ async def add_product(
                         if platform in platforms_to_sync:
                             platform_statuses[platform] = {
                                 "status": "info",
-                                "message": "Skipped - Reverb creation failed",
-                                "sku_conflict": duplicate_sku,
+                                "message": "Skipped - Reverb creation failed"
                             }
                     platforms_to_sync = []
                     enriched_data = None
-
-            except Exception as e:
-                logger.error(f"Reverb listing error: {str(e)}", exc_info=True)
-                platform_statuses["reverb"] = {
-                    "status": "error",
-                    "message": f"Error: {str(e)}"
-                }
-
-                logger.warning("❌ Reverb creation failed - skipping other platforms")
-                for platform in ["ebay", "shopify", "vr"]:
-                    if platform in platforms_to_sync:
-                        platform_statuses[platform] = {
-                            "status": "info",
-                            "message": "Skipped - Reverb creation failed"
-                        }
-                platforms_to_sync = []
-                enriched_data = None
 
         # If no enriched data from Reverb, create from product data
         if not enriched_data and platforms_to_sync:

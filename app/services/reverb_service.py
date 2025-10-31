@@ -100,50 +100,88 @@ class ReverbService:
 
         return urls
 
-    async def refresh_product_images_from_listing(self, reverb_id: str, retries: int = 3, delay_seconds: float = 1.5) -> bool:
-        photo_urls: List[str] = []
+    async def refresh_product_images_from_listing(
+        self,
+        reverb_id: str,
+        *,
+        expected_count: Optional[int] = None,
+        retry_delays: Optional[List[float]] = None,
+    ) -> bool:
+        """Refresh local product images using the canonical Reverb gallery.
+
+        Args:
+            reverb_id: The Reverb listing identifier to poll.
+            expected_count: Optional number of images we hope to see; polling stops early
+                once Reverb returns at least this many URLs.
+            retry_delays: Sequence of sleep durations (in seconds) between attempts. The
+                number of polling attempts equals ``len(retry_delays) + 1``. When omitted
+                we fall back to the legacy behaviour (three attempts ~1.5s apart).
+
+        Returns:
+            ``True`` when at least one image was retrieved and persisted locally, ``False``
+            otherwise.
+        """
+
+        delays = retry_delays or [1.5, 1.5, 1.5]
+        attempts = len(delays) + 1
+
+        collected_urls: List[str] = []
         last_error: Optional[Exception] = None
 
-        for attempt in range(1, retries + 1):
+        for attempt in range(attempts):
             try:
                 details = await self.client.get_listing_details(reverb_id)
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
                 logger.warning(
                     "Attempt %s/%s: failed to fetch Reverb listing %s for image refresh: %s",
-                    attempt,
-                    retries,
+                    attempt + 1,
+                    attempts,
                     reverb_id,
                     exc,
                 )
             else:
                 listing_data = details.get("listing", details) or {}
                 photo_urls = self._extract_image_urls(listing_data)
+
                 if photo_urls:
-                    break
-                logger.info(
-                    "Attempt %s/%s: Reverb listing %s returned no photos yet",
-                    attempt,
-                    retries,
-                    reverb_id,
-                )
+                    collected_urls = photo_urls
+                    expected = expected_count or 0
+                    if expected and len(photo_urls) < expected and attempt < attempts - 1:
+                        logger.info(
+                            "Attempt %s/%s: Reverb listing %s returned %s/%s images; continuing to poll",
+                            attempt + 1,
+                            attempts,
+                            reverb_id,
+                            len(photo_urls),
+                            expected,
+                        )
+                    else:
+                        break
+                else:
+                    logger.info(
+                        "Attempt %s/%s: Reverb listing %s returned no photos yet",
+                        attempt + 1,
+                        attempts,
+                        reverb_id,
+                    )
 
-            if attempt < retries:
-                await asyncio.sleep(delay_seconds)
+            if attempt < len(delays):
+                await asyncio.sleep(delays[attempt])
 
-        if not photo_urls:
+        if not collected_urls:
             if last_error:
                 logger.warning(
                     "Giving up refreshing images for Reverb listing %s after %s attempts: %s",
                     reverb_id,
-                    retries,
+                    attempts,
                     last_error,
                 )
             else:
                 logger.warning(
                     "Reverb listing %s did not return any image URLs after %s attempts",
                     reverb_id,
-                    retries,
+                    attempts,
                 )
             return False
 
@@ -171,15 +209,22 @@ class ReverbService:
             )
             return False
 
-        product.primary_image = photo_urls[0]
-        product.additional_images = photo_urls[1:]
+        product.primary_image = collected_urls[0]
+        product.additional_images = collected_urls[1:]
         await self.db.flush()
         logger.info(
             "Refreshed product %s images from Reverb listing %s (total %s)",
             product.id,
             reverb_id,
-            len(photo_urls),
+            len(collected_urls),
         )
+        if expected_count and len(collected_urls) < expected_count:
+            logger.info(
+                "Reverb listing %s provided %s images but %s were expected; will retain available set",
+                reverb_id,
+                len(collected_urls),
+                expected_count,
+            )
         return True
 
     async def get_categories(self) -> Dict:

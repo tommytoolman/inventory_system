@@ -936,6 +936,12 @@ class ShopifyService:
             if hasattr(product, 'additional_images') and product.additional_images:
                 product_image_urls.extend(product.additional_images)
 
+            logger.info(
+                "Shopify fallback images: primary=%s additional=%s",
+                bool(product.primary_image),
+                len(product.additional_images or []) if hasattr(product, 'additional_images') and product.additional_images else 0,
+            )
+
             if product_image_urls:
                 for img_url in product_image_urls:
                     max_res_url = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
@@ -1035,7 +1041,26 @@ class ShopifyService:
                         # Use the same format as the validated script for consistency
                         media_input = [{"src": url} for url in valid_images]
                         logger.debug("Shopify media_input: %s", media_input)
-                        self.client.create_product_images(product_gid, media_input)
+                        media_result = self.client.create_product_images(product_gid, media_input)
+                        media_errors = []
+                        if media_result:
+                            media_errors.extend(media_result.get("mediaUserErrors") or [])
+                            media_errors.extend(media_result.get("userErrors") or [])
+                            created_media = media_result.get("media") or []
+                            logger.info(
+                                "Shopify media response: %s created, %s requested",
+                                len(created_media),
+                                len(valid_images),
+                            )
+                        else:
+                            created_media = []
+
+                        if media_errors:
+                            logger.warning(
+                                "Shopify reported media errors: %s",
+                                media_errors,
+                            )
+
                         logger.info(f"Added {len(valid_images)} images (best quality available) to product")
                         created_images = valid_images
                     else:

@@ -887,8 +887,21 @@ class ShopifyService:
             # Remove duplicates and filter out None/empty values
             tags = list(filter(None, set(tags)))
             
-            # Extract and transform images to MAX_RES (same logic as VR)
-            all_images = []
+            # Extract and prioritise locally uploaded images first
+            all_images: List[str] = []
+
+            local_photos: List[str] = []
+            if reverb_data:
+                raw_local = reverb_data.get('local_photos') or []
+                if raw_local:
+                    local_photos = [url for url in raw_local if url]
+            if local_photos:
+                logger.info("Using %s local photos for Shopify payload", len(local_photos))
+                for image_url in local_photos:
+                    max_res_url = ImageTransformer.transform_reverb_url(image_url, ImageQuality.MAX_RES)
+                    if max_res_url and max_res_url not in all_images:
+                        all_images.append(max_res_url)
+                        logger.debug("Added local image: %s", max_res_url[:80])
 
             # First try to get images from reverb_data if provided
             if reverb_data:
@@ -937,9 +950,10 @@ class ShopifyService:
                 product_image_urls.extend(product.additional_images)
 
             logger.info(
-                "Shopify fallback images: primary=%s additional=%s",
+                "Shopify fallback images: primary=%s additional=%s (local already: %s)",
                 bool(product.primary_image),
                 len(product.additional_images or []) if hasattr(product, 'additional_images') and product.additional_images else 0,
+                len(local_photos),
             )
 
             if product_image_urls:

@@ -682,26 +682,15 @@ class ReverbService:
             if photo_urls:
                 current_additional = list(product.additional_images or [])
                 existing_count = int(bool(product.primary_image)) + len(current_additional)
-                if len(photo_urls) < max(existing_count, 1):
+                if existing_count == 0:
+                    product.primary_image = photo_urls[0]
+                    product.additional_images = photo_urls[1:]
                     logger.info(
-                        "Skipping media update for product %s; Reverb returned %s images (< existing %s)",
+                        "Populated product %s media from Reverb listing %s (previously empty)",
                         product.sku,
-                        len(photo_urls),
-                        existing_count,
+                        reverb_id,
                     )
-                else:
-                    if (
-                        product.primary_image != photo_urls[0]
-                        or current_additional != photo_urls[1:]
-                    ):
-                        product.primary_image = photo_urls[0]
-                        product.additional_images = photo_urls[1:]
-                        logger.info(
-                            "Updated product %s media from Reverb listing %s",
-                            product.sku,
-                            reverb_id,
-                        )
-                        await self.db.flush()
+                    await self.db.flush()
 
             # Upsert platform_common
             existing_common_query = select(PlatformCommon).where(

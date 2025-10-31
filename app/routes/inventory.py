@@ -1711,6 +1711,23 @@ async def handle_create_platform_listing_from_detail(
                             product.category,
                         )
 
+                base_url = str(request.base_url).rstrip('/')
+                local_photo_urls: List[str] = []
+                if product.primary_image:
+                    if product.primary_image.startswith('/static/'):
+                        local_photo_urls.append(f"{base_url}{product.primary_image}")
+                    else:
+                        local_photo_urls.append(product.primary_image)
+                if product.additional_images:
+                    for img_url in product.additional_images:
+                        if not img_url:
+                            continue
+                        full_url = (
+                            f"{base_url}{img_url}" if img_url.startswith('/static/') else img_url
+                        )
+                        if full_url not in local_photo_urls:
+                            local_photo_urls.append(full_url)
+
                 # Prepare enriched data similar to what would come from Reverb
                 enriched_data = {
                     "title": f"{product.year} {product.brand} {product.model}" if product.year else f"{product.brand} {product.model}",
@@ -1723,7 +1740,8 @@ async def handle_create_platform_listing_from_detail(
                     "finish": product.finish,
                     "year": str(product.year) if product.year else None,
                     "model": product.model,
-                    "brand": product.brand
+                    "brand": product.brand,
+                    "local_photos": local_photo_urls,
                 }
                 
                 # Add images
@@ -2248,7 +2266,15 @@ async def add_product(
         if primary_image:
             primary_image = make_full_url(primary_image)
         additional_images = [make_full_url(img) for img in additional_images]
-            
+
+        local_gallery_full_urls: List[str] = []
+        if primary_image:
+            local_gallery_full_urls.append(primary_image)
+        if additional_images:
+            for img in additional_images:
+                if img and img not in local_gallery_full_urls:
+                    local_gallery_full_urls.append(img)
+
         # Process platform-specific data from form
         platform_data = {}
         for key, value in form_data.items():
@@ -2480,6 +2506,8 @@ async def add_product(
                             )
 
                         enriched_data = result.get("listing_data") or {}
+                        if local_gallery_full_urls:
+                            enriched_data["local_photos"] = local_gallery_full_urls
                         platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
                     else:
                         duplicate_sku = result.get("error", "").lower().startswith("unexpected error: validation failed: sku")
@@ -2543,7 +2571,8 @@ async def add_product(
                 "finish": product.finish,
                 "year": str(product.year) if product.year else None,
                 "model": product.model,
-                "brand": product.brand
+                "brand": product.brand,
+                "local_photos": local_gallery_full_urls,
             }
 
             # Add images to enriched data

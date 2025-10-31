@@ -1036,10 +1036,17 @@ class EbayService:
             logger.info(f"  Condition display name: {self._get_ebay_condition_display_name(ebay_condition_id)}")
             
             # 3. Prepare Pictures with MAX_RES transformation
+            from app.core.utils import ImageTransformer, ImageQuality
+
             pictures: List[str] = []
             local_photos: List[str] = []
-            if reverb_data and isinstance(reverb_data.get('local_photos'), list):
-                local_photos = [url for url in reverb_data['local_photos'] if url]
+            if reverb_api_data and isinstance(reverb_api_data.get('local_photos'), list):
+                local_photos = [url for url in reverb_api_data['local_photos'] if url]
+            if not local_photos:
+                if product.primary_image:
+                    local_photos.append(product.primary_image)
+                if product.additional_images:
+                    local_photos.extend([img for img in product.additional_images if img])
             if local_photos:
                 logger.info("  Using %s local photos for eBay payload", len(local_photos))
                 for image_url in local_photos:
@@ -1047,7 +1054,6 @@ class EbayService:
                     if max_res_url and max_res_url not in pictures:
                         pictures.append(max_res_url)
                         logger.debug(f"  Added local image: {max_res_url[:80]}...")
-            from app.core.utils import ImageTransformer, ImageQuality
             
             if product.primary_image:
                 # Transform to MAX_RES like Shopify and VR

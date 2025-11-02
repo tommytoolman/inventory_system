@@ -447,7 +447,11 @@
                     <h2 class="text-lg font-semibold leading-none pb-0">Images</h2>
                     {% if reverb_listing_id %}
                         <button id="refresh-images-btn"
+                                type="button"
                                 data-refresh-url="{{ url_for('refresh_product_images', product_id=product.id) }}"
+                                data-fix-url="{{ url_for('fix_product_images', product_id=product.id) }}"
+                                data-check-label="(Check Images)"
+                                data-fix-label="Fix Images"
                                 class="text-xs text-blue-600 hover:text-blue-800 pb-0.5">
                             (Check Images)
                         </button>
@@ -534,30 +538,96 @@
             });
         });
 
+        const storedImageFlash = sessionStorage.getItem('imageHealthFlash');
+        if (storedImageFlash) {
+            try {
+                const parsed = JSON.parse(storedImageFlash);
+                if (parsed && parsed.message) {
+                    displayMessage(parsed.message, parsed.type || 'info');
+                }
+            } catch (_) {
+                // ignore parsing errors
+            }
+            sessionStorage.removeItem('imageHealthFlash');
+        }
+
         const refreshButton = document.getElementById('refresh-images-btn');
         if (refreshButton) {
+            const checkLabel = refreshButton.dataset.checkLabel || '(Check Images)';
+            const fixLabel = refreshButton.dataset.fixLabel || 'Fix Images';
+
+            const setMode = (mode, tooltipText = '') => {
+                refreshButton.dataset.mode = mode;
+                if (mode === 'fix') {
+                    refreshButton.innerHTML = `<strong>${fixLabel}</strong>`;
+                } else {
+                    refreshButton.textContent = checkLabel;
+                }
+                refreshButton.title = tooltipText;
+            };
+
+            setMode('check');
+
             refreshButton.addEventListener('click', async () => {
-                const originalText = refreshButton.textContent;
-                refreshButton.textContent = 'Checking…';
+                const mode = refreshButton.dataset.mode || 'check';
+                const targetUrl = mode === 'fix' ? refreshButton.dataset.fixUrl : refreshButton.dataset.refreshUrl;
+                if (!targetUrl) {
+                    return;
+                }
+
                 refreshButton.disabled = true;
+                if (mode === 'fix') {
+                    refreshButton.innerHTML = `<strong>${fixLabel}…</strong>`;
+                } else {
+                    refreshButton.textContent = 'Checking…';
+                }
 
                 try {
-                    const response = await fetch(refreshButton.dataset.refreshUrl, {
+                    const response = await fetch(targetUrl, {
                         method: 'POST',
                         headers: { 'Accept': 'application/json' }
                     });
                     const data = await response.json();
-                    if (data.status === 'success') {
-                        window.location.reload();
-                    } else {
-                        alert(data.message || 'Reverb has not provided images yet.');
-                        refreshButton.textContent = originalText;
+
+                    if (data.status !== 'success') {
+                        displayMessage(data.message || 'Unable to refresh images.', data.message_type || 'error');
+                        setMode('check');
                         refreshButton.disabled = false;
+                        return;
                     }
+
+                    if (data.message) {
+                        displayMessage(data.message, data.message_type || (data.needs_fix ? 'warning' : 'success'));
+                    }
+
+                    const summaryLines = (data.platform_results || [])
+                        .filter(res => res && res.needs_fix && !res.error && res.available)
+                        .map(res => `${res.platform.charAt(0).toUpperCase() + res.platform.slice(1)}: ${res.platform_count}/${res.canonical_count}`);
+
+                    if (data.needs_fix) {
+                        const tooltip = summaryLines.length ? `Needs sync – ${summaryLines.join(', ')}` : 'Needs sync';
+                        setMode('fix', tooltip);
+                    } else {
+                        const tooltip = summaryLines.length ? summaryLines.join(', ') : 'Images are in sync';
+                        setMode('check', tooltip);
+                    }
+
+                    if (data.canonical_updated && (mode === 'fix' || !data.needs_fix)) {
+                        if (data.message) {
+                            sessionStorage.setItem('imageHealthFlash', JSON.stringify({
+                                message: data.message,
+                                type: data.message_type || 'info'
+                            }));
+                        }
+                        window.location.reload();
+                        return;
+                    }
+
+                    refreshButton.disabled = false;
                 } catch (error) {
-                    console.error('Failed to refresh images', error);
-                    alert('Unable to refresh images at this time.');
-                    refreshButton.textContent = originalText;
+                    console.error('Failed to refresh platform images', error);
+                    displayMessage('Unable to refresh images at this time.', 'error');
+                    setMode('check');
                     refreshButton.disabled = false;
                 }
             });
@@ -591,37 +661,56 @@
         }
         
         function displayMessage(message, type) {
-            // Create message element
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `alert alert-${type || 'info'} mb-4 p-4 rounded-md`;
-
-            // Set colors based on message type
-            if (type === 'error') {
-                messageDiv.className += ' bg-red-100 border border-red-400 text-red-700';
-            } else if (type === 'warning') {
-                messageDiv.className += ' bg-yellow-100 border border-yellow-400 text-yellow-700';
-            } else if (type === 'success') {
-                messageDiv.className += ' bg-green-100 border border-green-400 text-green-700';
-            } else {
-                messageDiv.className += ' bg-blue-100 border border-blue-400 text-blue-700';
+            const containerId = 'image-health-toast-container';
+            let container = document.getElementById(containerId);
+            if (!container) {
+                container = document.createElement('div');
+                container.id = containerId;
+                container.style.position = 'fixed';
+                container.style.bottom = '1.5rem';
+                container.style.right = '1.5rem';
+                container.style.zIndex = '9999';
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column';
+                container.style.gap = '0.75rem';
+                document.body.appendChild(container);
             }
 
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'rounded-md border px-4 py-3 text-sm shadow-lg flex items-start gap-3 max-w-md bg-white';
+
+            let toneClasses = 'border-blue-200 text-blue-800 bg-blue-50';
+            if (type === 'error') {
+                toneClasses = 'border-red-200 text-red-800 bg-red-50';
+            } else if (type === 'warning') {
+                toneClasses = 'border-yellow-200 text-yellow-800 bg-yellow-50';
+            } else if (type === 'success') {
+                toneClasses = 'border-green-200 text-green-800 bg-green-50';
+            }
+            messageDiv.className += ` ${toneClasses}`;
+
             messageDiv.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <span>${message.replace(/\+/g, ' ')}</span>
-                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-lg">&times;</button>
-                </div>
+                <span class="flex-1 leading-snug">${message.replace(/\+/g, ' ')}</span>
+                <button class="text-xl leading-none" aria-label="Dismiss" style="color: inherit;">&times;</button>
             `;
 
-            // Insert at the top of the container
-            const container = document.querySelector('.container');
-            container.insertBefore(messageDiv, container.firstChild);
+            const closeBtn = messageDiv.querySelector('button');
+            closeBtn.addEventListener('click', () => {
+                messageDiv.remove();
+                if (!container.hasChildNodes()) {
+                    container.remove();
+                }
+            });
 
-            // Auto-remove success/info messages after 5 seconds
-            if (type === 'success' || type === 'info') {
+            container.appendChild(messageDiv);
+
+            if (type !== 'error') {
                 setTimeout(() => {
                     if (messageDiv.parentElement) {
                         messageDiv.remove();
+                    }
+                    if (!container.hasChildNodes()) {
+                        container.remove();
                     }
                 }, 5000);
             }

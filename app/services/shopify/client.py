@@ -1349,6 +1349,38 @@ class ShopifyGraphQLClient:
                 print(f"Response content: {e.response.text}")
             return None
 
+    def delete_product_images_rest(self, product_gid: str, image_gids: List[str]) -> None:
+        """Delete product images via REST API using image GIDs."""
+        if not image_gids:
+            return
+
+        import requests
+
+        product_id = product_gid.split('/')[-1]
+        clean_domain = self.store_domain.rstrip('/')
+
+        headers = {
+            "X-Shopify-Access-Token": self.admin_api_token,
+            "Content-Type": "application/json",
+        }
+
+        for gid in image_gids:
+            image_id = gid.split('/')[-1]
+            rest_url = (
+                f"https://{clean_domain}/admin/api/{self.api_version}/products/{product_id}/images/{image_id}.json"
+            )
+            try:
+                response = requests.delete(rest_url, headers=headers, timeout=30)
+                if response.status_code not in (200, 204):
+                    logger.warning(
+                        "Failed to delete Shopify image %s (status=%s, body=%s)",
+                        gid,
+                        response.status_code,
+                        response.text,
+                    )
+            except requests.exceptions.RequestException as exc:
+                logger.warning("Error deleting Shopify image %s: %s", gid, exc)
+
     async def update_product_variant_price(self, product_gid: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Update the primary variant price for a product using REST via executor."""
 

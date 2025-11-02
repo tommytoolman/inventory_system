@@ -52,6 +52,11 @@ from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
 from app.services.shopify_service import ShopifyService
+from app.services.image_reconciliation import (
+    refresh_canonical_gallery,
+    reconcile_shopify,
+    reconcile_ebay,
+)
 from app.services.shopify.utils import (
     ensure_description_has_standard_footer,
     generate_shopify_keywords,
@@ -1488,39 +1493,146 @@ async def product_detail(
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 
+def _summarize_differences(results: List[Dict]) -> List[str]:
+    lines: List[str] = []
+    for result in results:
+        if not result.get("available") or result.get("error"):
+            continue
+        if result.get("needs_fix"):
+            base = f"{result['platform'].capitalize()}: {result.get('platform_count')} of {result.get('canonical_count')} images"
+            live_count = result.get("live_count")
+            if live_count is not None and live_count != result.get("platform_count"):
+                base += f" (live: {live_count})"
+            stored_count = result.get("stored_count")
+            if stored_count is not None and stored_count != result.get("platform_count") and stored_count != live_count:
+                base += f" (stored: {stored_count})"
+            lines.append(base)
+    return lines
+
+
 @router.post("/product/{product_id}/refresh_images", response_class=JSONResponse)
 async def refresh_product_images(
     product_id: int,
     db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings),
 ):
-    stmt = (
-        select(PlatformCommon)
-        .where(
-            PlatformCommon.product_id == product_id,
-            PlatformCommon.platform_name == "reverb",
-        )
-    )
-    result = await db.execute(stmt)
-    platform_common = result.scalars().first()
-
-    if not platform_common or not platform_common.external_id:
+    product = await db.get(Product, product_id)
+    if not product:
         return JSONResponse(
-            {"status": "error", "message": "No Reverb listing found for this product."},
-            status_code=400,
+            {"status": "error", "message": "Product not found."},
+            status_code=404,
         )
 
-    service = ReverbService(db, settings)
-    refreshed = await service.refresh_product_images_from_listing(str(platform_common.external_id))
+    canonical_gallery, canonical_updated = await refresh_canonical_gallery(db, settings, product, refresh_reverb=True)
 
-    if refreshed:
-        await db.commit()
-        return JSONResponse({"status": "success"})
+    platform_results: List[Dict[str, Any]] = []
 
-    await db.rollback()
+    shopify_result = await reconcile_shopify(db, settings, product, canonical_gallery, apply_fix=False)
+    platform_results.append(shopify_result)
+
+    ebay_result = await reconcile_ebay(db, settings, product, canonical_gallery, apply_fix=False)
+    platform_results.append(ebay_result)
+
+    errors = [res for res in platform_results if res.get("error")]
+    if errors:
+        message = "; ".join(res.get("message", "Unknown error") for res in errors)
+        return JSONResponse(
+            {
+                "status": "error",
+                "message": message,
+                "message_type": "error",
+                "needs_fix": True,
+                "canonical_updated": canonical_updated,
+                "platform_results": platform_results,
+            },
+            status_code=500,
+        )
+
+    actionable_results = [res for res in platform_results if res.get("available")]
+    needs_fix = any(res.get("needs_fix") for res in actionable_results)
+    summary_lines = _summarize_differences(platform_results)
+
+    if needs_fix:
+        base_message = "Detected image discrepancies."
+        if summary_lines:
+            base_message += " " + ", ".join(summary_lines)
+        message_type = "warning"
+    else:
+        base_message = "Platform galleries already match the RIFF images."
+        message_type = "success"
+
     return JSONResponse(
-        {"status": "error", "message": "Reverb did not provide any images yet. Please try again shortly."},
-        status_code=409,
+        {
+            "status": "success",
+            "message": base_message,
+            "message_type": message_type,
+            "needs_fix": needs_fix,
+            "canonical_updated": canonical_updated,
+            "platform_results": platform_results,
+        }
+    )
+
+
+@router.post("/product/{product_id}/fix_images", response_class=JSONResponse)
+async def fix_product_images(
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    product = await db.get(Product, product_id)
+    if not product:
+        return JSONResponse(
+            {"status": "error", "message": "Product not found."},
+            status_code=404,
+        )
+
+    canonical_gallery, canonical_updated = await refresh_canonical_gallery(db, settings, product, refresh_reverb=True)
+
+    platform_results: List[Dict[str, Any]] = []
+
+    shopify_result = await reconcile_shopify(db, settings, product, canonical_gallery, apply_fix=True)
+    platform_results.append(shopify_result)
+
+    ebay_result = await reconcile_ebay(db, settings, product, canonical_gallery, apply_fix=True)
+    platform_results.append(ebay_result)
+
+    errors = [res for res in platform_results if res.get("error")]
+    if errors:
+        message = "; ".join(res.get("message", "Unable to update images") for res in errors)
+        return JSONResponse(
+            {
+                "status": "error",
+                "message": message,
+                "message_type": "error",
+                "needs_fix": True,
+                "canonical_updated": canonical_updated,
+                "platform_results": platform_results,
+            },
+            status_code=500,
+        )
+
+    actionable_results = [res for res in platform_results if res.get("available")]
+    needs_fix = any(res.get("needs_fix") for res in actionable_results)
+    summary_lines = _summarize_differences(platform_results)
+
+    if needs_fix:
+        base_message = "Some platforms still report mismatched image counts."
+        if summary_lines:
+            base_message += " " + ", ".join(summary_lines)
+        message_type = "warning"
+    else:
+        base_message = "Shopify and eBay galleries now mirror the RIFF images."
+        message_type = "success"
+
+    return JSONResponse(
+        {
+            "status": "success",
+            "message": base_message,
+            "message_type": message_type,
+            "needs_fix": needs_fix,
+            "canonical_updated": canonical_updated,
+            "platform_results": platform_results,
+        }
     )
 
 @router.post("/product/{product_id}/list_on/{platform_slug}", name="create_platform_listing_from_detail")

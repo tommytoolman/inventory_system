@@ -65,7 +65,10 @@ class ReverbService:
 
         transformed = url
         if "f_auto,t_large" in transformed:
+            transformed = transformed.replace("/a_0/f_auto,t_large/", "/")
             transformed = transformed.replace("f_auto,t_large/", "").replace("f_auto,t_large", "")
+        if "/a_0/" in transformed:
+            transformed = transformed.replace("/a_0/", "/")
         if "t_card-square" in transformed:
             transformed = transformed.replace("t_card-square/", "").replace("t_card-square", "")
 

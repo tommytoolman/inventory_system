@@ -153,11 +153,16 @@ class ImageTransformer:
             match = re.search(pattern, url)
             if match:
                 # Replace with just /upload/v{numbers}/
-                return url[:url.find('/upload/')] + '/upload' + match.group(1) + url[match.end():]
+                cleaned = url[:url.find('/upload/')] + '/upload' + match.group(1) + url[match.end():]
             else:
-                # Fallback if no version pattern found
-                return url
-        
+                cleaned = url
+
+            # Remove any residual orientation segments like /a_0/
+            cleaned = re.sub(r'/a_\d+/', '/', cleaned)
+            # Collapse any duplicate slashes that might have been introduced, ignoring the protocol delimiter
+            cleaned = re.sub(r'(?<!:)//+', '/', cleaned)
+            return cleaned
+
         # For other qualities, remove existing transformations and add new ones
         # First remove any existing transformation patterns
         # Pattern 1: /s--xyz--/anything/
@@ -235,4 +240,3 @@ def get_vr_optimized_images(primary_image: Optional[str], additional_images: Lis
     vr_primary = ImageTransformer.get_primary_image_for_platform(primary_image, 'vr')
     vr_additional = ImageTransformer.transform_images_for_platform(additional_images, 'vr')
     return vr_primary, vr_additional
-

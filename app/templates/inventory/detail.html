@@ -31,15 +31,15 @@
                             {% set status_val = product.status.value|upper if product.status else '' %}
                             <div class="mt-1">
                                 {% if status_val == 'SOLD' %}
-                                    <span class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800">Sold</span>
+                                    <span class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-700">Sold</span>
                                 {% elif status_val == 'DRAFT' %}
-                                    <span class="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800">Draft</span>
+                                    <span class="px-3 py-1 text-sm rounded-full bg-amber-100 text-amber-700">Draft</span>
                                 {% elif status_val == 'ARCHIVED' %}
-                                    <span class="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800">Archived</span>
+                                    <span class="px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-700">Archived</span>
                                 {% elif status_val %}
                                     <span class="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800">{{ status_val|title }}</span>
                                 {% else %}
-                                    <span class="px-3 py-1 text-sm rounded-full bg-gray-100 text-gray-500">Status Unknown</span>
+                                    <span class="px-3 py-1 text-sm rounded-full bg-slate-100 text-slate-600">Status Unknown</span>
                                 {% endif %}
                             </div>
                         </div>
@@ -339,15 +339,15 @@
                                     </span>
                                     {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
                                     {% if platform_status in ['SOLD', 'ENDED', 'SOLD_OUT'] %}
-                                        <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                                        <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">
                                             Sold
                                         </span>
                                     {% elif platform_status in ['DRAFT'] %}
-                                        <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                                        <span class="px-2 py-1 text-xs rounded-full bg-amber-100 text-amber-700">
                                             Draft
                                         </span>
                                     {% elif platform_status in ['ARCHIVED'] %}
-                                        <span class="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+                                        <span class="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-700">
                                             Archived
                                         </span>
                                     {% elif platform_status in ['ACTIVE', 'LIVE'] %}

@@ -71,14 +71,14 @@
     <!-- </div> -->
 
     <!-- Filters Section - Single Line Layout -->
-    <div class="mb-8 bg-white p-4 rounded-lg shadow">
+    <div class="mb-8 bg-gray-50 p-4 rounded-lg shadow">
         <form method="get" class="flex items-center gap-3" id="filterForm">
             <input type="hidden" name="page" value="{{ page|default(1) }}">
             <input type="hidden" name="sort" id="sortField" value="{{ current_sort|default('') }}">
             <input type="hidden" name="order" id="orderField" value="{{ current_order|default('asc') }}">
             
             <!-- Category Filter -->
-            <select name="category" class="p-2 border rounded" onchange="this.form.submit()">
+            <select name="category" class="p-2 border rounded w-44" onchange="this.form.submit()">
                 <option value="">All Categories</option>
                 {% for category, count in categories %}
                 <option value="{{ category }}" {% if category == selected_category and selected_category %}selected{% endif %}>
@@ -88,7 +88,7 @@
             </select>
             
             <!-- Brand Filter -->
-            <select name="brand" class="p-2 border rounded" onchange="this.form.submit()">
+            <select name="brand" class="p-2 border rounded w-48" onchange="this.form.submit()">
                 <option value="">All Brands</option>
                 {% for brand, count in brands %}
                 <option value="{{ brand }}" {% if brand == selected_brand and selected_brand %}selected{% endif %}>
@@ -98,7 +98,7 @@
             </select>
             
             <!-- Status Filter -->
-            <select name="status" class="p-2 border rounded" onchange="this.form.submit()">
+            <select name="status" class="p-2 border rounded w-48" onchange="this.form.submit()">
                 <option value="">All Status</option>
                 <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
                 <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Draft</option>
@@ -108,7 +108,7 @@
             
             <!-- Show Entries Dropdown -->
             <div class="flex items-center">
-                <span class="mr-2 text-sm text-blue-600">Show:</span>
+                <span class="mr-2 text-sm text-blue-600">Items:</span>
                 {% set current_per_page = per_page|default(100)|int %}
                 <select name="per_page" class="p-2 border rounded" onchange="this.form.submit()">
                     {% for count in [10, 25, 50, 100] %}
@@ -118,7 +118,6 @@
                     {% endfor %}
                     <option value="all" {% if per_page == 'all' %}selected{% endif %}>All</option>
                 </select>
-                <span class="ml-2 text-sm text-blue-600">entries</span>
             </div>
             
             <!-- Search Input -->
@@ -259,9 +258,9 @@
                         </div>
                     </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">{{ product.brand|title }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">{{ product.brand|title }}</td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
                         <span title="{{ product.model }}" class="truncate inline-block max-w-xs">
                             {% if product.model and product.model|length > 65 %}
                                 {{ product.model[:65] }}...
@@ -271,7 +270,7 @@
                         </span>
                     </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
                         <span title="{{ product.category or '' }}" class="truncate inline-block max-w-sm">
                             {% if product.category and product.category|length > 55 %}
                                 {{ product.category[:55] }}...
@@ -281,7 +280,7 @@
                         </span>
                     </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val in ['SOLD', 'ARCHIVED'] %}text-gray-500{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
                         {% if product.base_price and product.base_price > 0 %}
                             £{{ "{:,.0f}".format(product.base_price) }}
                             <!-- ${{ "%.2f"|format(product.base_price) }} -->
@@ -292,15 +291,15 @@
                     <td class="px-6 py-4 whitespace-nowrap">
                         {% set status_val = product.status.value|upper if product.status else '' %}
                         {% if status_val == 'SOLD' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-700">
                                 Sold
                             </span>
                         {% elif status_val == 'DRAFT' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700">
                                 Draft
                             </span>
                         {% elif status_val == 'ARCHIVED' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-700">
                                 Archived
                             </span>
                         {% else %}

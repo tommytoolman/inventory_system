@@ -121,6 +121,35 @@
                         </label>
                     </div>
                 </div>
+
+                <div class="mt-6">
+                    <h3 class="text-md font-semibold text-gray-800 mb-2">Platform Pricing</h3>
+                    <p class="text-sm text-gray-500 mb-4">Base price auto-calculates suggested prices. Adjust eBay, Reverb, or V&amp;R if you need custom margins.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="shopify_price_display">Shopify (read-only)</label>
+                            <input id="shopify_price_display" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-100 leading-tight" value="{{ platforms['shopify']['price'] }}" readonly>
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="ebay_price_display">eBay</label>
+                            <input id="ebay_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['ebay']['price'] }}">
+                            <input type="hidden" id="ebay_price" name="platform_price_ebay" value="{{ platforms['ebay']['price'] }}">
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="reverb_price_display">Reverb</label>
+                            <input id="reverb_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['reverb']['price'] }}">
+                            <input type="hidden" id="reverb_price" name="platform_price_reverb" value="{{ platforms['reverb']['price'] }}">
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="vr_price_display">Vintage &amp; Rare</label>
+                            <input id="vr_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['vr']['price'] }}">
+                            <input type="hidden" id="vr_price" name="platform_price_vr" value="{{ platforms['vr']['price'] }}">
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <!-- Platform Sync Options -->
@@ -220,6 +249,137 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    const basePriceInput = document.getElementById('base_price');
+    const shopifyDisplay = document.getElementById('shopify_price_display');
+    const priceFields = {
+        ebay: {
+            display: document.getElementById('ebay_price_display'),
+            hidden: document.getElementById('ebay_price'),
+        },
+        reverb: {
+            display: document.getElementById('reverb_price_display'),
+            hidden: document.getElementById('reverb_price'),
+        },
+        vr: {
+            display: document.getElementById('vr_price_display'),
+            hidden: document.getElementById('vr_price'),
+        },
+    };
+
+    const formatPrice = (price) => {
+        if (price === null || price === undefined || Number.isNaN(price)) {
+            return '';
+        }
+        return new Intl.NumberFormat('en-GB', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        }).format(price);
+    };
+
+    const parsePrice = (value) => {
+        if (value === null || value === undefined || value === '') {
+            return NaN;
+        }
+        const numeric = parseFloat(String(value).replace(/[^0-9.\-]/g, ''));
+        return Number.isNaN(numeric) ? NaN : numeric;
+    };
+
+    const calculateEbayPrice = (base) => Math.round(base * 1.05);
+    const calculateVRPrice = (base) => Math.round(base * 1.05);
+    const calculateReverbPrice = (base) => {
+        const withMargin = base * 1.05;
+        const rounded = Math.ceil(withMargin / 100) * 100;
+        const suggestion = rounded - 1;
+        return suggestion > 0 ? suggestion : 0;
+    };
+
+    const calculators = {
+        ebay: calculateEbayPrice,
+        reverb: calculateReverbPrice,
+        vr: calculateVRPrice,
+    };
+
+    const formatExistingPrices = () => {
+        Object.values(priceFields).forEach(({ display, hidden }) => {
+            if (!display || !hidden) {
+                return;
+            }
+            const numeric = parsePrice(hidden.value || display.value);
+            if (!Number.isNaN(numeric)) {
+                hidden.value = numeric;
+                display.value = formatPrice(numeric);
+            }
+        });
+
+        if (shopifyDisplay) {
+            const shopifyNumeric = basePriceInput ? parseFloat(basePriceInput.value) : NaN;
+            if (!Number.isNaN(shopifyNumeric) && shopifyNumeric > 0) {
+                shopifyDisplay.value = formatPrice(shopifyNumeric);
+            } else {
+                const fallback = parsePrice(shopifyDisplay.value);
+                if (!Number.isNaN(fallback)) {
+                    shopifyDisplay.value = formatPrice(fallback);
+                }
+            }
+        }
+    };
+
+    const updatePlatformPricesFromBase = () => {
+        if (!basePriceInput) {
+            return;
+        }
+
+        const baseValue = parseFloat(basePriceInput.value);
+        if (Number.isNaN(baseValue) || baseValue <= 0) {
+            return;
+        }
+
+        if (shopifyDisplay) {
+            shopifyDisplay.value = formatPrice(baseValue);
+        }
+
+        Object.entries(priceFields).forEach(([platform, { display, hidden }]) => {
+            if (!display || !hidden) {
+                return;
+            }
+            const calculator = calculators[platform];
+            const suggested = calculator ? calculator(baseValue) : baseValue;
+            hidden.value = suggested;
+            display.value = formatPrice(suggested);
+        });
+    };
+
+    const attachManualOverrideHandlers = () => {
+        Object.values(priceFields).forEach(({ display, hidden }) => {
+            if (!display || !hidden) {
+                return;
+            }
+            display.addEventListener('input', () => {
+                const numeric = parsePrice(display.value);
+                hidden.value = Number.isNaN(numeric) ? '' : numeric;
+            });
+
+            display.addEventListener('blur', () => {
+                const numeric = parsePrice(display.value);
+                if (!Number.isNaN(numeric) && numeric > 0) {
+                    hidden.value = numeric;
+                    display.value = formatPrice(numeric);
+                }
+            });
+        });
+    };
+
+    if (basePriceInput) {
+        ['input', 'change'].forEach((eventName) => {
+            basePriceInput.addEventListener(eventName, updatePlatformPricesFromBase);
+        });
+    }
+
+    formatExistingPrices();
+    attachManualOverrideHandlers();
 });
 </script>
 {% endblock %}

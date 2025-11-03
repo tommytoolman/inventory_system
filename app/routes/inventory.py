@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import math
 import asyncio
 import aiofiles
 import logging
@@ -78,6 +79,41 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 DRAFT_UPLOAD_DIR = Path(get_settings().DRAFT_UPLOAD_DIR).expanduser()
 DRAFT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DRAFT_UPLOAD_URL_PREFIX = "/static/drafts"
+
+
+def _calculate_default_platform_price(platform: str, base_price: Optional[float]) -> float:
+    """Return the suggested platform price given a base price."""
+    if base_price is None:
+        return 0.0
+
+    platform = (platform or "").lower()
+    base_value = float(base_price) if base_price else 0.0
+    if base_value <= 0:
+        return 0.0
+
+    if platform == "shopify":
+        return base_value
+
+    if platform in {"ebay", "vr"}:
+        return float(round(base_value * 1.05))
+
+    if platform == "reverb":
+        with_margin = base_value * 1.05
+        rounded = math.ceil(with_margin / 100.0) * 100.0
+        suggestion = rounded - 1.0
+        return float(suggestion if suggestion > 0 else 0.0)
+
+    return base_value
+
+
+def _build_platform_stub(platform: str, base_price: Optional[float]) -> Dict[str, Any]:
+    """Create a default platform entry for the edit form."""
+    return {
+        "status": "inactive",
+        "external_id": None,
+        "url": None,
+        "price": _calculate_default_platform_price(platform, base_price),
+    }
 
 DEFAULT_VR_BRAND = "Justin" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR VRAcceptedBrand TABLE***
 # DEFAULT_EBAY_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR eBay Accepted Brands TABLE***
@@ -3852,20 +3888,67 @@ async def edit_product_form(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Get platform statuses
-    platform_links = await db.execute(
+    # Get platform statuses and specialist pricing
+    platform_links_result = await db.execute(
         select(PlatformCommon).where(PlatformCommon.product_id == product_id)
     )
-    platform_links = platform_links.scalars().all()
-    
-    platforms = {
-        link.platform_name: {
-            'status': link.status,
-            'external_id': link.external_id,
-            'url': link.listing_url
-        }
-        for link in platform_links
+    platform_links = platform_links_result.scalars().all()
+
+    base_price_value = float(product.base_price or 0)
+    platforms: Dict[str, Dict[str, Any]] = {
+        name: _build_platform_stub(name, base_price_value)
+        for name in ["shopify", "reverb", "ebay", "vr"]
     }
+
+    for link in platform_links:
+        platform_key = (link.platform_name or "").lower()
+        if not platform_key:
+            continue
+
+        entry = platforms.get(platform_key)
+        if entry is None:
+            entry = _build_platform_stub(platform_key, base_price_value)
+            platforms[platform_key] = entry
+
+        entry["status"] = (link.status or entry.get("status") or "inactive").lower()
+        entry["external_id"] = link.external_id
+        entry["url"] = link.listing_url
+
+        price_value: Optional[float] = None
+
+        if platform_key == "shopify":
+            listing_stmt = select(ShopifyListing).where(ShopifyListing.platform_id == link.id)
+            listing = (await db.execute(listing_stmt)).scalar_one_or_none()
+            if listing and listing.price is not None:
+                price_value = float(listing.price)
+        elif platform_key == "reverb":
+            listing_stmt = select(ReverbListing).where(ReverbListing.platform_id == link.id)
+            listing = (await db.execute(listing_stmt)).scalar_one_or_none()
+            if listing and listing.list_price is not None:
+                price_value = float(listing.list_price)
+        elif platform_key == "ebay":
+            listing_stmt = select(EbayListing).where(EbayListing.platform_id == link.id)
+            listing = (await db.execute(listing_stmt)).scalar_one_or_none()
+            if listing and listing.price is not None:
+                price_value = float(listing.price)
+        elif platform_key == "vr":
+            listing_stmt = select(VRListing).where(VRListing.platform_id == link.id)
+            listing = (await db.execute(listing_stmt)).scalar_one_or_none()
+            if listing and listing.price_notax is not None:
+                price_value = float(listing.price_notax)
+
+        if price_value is None:
+            platform_specific = link.platform_specific_data or {}
+            raw_price = platform_specific.get("price") if isinstance(platform_specific, dict) else None
+            try:
+                price_value = float(raw_price) if raw_price is not None else None
+            except (TypeError, ValueError):
+                price_value = None
+
+        if price_value is None:
+            price_value = _calculate_default_platform_price(platform_key, base_price_value)
+
+        entry["price"] = price_value
     
     return templates.TemplateResponse(
         "inventory/edit.html",
@@ -3947,6 +4030,16 @@ async def update_product(
         if getattr(product, field) != original
     }
 
+    platform_price_overrides: Dict[str, float] = {}
+    for platform_key in ("reverb", "ebay", "vr"):
+        raw_value = form_data.get(f"platform_price_{platform_key}")
+        if raw_value is None or raw_value == "":
+            continue
+        try:
+            platform_price_overrides[platform_key] = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+
     message = "Product updated successfully."
 
     if changed_fields:
@@ -3957,6 +4050,7 @@ async def update_product(
                 product_id,
                 original_values,
                 changed_fields,
+                platform_price_overrides=platform_price_overrides,
             )
             logger.info("Edit propagation result for product %s: %s", product.sku, propagation_result)
         except Exception as exc:

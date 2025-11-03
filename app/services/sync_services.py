@@ -23,6 +23,7 @@ from difflib import SequenceMatcher
 
 from app.models.product import Product, ProductCondition, ProductStatus
 from app.models.platform_common import PlatformCommon
+from app.models.sale import Sale
 from app.models.reverb import ReverbListing
 from app.models.ebay import EbayListing
 from app.models.shopify import ShopifyListing
@@ -878,8 +879,97 @@ class SyncService:
                 propagated_platforms=propagated_platforms,
             )
 
+        if not dry_run:
+            await self._record_sale_entry(
+                product=product,
+                platform_common=platform_common,
+                event=event,
+                status=new_status,
+                sale_price=sale_price,
+            )
+
         event.notes = "Sale signal processed and platform consistency enforced."
         return True   
+
+    async def _record_sale_entry(
+        self,
+        *,
+        product: Product,
+        platform_common: Optional[PlatformCommon],
+        event: SyncEvent,
+        status: str,
+        sale_price: Optional[float],
+    ) -> None:
+        """Persist a sale/ended event into the sales table."""
+
+        platform_common = platform_common or await self._get_platform_common(product.id, event.platform_name)
+        if not platform_common:
+            logger.warning(
+                "Skipping sale record for product %s on %s: no platform_common found",
+                product.id,
+                event.platform_name,
+            )
+            return
+
+        external_id = event.external_id or platform_common.external_id
+        if not external_id:
+            logger.warning(
+                "Skipping sale record for product %s on %s: missing external_id",
+                product.id,
+                event.platform_name,
+            )
+            return
+
+        sale_date = event.detected_at or datetime.utcnow()
+        if sale_date.tzinfo is not None:
+            sale_date = sale_date.astimezone(timezone.utc).replace(tzinfo=None)
+
+        existing_stmt = (
+            select(Sale)
+            .where(Sale.platform_listing_id == platform_common.id)
+            .where(Sale.status == status)
+        )
+        existing = (await self.db.execute(existing_stmt)).scalar_one_or_none()
+
+        payload = event.change_data or {}
+
+        if existing:
+            existing.sale_date = sale_date
+            existing.sale_price = sale_price if sale_price is not None else existing.sale_price
+            existing.original_list_price = existing.original_list_price or product.base_price
+            existing.platform_data = {**(existing.platform_data or {}), **payload}
+            existing.order_reference = existing.order_reference or payload.get("order_reference")
+            existing.platform_external_id = external_id
+            existing.buyer_location = existing.buyer_location or payload.get("buyer_location")
+            self.db.add(existing)
+            logger.info(
+                "Updated existing sale record for product %s on %s",
+                product.id,
+                event.platform_name,
+            )
+            return
+
+        sale_entry = Sale(
+            product_id=product.id,
+            platform_listing_id=platform_common.id,
+            platform_name=event.platform_name,
+            platform_external_id=external_id,
+            status=status,
+            sale_date=sale_date,
+            sale_price=sale_price,
+            original_list_price=product.base_price,
+            order_reference=payload.get("order_reference"),
+            buyer_location=payload.get("buyer_location"),
+            platform_data=payload,
+        )
+
+        self.db.add(sale_entry)
+        logger.info(
+            "Recorded sale entry for product %s on %s (external_id=%s)",
+            product.id,
+            event.platform_name,
+            external_id,
+        )
 
     async def _send_sale_alert(
         self,
@@ -1539,6 +1629,8 @@ class SyncService:
         product_id: int,
         original_values: Dict[str, Any],
         changed_fields: Set[str],
+        *,
+        platform_price_overrides: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         product = await self.db.get(Product, product_id)
         if not product:
@@ -1551,6 +1643,12 @@ class SyncService:
         ).scalars().all()
 
         results: Dict[str, Any] = {}
+
+        overrides = {
+            (key or "").lower(): value
+            for key, value in (platform_price_overrides or {}).items()
+            if value is not None
+        }
 
         non_vr_links = [link for link in platform_links if link.platform_name != "vr"]
         vr_links = [link for link in platform_links if link.platform_name == "vr"]
@@ -1579,8 +1677,8 @@ class SyncService:
                 else:
                     results[platform_name] = response
 
-        if "base_price" in changed_fields:
-            new_price = float(product.base_price or 0)
+        if "base_price" in changed_fields or overrides:
+            default_price = float(product.base_price or 0)
             for link in non_vr_links:
                 if not link.external_id:
                     continue
@@ -1588,7 +1686,9 @@ class SyncService:
                 if not service or not hasattr(service, "update_listing_price"):
                     continue
                 try:
-                    success = await service.update_listing_price(link.external_id, new_price)
+                    platform_key = (link.platform_name or "").lower()
+                    desired_price = overrides.get(platform_key, default_price)
+                    success = await service.update_listing_price(link.external_id, desired_price)
                 except Exception as exc:
                     logger.error(
                         "Error updating price for %s listing %s: %s",
@@ -1610,7 +1710,7 @@ class SyncService:
                         listing_result = await self.db.execute(listing_stmt)
                         listing = listing_result.scalar_one_or_none()
                         if listing:
-                            listing.price = new_price
+                            listing.price = desired_price
                             listing.updated_at = timestamp
                             listing.last_synced_at = timestamp
                             self.db.add(listing)
@@ -1619,7 +1719,7 @@ class SyncService:
                         listing_result = await self.db.execute(listing_stmt)
                         listing = listing_result.scalar_one_or_none()
                         if listing:
-                            listing.price = new_price
+                            listing.price = desired_price
                             listing.updated_at = timestamp
                             listing.last_synced_at = timestamp
                             self.db.add(listing)
@@ -1628,19 +1728,64 @@ class SyncService:
                         listing_result = await self.db.execute(listing_stmt)
                         listing = listing_result.scalar_one_or_none()
                         if listing:
-                            listing.list_price = new_price
+                            listing.list_price = desired_price
                             listing.updated_at = timestamp
                             listing.last_synced_at = timestamp
                             self.db.add(listing)
 
                     platform_data = dict(link.platform_specific_data or {})
-                    platform_data["price"] = new_price
+                    platform_data["price"] = desired_price
                     link.platform_specific_data = platform_data
                     link.last_sync = timestamp
                     link.sync_status = SyncStatus.SYNCED.value
                     self.db.add(link)
                 else:
                     results[status_key] = "failed"
+
+        if vr_links and ("base_price" in changed_fields or "vr" in overrides):
+            desired_price = overrides.get("vr", float(product.base_price or 0))
+            service = self.platform_services.get("vr")
+            if service and hasattr(service, "update_listing_price"):
+                async def _run_vr_price_update(external_id: str, target_price: float) -> None:
+                    try:
+                        success = await service.update_listing_price(external_id, target_price)
+                        if not success:
+                            logger.warning(
+                                "VR price update for listing %s reported failure",
+                                external_id,
+                            )
+                    except Exception as exc:
+                        logger.error(
+                            "Error updating VR price for listing %s: %s",
+                            external_id,
+                            exc,
+                            exc_info=True,
+                        )
+
+                timestamp = datetime.utcnow()
+                for link in vr_links:
+                    if not link.external_id:
+                        continue
+
+                    listing_stmt = select(VRListing).where(VRListing.platform_id == link.id)
+                    listing_result = await self.db.execute(listing_stmt)
+                    listing = listing_result.scalar_one_or_none()
+                    if listing:
+                        listing.price_notax = desired_price
+                        listing.last_synced_at = timestamp
+                        self.db.add(listing)
+
+                    platform_data = dict(link.platform_specific_data or {})
+                    platform_data["price"] = desired_price
+                    link.platform_specific_data = platform_data
+                    link.last_sync = timestamp
+                    link.sync_status = SyncStatus.SYNCED.value
+                    self.db.add(link)
+
+                    task = asyncio.create_task(_run_vr_price_update(link.external_id, desired_price))
+                    self._track_background_task(task)
+
+                results["vr_price"] = "queued"
 
         # Handle VR quantity going to zero (end listing)
         for link in vr_links:

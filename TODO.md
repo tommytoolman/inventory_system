@@ -76,3 +76,4 @@
 
 Add new items directly under the matching priority heading; keep finished work in a separate "Completed" section only after verification.
 - [ ] Design consolidated `sales_orders` table: capture platform sale events, buyer/shipping info, financials, using normalized status while preserving per-platform nuance. Review Reverb/eBay/Shopify payloads before schema changes.
+- [ ] Fix image toast message state so the success banner dismisses correctly after refresh.

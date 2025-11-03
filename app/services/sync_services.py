@@ -43,6 +43,45 @@ from app.services.vr_service import VRService
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
+def _normalize_platform_status(platform: str, status: Optional[str]) -> Optional[str]:
+    """Normalize raw platform status strings to internal `ListingStatus` values."""
+
+    if status is None:
+        return None
+
+    normalized = str(status).strip().lower()
+    if not normalized:
+        return None
+
+    platform = (platform or "").strip().lower()
+
+    if platform == "ebay":
+        if normalized in {"completed", "endedwithsales", "sold"}:
+            return ListingStatus.SOLD.value
+        if normalized == "ended":
+            return ListingStatus.ENDED.value
+        if normalized in {"active", "live"}:
+            return ListingStatus.ACTIVE.value
+        if normalized in {"inactive", "unsold"}:
+            return ListingStatus.INACTIVE.value
+
+    elif platform == "reverb":
+        if normalized == "live":
+            return ListingStatus.ACTIVE.value
+        if normalized in {"sold", "ended"}:
+            return normalized
+
+    elif platform == "shopify":
+        if normalized == "archived":
+            return ListingStatus.SOLD.value
+
+    elif platform == "vr":
+        if normalized == "live":
+            return ListingStatus.ACTIVE.value
+
+    return normalized
+
 # Add these data structures after your imports
 @dataclass
 class DetectedChange:
@@ -697,7 +736,8 @@ class SyncService:
 
         # Determine the EXACT new status ('sold' or 'ended') from the event data.
         is_sale_signal = self._is_sale_event(event.platform_name, event.change_data)
-        new_status = event.change_data.get('new', 'ended').lower()
+        raw_new_status = event.change_data.get('new') if event.change_data else None
+        new_status = _normalize_platform_status(event.platform_name, raw_new_status) or ListingStatus.ENDED.value
 
         # Gather platform metadata for email/reporting context.
         platform_common = await self._get_platform_common(product.id, event.platform_name)
@@ -706,6 +746,13 @@ class SyncService:
 
         # This handler should only process sale/ended signals.
         if not is_sale_signal:
+            logger.info(
+                "Status change for product %s on %s treated as non-sale (new_status=%s, raw=%s)",
+                event.product_id,
+                event.platform_name,
+                new_status,
+                raw_new_status,
+            )
             event.notes = f"Acknowledged non-sale status change '{new_status}' with no action."
             return True
 
@@ -749,6 +796,12 @@ class SyncService:
                 logger.info(f"Product #{product.id} is already SOLD. Received redundant signal from {event.platform_name}. Verifying consistency...")
 
         # Perform the TWO-STAGE local update for the source platform of the event.
+        logger.info(
+            "Applying primary status update for product %s on %s -> %s",
+            product.id,
+            event.platform_name,
+            new_status,
+        )
         await self._update_local_platform_status(
             product_id=product.id,
             platform_name=event.platform_name,
@@ -767,6 +820,12 @@ class SyncService:
         propagated_platforms: List[str] = []
 
         if should_propagate:
+            logger.info(
+                "Propagating end signal from %s across other platforms (targets=%s) for product %s",
+                event.platform_name,
+                platform_filter if platform_filter is not None else "ALL",
+                product.id,
+            )
             successful_platforms, action_log, failed_count = await self._propagate_end_listing(
                 product,
                 event.platform_name,
@@ -780,6 +839,12 @@ class SyncService:
             if not dry_run and successful_platforms:
                 logger.info(f"Updating local status for successfully ended platforms: {successful_platforms}")
                 for platform in successful_platforms:
+                    logger.info(
+                        "Applying propagated status update for product %s on %s -> %s",
+                        product.id,
+                        platform,
+                        ListingStatus.ENDED.value,
+                    )
                     # Perform the two-stage update for each propagated platform.
                     await self._update_local_platform_status(
                         product_id=product.id,
@@ -1072,7 +1137,7 @@ class SyncService:
         if isinstance(source_platforms, str):
             source_platforms = {source_platforms}
             
-        action_log = []
+        action_log: List[str] = []
         successful_platforms = []
         failed_count = 0
         all_platform_links = (await self.db.execute(select(PlatformCommon).where(PlatformCommon.product_id == product.id))).scalars().all()
@@ -1108,6 +1173,12 @@ class SyncService:
                     logger.info(action_desc)
                     successful_platforms.append(link.platform_name)
                 else:
+                    logger.info(
+                        "Queueing mark_item_as_sold for product %s on %s (external_id=%s)",
+                        product.id,
+                        link.platform_name,
+                        link.external_id,
+                    )
                     tasks.append(service.mark_item_as_sold(link.external_id))
                     task_map[len(tasks)-1] = (link.platform_name, link.external_id, product.sku)
         
@@ -1118,7 +1189,10 @@ class SyncService:
                 
                 if isinstance(res, Exception) or res is False:
                     failed_count += 1
-                    error_msg = f"[ERROR] Product #{product.id} (SKU: {sku}) on {platform_name.upper()} (ID: {external_id}) -> FAILED to end. Reason: {res}"
+                    error_msg = (
+                        f"[ERROR] Product #{product.id} (SKU: {sku}) on {platform_name.upper()} (ID: {external_id})"
+                        f" -> FAILED to end. Reason: {res}"
+                    )
                     action_log.append(error_msg)
                     logger.error(error_msg)
                 else:
@@ -1232,21 +1306,13 @@ class SyncService:
         Determines if a status change constitutes a sale or an equivalent event
         that requires ending listings on other platforms.
         """
-        new_status = str(change_data.get('new', '')).lower()
-        
-        # A listing is considered "off the market" if it's sold OR ended.
-        if platform_name == 'reverb':
-            return new_status in ['sold', 'ended']
-        if platform_name == 'shopify':
-            # 'archived' is Shopify's typical status for a completed/sold order's product.
-            return new_status == 'archived'
-        if platform_name == 'ebay':
-            return new_status in ['completed', 'endedwithsales', 'ended']
-        if platform_name == 'vr':
-            # V&R uses 'sold', but we can treat an ended listing as a sale too.
-            return new_status in ['sold', 'ended']
-            
-        return False    
+        raw_new_status = change_data.get('new') if change_data else None
+        normalized_status = _normalize_platform_status(platform_name, raw_new_status)
+
+        if not normalized_status:
+            return False
+
+        return normalized_status in {ListingStatus.SOLD.value, ListingStatus.ENDED.value}
 
     async def _handle_quantity_change(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
         """Adjust local inventory when the platform reports a quantity change."""
@@ -1774,13 +1840,14 @@ class SyncService:
         and specialist tables.
         """
         logger.info(f"Updating local status for Product #{product_id} on {platform_name} to '{new_status}'.")
-        
+        canonical_status = _normalize_platform_status(platform_name, new_status) or new_status
+
         # Stage 1: Update the Manager (platform_common)
         pc_stmt = (
             update(PlatformCommon)
             .where(PlatformCommon.product_id == product_id)
             .where(PlatformCommon.platform_name == platform_name)
-            .values(status=new_status, sync_status=SyncStatus.SYNCED.value)
+            .values(status=canonical_status, sync_status=SyncStatus.SYNCED.value)
         )
         await self.db.execute(pc_stmt)
 
@@ -1808,7 +1875,7 @@ class SyncService:
 
             if platform_common_id:
                 # Use a dictionary for the values to set the column name dynamically
-                values_to_update = {config["status_col"]: new_status}
+                values_to_update = {config["status_col"]: canonical_status}
                 specialist_stmt = (
                     update(config["table"])
                     .where(getattr(config["table"], 'platform_id') == platform_common_id)
@@ -1958,7 +2025,14 @@ class ChangeDetector:
             local_status = local_item.get('status')
             
             # Compare statuses
-            if platform_status and local_status and platform_status != local_status:
+            normalized_platform_status = _normalize_platform_status(platform, platform_status)
+            normalized_local_status = _normalize_platform_status(platform, local_status)
+
+            if (
+                normalized_platform_status is not None
+                and normalized_local_status is not None
+                and normalized_platform_status != normalized_local_status
+            ):
                 changes.append(DetectedChange(
                     platform=platform,
                     external_id=external_id,
@@ -1968,9 +2042,12 @@ class ChangeDetector:
                     field="status",
                     old_value=local_status,
                     new_value=platform_status,
-                    requires_propagation=self._should_propagate_status_change(platform_status, local_status)
+                    requires_propagation=self._should_propagate_status_change(
+                        normalized_platform_status,
+                        normalized_local_status,
+                    )
                 ))
-        
+
         return changes
     
     async def _detect_price_changes(

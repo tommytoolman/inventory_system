@@ -1,7 +1,7 @@
 """Refresh Shopify handles/URLs for legacy listings.
 
 Usage examples:
-    python scripts/utilities/fix_shopify_listing_urls.py \  # dry run range
+    python scripts/utilities/fix_shopify_listing_urls.py \
         --min-product-id 608 --max-product-id 655
 
     python scripts/utilities/fix_shopify_listing_urls.py --apply \

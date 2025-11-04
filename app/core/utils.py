@@ -100,8 +100,8 @@ async def paginate_query(
         "has_next": has_next,
         "has_prev": has_prev
     }
-    
-    
+
+
 class ImageQuality(Enum):
     """Image quality/size options for different platforms"""
     THUMBNAIL = "thumbnail"      # Small thumbnails

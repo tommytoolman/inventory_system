@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, select
+from sqlalchemy import text, select, func
 from sqlalchemy.orm import selectinload
 import json
 from typing import Optional, List, Dict, Any
@@ -17,6 +17,7 @@ from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.ebay import EbayListing
 from app.models.shopify import ShopifyListing
 from app.models.vr import VRListing
+from app.models.reverb import ReverbListing
 from scripts.product_matcher import ProductMatcher
 import logging
 
@@ -1092,6 +1093,9 @@ async def process_sync_event(
                 event.product_id = product.id
                 await db.commit()
 
+            if action == 'activate_listing':
+                return await _activate_listing_status(db, event)
+
             # Route based on event type
             if event.change_type == 'new_listing':
                 # Use the EventProcessor class EXACTLY like the CLI script
@@ -1161,6 +1165,97 @@ async def _resolve_product_identifier(db: AsyncSession, identifier: Optional[str
     stmt = select(Product).where(func.lower(Product.sku) == identifier_str.lower())
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def _activate_listing_status(db: AsyncSession, event: SyncEvent) -> Dict[str, Any]:
+    """Force a Reverb listing to active/live locally when the API reports it as such."""
+    platform_name = (event.platform_name or '').lower()
+    if platform_name != 'reverb':
+        return {
+            "status": "error",
+            "message": "Manual activation is currently available for Reverb listings only"
+        }
+
+    if event.change_type != 'status_change':
+        return {
+            "status": "error",
+            "message": "Manual activation is limited to status change events"
+        }
+
+    change_data = event.change_data or {}
+    desired_status = str(change_data.get('new') or '').lower()
+    if desired_status not in {'live', 'active'}:
+        return {
+            "status": "error",
+            "message": f"Cannot activate status '{desired_status or 'unknown'}'"
+        }
+
+    platform_listing: Optional[PlatformCommon] = None
+    if event.platform_common_id:
+        platform_listing = await db.get(PlatformCommon, event.platform_common_id)
+
+    if not platform_listing and event.external_id:
+        stmt = select(PlatformCommon).where(
+            PlatformCommon.platform_name == 'reverb',
+            PlatformCommon.external_id == str(event.external_id)
+        )
+        result = await db.execute(stmt)
+        platform_listing = result.scalar_one_or_none()
+
+    if not platform_listing and event.product_id:
+        stmt = select(PlatformCommon).where(
+            PlatformCommon.platform_name == 'reverb',
+            PlatformCommon.product_id == event.product_id
+        )
+        result = await db.execute(stmt)
+        platform_listing = result.scalar_one_or_none()
+
+    if not platform_listing:
+        return {
+            "status": "error",
+            "message": "Unable to locate platform_common entry for this event"
+        }
+
+    now_utc = datetime.utcnow()
+    platform_listing.status = ListingStatus.ACTIVE.value
+    platform_listing.sync_status = SyncStatus.SYNCED.value
+    platform_listing.last_sync = now_utc
+    platform_listing.updated_at = now_utc
+    db.add(platform_listing)
+
+    reverb_listing: Optional[ReverbListing] = None
+    if platform_listing.id:
+        stmt = select(ReverbListing).where(ReverbListing.platform_id == platform_listing.id)
+        result = await db.execute(stmt)
+        reverb_listing = result.scalar_one_or_none()
+
+    if not reverb_listing and platform_listing.external_id:
+        stmt = select(ReverbListing).where(ReverbListing.reverb_listing_id == platform_listing.external_id)
+        result = await db.execute(stmt)
+        reverb_listing = result.scalar_one_or_none()
+
+    if reverb_listing:
+        reverb_listing.reverb_state = 'live'
+        reverb_listing.last_synced_at = now_utc
+        reverb_listing.updated_at = now_utc
+        db.add(reverb_listing)
+
+    event.status = 'processed'
+    event.processed_at = now_utc
+    notes_msg = "Manually marked as live via Sync Events UI"
+    event.notes = f"{event.notes}\n{notes_msg}" if event.notes else notes_msg
+    db.add(event)
+
+    await db.commit()
+
+    return {
+        "status": "success",
+        "message": "Local listing marked active and event closed",
+        "details": {
+            "platform_common_id": platform_listing.id,
+            "reverb_listing_id": getattr(reverb_listing, 'id', None)
+        }
+    }
 
 
 async def _apply_manual_delete(db: AsyncSession, event: SyncEvent) -> Dict[str, Any]:

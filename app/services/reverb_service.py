@@ -1964,7 +1964,7 @@ class ReverbService:
         Runs the sync for Reverb. This method detects new live listings on Reverb
         and status changes for existing listings (e.g., live -> sold).
         """
-        stats = {"api_live_count": 0, "db_live_count": 0, "events_logged": 0, "errors": 0}
+        stats = {"api_live_count": 0, "db_live_count": 0, "db_known_count": 0, "events_logged": 0, "errors": 0}
         logger.info(f"=== ReverbService: STARTING SYNC (run_id: {sync_run_id}) ===")
 
         try:
@@ -1974,15 +1974,29 @@ class ReverbService:
             stats['api_live_count'] = len(api_live_ids)
             logger.info(f"Found {stats['api_live_count']} live listings on Reverb API.")
 
-            # 2. Fetch all Reverb listings marked as 'live' in our local DB.
-            local_live_ids_map = await self._fetch_local_live_reverb_ids()
-            local_live_ids = set(local_live_ids_map.keys())
+            # 2. Fetch all Reverb listings we already know about in our local DB (any status).
+            local_reverb_items = await self._fetch_local_live_reverb_ids()
+            local_known_ids = set(local_reverb_items.keys())
+
+            # Determine which of the known listings we currently consider "live" locally.
+            local_live_ids = {
+                reverb_id
+                for reverb_id, data in local_reverb_items.items()
+                if str(data.get('reverb_state', '')).lower() == 'live'
+                or str(data.get('platform_status', '')).lower() in {'active', 'live'}
+            }
+
+            stats['db_known_count'] = len(local_known_ids)
             stats['db_live_count'] = len(local_live_ids)
-            logger.info(f"Found {stats['db_live_count']} live listings in local DB for Reverb.")
+            logger.info(
+                "Found %s Reverb listings in local DB (%s marked live locally).",
+                stats['db_known_count'],
+                stats['db_live_count'],
+            )
 
             # 3. Compare the sets of IDs to find differences.
-            new_rogue_ids = api_live_ids - local_live_ids
-            missing_from_api_ids = local_live_ids - api_live_ids
+            new_rogue_ids = api_live_ids - local_known_ids
+            missing_from_api_ids = {reverb_id for reverb_id in local_live_ids if reverb_id not in api_live_ids}
 
             # Create a mapping for easy access to listing data
             api_listings_map = {str(listing['id']): listing for listing in live_listings_api}
@@ -2016,9 +2030,40 @@ class ReverbService:
                     change_data=change_data
                 ))
 
+            # 5. For listings that exist both locally and on the API, detect status mismatches
+            #    (e.g. local draft -> API live) and log them as status change events.
+            for reverb_id in api_live_ids & local_known_ids:
+                db_item = local_reverb_items.get(reverb_id)
+                if not db_item:
+                    continue
+
+                local_status = str(
+                    db_item.get('reverb_state')
+                    or db_item.get('platform_status')
+                    or ''
+                ).lower()
+
+                if local_status in {'live', 'active'}:
+                    continue
+
+                events_to_log.append(
+                    self._prepare_sync_event(
+                        sync_run_id,
+                        'status_change',
+                        external_id=reverb_id,
+                        product_id=db_item.get('product_id'),
+                        platform_common_id=db_item.get('platform_common_id'),
+                        change_data={
+                            'old': local_status or 'unknown',
+                            'new': 'live',
+                            'reverb_id': reverb_id,
+                        },
+                    )
+                )
+
             # 5. For items no longer 'live' on the API, fetch their details to find out WHY.
             for reverb_id in missing_from_api_ids:
-                db_item = local_live_ids_map[reverb_id]
+                db_item = local_reverb_items[reverb_id]
                 try:
                     # This second API call is crucial to get the new status (e.g., 'sold', 'ended').
                     details = await self.client.get_listing_details(reverb_id)
@@ -2254,13 +2299,18 @@ class ReverbService:
             self.db.add(listing)
 
     async def _fetch_local_live_reverb_ids(self) -> Dict[str, Dict]:
-        """Fetches all Reverb listings marked as 'live' in the local DB."""
-        logger.info("Fetching live Reverb listings from local DB.")
+        """Fetch all known Reverb listings from the local DB, regardless of status."""
+        logger.info("Fetching Reverb listings from local DB (all statuses).")
         query = text("""
-            SELECT pc.external_id, pc.product_id, pc.id as platform_common_id
+            SELECT
+                pc.external_id,
+                pc.product_id,
+                pc.id AS platform_common_id,
+                pc.status AS platform_status,
+                rl.reverb_state
             FROM platform_common pc
-            JOIN reverb_listings rl ON pc.id = rl.platform_id
-            WHERE pc.platform_name = 'reverb' AND rl.reverb_state = 'live'
+            LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id
+            WHERE pc.platform_name = 'reverb' AND pc.external_id IS NOT NULL
         """)
         result = await self.db.execute(query)
         return {str(row.external_id): row._asdict() for row in result.fetchall()}

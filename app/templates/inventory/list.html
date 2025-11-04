@@ -181,8 +181,8 @@
                         </a>
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <a href="javascript:void(0)" onclick="sortBy('model')" class="flex items-center cursor-pointer">
-                            Model
+                        <a href="javascript:void(0)" onclick="sortBy('title')" class="flex items-center cursor-pointer">
+                            Title
                             {% if current_sort == 'model' %}
                                 <svg class="w-4 h-4 ml-1" fill="currentColor" viewBox="0 0 20 20">
                                     {% if current_order == 'asc' %}
@@ -247,7 +247,7 @@
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="h-10 w-10 rounded-full overflow-hidden">
                             {% if product.primary_image %}
-                                <img src="{{ product.primary_image }}" alt="{{ product.brand }} {{ product.model }}" class="h-full w-full object-cover">
+                                <img src="{{ product.primary_image }}" alt="{{ product.brand }} {{ product.title }}" class="h-full w-full object-cover">
                             {% else %}
                                 <div class="h-full w-full bg-gray-200 flex items-center justify-center">
                                     <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -260,17 +260,17 @@
                     {% set status_val = product.status.value|upper if product.status else '' %}
                     <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">{{ product.brand|title }}</td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
-                        <span title="{{ product.model }}" class="truncate inline-block max-w-xs">
-                            {% if product.model and product.model|length > 65 %}
-                                {{ product.model[:65] }}...
+                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
+                        <span title="{{ product.title }}" class="truncate inline-block max-w-xs">
+                            {% if product.title and product.title|length > 65 %}
+                                {{ product.title[:65] }}...
                             {% else %}
-                                {{ product.model }}
+                                {{ product.title }}
                             {% endif %}
                         </span>
                     </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
                         <span title="{{ product.category or '' }}" class="truncate inline-block max-w-sm">
                             {% if product.category and product.category|length > 55 %}
                                 {{ product.category[:55] }}...

@@ -352,6 +352,13 @@
                                             data-event-id="{{ event.id }}">
                                         <span>Remove / End</span>
                                     </button>
+                                    {% elif event.change_data and event.change_data.new in ['live', 'active'] %}
+                                    <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                                            title="Mark listing as active locally"
+                                            onclick="processSyncEvent({{ event.id }}, 'Change Status', { action: 'activate_listing' }, this)"
+                                            data-event-id="{{ event.id }}">
+                                        <span>Change Status</span>
+                                    </button>
                                     {% endif %}
                                 {% endif %}
                                 

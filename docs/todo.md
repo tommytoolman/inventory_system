@@ -3,6 +3,7 @@
 > We only tick or strike items once we have confirmed they are done in production.
 ## 🔴 High Priority (Production blockers)
 - [ ] **VR handling performance** – address sluggish VR listing creation and inventory sync by offloading slow Selenium/API work to background workers and smoothing operator workflows.
+- [ ] **Capture handedness & artist ownership** – add non-mandatory fields to product add/edit flows, defaulting to right-handed / not artist owned, and propagate to relevant APIs.
 - [ ] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms.
 - [ ] **VR removal logic verification** – confirm the updated handling marks "not found on API" as REMOVED (unless corroborated by Reverb) and that the “List Item” UI path reflects the latest logic.
 - [ ] **VR historical shipping profiles** – audit legacy VR listings and update shipping profiles to match the current configuration.
@@ -33,6 +34,7 @@
 - [ ] **Shopify auto-archive workflow** – automate moving stale Shopify listings to archive after the agreed threshold.
 ## 🔵 Low Priority (Enhancements)
 - [ ] **Retrofix missing product titles** – write a script to backfill `products.title` entries where historical edits failed to persist.
+- [ ] **Ongoing UI tweaks** – e.g. image dividers, vertical alignment adjustments.
 - [ ] **Testing & verification rebuild** – restore integration coverage for sync flows, add regression tests for the high-risk services, and document the verification checklist.
 - [ ] **Populate Shopify archive gallery** – build the historical gallery view using the archive dataset so users can review past listings. Confirm with Adam whether thousands of gallery entries are actually required.
 - [ ] **CrazyLister integration discovery** – investigate feasibility, fix description stripping on edits, and decide whether to proceed.
@@ -167,3 +169,7 @@
 - [x] Create basic CSV handler.
 - [x] Implement Vintage & Rare import.
 - [x] Set up API client for Reverb.
+
+---
+
+**Note:** Handedness/artist-owned feature will require: Alembic migration + `Product` model update; default backfill; Pydantic schema & API adjustments; form/template inputs on add/edit; detail view surfacing; platform payload updates; tests/docs refresh.

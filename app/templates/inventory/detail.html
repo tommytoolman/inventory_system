@@ -280,18 +280,18 @@
                     </dl>
                 </div>
 
-                <div class="border rounded p-4 bg-gray-50">
-                    <div class="flex items-end mb-4 space-x-2">
+                <div class="border rounded p-4 bg-white">
+                    <div class="flex items-end justify-between mb-4 pb-3 border-b border-gray-300">
                         <h2 class="text-lg font-semibold leading-none pb-0">Images</h2>
                         {% if reverb_listing_id %}
                             <button id="refresh-images-btn"
                                     type="button"
                                     data-refresh-url="{{ url_for('refresh_product_images', product_id=product.id) }}"
                                     data-fix-url="{{ url_for('fix_product_images', product_id=product.id) }}"
-                                    data-check-label="(Check Images)"
+                                    data-check-label="Check Images"
                                     data-fix-label="Fix Images"
-                                    class="text-xs text-blue-600 hover:text-blue-800 pb-0.5">
-                                (Check Images)
+                                    class="inline-flex items-center px-3 py-1 text-xs rounded-full bg-blue-50 text-blue-600 hover:text-blue-800">
+                                Check Images
                             </button>
                         {% endif %}
                     </div>
@@ -398,11 +398,11 @@
                 <div class="border rounded p-4 bg-white">
                     <h2 class="text-lg font-semibold mb-4 border-b border-gray-300 pb-3">Description</h2>
                     {% if product.description %}
-                        <div class="bg-gray-50 p-4 text-sm text-gray-700 rounded">
+                        <div class="border border-gray-200 rounded p-4 bg-gray-50 text-sm text-gray-700">
                             {{ product.description|safe }}
                         </div>
                     {% else %}
-                        <div class="bg-gray-50 p-4 text-sm text-gray-500 rounded">No description available.</div>
+                        <div class="border border-gray-200 rounded p-4 bg-gray-50 text-sm text-gray-500">No description available.</div>
                     {% endif %}
                 </div>
             </div>

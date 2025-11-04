@@ -15,9 +15,10 @@ Contains an unused MockWebhookProcessor class.
 
 """
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone
+
 from app.models.sale import Sale
 from app.models.product import Product
-from datetime import datetime, timezone
 
 class MockWebhookProcessor:
     pass
@@ -25,22 +26,21 @@ class MockWebhookProcessor:
 async def process_website_sale(payload: dict, db: AsyncSession):
     """Process a sale webhook from the website"""
     # Extract sale information from the payload
-    sale_data = {
-        "platform": "website",
-        "platform_order_id": payload["order_id"],
-        "product_id": payload["product_id"],
-        "sale_price": payload["price"],
-        "sale_date": datetime.fromisoformat(payload["sale_date"]),
-        "buyer_info": {
-            "name": payload["buyer"]["name"],
-            "email": payload["buyer"]["email"],
-            "shipping_address": payload["shipping_address"]
-        }
-    }
-    
-    
-    # Create sale record
-    sale = Sale(**sale_data)
+    sale = Sale(
+        product_id=payload["product_id"],
+        platform_listing_id=payload.get("platform_listing_id"),
+        platform_name="website",
+        platform_external_id=payload.get("order_id", "website"),
+        status="sold",
+        sale_date=datetime.fromisoformat(payload["sale_date"]),
+        sale_price=payload.get("price"),
+        original_list_price=payload.get("price"),
+        order_reference=payload.get("order_id"),
+        buyer_name=payload.get("buyer", {}).get("name"),
+        buyer_email=payload.get("buyer", {}).get("email"),
+        buyer_address=payload.get("shipping_address"),
+        platform_data=payload,
+    )
     db.add(sale)
     
     # Update product inventory

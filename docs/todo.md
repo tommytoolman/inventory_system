@@ -42,6 +42,7 @@
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 - [ ] **NPI clustering report** – add a New Product Introduction cluster view grouped by category for merch planning.
 - [ ] **Left-handed tagging** – determine how we consistently label and surface left-handed instruments.
+- [ ] **Redundant code clean-up** – tidy up/deprecate old sync forms, placeholder routers, and other dead code paths.
 ## 🟠 Documentation & knowledge base
 - [ ] Add example usage to docstrings across core services and routers.
 - [ ] Set up Sphinx (or equivalent) documentation generation and publish API docs.

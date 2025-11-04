@@ -115,6 +115,50 @@ def _build_platform_stub(platform: str, base_price: Optional[float]) -> Dict[str
         "price": _calculate_default_platform_price(platform, base_price),
     }
 
+
+async def _fetch_current_platform_prices(db: AsyncSession, product_id: int) -> Dict[str, float]:
+    """Return the latest stored price for each platform for comparison."""
+    result = await db.execute(select(PlatformCommon).where(PlatformCommon.product_id == product_id))
+    platform_links = result.scalars().all()
+    prices: Dict[str, float] = {}
+
+    for link in platform_links:
+        platform_key = (link.platform_name or "").lower()
+        if not platform_key:
+            continue
+
+        price_value: Optional[float] = None
+        stmt = None
+
+        if platform_key == "shopify":
+            stmt = select(ShopifyListing.price).where(ShopifyListing.platform_id == link.id)
+        elif platform_key == "reverb":
+            stmt = select(ReverbListing.list_price).where(ReverbListing.platform_id == link.id)
+        elif platform_key == "ebay":
+            stmt = select(EbayListing.price).where(EbayListing.platform_id == link.id)
+        elif platform_key == "vr":
+            stmt = select(VRListing.price_notax).where(VRListing.platform_id == link.id)
+
+        if stmt is not None:
+            price_value = (await db.execute(stmt)).scalar_one_or_none()
+
+        if price_value is None:
+            platform_specific = link.platform_specific_data or {}
+            if isinstance(platform_specific, dict):
+                raw_price = platform_specific.get("price")
+                try:
+                    price_value = float(raw_price) if raw_price is not None else None
+                except (TypeError, ValueError):
+                    price_value = None
+
+        if price_value is not None:
+            prices[platform_key] = float(price_value)
+
+    return prices
+
+
+PRICE_CHANGE_EPSILON = 0.01
+
 DEFAULT_VR_BRAND = "Justin" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR VRAcceptedBrand TABLE***
 # DEFAULT_EBAY_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR eBay Accepted Brands TABLE***
 # DEFAULT_REVERB_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR Reverb Accepted Brands TABLE***
@@ -3973,6 +4017,8 @@ async def update_product(
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    current_platform_prices = await _fetch_current_platform_prices(db, product_id)
     
     original_values = {
         "title": product.title,
@@ -4036,13 +4082,17 @@ async def update_product(
         if raw_value is None or raw_value == "":
             continue
         try:
-            platform_price_overrides[platform_key] = float(raw_value)
+            desired_price = float(raw_value)
         except (TypeError, ValueError):
             continue
 
+        current_price = current_platform_prices.get(platform_key)
+        if current_price is None or abs(desired_price - current_price) > PRICE_CHANGE_EPSILON:
+            platform_price_overrides[platform_key] = desired_price
+
     message = "Product updated successfully."
 
-    if changed_fields:
+    if changed_fields or platform_price_overrides:
         vr_executor = getattr(request.app.state, "vr_executor", None)
         sync_service = SyncService(db, vr_executor=vr_executor)
         try:

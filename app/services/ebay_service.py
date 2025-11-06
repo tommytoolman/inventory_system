@@ -210,6 +210,19 @@ class EbayService:
 
         trimmed = truncated[:last_space].rstrip()
         return trimmed if trimmed else truncated
+
+    @staticmethod
+    def _is_crazylister_template(description_html: Optional[str]) -> bool:
+        if not description_html:
+            return False
+        haystack = description_html.lower()
+        markers = [
+            "crazylister",
+            "cl-template-id",
+            "templates-css.crazylister.com",
+            "resized-images.crazylister.com",
+        ]
+        return any(marker in haystack for marker in markers)
     
     def _build_item_specifics(self, product: Product, category_id: str) -> Dict[str, str]:
         """
@@ -786,6 +799,11 @@ class EbayService:
                             'status': 'pending'
                         })
                 
+                raw_listing = api_data.get('_raw')
+                platform_common_id = db_data.get('platform_common_id')
+                if raw_listing and platform_common_id:
+                    await self._maybe_refresh_listing_description(platform_common_id, raw_listing)
+
                 updated_count += 1
             except Exception as e:
                 logger.error(f"Failed to prepare events for eBay item {item['api_data']['external_id']}: {e}", exc_info=True)
@@ -806,8 +824,72 @@ class EbayService:
                 logger.info(f"Attempted to log {len(events_to_log)} new update events (duplicates ignored)")
             except Exception as e:
                 logger.error(f"Failed to bulk insert update events: {e}", exc_info=True)
-        
+
         return updated_count, events_logged
+
+    async def _maybe_refresh_listing_description(self, platform_common_id: int, raw_listing: Dict[str, Any]) -> None:
+        if not platform_common_id or not raw_listing:
+            logger.info(
+                "Skipping description refresh for platform_id %s due to missing inputs",
+                platform_common_id,
+            )
+            return
+
+        new_description = raw_listing.get("Description")
+        if new_description is None:
+            logger.info(
+                "No description returned for platform_id %s; skipping refresh",
+                platform_common_id,
+            )
+            return
+
+        stmt = select(EbayListing).where(EbayListing.platform_id == platform_common_id)
+        result = await self.db.execute(stmt)
+        listing = result.scalar_one_or_none()
+        if not listing:
+            logger.info(
+                "No ebay_listing row for platform_id %s; skipping description refresh",
+                platform_common_id,
+            )
+            return
+
+        listing_data = listing.listing_data or {}
+        if isinstance(listing_data, str):
+            try:
+                listing_data = json.loads(listing_data)
+            except json.JSONDecodeError:
+                listing_data = {"Description": listing_data}
+
+        existing_description = listing_data.get("Description")
+        existing_flag = listing_data.get("uses_crazylister")
+        new_flag = self._is_crazylister_template(new_description)
+
+        needs_update = (
+            existing_description != new_description
+            or existing_flag != new_flag
+            or "Raw" not in listing_data
+        )
+
+        if not needs_update:
+            logger.info(
+                "Description unchanged for platform_id %s (uses_crazylister=%s); skipping",
+                platform_common_id,
+                existing_flag,
+            )
+            return
+
+        listing_data["Description"] = new_description
+        listing_data["uses_crazylister"] = new_flag
+        listing_data["Raw"] = {"Item": raw_listing}
+
+        listing.listing_data = listing_data
+        listing.updated_at = datetime.utcnow()
+        listing.last_synced_at = datetime.utcnow()
+        logger.info(
+            "Refreshed eBay description for platform_id %s (uses_crazylister=%s)",
+            platform_common_id,
+            new_flag,
+        )
 
     async def _batch_mark_removed(self, items: List[Dict], sync_run_id: uuid.UUID, pending_events: set) -> Tuple[int, int]:
         """SYNC PHASE: Only log removal events if no pending event already exists."""
@@ -1261,22 +1343,20 @@ class EbayService:
             response = await self.trading_api.end_listing(external_id, reason_code='NotAvailable')
             
             if response and "EndItemResponse" in response:
-                ack = response["EndItemResponse"].get("Ack", "")
+                end_response = response["EndItemResponse"]
+                ack = end_response.get("Ack", "")
                 if ack in ["Success", "Warning"]:
                     logger.info(f"Successfully sent 'end' request for eBay listing {external_id}.")
+                    await self._mark_local_ebay_listing_ended(external_id)
+                    return True
 
-                    # Update local listing metadata so we stay in sync without
-                    # waiting for the next detection pass.
-                    stmt = select(EbayListing).where(EbayListing.ebay_item_id == external_id)
-                    listing_result = await self.db.execute(stmt)
-                    listing = listing_result.scalar_one_or_none()
-                    if listing:
-                        listing.listing_status = 'ended'
-                        listing.quantity_available = 0
-                        listing.quantity = listing.quantity or 0
-                        listing.updated_at = datetime.utcnow()
-                        self.db.add(listing)
-
+                errors = end_response.get("Errors")
+                if self._is_already_closed_error(errors):
+                    logger.warning(
+                        "eBay listing %s was already closed according to API response. Marking locally as ended.",
+                        external_id
+                    )
+                    await self._mark_local_ebay_listing_ended(external_id)
                     return True
             
             logger.error(f"API call to end eBay listing {external_id} failed. Response: {response}")
@@ -1284,6 +1364,44 @@ class EbayService:
         except Exception as e:
             logger.error(f"Exception while ending eBay listing {external_id}: {e}", exc_info=True)
             return False
+
+    async def _mark_local_ebay_listing_ended(self, external_id: str) -> None:
+        """Update the local ebay_listings row to reflect an ended listing."""
+        stmt = select(EbayListing).where(EbayListing.ebay_item_id == external_id)
+        listing_result = await self.db.execute(stmt)
+        listing = listing_result.scalar_one_or_none()
+        if listing:
+            listing.listing_status = 'ended'
+            listing.quantity_available = 0
+            listing.quantity = listing.quantity or 0
+            listing.updated_at = datetime.utcnow()
+            self.db.add(listing)
+
+    @staticmethod
+    def _is_already_closed_error(errors: Any) -> bool:
+        """Return True if the error payload indicates the listing is already ended."""
+        if not errors:
+            return False
+
+        error_list = errors if isinstance(errors, list) else [errors]
+        for error in error_list:
+            if not isinstance(error, dict):
+                continue
+
+            error_code = str(error.get("ErrorCode", "")).strip()
+            if error_code in {"1046", "1047"}:
+                return True
+
+            messages = " ".join(
+                part for part in [
+                    str(error.get("ShortMessage", "")),
+                    str(error.get("LongMessage", ""))
+                ] if part
+            ).lower()
+            if "already been closed" in messages or "already closed" in messages:
+                return True
+
+        return False
     
     async def _create_ebay_listing_entry(
         self,

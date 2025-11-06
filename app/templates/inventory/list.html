@@ -258,9 +258,9 @@
                         </div>
                     </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">{{ product.brand|title }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-purple-700{% endif %}">{{ product.brand|title }}</td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-purple-700{% endif %}">
                         <span title="{{ product.title }}" class="truncate inline-block max-w-xs">
                             {% if product.title and product.title|length > 65 %}
                                 {{ product.title[:65] }}...
@@ -270,7 +270,7 @@
                         </span>
                     </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-purple-700{% endif %}">
                         <span title="{{ product.category or '' }}" class="truncate inline-block max-w-sm">
                             {% if product.category and product.category|length > 55 %}
                                 {{ product.category[:55] }}...
@@ -280,7 +280,7 @@
                         </span>
                     </td>
                     {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-orange-700{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-purple-700{% endif %}">
                         {% if product.base_price and product.base_price > 0 %}
                             £{{ "{:,.0f}".format(product.base_price) }}
                             <!-- ${{ "%.2f"|format(product.base_price) }} -->
@@ -299,7 +299,7 @@
                                 Draft
                             </span>
                         {% elif status_val == 'ARCHIVED' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-700">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-700">
                                 Archived
                             </span>
                         {% else %}

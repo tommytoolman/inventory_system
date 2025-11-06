@@ -27,6 +27,7 @@ from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
 from app.services.match_utils import suggest_product_match
+from app.core.enums import ManufacturingCountry, Handedness
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,75 @@ class ReverbService:
                 transformed = f"{prefix}/image/upload/{remainder}"
 
         return transformed
+
+    @staticmethod
+    def _origin_country_code(country: Optional[Any]) -> Optional[str]:
+        """Return the ISO alpha-2 country code expected by Reverb."""
+
+        if country is None:
+            return None
+
+        enum_value: Optional[ManufacturingCountry] = None
+
+        if isinstance(country, ManufacturingCountry):
+            enum_value = country
+        else:
+            raw = str(country or "").strip()
+            if not raw:
+                return None
+            if raw.startswith("ManufacturingCountry."):
+                raw = raw.split(".", 1)[1]
+            try:
+                enum_value = ManufacturingCountry(raw)
+            except ValueError:
+                try:
+                    enum_value = ManufacturingCountry[raw.upper()]
+                except KeyError:
+                    normalized = raw.upper()
+                    return normalized if len(normalized) == 2 else raw
+
+        return enum_value.value if enum_value else None
+
+    @staticmethod
+    def _handedness_value(handedness: Optional[Any]) -> Optional[str]:
+        """Map our Handedness enum (or string) to Reverb's expected field."""
+
+        if handedness is None:
+            return None
+
+        enum_value: Optional[Handedness] = None
+
+        if isinstance(handedness, Handedness):
+            enum_value = handedness
+        else:
+            raw = str(handedness or "").strip().upper()
+            if not raw:
+                return None
+            raw = raw.replace("-", "_")
+            if raw.startswith("HANDEDNESS."):
+                raw = raw.split(".", 1)[1]
+            try:
+                enum_value = Handedness[raw]
+            except KeyError:
+                try:
+                    enum_value = Handedness(raw)
+                except ValueError:
+                    enum_value = None
+
+        if not enum_value or enum_value == Handedness.UNSPECIFIED:
+            return None
+
+        mapping = {
+            Handedness.LEFT: "left-handed",
+            Handedness.RIGHT: "right-handed",
+            Handedness.AMBIDEXTROUS: "ambidextrous",
+        }
+        return mapping.get(enum_value)
+
+    @staticmethod
+    def _handmade_flag(product: Product) -> bool:
+        extra = getattr(product, "extra_attributes", None) or {}
+        return bool(extra.get("handmade"))
 
     @classmethod
     def _extract_image_urls(cls, listing_data: Dict[str, Any]) -> List[str]:
@@ -572,9 +642,16 @@ class ReverbService:
                 "finish": product.finish,
                 "year": str(product.year) if product.year else None,
                 "sku": product.sku,
+                "origin_country_code": self._origin_country_code(product.manufacturing_country),
                 "publish": publish,
                 "photos": valid_photos,
             }
+
+            handedness_value = self._handedness_value(product.handedness)
+            if handedness_value:
+                listing_payload["handedness"] = handedness_value
+
+            listing_payload["handmade"] = self._handmade_flag(product)
 
             video_payload = self._prepare_video_payload(product.video_url)
             if video_payload:
@@ -1008,6 +1085,13 @@ class ReverbService:
             payload["model"] = product.model
         if "description" in changed_fields:
             payload["description"] = product.description or ""
+        if "manufacturing_country" in changed_fields:
+            country_code = self._origin_country_code(product.manufacturing_country)
+            payload["origin_country_code"] = country_code if country_code is not None else None
+        if "handedness" in changed_fields:
+            payload["handedness"] = self._handedness_value(product.handedness)
+        if "handmade" in changed_fields:
+            payload["handmade"] = self._handmade_flag(product)
 
         if "quantity" in changed_fields:
             payload["has_inventory"] = bool(product.is_stocked_item)
@@ -2287,16 +2371,59 @@ class ReverbService:
             return False
 
     async def _mark_local_reverb_listing_ended(self, external_id: str) -> None:
-        """Update the local reverb_listings row to reflect an ended listing."""
-        stmt = select(ReverbListing).where(ReverbListing.reverb_listing_id == external_id)
-        listing_result = await self.db.execute(stmt)
-        listing = listing_result.scalar_one_or_none()
-        if listing:
-            listing.reverb_state = 'ended'
-            listing.inventory_quantity = 0
-            listing.has_inventory = False
-            listing.updated_at = datetime.utcnow()
-            self.db.add(listing)
+        """Update local tables so an ended listing is reflected everywhere."""
+        product_id = None
+        platform_row = None
+
+        # Always start by updating platform_common using the external_id.
+        platform_update = text("""
+            UPDATE platform_common
+            SET status = 'ENDED',
+                sync_status = 'SYNCED',
+                last_sync = timezone('utc', now()),
+                updated_at = timezone('utc', now())
+            WHERE platform_name = 'reverb'
+              AND external_id = :external_id
+            RETURNING id, product_id
+        """)
+        platform_result = await self.db.execute(platform_update, {"external_id": external_id})
+        platform_row = platform_result.fetchone()
+
+        if not platform_row:
+            logger.warning(
+                "Attempted to mark Reverb listing %s as ended locally, but no platform_common row was found.",
+                external_id
+            )
+        else:
+            product_id = platform_row.product_id
+
+        # Update the Reverb listing using platform_id if we have it, otherwise fall back to external_id.
+        listing_params = {"external_id": external_id}
+        listing_update_sql = """
+            UPDATE reverb_listings
+            SET reverb_state = 'ended',
+                inventory_quantity = 0,
+                has_inventory = FALSE,
+                updated_at = timezone('utc', now())
+            WHERE reverb_listing_id = :external_id
+        """
+        if platform_row:
+            listing_update_sql += " OR platform_id = :platform_id"
+            listing_params["platform_id"] = platform_row.id
+
+        await self.db.execute(text(listing_update_sql), listing_params)
+
+        if product_id:
+            await self.db.execute(
+                text("""
+                    UPDATE products
+                    SET status = 'SOLD',
+                        is_sold = TRUE,
+                        updated_at = timezone('utc', now())
+                    WHERE id = :product_id
+                """),
+                {"product_id": product_id}
+            )
 
     async def _fetch_local_live_reverb_ids(self) -> Dict[str, Dict]:
         """Fetch all known Reverb listings from the local DB, regardless of status."""

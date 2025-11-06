@@ -256,14 +256,23 @@ async def end_reverb_listing(
     
     try:
         service = ReverbService(db, settings)
-        # Use the same method that sync_services uses
         success = await service.mark_item_as_sold(listing_id)
-        return success
+
+        if success:
+            await db.commit()
+            return True
+
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Failed to end listing on Reverb")
     except ListingNotFoundError as e:
+        await db.rollback()
         raise HTTPException(status_code=404, detail=str(e))
     except ReverbAPIError as e:
+        await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        await db.rollback()
+        logger.exception("Unexpected error ending Reverb listing %s", listing_id)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.put("/listings/{listing_id}/inventory", response_model=bool)

@@ -255,6 +255,38 @@
                             <dt class="text-gray-600">Condition</dt>
                             <dd class="text-right">{{ product.condition.value|title if product.condition else 'N/A' }}</dd>
                         </div>
+                        {% if product.serial_number %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Serial Number</dt>
+                            <dd class="text-right">{{ product.serial_number }}</dd>
+                        </div>
+                        {% endif %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">L/R Handed</dt>
+                            <dd class="text-right">{{ product.handedness.value|replace('_', ' ')|title if product.handedness else 'Unspecified' }}</dd>
+                        </div>
+                        {% if product.artist_owned %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Artist Owned</dt>
+                            <dd class="text-right">Yes</dd>
+                        </div>
+                        {% endif %}
+                        {% if product.artist_names %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Artist(s)</dt>
+                            <dd class="text-right">{{ ', '.join(product.artist_names) }}</dd>
+                        </div>
+                        {% endif %}
+                        {% if is_handmade %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Handmade</dt>
+                            <dd class="text-right">Yes</dd>
+                        </div>
+                        {% endif %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Manufacturing Country</dt>
+                            <dd class="text-right">{{ product.manufacturing_country.value if product.manufacturing_country else 'N/A' }}</dd>
+                        </div>
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Base Price</dt>
                             <dd class="text-right">
@@ -277,6 +309,23 @@
                             <dt class="text-gray-600">Quantity Available</dt>
                             <dd class="text-right">{% if product.is_stocked_item %}{{ product.quantity or 0 }}{% else %}1{% endif %}</dd>
                         </div>
+                        {% if extra_specs %}
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <h3 class="text-sm font-semibold text-gray-800 mb-3">Technical Specs</h3>
+                            <div class="space-y-2">
+                                {% for key, value in extra_specs.items() %}
+                                    {% if value %}
+                                    {% set label = spec_field_map.get(key, key|replace('_', ' ')|title) %}
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-600">{{ label }}</dt>
+                                        <dd class="text-right">{{ value }}</dd>
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {# Shipping options intentionally hidden from detail view #}
                     </dl>
                 </div>
 
@@ -331,7 +380,12 @@
                     <div class="space-y-3">
                         {% if all_platforms_status %}
                             {% for platform_entry in all_platforms_status %}
-                                <div class="border rounded p-3 bg-gray-50">
+                                <div class="border rounded p-3 bg-gray-50"
+                                     {% if platform_entry.is_listed and platform_entry.details %}
+                                     data-platform="{{ platform_entry.name|lower }}"
+                                     data-external-id="{{ platform_entry.details.external_id }}"
+                                     data-platform-active="{% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}{% if platform_status in ['ACTIVE', 'LIVE'] %}true{% else %}false{% endif %}"
+                                     {% endif %}>
                                     {% if platform_entry.is_listed and platform_entry.details %}
                                         <div class="flex justify-between items-center mb-2">
                                             <span class="font-medium">

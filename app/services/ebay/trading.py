@@ -10,6 +10,7 @@ import requests
 import warnings
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
+from xml.sax.saxutils import escape as xml_escape
 
 from app.services.ebay.auth import EbayAuthManager
 from app.core.exceptions import EbayAPIError
@@ -603,48 +604,50 @@ class EbayTradingLegacyAPI:
         xml_parts.append("<Item>")
         
         # Required fields
-        xml_parts.append(f"<Title>{item_data.get('Title', '')}</Title>")
+        xml_parts.append(f"<Title>{self._escape_xml_chars(item_data.get('Title', ''))}</Title>")
         xml_parts.append(f"<Description><![CDATA[{item_data.get('Description', '')}]]></Description>")
         
         # Category
         xml_parts.append("<PrimaryCategory>")
-        xml_parts.append(f"<CategoryID>{item_data.get('CategoryID', '')}</CategoryID>")
+        xml_parts.append(f"<CategoryID>{self._escape_xml_chars(item_data.get('CategoryID', ''))}</CategoryID>")
         xml_parts.append("</PrimaryCategory>")
         
         # Price and currency
-        xml_parts.append(f"<StartPrice currencyID=\"{item_data.get('CurrencyID', 'GBP')}\">{item_data.get('Price', '0.0')}</StartPrice>")
+        xml_parts.append(
+            f"<StartPrice currencyID=\"{self._escape_xml_chars(item_data.get('CurrencyID', 'GBP'))}\">{self._escape_xml_chars(item_data.get('Price', '0.0'))}</StartPrice>"
+        )
         
         # Add Currency element (required by eBay)
         # This is the fix: ensure Currency tag is always included
         currency = item_data.get('Currency', item_data.get('CurrencyID', 'GBP'))
-        xml_parts.append(f"<Currency>{currency}</Currency>")
+        xml_parts.append(f"<Currency>{self._escape_xml_chars(currency)}</Currency>")
         
         # Quantity
-        xml_parts.append(f"<Quantity>{item_data.get('Quantity', '1')}</Quantity>")
+        xml_parts.append(f"<Quantity>{self._escape_xml_chars(item_data.get('Quantity', '1'))}</Quantity>")
         
         # SKU (Stock Keeping Unit) - important for tracking
         if "SKU" in item_data:
-            xml_parts.append(f"<SKU>{item_data.get('SKU')}</SKU>")
+            xml_parts.append(f"<SKU>{self._escape_xml_chars(item_data.get('SKU'))}</SKU>")
         
         # Listing details
-        xml_parts.append(f"<ListingDuration>{item_data.get('ListingDuration', 'GTC')}</ListingDuration>")  # Good Till Cancelled
+        xml_parts.append(f"<ListingDuration>{self._escape_xml_chars(item_data.get('ListingDuration', 'GTC'))}</ListingDuration>")  # Good Till Cancelled
         xml_parts.append("<ListingType>FixedPriceItem</ListingType>")
         
         # Condition
         if "ConditionID" in item_data:
-            xml_parts.append(f"<ConditionID>{item_data.get('ConditionID')}</ConditionID>")
+            xml_parts.append(f"<ConditionID>{self._escape_xml_chars(item_data.get('ConditionID'))}</ConditionID>")
         
         # Item specifics
         if "ItemSpecifics" in item_data and item_data["ItemSpecifics"]:
             xml_parts.append("<ItemSpecifics>")
             for name, value in item_data["ItemSpecifics"].items():
                 xml_parts.append("<NameValueList>")
-                xml_parts.append(f"<Name>{name}</Name>")
+                xml_parts.append(f"<Name>{self._escape_xml_chars(name)}</Name>")
                 if isinstance(value, list):
                     for v in value:
-                        xml_parts.append(f"<Value>{v}</Value>")
+                        xml_parts.append(f"<Value>{self._escape_xml_chars(v)}</Value>")
                 else:
-                    xml_parts.append(f"<Value>{value}</Value>")
+                    xml_parts.append(f"<Value>{self._escape_xml_chars(value)}</Value>")
                 xml_parts.append("</NameValueList>")
             xml_parts.append("</ItemSpecifics>")
         
@@ -652,7 +655,7 @@ class EbayTradingLegacyAPI:
         if "PictureURLs" in item_data and item_data["PictureURLs"]:
             xml_parts.append("<PictureDetails>")
             for url in item_data["PictureURLs"]:
-                xml_parts.append(f"<PictureURL>{url}</PictureURL>")
+                xml_parts.append(f"<PictureURL>{self._escape_xml_chars(url)}</PictureURL>")
             xml_parts.append("</PictureDetails>")
         
         # In app/services/ebay/trading.py around line 500
@@ -665,17 +668,17 @@ class EbayTradingLegacyAPI:
             
             if "SellerShippingProfile" in profiles:
                 xml_parts.append("<SellerShippingProfile>")
-                xml_parts.append(f"<ShippingProfileID>{profiles['SellerShippingProfile']['ShippingProfileID']}</ShippingProfileID>")
+                xml_parts.append(f"<ShippingProfileID>{self._escape_xml_chars(profiles['SellerShippingProfile']['ShippingProfileID'])}</ShippingProfileID>")
                 xml_parts.append("</SellerShippingProfile>")
             
             if "SellerPaymentProfile" in profiles:
                 xml_parts.append("<SellerPaymentProfile>")
-                xml_parts.append(f"<PaymentProfileID>{profiles['SellerPaymentProfile']['PaymentProfileID']}</PaymentProfileID>")
+                xml_parts.append(f"<PaymentProfileID>{self._escape_xml_chars(profiles['SellerPaymentProfile']['PaymentProfileID'])}</PaymentProfileID>")
                 xml_parts.append("</SellerPaymentProfile>")
             
             if "SellerReturnProfile" in profiles:
                 xml_parts.append("<SellerReturnProfile>")
-                xml_parts.append(f"<ReturnProfileID>{profiles['SellerReturnProfile']['ReturnProfileID']}</ReturnProfileID>")
+                xml_parts.append(f"<ReturnProfileID>{self._escape_xml_chars(profiles['SellerReturnProfile']['ReturnProfileID'])}</ReturnProfileID>")
                 xml_parts.append("</SellerReturnProfile>")
             
             xml_parts.append("</SellerProfiles>")
@@ -688,7 +691,7 @@ class EbayTradingLegacyAPI:
             
             # Add shipping type if specified
             if "ShippingType" in shipping_details:
-                xml_parts.append(f"<ShippingType>{shipping_details['ShippingType']}</ShippingType>")
+                xml_parts.append(f"<ShippingType>{self._escape_xml_chars(shipping_details['ShippingType'])}</ShippingType>")
             else:
                 xml_parts.append("<ShippingType>Flat</ShippingType>")
             
@@ -700,12 +703,12 @@ class EbayTradingLegacyAPI:
                     services = [services]
                 for service in services:
                     xml_parts.append("<ShippingServiceOptions>")
-                    xml_parts.append(f"<ShippingServicePriority>{service.get('ShippingServicePriority', '1')}</ShippingServicePriority>")
-                    xml_parts.append(f"<ShippingService>{service.get('ShippingService', 'UK_OtherCourier24')}</ShippingService>")
-                    xml_parts.append(f"<ShippingServiceCost currencyID=\"GBP\">{service.get('ShippingServiceCost', '0.0')}</ShippingServiceCost>")
+                    xml_parts.append(f"<ShippingServicePriority>{self._escape_xml_chars(service.get('ShippingServicePriority', '1'))}</ShippingServicePriority>")
+                    xml_parts.append(f"<ShippingService>{self._escape_xml_chars(service.get('ShippingService', 'UK_OtherCourier24'))}</ShippingService>")
+                    xml_parts.append(f"<ShippingServiceCost currencyID=\"GBP\">{self._escape_xml_chars(service.get('ShippingServiceCost', '0.0'))}</ShippingServiceCost>")
                     if service.get('ShippingServiceAdditionalCost') is not None:
                         xml_parts.append(
-                            f"<ShippingServiceAdditionalCost currencyID=\"GBP\">{service.get('ShippingServiceAdditionalCost')}</ShippingServiceAdditionalCost>"
+                            f"<ShippingServiceAdditionalCost currencyID=\"GBP\">{self._escape_xml_chars(service.get('ShippingServiceAdditionalCost'))}</ShippingServiceAdditionalCost>"
                         )
                     if service.get('FreeShipping'):
                         xml_parts.append("<FreeShipping>true</FreeShipping>")
@@ -719,19 +722,19 @@ class EbayTradingLegacyAPI:
                     intl_services = [intl_services]
                 for intl_service in intl_services:
                     xml_parts.append("<InternationalShippingServiceOption>")
-                    xml_parts.append(f"<ShippingServicePriority>{intl_service.get('ShippingServicePriority', '1')}</ShippingServicePriority>")
-                    xml_parts.append(f"<ShippingService>{intl_service.get('ShippingService', 'UK_InternationalStandard')}</ShippingService>")
-                    xml_parts.append(f"<ShippingServiceCost currencyID=\"GBP\">{intl_service.get('ShippingServiceCost', '0.0')}</ShippingServiceCost>")
+                    xml_parts.append(f"<ShippingServicePriority>{self._escape_xml_chars(intl_service.get('ShippingServicePriority', '1'))}</ShippingServicePriority>")
+                    xml_parts.append(f"<ShippingService>{self._escape_xml_chars(intl_service.get('ShippingService', 'UK_InternationalStandard'))}</ShippingService>")
+                    xml_parts.append(f"<ShippingServiceCost currencyID=\"GBP\">{self._escape_xml_chars(intl_service.get('ShippingServiceCost', '0.0'))}</ShippingServiceCost>")
                     if intl_service.get('ShippingServiceAdditionalCost') is not None:
                         xml_parts.append(
-                            f"<ShippingServiceAdditionalCost currencyID=\"GBP\">{intl_service.get('ShippingServiceAdditionalCost')}</ShippingServiceAdditionalCost>"
+                            f"<ShippingServiceAdditionalCost currencyID=\"GBP\">{self._escape_xml_chars(intl_service.get('ShippingServiceAdditionalCost'))}</ShippingServiceAdditionalCost>"
                         )
                     ship_to = intl_service.get('ShipToLocation', 'Worldwide')
                     if isinstance(ship_to, (list, tuple, set)):
                         for destination in ship_to:
-                            xml_parts.append(f"<ShipToLocation>{destination}</ShipToLocation>")
+                            xml_parts.append(f"<ShipToLocation>{self._escape_xml_chars(destination)}</ShipToLocation>")
                     else:
-                        xml_parts.append(f"<ShipToLocation>{ship_to}</ShipToLocation>")
+                        xml_parts.append(f"<ShipToLocation>{self._escape_xml_chars(ship_to)}</ShipToLocation>")
                     xml_parts.append("</InternationalShippingServiceOption>")
             
             xml_parts.append("</ShippingDetails>")
@@ -742,9 +745,9 @@ class EbayTradingLegacyAPI:
                 payment_methods = item_data["PaymentMethods"]
                 if isinstance(payment_methods, list):
                     for method in payment_methods:
-                        xml_parts.append(f"<PaymentMethods>{method}</PaymentMethods>")
+                        xml_parts.append(f"<PaymentMethods>{self._escape_xml_chars(method)}</PaymentMethods>")
                 else:
-                    xml_parts.append(f"<PaymentMethods>{payment_methods}</PaymentMethods>")
+                    xml_parts.append(f"<PaymentMethods>{self._escape_xml_chars(payment_methods)}</PaymentMethods>")
             # Don't add PayPal as default - eBay manages payments now
         
         # PayPal email
@@ -755,25 +758,25 @@ class EbayTradingLegacyAPI:
         if "ReturnPolicy" in item_data and "SellerProfiles" not in item_data:
             policy = item_data["ReturnPolicy"]
             xml_parts.append("<ReturnPolicy>")
-            xml_parts.append(f"<ReturnsAcceptedOption>{policy.get('ReturnsAccepted', 'ReturnsAccepted')}</ReturnsAcceptedOption>")
-            xml_parts.append(f"<ReturnsWithinOption>{policy.get('ReturnsWithin', 'Days_30')}</ReturnsWithinOption>")
-            xml_parts.append(f"<ShippingCostPaidByOption>{policy.get('ShippingCostPaidBy', 'Buyer')}</ShippingCostPaidByOption>")
+            xml_parts.append(f"<ReturnsAcceptedOption>{self._escape_xml_chars(policy.get('ReturnsAccepted', 'ReturnsAccepted'))}</ReturnsAcceptedOption>")
+            xml_parts.append(f"<ReturnsWithinOption>{self._escape_xml_chars(policy.get('ReturnsWithin', 'Days_30'))}</ReturnsWithinOption>")
+            xml_parts.append(f"<ShippingCostPaidByOption>{self._escape_xml_chars(policy.get('ShippingCostPaidBy', 'Buyer'))}</ShippingCostPaidByOption>")
             xml_parts.append("</ReturnPolicy>")
         
         # Location and country
-        xml_parts.append(f"<Location>{item_data.get('Location', 'London, UK')}</Location>")
-        xml_parts.append(f"<Country>{item_data.get('Country', 'GB')}</Country>")
+        xml_parts.append(f"<Location>{self._escape_xml_chars(item_data.get('Location', 'London, UK'))}</Location>")
+        xml_parts.append(f"<Country>{self._escape_xml_chars(item_data.get('Country', 'GB'))}</Country>")
         
         # PostalCode is required when using ShippingDetails
         if "PostalCode" in item_data:
-            xml_parts.append(f"<PostalCode>{item_data.get('PostalCode')}</PostalCode>")
+            xml_parts.append(f"<PostalCode>{self._escape_xml_chars(item_data.get('PostalCode'))}</PostalCode>")
         
         # Add Site - required for eBay UK
-        xml_parts.append(f"<Site>{item_data.get('Site', 'UK')}</Site>")
+        xml_parts.append(f"<Site>{self._escape_xml_chars(item_data.get('Site', 'UK'))}</Site>")
         
         # Dispatch time
         if "DispatchTimeMax" in item_data:
-            xml_parts.append(f"<DispatchTimeMax>{item_data.get('DispatchTimeMax')}</DispatchTimeMax>")
+            xml_parts.append(f"<DispatchTimeMax>{self._escape_xml_chars(item_data.get('DispatchTimeMax'))}</DispatchTimeMax>")
         
         # Close Item element and request
         xml_parts.append("</Item>")
@@ -834,22 +837,9 @@ class EbayTradingLegacyAPI:
         """
         if text is None:
             return ""
-            
-        # Define replacements
-        replacements = [
-            ('&', '&amp;'),  # Must be first to avoid double-escaping
-            ('<', '&lt;'),
-            ('>', '&gt;'),
-            ('"', '&quot;'),
-            ("'", '&apos;')
-        ]
-        
-        # Apply replacements
-        result = text
-        for old, new in replacements:
-            result = result.replace(old, new)
-            
-        return result
+        if not isinstance(text, str):
+            text = str(text)
+        return xml_escape(text, entities={"'": "&apos;", "\"": "&quot;"})
 
     async def relist_item(self, item_id: str) -> Dict[str, Any]:
         """

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Get detailed information for a single Reverb listing.
+Get detailed information for a single Reverb listing or look up an existing listing by SKU.
 
 Usage:
-    python scripts/reverb/get_reverb_item_details.py <reverb_listing_id> [--json] [--check-orders] [--save]
+    python scripts/reverb/get_reverb_item_details.py [reverb_listing_id] [--sku SKU] [--json] [--check-orders] [--save]
     
 Examples:
     # Get details with formatted output
     python scripts/reverb/get_reverb_item_details.py 91978727
+    
+    # Look up a listing by SKU to test the /my/listings?sku= endpoint
+    python scripts/reverb/get_reverb_item_details.py --sku RIFF-10000123
     
     # Get details as pretty-printed JSON
     python scripts/reverb/get_reverb_item_details.py 91978727 --json
@@ -15,21 +18,20 @@ Examples:
     # Save details to JSON file with SKU (e.g., REV-91978727.json)
     python scripts/reverb/get_reverb_item_details.py 91978727 --save
     
-    # Save listing details to scripts/reverb/output/{SKU}.json
-    # This will extract shipping profile, rates, and other details
-    python scripts/reverb/get_reverb_item_details.py 91978727 --save
-    
 Options:
+    --sku SKU       Query Reverb's /my/listings endpoint using a SKU instead of a listing ID
     --json          Output as pretty-printed JSON to console
     --check-orders  Also check Orders API (slow if many orders)
     --save          Save to JSON file in scripts/reverb/output/ with SKU in filename
 """
 
+import argparse
 import asyncio
 import json
 import sys
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -37,12 +39,21 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from app.services.reverb.client import ReverbClient
 from app.core.config import get_settings
 
-async def test_listing_status(listing_id: str, json_output: bool = False, check_orders: bool = False, save_to_file: bool = False):
+async def test_listing_status(
+    listing_id: Optional[str],
+    *,
+    sku: Optional[str] = None,
+    json_output: bool = False,
+    check_orders: bool = False,
+    save_to_file: bool = False,
+):
     """
     Checks a single Reverb Listing ID against the Listings API and optionally the Orders API.
+    Can also query the private /my/listings endpoint by SKU to verify uniqueness.
     
     Args:
-        listing_id: The Reverb listing ID to check
+        listing_id: The Reverb listing ID to check (optional if sku is provided)
+        sku: Optional SKU to look up via /my/listings?sku=<value>
         json_output: If True, output as JSON instead of formatted text
         check_orders: If True, also check the Orders API (slow if many orders)
     """
@@ -52,32 +63,72 @@ async def test_listing_status(listing_id: str, json_output: bool = False, check_
     result = {
         "listing_id": listing_id,
         "listings_api": None,
-        "orders_api": None
+        "orders_api": None,
+        "sku_lookup": None,
     }
 
     if not json_output:
-        print(f"🔬 Testing Reverb Listing ID: {listing_id}\n")
+        header = "🔬 Testing Reverb Listing"
+        if listing_id:
+            header += f" ID: {listing_id}"
+        if sku:
+            header += f" (SKU lookup: {sku})"
+        print(f"{header}\n")
+
+    # 0. Optional SKU lookup via private endpoint
+    if sku:
+        if not json_output:
+            print("--- Checking /my/listings by SKU ---")
+        try:
+            sku_response = await client.find_listing_by_sku(sku)
+            result["sku_lookup"] = sku_response
+            listings = []
+            if isinstance(sku_response, dict):
+                if sku_response.get("listings"):
+                    listings = sku_response["listings"]
+                elif sku_response.get("_embedded", {}).get("listings"):
+                    listings = sku_response["_embedded"]["listings"]
+            if not json_output:
+                if listings:
+                    print(f"✅ SUCCESS: Found {len(listings)} listing(s) for SKU {sku}")
+                    for entry in listings[:3]:
+                        entry_id = entry.get("id") or entry.get("listing_id")
+                        entry_state = entry.get("state", {}).get("slug") if isinstance(entry.get("state"), dict) else entry.get("state")
+                        print(f"   - Listing ID: {entry_id}, State: {entry_state}, Title: {entry.get('title')}")
+                else:
+                    total = sku_response.get("total")
+                    if total == 0:
+                        print(f"ℹ️  No listings found for SKU {sku}")
+                    else:
+                        print(f"ℹ️  Received response but no listings parsed. Raw keys: {list(sku_response.keys())}")
+        except Exception as sku_error:
+            result["sku_lookup_error"] = str(sku_error)
+            if not json_output:
+                print(f"❌ FAILED: SKU lookup errored - {sku_error}")
+        if not json_output:
+            print()
 
     # 1. Test the Public Listings API
-    if not json_output:
+    if listing_id and not json_output:
         print("--- Checking Listings API ---")
-    try:
-        details = await client.get_listing_details(listing_id)
-        result["listings_api"] = details
-        if not json_output:
-            print(f"✅ SUCCESS: Found in Listings API.")
-            print(f"   - Status: {details.get('state', {}).get('slug')}")
-            print(f"   - Title: {details.get('title')}")
-            # Show key fields
-            if details.get('shipping_profile'):
-                print(f"   - Shipping Profile ID: {details.get('shipping_profile', {}).get('id')}")
-            if details.get('slug'):
-                print(f"   - Slug: {details.get('slug')}")
-    except Exception as e:
-        result["listings_api_error"] = str(e)
-        if not json_output:
-            print(f"❌ FAILED: Could not find in Listings API.")
-            print(f"   - Error: {e}")
+    if listing_id:
+        try:
+            details = await client.get_listing_details(listing_id)
+            result["listings_api"] = details
+            if not json_output:
+                print(f"✅ SUCCESS: Found in Listings API.")
+                print(f"   - Status: {details.get('state', {}).get('slug')}")
+                print(f"   - Title: {details.get('title')}")
+                # Show key fields
+                if details.get('shipping_profile'):
+                    print(f"   - Shipping Profile ID: {details.get('shipping_profile', {}).get('id')}")
+                if details.get('slug'):
+                    print(f"   - Slug: {details.get('slug')}")
+        except Exception as e:
+            result["listings_api_error"] = str(e)
+            if not json_output:
+                print(f"❌ FAILED: Could not find in Listings API.")
+                print(f"   - Error: {e}")
 
     # 2. Test the Orders API (our proposed fallback) - only if requested
     if check_orders:
@@ -167,23 +218,46 @@ async def test_listing_status(listing_id: str, json_output: bool = False, check_
     return result
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python scripts/reverb/get_reverb_item_details.py <reverb_listing_id> [--json] [--check-orders] [--save]")
-        print("\nExamples:")
-        print("  python scripts/reverb/get_reverb_item_details.py 91978727")
-        print("  python scripts/reverb/get_reverb_item_details.py 91978727 --json")
-        print("  python scripts/reverb/get_reverb_item_details.py 91978727 --save")
-        print("  python scripts/reverb/get_reverb_item_details.py 91978727 --json --check-orders")
-        print("\nOptions:")
-        print("  --json          Output as pretty-printed JSON")
-        print("  --check-orders  Also check Orders API (slow if many orders)")
-        print("  --save          Save to JSON file with SKU in filename")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Inspect a Reverb listing by ID or SKU."
+    )
+    parser.add_argument(
+        "listing_id",
+        nargs="?",
+        help="Reverb listing ID to inspect",
+    )
+    parser.add_argument(
+        "--sku",
+        help="SKU to look up via /my/listings?sku=<value>",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output as pretty-printed JSON",
+    )
+    parser.add_argument(
+        "--check-orders",
+        action="store_true",
+        help="Also check Orders API (slower)",
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save Listings API response to scripts/reverb/output/{SKU}.json",
+    )
+
+    args = parser.parse_args()
+
+    if not args.listing_id and not args.sku:
+        parser.error("You must supply a listing_id positional argument or --sku.")
     
-    item_id_to_test = sys.argv[1]
-    json_output = "--json" in sys.argv
-    check_orders = "--check-orders" in sys.argv
-    save_to_file = "--save" in sys.argv
-    
-    asyncio.run(test_listing_status(item_id_to_test, json_output, check_orders, save_to_file))
+    asyncio.run(
+        test_listing_status(
+            args.listing_id,
+            sku=args.sku,
+            json_output=args.json,
+            check_orders=args.check_orders,
+            save_to_file=args.save,
+        )
+    )
     

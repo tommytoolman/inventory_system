@@ -1232,20 +1232,9 @@ async def test_get_next_sku(mocker):
     """
     print("\n--- Running Test: test_get_next_sku ---")
     
-    # Arrange: Mock DB session
     mock_session = AsyncMock()
-    
-    # Mock result for getting the maximum SKU - it doesn't matter what this is,
-    # since the actual implementation seems to ignore it
-    mock_execute_result = MagicMock()
-    mock_execute_result.scalar_one_or_none.return_value = "TEST-123"
-    
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
-    
-    # Mock settings - again, doesn't seem to be used by the implementation
-    mock_settings = MagicMock(spec=Settings)
-    mock_settings.SKU_PREFIX = "TEST"
-    mocker.patch("app.routes.inventory.get_settings", return_value=mock_settings)
+    mocked_generator = AsyncMock(return_value="RIFF-10000123")
+    mocker.patch("app.services.sku_service.generate_next_riff_sku", mocked_generator)
     
     # Act: Call the route function
     from app.routes.inventory import get_next_sku
@@ -1254,10 +1243,8 @@ async def test_get_next_sku(mocker):
     # Assert: Check response uses the hardcoded format
     assert isinstance(response, dict)
     assert "sku" in response
-    assert response["sku"] == "DSG-000-001"  # The actual hardcoded value
-    
-    # Verify DB call was made (even if result is ignored)
-    mock_session.execute.assert_called_once()
+    assert response["sku"] == "RIFF-10000123"
+    mocked_generator.assert_awaited_once_with(mock_session)
     
     print("--- Test get_next_sku Passed ---")
 
@@ -1268,19 +1255,9 @@ async def test_get_next_sku_no_existing(mocker):
     """
     print("\n--- Running Test: test_get_next_sku_no_existing ---")
     
-    # Arrange: Mock DB session
     mock_session = AsyncMock()
-    
-    # Mock result for getting the maximum SKU - return None to simulate no existing SKUs
-    mock_execute_result = MagicMock()
-    mock_execute_result.scalar_one_or_none.return_value = None
-    
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
-    
-    # Mock settings - again, doesn't seem to be used by the implementation
-    mock_settings = MagicMock(spec=Settings)
-    mock_settings.SKU_PREFIX = "TEST"
-    mocker.patch("app.routes.inventory.get_settings", return_value=mock_settings)
+    mocked_generator = AsyncMock(return_value="RIFF-10000001")
+    mocker.patch("app.services.sku_service.generate_next_riff_sku", mocked_generator)
     
     # Act: Call the route function
     print("Calling get_next_sku with no existing SKUs")
@@ -1288,13 +1265,11 @@ async def test_get_next_sku_no_existing(mocker):
     response = await get_next_sku(db=mock_session)
     print("get_next_sku function finished")
     
-    # Assert: Check response uses the hardcoded format, which is the same regardless of DB state
+    # Assert: Check response uses the helper's value
     assert isinstance(response, dict)
     assert "sku" in response
-    assert response["sku"] == "DSG-000-001"  # The actual hardcoded value
-    
-    # Verify DB call was made (even if result is ignored)
-    mock_session.execute.assert_called_once()
+    assert response["sku"] == "RIFF-10000001"
+    mocked_generator.assert_awaited_once_with(mock_session)
     
     print("--- Test get_next_sku_no_existing Passed ---")
 
@@ -2043,8 +2018,6 @@ async def test_platform_synchronization(mocker):
     mock_vr_client.create_listing.assert_awaited_once()
     
     print("--- Test platform_synchronization Passed ---")
-
-
 
 
 

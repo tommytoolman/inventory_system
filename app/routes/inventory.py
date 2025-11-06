@@ -422,11 +422,12 @@ async def _persist_shopify_listing(
     seo_title = seo_data.get("title") or shopify_generated_seo_title
     seo_description = seo_data.get("description") or shopify_generated_short_description
 
+    category_node = snapshot_payload.get("category") if isinstance(snapshot_payload, dict) else None
     category_gid = (
         shopify_options.get("category")
         or shopify_options.get("category_gid")
         or shopify_result.get("category_gid")
-        or snapshot_payload.get("category", {}).get("id")
+        or (category_node.get("id") if isinstance(category_node, dict) else None)
     )
     category_name = (
         shopify_result.get("category_name")
@@ -448,7 +449,6 @@ async def _persist_shopify_listing(
         category_name = category_name or taxonomy_node.get("name")
         category_full_name = category_full_name or taxonomy_node.get("fullName")
 
-    category_node = snapshot_payload.get("category") if isinstance(snapshot_payload, dict) else None
     if isinstance(category_node, dict):
         category_gid = category_gid or category_node.get("id")
         category_name = category_name or category_node.get("name")
@@ -2112,11 +2112,13 @@ async def handle_create_platform_listing_from_detail(
                     message = "Product is already listed on Reverb"
                     message_type = "warning"
                 else:
-                    # Create listing on Reverb
                     result = await reverb_service.create_listing_from_product(product_id)
 
                     if result.get("status") == "success":
                         message = f"Successfully created Reverb listing with ID: {result.get('reverb_listing_id')}"
+                        sku_adjustment = result.get("sku_adjustment")
+                        if sku_adjustment:
+                            message += f" (SKU updated to {sku_adjustment.get('new_sku')})"
                         message_type = "success"
 
                         # Update product status to ACTIVE if it was DRAFT
@@ -2124,7 +2126,11 @@ async def handle_create_platform_listing_from_detail(
                             product.status = ProductStatus.ACTIVE
                             await db.commit()
                     else:
-                        message = f"Error creating Reverb listing: {result.get('error', 'Unknown error')}"
+                        error_message = result.get('error', 'Unknown error')
+                        if result.get("code") == "duplicate_sku" and result.get("conflict"):
+                            conflict = result["conflict"]
+                            error_message += f" (Reverb listing {conflict.get('id')} is still live with SKU {product.sku})"
+                        message = f"Error creating Reverb listing: {error_message}"
                         message_type = "error"
 
             except Exception as e:
@@ -2713,10 +2719,15 @@ async def add_product(
                     )
 
                     if result.get("status") == "success":
+                        sku_adjustment = result.get("sku_adjustment")
                         platform_statuses["reverb"] = {
                             "status": "success",
                             "message": f"Listed on Reverb with ID: {result.get('reverb_listing_id')}"
                         }
+                        if sku_adjustment:
+                            platform_statuses["reverb"]["message"] += (
+                                f" (SKU updated to {sku_adjustment.get('new_sku')})"
+                            )
 
                         reverb_listing_id = result.get("reverb_listing_id")
                         if reverb_listing_id:
@@ -2733,10 +2744,11 @@ async def add_product(
                         platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
                     else:
                         duplicate_sku = result.get("code") == "duplicate_sku"
+                        conflict_message = result.get("error", "Failed to create Reverb listing")
                         platform_statuses["reverb"] = {
                             "status": "error",
-                            "message": result.get("error", "Failed to create Reverb listing"),
-                            "sku_conflict": duplicate_sku,
+                            "message": conflict_message,
+                            "sku_conflict": result.get("code") == "duplicate_sku",
                         }
 
                         logger.warning("❌ Reverb creation failed - skipping other platforms")
@@ -4179,31 +4191,13 @@ async def update_product_stock(
 async def get_next_sku(db: AsyncSession = Depends(get_db)):
     """Generate the next available SKU in format RIFF-1xxxxxxx (8 digit number starting with 1)"""
     try:
-        # Get the highest existing SKU with RIFF- pattern
-        query = select(func.max(Product.sku)).where(Product.sku.like('RIFF-%'))
-        result = await db.execute(query)
-        highest_sku = result.scalar_one_or_none()
-        
-        if not highest_sku or not highest_sku.startswith('RIFF-'):
-            # If no existing SKUs with this pattern, start from RIFF-10000001
-            next_num = 10000001
-        else:
-            # Extract the numeric part after RIFF-
-            try:
-                numeric_part = highest_sku.replace('RIFF-', '')
-                next_num = int(numeric_part) + 1
-                # Ensure it stays within 8 digits starting with 1
-                if next_num >= 20000000:
-                    # If we somehow exceed the range, find a gap
-                    next_num = 10000001
-            except (ValueError, IndexError):
-                next_num = 10000001
-        
-        # Format the new SKU
-        new_sku = f"RIFF-{next_num}"
+        from app.services.sku_service import generate_next_riff_sku
+
+        new_sku = await generate_next_riff_sku(db)
         return {"sku": new_sku}
     except Exception as e:
         import traceback
+
         print(traceback.format_exc())
         return {"error": str(e)}
 

@@ -28,6 +28,7 @@ from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
 from app.services.match_utils import suggest_product_match
 from app.core.enums import ProductStatus, ProductCondition, PlatformName
+from app.services.sku_service import generate_next_riff_sku
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,112 @@ class ReverbService:
         # api_key = self.settings.REVERB_SANDBOX_API_KEY if use_sandbox else self.settings.REVERB_API_KEY
         
         self.client = ReverbClient(api_key=self.settings.REVERB_API_KEY, use_sandbox=use_sandbox)
+
+    async def _find_remote_listings_by_sku(self, sku: Optional[str]) -> List[Dict[str, Any]]:
+        """Return Reverb listings that currently use the given SKU."""
+        if not sku:
+            return []
+
+        try:
+            response = await self.client.find_listing_by_sku(sku)
+        except ReverbAPIError as exc:
+            logger.warning("Unable to check Reverb for SKU %s: %s", sku, exc)
+            return []
+        except Exception as exc:
+            logger.warning("Unexpected error during Reverb SKU lookup for %s: %s", sku, exc)
+            return []
+
+        listings: List[Dict[str, Any]] = []
+        if isinstance(response, dict):
+            if isinstance(response.get("listings"), list):
+                listings = response["listings"]
+            elif isinstance(response.get("_embedded", {}).get("listings"), list):
+                listings = response["_embedded"]["listings"]
+
+        total = response.get("total") if isinstance(response, dict) else None
+        if total and not listings:
+            logger.debug(
+                "Reverb SKU lookup reported total=%s but no listings were parsed (sku=%s)",
+                total,
+                sku,
+            )
+        return listings
+
+    @staticmethod
+    def _summarize_reverb_listing(listing: Dict[str, Any]) -> Dict[str, Any]:
+        """Return a lightweight summary for logging/UI messaging."""
+        if not isinstance(listing, dict):
+            return {}
+        state = listing.get("state")
+        if isinstance(state, dict):
+            state_value = state.get("slug") or state.get("name")
+        else:
+            state_value = state
+        return {
+            "id": listing.get("id") or listing.get("listing_id"),
+            "slug": listing.get("slug"),
+            "state": state_value,
+            "title": listing.get("title"),
+            "price": listing.get("price", {}).get("amount") if isinstance(listing.get("price"), dict) else listing.get("price"),
+        }
+
+    async def _ensure_reverb_sku_available(self, product: Product) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """
+        Ensure the product's SKU is not already in use on Reverb.
+
+        Returns:
+            (True, adjustment_info) if it's safe to proceed. adjustment_info is populated when we auto-update the SKU.
+            (False, error_payload) when we must abort (e.g., non-RIFF duplicate).
+        """
+        if not product.sku:
+            return True, None
+
+        listings = await self._find_remote_listings_by_sku(product.sku)
+        if not listings:
+            return True, None
+
+        conflict_summary = self._summarize_reverb_listing(listings[0])
+        duplicate_message = (
+            f"Reverb already has a listing with SKU {product.sku}. "
+            "End the existing listing or change the SKU before retrying."
+        )
+
+        if not product.sku.upper().startswith("RIFF-"):
+            return False, {
+                "status": "error",
+                "error": duplicate_message,
+                "code": "duplicate_sku",
+                "conflict": conflict_summary,
+            }
+
+        for attempt in range(5):
+            next_sku = await generate_next_riff_sku(self.db)
+            previous_sku = product.sku
+            product.sku = next_sku
+            await self.db.commit()
+            await self.db.refresh(product)
+
+            logger.warning(
+                "Auto-updated product %s SKU from %s to %s because Reverb already has listing %s",
+                product.id,
+                previous_sku,
+                next_sku,
+                conflict_summary.get("id"),
+            )
+
+            if not await self._find_remote_listings_by_sku(product.sku):
+                return True, {
+                    "old_sku": previous_sku,
+                    "new_sku": next_sku,
+                    "conflict": conflict_summary,
+                }
+
+        return False, {
+            "status": "error",
+            "error": duplicate_message + " Automatic re-assignment failed after multiple attempts.",
+            "code": "duplicate_sku",
+            "conflict": conflict_summary,
+        }
 
     @staticmethod
     def _normalize_image_url(url: Optional[str]) -> Optional[str]:
@@ -482,6 +589,7 @@ class ReverbService:
         """
 
         reverb_options: Dict[str, Any] = {}
+        sku_adjustment: Optional[Dict[str, Any]] = None
         if platform_options:
             # Support both nested and flat structures
             reverb_options = platform_options.get("reverb", platform_options) or {}
@@ -503,6 +611,12 @@ class ReverbService:
                     "status": "error",
                     "error": "Product requires both brand and model before creating a Reverb listing."
                 }
+
+            sku_ok, sku_context = await self._ensure_reverb_sku_available(product)
+            if not sku_ok:
+                return sku_context
+            if sku_context:
+                sku_adjustment = sku_context
 
             status_value = (
                 product.status.value if hasattr(product.status, "value") else str(product.status)
@@ -916,6 +1030,7 @@ class ReverbService:
                 "listing_url": listing_url,
                 "listing_data": listing_data,
                 "publish_errors": publish_errors,
+                "sku_adjustment": sku_adjustment,
             }
 
         except ReverbAPIError as api_error:

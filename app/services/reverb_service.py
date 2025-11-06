@@ -920,12 +920,17 @@ class ReverbService:
 
         except ReverbAPIError as api_error:
             await self.db.rollback()
+            error_text = str(api_error)
             logger.error(
                 "Reverb API error while creating listing for product %s: %s",
                 product_id,
-                api_error,
+                error_text,
             )
-            return {"status": "error", "error": str(api_error)}
+            error_payload = {"status": "error", "error": error_text}
+            lowered = error_text.lower()
+            if "sku" in lowered and "already exists" in lowered:
+                error_payload["code"] = "duplicate_sku"
+            return error_payload
         except Exception as exc:
             await self.db.rollback()
             logger.error(

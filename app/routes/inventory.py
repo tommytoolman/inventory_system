@@ -2714,7 +2714,7 @@ async def add_product(
                             enriched_data["local_photos"] = local_gallery_full_urls
                         platforms_to_sync = [p for p in platforms_to_sync if p != "reverb"]
                     else:
-                        duplicate_sku = result.get("error", "").lower().startswith("unexpected error: validation failed: sku")
+                        duplicate_sku = result.get("code") == "duplicate_sku"
                         platform_statuses["reverb"] = {
                             "status": "error",
                             "message": result.get("error", "Failed to create Reverb listing"),
@@ -2731,6 +2731,23 @@ async def add_product(
                                 }
                         platforms_to_sync = []
                         enriched_data = None
+
+                        if duplicate_sku:
+                            logger.error(
+                                "Reverb rejected SKU %s because it already exists. Prompting user to resolve conflict.",
+                                product.sku,
+                            )
+                            return JSONResponse(
+                                status_code=400,
+                                content={
+                                    "status": "error",
+                                    "error": (
+                                        "Reverb reports this SKU already exists in your shop. "
+                                        "Please end the existing listing on Reverb or change the SKU before retrying."
+                                    ),
+                                    "sku_conflict": True,
+                                },
+                            )
 
                 except Exception as e:
                     logger.error(f"Reverb listing error: {str(e)}", exc_info=True)

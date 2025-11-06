@@ -35,6 +35,35 @@ class ProductCondition(str, Enum):
     FAIR = "FAIR"
     POOR = "POOR"
 
+
+class Handedness(str, Enum):
+    RIGHT = "RIGHT"
+    LEFT = "LEFT"
+    AMBIDEXTROUS = "AMBIDEXTROUS"
+    UNSPECIFIED = "UNSPECIFIED"
+
+
+class ManufacturingCountry(str, Enum):
+    UNITED_KINGDOM = "GB"
+    UNITED_STATES = "US"
+    CANADA = "CA"
+    JAPAN = "JP"
+    GERMANY = "DE"
+    FRANCE = "FR"
+    ITALY = "IT"
+    SPAIN = "ES"
+    SWEDEN = "SE"
+    NORWAY = "NO"
+    DENMARK = "DK"
+    MEXICO = "MX"
+    INDONESIA = "ID"
+    CHINA = "CN"
+    KOREA = "KR"
+    AUSTRALIA = "AU"
+    NEW_ZEALAND = "NZ"
+    BRAZIL = "BR"
+    OTHER = "OTHER"
+
 class ListingStatus(str, Enum):
     """Listing status values used in both models and schemas"""
     DRAFT = "draft"

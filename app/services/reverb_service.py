@@ -27,7 +27,7 @@ from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
 from app.services.match_utils import suggest_product_match
-from app.core.enums import ManufacturingCountry, Handedness
+from app.core.enums import ProductStatus, ProductCondition, PlatformName
 
 logger = logging.getLogger(__name__)
 

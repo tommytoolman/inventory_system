@@ -642,12 +642,12 @@ class ReverbService:
                 "finish": product.finish,
                 "year": str(product.year) if product.year else None,
                 "sku": product.sku,
-                "origin_country_code": self._origin_country_code(product.manufacturing_country),
+                "origin_country_code": self._origin_country_code(getattr(product, "manufacturing_country", None)),
                 "publish": publish,
                 "photos": valid_photos,
             }
 
-            handedness_value = self._handedness_value(product.handedness)
+            handedness_value = self._handedness_value(getattr(product, "handedness", None))
             if handedness_value:
                 listing_payload["handedness"] = handedness_value
 
@@ -1086,10 +1086,10 @@ class ReverbService:
         if "description" in changed_fields:
             payload["description"] = product.description or ""
         if "manufacturing_country" in changed_fields:
-            country_code = self._origin_country_code(product.manufacturing_country)
+            country_code = self._origin_country_code(getattr(product, "manufacturing_country", None))
             payload["origin_country_code"] = country_code if country_code is not None else None
         if "handedness" in changed_fields:
-            payload["handedness"] = self._handedness_value(product.handedness)
+            payload["handedness"] = self._handedness_value(getattr(product, "handedness", None))
         if "handmade" in changed_fields:
             payload["handmade"] = self._handmade_flag(product)
 

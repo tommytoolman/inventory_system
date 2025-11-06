@@ -67,10 +67,12 @@ class ProductService:
         """
         try:
             # Check if SKU exists as a draft
-            existing_product = await self.db.execute(
-                select(Product).where(Product.sku == product_data.sku)
+            existing_query = await self.db.execute(
+                select(Product)
+                .where(Product.sku == product_data.sku)
+                .order_by(Product.id.desc())
             )
-            existing_product = existing_product.scalar_one_or_none()
+            existing_product = existing_query.scalars().first()
 
             if existing_product:
                 if existing_product.status == ProductStatus.DRAFT:

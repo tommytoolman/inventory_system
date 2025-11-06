@@ -330,6 +330,13 @@ async def _persist_shopify_listing(
 ) -> Dict[str, Any]:
     """Upsert platform_common and shopify_listings entries from a Shopify publish result."""
 
+    if not isinstance(shopify_result, dict):
+        logger.error("Shopify persistence aborted: result is not a dict (%s)", type(shopify_result))
+        return {
+            "status": "error",
+            "message": "Invalid Shopify response; could not persist listing",
+        }
+
     if shopify_result.get("status") != "success":
         return {
             "status": "error",
@@ -337,8 +344,19 @@ async def _persist_shopify_listing(
         }
 
     shopify_options = shopify_options or {}
+    if not isinstance(shopify_options, dict):
+        logger.warning("Shopify options payload was %s; defaulting to empty dict", type(shopify_options))
+        shopify_options = {}
 
-    snapshot_payload = shopify_result.get("snapshot") or {}
+    snapshot_payload = shopify_result.get("snapshot")
+    if not isinstance(snapshot_payload, dict):
+        if snapshot_payload not in (None, {}):
+            logger.warning(
+                "Shopify snapshot payload was unexpected type %s; falling back to empty dict",
+                type(snapshot_payload),
+            )
+        snapshot_payload = {}
+
     platform_payload = snapshot_payload or shopify_result
 
     external_id_raw = (

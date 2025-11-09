@@ -15,19 +15,19 @@ from urllib.parse import urlparse, parse_qs
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
-from sqlalchemy import update, text
+from sqlalchemy import update, text, func
 from sqlalchemy.orm import selectinload
 
 from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
-from app.models.product import Product
 from app.models.reverb import ReverbListing
 from app.models.sync_event import SyncEvent
 from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
 from app.services.match_utils import suggest_product_match
-from app.core.enums import ProductStatus, ProductCondition, PlatformName
+from app.core.enums import PlatformName, Handedness, ManufacturingCountry
+from app.models.category_mappings import ReverbCategory
 from app.services.sku_service import generate_next_riff_sku
 
 logger = logging.getLogger(__name__)
@@ -253,6 +253,83 @@ class ReverbService:
             Handedness.AMBIDEXTROUS: "ambidextrous",
         }
         return mapping.get(enum_value)
+
+    @staticmethod
+    def _handedness_from_reverb(value: Optional[Any]) -> Optional[Handedness]:
+        if value is None:
+            return None
+        slug = str(value).strip().lower()
+        mapping = {
+            "left": Handedness.LEFT,
+            "left-handed": Handedness.LEFT,
+            "right": Handedness.RIGHT,
+            "right-handed": Handedness.RIGHT,
+            "ambidextrous": Handedness.AMBIDEXTROUS,
+            "ambidextrous-handed": Handedness.AMBIDEXTROUS,
+        }
+        return mapping.get(slug)
+
+    @staticmethod
+    def _manufacturing_country_from_code(code: Optional[str]) -> Optional[ManufacturingCountry]:
+        if not code:
+            return None
+        try:
+            return ManufacturingCountry(code.upper())
+        except ValueError:
+            return None
+
+    async def _resolve_reverb_category_uuid(self, category_value: Optional[str]) -> Optional[str]:
+        if not category_value:
+            return None
+        normalized = category_value.strip().lower()
+        if not normalized:
+            return None
+
+        stmt = (
+            select(ReverbCategory.uuid)
+            .where(func.lower(ReverbCategory.full_path) == normalized)
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        uuid_value = result.scalar_one_or_none()
+        if uuid_value:
+            return uuid_value
+
+        stmt = (
+            select(ReverbCategory.uuid)
+            .where(func.lower(ReverbCategory.name) == normalized)
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        uuid_value = result.scalar_one_or_none()
+        if uuid_value:
+            return uuid_value
+
+        logger.warning("Unable to resolve Reverb category UUID for '%s'", category_value)
+        return None
+
+    @classmethod
+    def apply_metadata_from_reverb(cls, product: Product, listing: Dict[str, Any]) -> None:
+        serial_value = (listing.get("serial_number") or "").strip()
+        if serial_value:
+            product.serial_number = serial_value
+
+        handedness_value = cls._handedness_from_reverb(listing.get("handedness"))
+        if handedness_value:
+            product.handedness = handedness_value
+
+        origin_code = listing.get("origin_country_code") or (
+            (listing.get("shipping", {}) or {}).get("origin_country_code")
+        )
+        country_enum = cls._manufacturing_country_from_code(origin_code)
+        if country_enum:
+            product.manufacturing_country = country_enum
+
+        handmade_flag = listing.get("handmade")
+        if handmade_flag is not None:
+            extra = dict(product.extra_attributes or {})
+            extra["handmade"] = bool(handmade_flag)
+            product.extra_attributes = extra
 
     @staticmethod
     def _handmade_flag(product: Product) -> bool:
@@ -767,6 +844,10 @@ class ReverbService:
 
             listing_payload["handmade"] = self._handmade_flag(product)
 
+            serial_value = (product.serial_number or "").strip() if product.serial_number else ""
+            if serial_value:
+                listing_payload["serial_number"] = serial_value
+
             video_payload = self._prepare_video_payload(product.video_url)
             if video_payload:
                 listing_payload["videos"] = [video_payload]
@@ -1210,8 +1291,21 @@ class ReverbService:
             payload["origin_country_code"] = country_code if country_code is not None else None
         if "handedness" in changed_fields:
             payload["handedness"] = self._handedness_value(getattr(product, "handedness", None))
-        if "handmade" in changed_fields:
+        if "serial_number" in changed_fields:
+            serial_value = (product.serial_number or "").strip() if product.serial_number else ""
+            payload["serial_number"] = serial_value or None
+        if "extra_attributes" in changed_fields:
             payload["handmade"] = self._handmade_flag(product)
+        if "category" in changed_fields:
+            category_uuid = await self._resolve_reverb_category_uuid(getattr(product, "category", None))
+            if category_uuid:
+                payload["categories"] = [{"uuid": category_uuid}]
+            else:
+                logger.warning(
+                    "Category '%s' could not be mapped to a Reverb UUID for product %s",
+                    getattr(product, "category", None),
+                    product.sku,
+                )
 
         if "quantity" in changed_fields:
             payload["has_inventory"] = bool(product.is_stocked_item)
@@ -1236,6 +1330,10 @@ class ReverbService:
                 listing.description = payload["description"]
             if "inventory" in payload:
                 listing.inventory_quantity = payload["inventory"]
+            if "categories" in payload and payload["categories"]:
+                new_category_uuid = payload["categories"][0].get("uuid")
+                if new_category_uuid:
+                    listing.reverb_category_uuid = new_category_uuid
             listing.updated_at = datetime.utcnow()
             self.db.add(listing)
 
@@ -1465,6 +1563,20 @@ class ReverbService:
             "inventory": listing.inventory_quantity or 1,
             "offers_enabled": listing.offers_enabled
         }
+
+        origin_code = self._origin_country_code(getattr(product, "manufacturing_country", None))
+        if origin_code:
+            data["origin_country_code"] = origin_code
+
+        handedness_value = self._handedness_value(getattr(product, "handedness", None))
+        if handedness_value:
+            data["handedness"] = handedness_value
+
+        serial_value = (product.serial_number or "").strip() if product.serial_number else ""
+        if serial_value:
+            data["serial_number"] = serial_value
+
+        data["handmade"] = self._handmade_flag(product)
         
         # Add photos if available
         if listing.photos:
@@ -2050,42 +2162,41 @@ class ReverbService:
 
     async def _update_existing_product(self, product_id: int, listing: Dict):
         """Update an existing product with new Reverb data"""
-        # Extract data from listing
-        is_sold = listing.get('state', {}).get('slug') == 'sold'
+        product = await self.db.get(Product, product_id)
+        if not product:
+            logger.warning("Product %s not found while applying Reverb update", product_id)
+            return
+
+        is_sold = listing.get("state", {}).get("slug") == "sold"
         new_status = ProductStatus.SOLD if is_sold else ProductStatus.ACTIVE
-        
-        # Update product
-        update_stmt = text("""
-            UPDATE products 
-            SET base_price = :price,
-                description = :description,
-                status = :status,
-                updated_at = timezone('utc', now())
-            WHERE id = :product_id
-        """)
-        
-        await self.db.execute(update_stmt, {
-            "product_id": product_id,
-            "price": float(listing.get('price', {}).get('amount', 0)) if listing.get('price') else 0,
-            "description": listing.get('description', ''),
-            "status": new_status.value
-        })
-        
-        # Update platform_common
-        platform_update = text("""
-            UPDATE platform_common 
-            SET status = :status,
-                sync_status = 'SYNCED',
-                last_sync = timezone('utc', now()),
-                updated_at = timezone('utc', now())
-            WHERE product_id = :product_id AND platform_name = 'reverb'
-        """)
-        
-        platform_status = ListingStatus.SOLD if is_sold else ListingStatus.ACTIVE
-        await self.db.execute(platform_update, {
-            "product_id": product_id,
-            "status": platform_status.value
-        })
+
+        price_block = listing.get("price") or {}
+        try:
+            price_amount = float(price_block.get("amount")) if price_block.get("amount") is not None else None
+        except (TypeError, ValueError):
+            price_amount = None
+
+        if price_amount is not None:
+            product.base_price = price_amount
+        if listing.get("description"):
+            product.description = listing.get("description")
+        product.status = new_status
+
+        self.apply_metadata_from_reverb(product, listing)
+        await self.db.flush()
+
+        platform_stmt = select(PlatformCommon).where(
+            PlatformCommon.product_id == product_id,
+            PlatformCommon.platform_name == "reverb",
+        )
+        platform_result = await self.db.execute(platform_stmt)
+        platform_link = platform_result.scalar_one_or_none()
+        if platform_link:
+            platform_link.status = ListingStatus.SOLD.value if is_sold else ListingStatus.ACTIVE.value
+            platform_link.sync_status = SyncStatus.SYNCED.value
+            platform_link.last_sync = datetime.utcnow()
+            platform_link.updated_at = datetime.utcnow()
+            self.db.add(platform_link)
 
     async def run_import_process_old(self, sync_run_id: uuid.UUID) -> Dict[str, Any]:
         """

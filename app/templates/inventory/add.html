@@ -2,8 +2,12 @@
 
 {% block title %}Add Product - Realtime Inventory Forms Flow{% endblock %}
 
+{% set extra_attrs = {} %}
+{% if form_data and form_data.extra_attributes %}
+    {% set extra_attrs = form_data.extra_attributes %}
+{% endif %}
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="container mx-auto px-4 pt-16 pb-8">
         <div class="max-w-6xl mx-auto">
             <!-- Modern Header -->
             <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
@@ -52,24 +56,25 @@
                                 Copy
                             </button>
 
-                            <!-- Draft Selector -->
-                            <div class="ml-6 flex items-center">
-                                <svg class="w-5 h-5 text-gray-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <div class="ml-4 flex items-center space-x-2">
+                                <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
                                 </svg>
                                 <label class="text-sm font-semibold text-gray-700">Resume Draft:</label>
                                 <select id="draftSelector"
-                                        class="ml-2 px-3 py-1.5 bg-white rounded-lg border border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[200px] max-w-[250px]">
+                                        class="px-3 py-1.5 bg-white rounded-lg border border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[200px] max-w-[250px]">
                                     <option value="">Select a draft...</option>
                                 </select>
                                 <button type="button" id="loadDraftButton"
-                                    class="ml-2 inline-flex items-center px-4 py-1.5 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                        class="inline-flex items-center px-4 py-1.5 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled>
                                     <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
                                     </svg>
                                     Load Draft
                                 </button>
                             </div>
+
                         </div>
                         <div class="text-sm text-gray-600">
                             <span id="copyStatus" class="inline-flex items-center"></span>
@@ -86,13 +91,14 @@
         </div>
         {% endif %}
 
-                <form
-                    method="POST" 
-                    action="/inventory/add"
-                    enctype="multipart/form-data" 
-                    class="p-8"
-                    id="addProductForm"
-                    >
+    <form
+        method="POST" 
+        action="/inventory/add"
+        enctype="multipart/form-data" 
+        class="p-8"
+        id="addProductForm"
+        >
+        <input type="hidden" name="status" value="{{ form_data.status if form_data and form_data.status else 'DRAFT' }}">
 
                     <!-- Form Sections -->
                     <div class="space-y-6">
@@ -115,13 +121,43 @@
                             </button>
                             <div class="form-section-content p-6 bg-white border border-gray-200 rounded-xl mt-3 shadow-sm">
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <!-- Title field -->
+                                    <div class="group md:col-span-1 md:col-start-1 md:row-start-1">
+                                        <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Title
+                                            <span class="ml-1 inline-flex items-center group relative">
+                                                <svg class="w-4 h-4 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+                                                </svg>
+                                                <span class="absolute left-0 bottom-full mb-2 w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                                    Auto-generates from Brand, Model, Finish, and Year. Can be manually edited.
+                                                </span>
+                                            </span>
+                                        </label>
+                                        <div class="flex space-x-2">
+                                            <input type="text" name="title" id="title"
+                                                class="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
+                                                value="{{ form_data.title if form_data else '' }}"
+                                                placeholder="Auto-generates from Brand, Model, Finish, Year">
+                                            <button type="button" id="regenerateTitle"
+                                                class="px-3 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all duration-200 group shadow-sm"
+                                                title="Regenerate Title">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
                                     <!-- Brand Field -->
-                                    <div class="group">
+                                    <div class="group md:col-span-1 md:col-start-1 md:row-start-2">
                                         <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
                                             <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                                                 <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                                             </svg>
-                                            Brand
+                                            Brand<span class="text-red-500 ml-1">*</span>
                                             <span id="brandVRStatus" class="ml-2 text-xs font-normal"></span>
                                         </label>
                                         <div class="relative">
@@ -155,12 +191,12 @@
                                     </div>
                                     
                                     <!-- Model Field -->
-                                    <div class="group">
+                                    <div class="group md:col-span-1 md:col-start-1 md:row-start-3">
                                         <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
                                             <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fill-rule="evenodd" d="M7 2a1 1 0 00-.707 1.707L7 4.414v3.758a1 1 0 01-.293.707l-4 4C.817 14.769 2.156 18 4.828 18h10.343c2.673 0 4.012-3.231 2.122-5.121l-4-4A1 1 0 0113 8.172V4.414l.707-.707A1 1 0 0013 2H7zm2 6.172V4h2v4.172a3 3 0 00.879 2.12l1.027 1.028a4 4 0 00-2.171.102l-.47.156a4 4 0 01-2.53 0l-.563-.187a1.993 1.993 0 00-.114-.035l1.063-1.063A3 3 0 009 8.172z" clip-rule="evenodd"/>
                                             </svg>
-                                            Model
+                                            Model<span class="text-red-500 ml-1">*</span>
                                         </label>
                                         <div class="relative">
                                             <input type="text" name="model" id="model" required
@@ -172,66 +208,10 @@
                                             <div id="modelSuggestions" class="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl hidden max-h-60 overflow-y-auto">
                                             </div>
                                         </div>
-                                        <p id="modelHint" class="mt-1 text-xs text-gray-500 italic"></p>
-                                    </div>
-                                    <!-- Category Field -->
-                                    <div class="group">
-                                        <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
-                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                                <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"/>
-                                            </svg>
-                                            Category
-                                        </label>
-                                        <input type="text" name="category" id="category" required list="categoriesList" autocomplete="off"
-                                            class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
-                                            value="{{ form_data.category if form_data else '' }}"
-                                            placeholder="Select or type category...">
-                                        <datalist id="categoriesList">
-                                            {% if canonical_categories %}
-                                                {% for category in canonical_categories %}
-                                                    <option value="{{ category }}" data-canonical="true"></option>
-                                                {% endfor %}
-                                            {% endif %}
-                                        </datalist>
-                                        <p class="mt-1 text-xs text-gray-500">Alphabetical list shown; type to filter the full Reverb taxonomy.</p>
-                                    </div>
-                                    <!-- SKU Field -->
-                                    <div class="group">
-                                        <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
-                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
-                                            </svg>
-                                            SKU
-                                        </label>
-                                        <div class="flex space-x-2">
-                                            <input type="text" name="sku" id="sku" required
-                                                class="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
-                                                value="{{ form_data.sku if form_data else '' }}"
-                                                placeholder="RIFF-1xxxxxxx">
-                                            <button type="button" id="generateSku"
-                                                class="px-3 py-2.5 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 rounded-lg transition-all duration-200 group"
-                                                title="Generate SKU">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600 group-hover:text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <!-- Finish Field -->
-                                    <div class="group">
-                                        <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
-                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M5.05 3.636a1 1 0 010 1.414 7 7 0 000 9.9 1 1 0 01-1.414 1.414 9 9 0 010-12.728 1 1 0 011.414 0zm9.9 0a1 1 0 011.414 0 9 9 0 010 12.728 1 1 0 11-1.414-1.414 7 7 0 000-9.9 1 1 0 010-1.414zM7.879 6.464a1 1 0 010 1.414 3 3 0 000 4.243 1 1 0 01-1.415 1.414 5 5 0 010-7.07 1 1 0 011.415 0zm4.242 0a1 1 0 011.415 0 5 5 0 010 7.072 1 1 0 01-1.415-1.415 3 3 0 000-4.242 1 1 0 010-1.415zM10 9a1 1 0 011 1v.01a1 1 0 11-2 0V10a1 1 0 011-1z" clip-rule="evenodd"/>
-                                            </svg>
-                                            Finish
-                                        </label>
-                                        <input type="text" name="finish" id="finish"
-                                            class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
-                                            value="{{ form_data.finish if form_data else '' }}"
-                                            placeholder="e.g., Sunburst, Natural, Black...">
+                                        <p id="modelHint" class="text-xs text-gray-500 mt-1">Tap the dropdown for recent models or start typing to load matches.</p>
                                     </div>
                                     <!-- Year Field -->
-                                    <div class="group">
+                                    <div class="group md:col-span-1 md:col-start-1 md:row-start-4">
                                         <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
                                             <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
@@ -252,8 +232,86 @@
                                             min="1900" max="2030"
                                             placeholder="e.g., 1965, 2020...">
                                     </div>
+                                    <!-- Category Field -->
+                                    <div class="group md:col-span-1 md:col-start-1 md:row-start-5">
+                                        <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"/>
+                                            </svg>
+                                            Category<span class="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <input type="text" name="category" id="category" required list="categoriesList" autocomplete="off"
+                                            class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
+                                            value="{{ form_data.category if form_data else '' }}"
+                                            placeholder="Select or type category...">
+                                        <datalist id="categoriesList">
+                                            {% if canonical_categories %}
+                                                {% for category in canonical_categories %}
+                                                    <option value="{{ category }}" data-canonical="true"></option>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </datalist>
+                                        <p class="mt-1 text-xs text-gray-500">Alphabetical list shown; type to filter the full Reverb taxonomy.</p>
+                                    </div>
+                                    <!-- SKU Field -->
+                                    <div class="group md:col-span-1 md:col-start-2 md:row-start-1">
+                                        <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                                            </svg>
+                                            SKU<span class="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <div class="flex space-x-2">
+                                            <input type="text" name="sku" id="sku" required
+                                                class="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
+                                                value="{{ form_data.sku if form_data else '' }}"
+                                                placeholder="RIFF-1xxxxxxx">
+                                            <button type="button" id="generateSku"
+                                                class="px-3 py-2.5 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 rounded-lg transition-all duration-200 group"
+                                                title="Generate SKU">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600 group-hover:text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- Finish Field -->
+                                    <div class="group md:col-span-1 md:col-start-2 md:row-start-2">
+                                        <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M5.05 3.636a1 1 0 010 1.414 7 7 0 000 9.9 1 1 0 01-1.414 1.414 9 9 0 010-12.728 1 1 0 011.414 0zm9.9 0a1 1 0 011.414 0 9 9 0 010 12.728 1 1 0 11-1.414-1.414 7 7 0 000-9.9 1 1 0 010-1.414zM7.879 6.464a1 1 0 010 1.414 3 3 0 000 4.243 1 1 0 01-1.415 1.414 5 5 0 010-7.07 1 1 0 011.415 0zm4.242 0a1 1 0 011.415 0 5 5 0 010 7.072 1 1 0 01-1.415-1.415 3 3 0 000-4.242 1 1 0 010-1.415zM10 9a1 1 0 011 1v.01a1 1 0 11-2 0V10a1 1 0 011-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Finish
+                                        </label>
+                                        <input type="text" name="finish" id="finish"
+                                            class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
+                                            value="{{ form_data.finish if form_data else '' }}"
+                                            placeholder="e.g., Sunburst, Natural, Black...">
+                                    </div>
+                                    <!-- Country of Manufacture -->
+                                    <div class="group md:col-span-1 md:col-start-2 md:row-start-3">
+                                        <label class="text-sm font-semibold text-gray-700 mb-2 flex items-center" for="manufacturing_country">
+                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3a1 1 0 00.553.894l2 1a1 1 0 10.894-1.788L11 9.382V7z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Country of Manufacture<span class="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select id="manufacturing_country"
+                                                name="manufacturing_country"
+                                                required
+                                                class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200">
+                                            <option value="">Select a country...</option>
+                                            {% for country in manufacturing_countries %}
+                                                {% set selected_country = form_data.manufacturing_country if form_data else '' %}
+                                                <option value="{{ country.value }}" {% if selected_country and selected_country == country.value %}selected{% endif %}>
+                                                    {{ country.name.replace('_', ' ')|title }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                        <p id="manufacturingCountryError" class="text-xs text-red-500 mt-1 hidden">Please select the country of manufacture.</p>
+                                    </div>
                                     <!-- Decade Field -->
-                                    <div class="group">
+                                    <div class="group md:col-span-1 md:col-start-2 md:row-start-4">
                                         <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
                                             <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                                                 <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
@@ -277,34 +335,153 @@
                                             {% endfor %}
                                         </select>
                                     </div>
-                                    <!-- Title field - full width -->
-                                    <div class="md:col-span-2 group">
+                                    <!-- Condition Field -->
+                                    <div class="group md:col-span-1 md:col-start-2 md:row-start-5">
                                         <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
                                             <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                                                <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                                             </svg>
-                                            Title
-                                            <span class="ml-1 inline-flex items-center group relative">
-                                                <svg class="w-4 h-4 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
-                                                </svg>
-                                                <span class="absolute left-0 bottom-full mb-2 w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                                    Auto-generates from Brand, Model, Finish, and Year. Can be manually edited.
-                                                </span>
-                                            </span>
+                                            Condition
                                         </label>
-                                        <div class="flex space-x-2">
-                                            <input type="text" name="title" id="title"
-                                                class="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
-                                                value="{{ form_data.title if form_data else '' }}"
-                                                placeholder="Auto-generates from Brand, Model, Finish, Year">
-                                            <button type="button" id="regenerateTitle"
-                                                class="px-3 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all duration-200 group shadow-sm"
-                                                title="Regenerate Title">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                            </button>
+                                        <select name="condition" id="condition" required
+                                            class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 appearance-none cursor-pointer">
+                                            <option value="NEW" {% if form_data and form_data.condition == 'NEW' %}selected{% endif %}>✨ NEW</option>
+                                            <option value="EXCELLENT" {% if form_data and form_data.condition == 'EXCELLENT' %}selected{% endif %}>🌟 EXCELLENT</option>
+                                            <option value="VERYGOOD" {% if form_data and form_data.condition == 'VERYGOOD' %}selected{% endif %}>⭐ VERY GOOD</option>
+                                            <option value="GOOD" {% if form_data and form_data.condition == 'GOOD' %}selected{% endif %}>👍 GOOD</option>
+                                            <option value="FAIR" {% if form_data and form_data.condition == 'FAIR' %}selected{% endif %}>👌 FAIR</option>
+                                            <option value="POOR" {% if form_data and form_data.condition == 'POOR' %}selected{% endif %}>⚠️ POOR</option>
+                                        </select>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <div class="bg-gray-50 border border-gray-200 rounded-xl">
+                                            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                                                <div>
+                                                    <p class="text-sm font-semibold text-gray-700">Further Information</p>
+                                                    <p class="text-xs text-gray-500">Optional product details shown on the edit form.</p>
+                                                </div>
+                                                <button type="button"
+                                                        class="metadata-toggle inline-flex items-center text-gray-500 hover:text-gray-700 transition-transform duration-200"
+                                                        data-metadata-target="further-info-body"
+                                                        data-default-state="collapsed">
+                                                    <svg class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                    <span class="sr-only">Toggle metadata</span>
+                                                </button>
+                                            </div>
+                                            <div id="further-info-body" class="p-4 hidden">
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div class="space-y-4">
+                                                        {% set handmade_prefill = extra_attrs.get('handmade') %}
+                                                        {% if handmade_prefill is none and form_data and ('extra_handmade' in form_data) %}
+                                                            {% set handmade_prefill = True %}
+                                                        {% endif %}
+                                                        <div class="flex items-center gap-2">
+                                                            <input type="checkbox"
+                                                                   id="extra_handmade"
+                                                                   name="extra_handmade"
+                                                                   class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                                                   {% if handmade_prefill %}checked{% endif %}>
+                                                            <label for="extra_handmade" class="text-sm font-semibold text-gray-700">Handmade</label>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-sm font-semibold text-gray-700 mb-2" for="handedness">Handedness</label>
+                                                            <select id="handedness" name="handedness"
+                                                                    class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200">
+                                                                {% set selected_handedness = form_data.handedness if form_data and form_data.handedness else 'UNSPECIFIED' %}
+                                                                {% for option in handedness_options %}
+                                                                    <option value="{{ option.name }}"
+                                                                        {% if selected_handedness and selected_handedness == option.name %}selected{% endif %}>
+                                                                        {{ option.name.replace('_', ' ') }}
+                                                                    </option>
+                                                                {% endfor %}
+                                                            </select>
+                                                            <p id="handedness-lock-note" class="hidden mt-1 text-xs text-gray-500 italic">
+                                                                Locked to left-handed because the selected category is a left-handed model.
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-sm font-semibold text-gray-700 mb-2" for="serial_number">Serial Number</label>
+                                                            <input type="text"
+                                                                   id="serial_number"
+                                                                   name="serial_number"
+                                                                   class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
+                                                                   value="{{ form_data.serial_number if form_data else '' }}"
+                                                                   placeholder="e.g., 123456 or N/A">
+                                                        </div>
+                                                        {% set selected_body_type = extra_attrs.get('body_type') %}
+                                                        {% if not selected_body_type and form_data %}
+                                                            {% if form_data.body_type %}
+                                                                {% set selected_body_type = form_data.body_type %}
+                                                            {% elif 'body_type' in form_data %}
+                                                                {% set selected_body_type = form_data['body_type'] %}
+                                                            {% endif %}
+                                                        {% endif %}
+                                                        <div>
+                                                            <label class="block text-sm font-semibold text-gray-700 mb-2" for="body_type">Body Type</label>
+                                                            <select id="body_type" name="body_type"
+                                                                    class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200">
+                                                                <option value="">—</option>
+                                                                {% for option in body_type_options %}
+                                                                    <option value="{{ option }}"
+                                                                        {% if selected_body_type == option %}selected{% endif %}>
+                                                                        {{ option }}
+                                                                    </option>
+                                                                {% endfor %}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-sm font-semibold text-gray-700 mb-2" for="case_status">Case Status</label>
+                                                            <select id="case_status" name="case_status"
+                                                                    class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200">
+                                                                {% set selected_case = form_data.case_status if form_data and form_data.case_status else 'UNSPECIFIED' %}
+                                                                {% for option in case_status_options %}
+                                                                    <option value="{{ option.name }}"
+                                                                        {% if selected_case and selected_case == option.name %}selected{% endif %}>
+                                                                        {{ option.name.replace('_', ' ') }}
+                                                                    </option>
+                                                                {% endfor %}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div class="space-y-4">
+                                                        <div class="flex items-center gap-2">
+                                                            <input type="checkbox"
+                                                                   id="artist_owned"
+                                                                   name="artist_owned"
+                                                                   class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                                                   {% if form_data and form_data.artist_owned %}checked{% endif %}>
+                                                            <label for="artist_owned" class="text-sm font-semibold text-gray-700">Artist Owned</label>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-sm font-semibold text-gray-700 mb-2" for="artist_names">Artist Details</label>
+                                                            {% set artist_value = '' %}
+                                                            {% if form_data and form_data.artist_names %}
+                                                                {% if form_data.artist_names is string %}
+                                                                    {% set artist_value = form_data.artist_names %}
+                                                                {% else %}
+                                                                    {% set artist_value = form_data.artist_names | join(', ') %}
+                                                                {% endif %}
+                                                            {% endif %}
+                                                            <textarea id="artist_names"
+                                                                      name="artist_names"
+                                                                      rows="4"
+                                                                      class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
+                                                                      placeholder="Separate multiple names with commas">{{ artist_value }}</textarea>
+                                                            <p class="text-xs text-gray-500 mt-1">Separate multiple names with commas.</p>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-sm font-semibold text-gray-700 mb-2" for="case_details">Case Details</label>
+                                                            <textarea id="case_details"
+                                                                      name="case_details"
+                                                                      rows="4"
+                                                                      class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
+                                                                      placeholder="Notes on original case, gig bag, or accessories">{{ form_data.case_details if form_data else '' }}</textarea>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -330,51 +507,23 @@
                             <div class="form-section-content p-6 bg-white border border-gray-200 rounded-xl mt-3 shadow-sm">
                         <div class="space-y-4">
                                     <div>
-                                        <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
-                                            <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
-                                            </svg>
-                                            Description
-                                        </label>
+                                        <div class="flex items-center justify-between mb-2">
+                                            <label class="flex items-center text-sm font-semibold text-gray-700" for="description">
+                                                <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                                                </svg>
+                                                Description
+                                            </label>
+                                            <button type="button" id="regenerateDescription"
+                                                class="inline-flex items-center px-3 py-1.5 rounded-md border border-indigo-200 text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors">
+                                                Regenerate Template
+                                            </button>
+                                        </div>
+                                        <p class="text-xs text-gray-500 mb-2">Auto-builds from Basic &amp; Further Information until you start typing. Use the button to rebuild the template.</p>
                                         <textarea name="description" id="description" rows="6"
                                             class="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 resize-none"
-                                            placeholder="Enter a detailed description of the product...">{{ form_data.description if form_data else '' }}</textarea>
+                                            placeholder="Template will populate automatically from product details">{{ form_data.description if form_data else '' }}</textarea>
                                     </div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div>
-                                            <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
-                                                <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                                                </svg>
-                                                Condition
-                                            </label>
-                                            <select name="condition" id="condition" required
-                                                class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 appearance-none cursor-pointer">
-                                                <option value="NEW" {% if form_data and form_data.condition == 'NEW' %}selected{% endif %}>✨ NEW</option>
-                                                <option value="EXCELLENT" {% if form_data and form_data.condition == 'EXCELLENT' %}selected{% endif %}>🌟 EXCELLENT</option>
-                                                <option value="VERYGOOD" {% if form_data and form_data.condition == 'VERYGOOD' %}selected{% endif %}>⭐ VERY GOOD</option>
-                                                <option value="GOOD" {% if form_data and form_data.condition == 'GOOD' %}selected{% endif %}>👍 GOOD</option>
-                                                <option value="FAIR" {% if form_data and form_data.condition == 'FAIR' %}selected{% endif %}>👌 FAIR</option>
-                                                <option value="POOR" {% if form_data and form_data.condition == 'POOR' %}selected{% endif %}>⚠️ POOR</option>
-                                            </select>
-                                        </div>
-                                <div class="group">
-                                    <label class="flex items-center text-sm font-semibold text-gray-700 mb-2">
-                                        <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-                                        </svg>
-                                        Status
-                                    </label>
-                                    <select name="status" id="status" required
-                                        class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200"
-                                        style="font-size: 16px;">
-                                        <option value="DRAFT" {% if not form_data or form_data.status == 'DRAFT' %}selected{% endif %}>📝 Draft</option>
-                                        <option value="ACTIVE" {% if form_data and form_data.status == 'ACTIVE' %}selected{% endif %}>✅ Active</option>
-                                        <option value="ARCHIVED" {% if form_data and form_data.status == 'ARCHIVED' %}selected{% endif %}>📦 Archived</option>
-                                    </select>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -1282,12 +1431,259 @@
 let lastKnownCategoryValue = '';
 const prefillDraftId = {{ prefill_draft_id if prefill_draft_id is not none else 'null' }};
 
+const EU_STANDARD_FOOTER = `
+<p><strong>ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID</strong></p>
+<p>All purchases include EU Taxes / Duties paid, i.e., nothing further is due on receipt of goods to any EU State.</p>
+<p><strong>WHY BUY FROM US</strong></p>
+<p>We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping, each item will be fully serviced and professionally packed.</p>
+<p><strong>SELL - TRADE - CONSIGN</strong></p>
+<p>If you are looking to sell, trade, or consign any of your classic gear, please contact us by message.</p>
+<p><strong>WORLDWIDE COLLECTION - DELIVERY</strong></p>
+<p>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam, and Chicago.</p>
+<p><strong>VALUATION SERVICE</strong></p>
+<p>If you require a valuation of any of your classic gear, please forward a brief description and pictures, and we will come back to you ASAP.</p>
+`.trim();
+
+const CONDITION_SCORE_MAP = {
+    NEW: 10,
+    MINT: 10,
+    EXCELLENT: 9,
+    VERYGOOD: 8,
+    VERY_GOOD: 8,
+    GOOD: 7,
+    FAIR: 6,
+    POOR: 5
+};
+
+const HANDEDNESS_LABELS = {
+    LEFT: 'Left-handed',
+    RIGHT: 'Right-handed',
+    AMBIDEXTROUS: 'Ambidextrous',
+    UNSPECIFIED: ''
+};
+
+const descriptionTextarea = document.getElementById('description');
+let descriptionEditorInstance = null;
+let suppressDescriptionChangeEvent = false;
+let descriptionTemplateTimeout = null;
+let isDescriptionAuto = descriptionTextarea ? !descriptionTextarea.value.trim() : true;
+
+function escapeHtml(value) {
+    if (!value && value !== 0) {
+        return '';
+    }
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function getInputValue(id) {
+    const el = document.getElementById(id);
+    return el ? (el.value || '').trim() : '';
+}
+
+function getSelectedOptionText(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+        return '';
+    }
+    const option = el.selectedOptions && el.selectedOptions[0];
+    return option ? option.textContent.trim() : (el.value || '').trim();
+}
+
+function getHandednessLabel(value) {
+    if (!value) {
+        return '';
+    }
+    return HANDEDNESS_LABELS[value] || value.replace(/_/g, ' ').toLowerCase();
+}
+
+function setDescriptionContent(html) {
+    if (!html) {
+        return;
+    }
+    const editor = window.tinymce?.get('description');
+    if (editor) {
+        suppressDescriptionChangeEvent = true;
+        editor.setContent(html);
+        suppressDescriptionChangeEvent = false;
+    } else if (descriptionTextarea) {
+        descriptionTextarea.value = html;
+    }
+}
+
+function buildDescriptionTemplate() {
+    const title = getInputValue('title');
+    const brand = getInputValue('brand');
+    const model = getInputValue('model');
+    const finish = getInputValue('finish');
+    const year = getInputValue('year');
+    const decade = getInputValue('decade');
+    const manufacturingCountry = getSelectedOptionText('manufacturing_country');
+    const bodyType = getInputValue('body_type');
+    const handednessRaw = getInputValue('handedness');
+    const handednessLabel = getHandednessLabel(handednessRaw);
+    const serialNumber = getInputValue('serial_number');
+    const caseStatusText = getSelectedOptionText('case_status');
+    const caseDetails = getInputValue('case_details');
+    const artistOwned = !!document.getElementById('artist_owned')?.checked;
+    const artistNamesValue = getInputValue('artist_names');
+    const conditionValue = getInputValue('condition').toUpperCase();
+    const conditionLabel = getSelectedOptionText('condition') || conditionValue;
+
+    const descriptorPieces = [brand, model].filter(Boolean);
+    const descriptor = descriptorPieces.join(' ').trim();
+
+    const attributeSegments = [];
+    if (bodyType) attributeSegments.push(`${escapeHtml(bodyType)} body`);
+    if (handednessLabel) attributeSegments.push(escapeHtml(handednessLabel));
+    if (manufacturingCountry && manufacturingCountry !== 'Select a country...') {
+        attributeSegments.push(`Crafted in ${escapeHtml(manufacturingCountry)}`);
+    }
+    if (serialNumber) attributeSegments.push(`Serial: ${escapeHtml(serialNumber)}`);
+    if (caseStatusText) {
+        const normalizedCaseStatus = caseStatusText.trim().toLowerCase();
+        if (normalizedCaseStatus && !['unspecified', '—', '-'].includes(normalizedCaseStatus)) {
+            attributeSegments.push(`Case: ${escapeHtml(caseStatusText)}`);
+        }
+    }
+    if (caseDetails) attributeSegments.push(`Case details: ${escapeHtml(caseDetails)}`);
+    if (artistOwned) {
+        const artistSummary = artistNamesValue ? `Artist owned (${escapeHtml(artistNamesValue)})` : 'Artist owned';
+        attributeSegments.push(artistSummary);
+    }
+
+    const paragraphs = [];
+    if (model) {
+        paragraphs.push(`<p><strong>${escapeHtml(model)}</strong></p>`);
+    }
+
+    if (descriptor) {
+        paragraphs.push(`<p>The following is a ${escapeHtml(descriptor)} ... details as follows:</p>`);
+    }
+
+    if (title) {
+        paragraphs.push(`<p><strong>${escapeHtml(title)}</strong></p>`);
+    }
+
+    if (!finish && !year && attributeSegments.length === 0) {
+        paragraphs.push('<p>Key specifications are outlined below:</p>');
+    }
+
+    if (finish) {
+        paragraphs.push(`<p>${escapeHtml(finish)}</p>`);
+    }
+
+    if (year) {
+        paragraphs.push(`<p>${escapeHtml(year)}</p>`);
+    } else if (decade) {
+        paragraphs.push(`<p>${escapeHtml(decade)}s</p>`);
+    }
+
+    if (attributeSegments.length) {
+        attributeSegments.forEach(segment => {
+            paragraphs.push(`<p>${segment}</p>`);
+        });
+    }
+
+    if (conditionValue) {
+        const score = CONDITION_SCORE_MAP[conditionValue] ?? '';
+        const cleanLabel = conditionLabel ? conditionLabel.replace(/^[^A-Za-z0-9]+/g, '').trim() : '';
+        const parts = [];
+        if (score) {
+            parts.push(`${score}/10`);
+        }
+        if (cleanLabel) {
+            parts.push(cleanLabel);
+        }
+        const conditionText = parts.length ? parts.join(' ') : conditionValue;
+        paragraphs.push(`<p>Condition: ${escapeHtml(conditionText)}</p>`);
+    }
+
+    paragraphs.push('<p><strong>Comments</strong>:</p>');
+    paragraphs.push('<p></p>');
+    paragraphs.push(EU_STANDARD_FOOTER);
+
+    return paragraphs.join('\n');
+}
+
+function queueDescriptionTemplate(force = false) {
+    if (!isDescriptionAuto && !force) {
+        return;
+    }
+    clearTimeout(descriptionTemplateTimeout);
+    descriptionTemplateTimeout = window.setTimeout(() => {
+        const template = buildDescriptionTemplate();
+        if (template) {
+            setDescriptionContent(template);
+        }
+    }, force ? 0 : 400);
+}
+
+function setupDescriptionTemplateAutomation() {
+    const watchedFields = [
+        'title',
+        'brand',
+        'model',
+        'finish',
+        'year',
+        'decade',
+        'manufacturing_country',
+        'body_type',
+        'handedness',
+        'serial_number',
+        'case_status',
+        'case_details',
+        'artist_owned',
+        'artist_names',
+        'condition'
+    ];
+
+    watchedFields.forEach((fieldId) => {
+        const element = document.getElementById(fieldId);
+        if (!element) {
+            return;
+        }
+        const events = element.type === 'checkbox' ? ['change'] : ['input', 'change'];
+        events.forEach((evt) =>
+            element.addEventListener(evt, () => {
+                queueDescriptionTemplate();
+            })
+        );
+    });
+
+    const regenerateButton = document.getElementById('regenerateDescription');
+    if (regenerateButton) {
+        regenerateButton.addEventListener('click', () => {
+            isDescriptionAuto = true;
+            queueDescriptionTemplate(true);
+        });
+    }
+
+    if (descriptionTextarea) {
+        descriptionTextarea.addEventListener('input', () => {
+            if (document.activeElement === descriptionTextarea && !suppressDescriptionChangeEvent) {
+                isDescriptionAuto = false;
+            }
+        });
+    }
+
+    if (isDescriptionAuto) {
+        queueDescriptionTemplate(true);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const shippingProfileSelect = document.getElementById('shipping_profile');
     const createProductBtn = document.getElementById('createProductBtn');
     const shippingProfileError = document.getElementById('shippingProfileError');
     let shippingProfilesLoaded = false;
     let shippingProfilesCache = [];
+
+    setupDescriptionTemplateAutomation();
 
     const deleteDraftBtn = document.getElementById('deleteDraftBtn');
     if (deleteDraftBtn) {
@@ -1303,14 +1699,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const manufacturingSelect = document.getElementById('manufacturing_country');
+    const manufacturingError = document.getElementById('manufacturingCountryError');
+
     function updateCreateButtonState() {
         if (!createProductBtn) {
             return;
         }
 
         const hasProfile = shippingProfileSelect && shippingProfileSelect.value && shippingProfileSelect.value.trim() !== '';
+        const hasCountry = manufacturingSelect && manufacturingSelect.value && manufacturingSelect.value.trim() !== '';
+        const readyForSubmit = hasProfile && hasCountry;
 
-        if (hasProfile) {
+        if (readyForSubmit) {
             createProductBtn.disabled = false;
             createProductBtn.classList.remove('opacity-50', 'cursor-not-allowed');
             createProductBtn.classList.add('hover:bg-blue-700');
@@ -1324,15 +1725,12 @@ document.addEventListener('DOMContentLoaded', function() {
             createProductBtn.disabled = true;
             createProductBtn.classList.add('opacity-50', 'cursor-not-allowed');
             createProductBtn.classList.remove('hover:bg-blue-700');
+            const showShippingError = !hasProfile && shippingProfilesLoaded;
             if (shippingProfileError) {
-                if (shippingProfilesLoaded) {
-                    shippingProfileError.classList.remove('hidden');
-                } else {
-                    shippingProfileError.classList.add('hidden');
-                }
+                shippingProfileError.classList.toggle('hidden', !showShippingError);
             }
-            if (shippingProfileSelect && shippingProfilesLoaded) {
-                shippingProfileSelect.classList.add('border-red-500');
+            if (shippingProfileSelect) {
+                shippingProfileSelect.classList.toggle('border-red-500', !!showShippingError);
             }
         }
     }
@@ -1348,6 +1746,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
+    }
+
+    if (manufacturingSelect) {
+        manufacturingSelect.addEventListener('change', updateCreateButtonState);
     }
 
     updateCreateButtonState();
@@ -2325,13 +2727,54 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    document.querySelectorAll('.metadata-toggle').forEach(button => {
+        const targetId = button.getAttribute('data-metadata-target');
+        const target = targetId ? document.getElementById(targetId) : null;
+        if (!target) {
+            return;
+        }
+        if (button.dataset.defaultState === 'collapsed') {
+            target.classList.add('hidden');
+        }
+        button.addEventListener('click', () => {
+            target.classList.toggle('hidden');
+            const icon = button.querySelector('svg');
+            if (icon) {
+                icon.classList.toggle('rotate-180');
+            }
+        });
+    });
+
     // Initialize TinyMCE - ADD THIS HERE
     tinymce.init({
         selector: '#description',
         plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount',
         toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat',
         height: 300,
-        menubar: false
+        menubar: false,
+        setup: (editor) => {
+            if (editor.id !== 'description') {
+                return;
+            }
+            descriptionEditorInstance = editor;
+            editor.on('init', () => {
+                if (isDescriptionAuto) {
+                    const template = buildDescriptionTemplate();
+                    if (template) {
+                        suppressDescriptionChangeEvent = true;
+                        editor.setContent(template);
+                        suppressDescriptionChangeEvent = false;
+                    }
+                }
+            });
+            const disableAuto = () => {
+                if (!suppressDescriptionChangeEvent && editor.hasFocus()) {
+                    isDescriptionAuto = false;
+                }
+            };
+            editor.on('input', disableAuto);
+            editor.on('change', disableAuto);
+        }
     });
 
     // Open the first section by default
@@ -2727,34 +3170,36 @@ function initializeSortable() {
         setValueIfExists('decade', data.decade);
         setValueIfExists('category', data.category);
         setValueIfExists('finish', data.finish);
+        setValueIfExists('manufacturing_country', data.manufacturing_country ?? '');
+
+        const extraAttributes = (data.extra_attributes && typeof data.extra_attributes === 'object' && !Array.isArray(data.extra_attributes))
+            ? data.extra_attributes
+            : {};
+        setCheckedIfExists('extra_handmade', !!extraAttributes.handmade);
+        setValueIfExists('body_type', extraAttributes.body_type ?? '');
+
+        const handednessValue = (data.handedness !== undefined && data.handedness !== null && data.handedness !== '')
+            ? data.handedness
+            : 'UNSPECIFIED';
+        setValueIfExists('handedness', handednessValue);
+        setValueIfExists('serial_number', data.serial_number ?? '');
+        const caseStatusValue = (data.case_status !== undefined && data.case_status !== null && data.case_status !== '')
+            ? data.case_status
+            : 'UNSPECIFIED';
+        setValueIfExists('case_status', caseStatusValue);
+        setValueIfExists('case_details', data.case_details ?? '');
+        setCheckedIfExists('artist_owned', !!data.artist_owned);
+
+        const artistNamesValue = Array.isArray(data.artist_names)
+            ? data.artist_names.join(', ')
+            : (data.artist_names ?? '');
+        setValueIfExists('artist_names', artistNamesValue);
         
         // Description & Condition
-        // Add standard footer to description
-        const standardFooter = '<br/><br/>' +
-            '<p><strong>ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID</strong></p>' +
-            '<br/>' +
-            '<p>All purchases include EU Taxes / Duties paid, i.e., nothing further is due on receipt of goods to any EU State.</p>' +
-            '<br/>' +
-            '<p><strong>WHY BUY FROM US</strong></p>' +
-            '<br/>' +
-            '<p>We are one of the world\'s leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping, each item will be fully serviced and professionally packed.</p>' +
-            '<br/>' +
-            '<p><strong>SELL - TRADE - CONSIGN</strong></p>' +
-            '<br/>' +
-            '<p>If you are looking to sell, trade, or consign any of your classic gear, please contact us by message.</p>' +
-            '<br/>' +
-            '<p><strong>WORLDWIDE COLLECTION - DELIVERY</strong></p>' +
-            '<br/>' +
-            '<p>We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam, and Chicago.</p>' +
-            '<br/>' +
-            '<p><strong>VALUATION SERVICE</strong></p>' +
-            '<br/>' +
-            '<p>If you require a valuation of any of your classic gear, please forward a brief description and pictures, and we will come back to you ASAP.</p>';
-        
         let description = data.description || '';
         // Only add footer if it's not already there
         if (!description.includes('ALL EU PURCHASES ARE DELIVERED WITH TAXES AND DUTIES PAID')) {
-            description += standardFooter;
+            description += `\n${EU_STANDARD_FOOTER}`;
         }
         setValueIfExists('description', description);
         setValueIfExists('condition', data.condition);
@@ -6304,3 +6749,40 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 </style>
 {% endblock %}
+    function setupHandednessLock() {
+        const categoryInput = document.getElementById('category');
+        const handednessSelect = document.getElementById('handedness');
+        const lockNote = document.getElementById('handedness-lock-note');
+        if (!categoryInput || !handednessSelect) return;
+
+        const enforceLock = () => {
+            const categoryValue = (categoryInput.value || '').toLowerCase();
+            const isLeftCategory = categoryValue.includes('left-handed');
+            if (isLeftCategory) {
+                const leftExists = Array.from(handednessSelect.options || []).some(opt => opt.value === 'LEFT');
+                if (leftExists) {
+                    handednessSelect.value = 'LEFT';
+                }
+                handednessSelect.dataset.locked = 'true';
+                handednessSelect.classList.add('bg-gray-100', 'cursor-not-allowed', 'text-gray-600');
+                handednessSelect.title = 'Handedness is auto-set because the selected category is left-handed.';
+                if (lockNote) lockNote.classList.remove('hidden');
+            } else {
+                delete handednessSelect.dataset.locked;
+                handednessSelect.classList.remove('bg-gray-100', 'cursor-not-allowed', 'text-gray-600');
+                handednessSelect.title = '';
+                if (lockNote) lockNote.classList.add('hidden');
+            }
+        };
+
+        handednessSelect.addEventListener('change', () => {
+            if (handednessSelect.dataset.locked === 'true') {
+                handednessSelect.value = 'LEFT';
+            }
+        });
+
+        categoryInput.addEventListener('input', enforceLock);
+        categoryInput.addEventListener('change', enforceLock);
+        enforceLock();
+    }
+    setupHandednessLock();

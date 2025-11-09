@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, select, func
+from sqlalchemy import text, select, func, or_
 from sqlalchemy.orm import selectinload
 import json
 from typing import Optional, List, Dict, Any
@@ -11,6 +11,7 @@ from app.database import get_session
 from app.core.templates import templates
 from app.core.config import Settings, get_settings
 from app.services.reconciliation_service import process_reconciliation
+from app.services.ebay_service import EbayService
 from app.models import SyncEvent
 from app.models.product import Product, ProductStatus
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
@@ -31,6 +32,160 @@ async def reports_index(request: Request):
     return templates.TemplateResponse("reports/index.html", {
         "request": request
     })
+
+
+@router.get("/crazylister-coverage", response_class=HTMLResponse)
+async def crazylister_coverage_report(
+    request: Request,
+    status: str = Query("all", description="Filter by template status"),
+    search: Optional[str] = Query(None, description="Search by SKU, brand, or title"),
+    product_status: str = Query("active", description="Filter by product status"),
+):
+    """Show which eBay listings have the CrazyLister template applied."""
+
+    valid_statuses = {"all", "applied", "missing", "unknown"}
+    status_filter = status.lower() if status else "all"
+    if status_filter not in valid_statuses:
+        status_filter = "all"
+
+    product_status_options = [
+        {"value": "all", "label": "All products"},
+        {"value": "active", "label": "Active"},
+        {"value": "draft", "label": "Draft"},
+        {"value": "sold", "label": "Sold"},
+        {"value": "archived", "label": "Archived"},
+    ]
+
+    normalized_product_status = (product_status or "active").lower()
+    valid_product_status_values = {opt["value"] for opt in product_status_options}
+    if normalized_product_status not in valid_product_status_values:
+        normalized_product_status = "active"
+
+    async with get_session() as db:
+        stmt = (
+            select(
+                Product.id.label("product_id"),
+                Product.sku,
+                Product.brand,
+                Product.model,
+                Product.title,
+                Product.primary_image,
+                Product.status.label("product_status"),
+                PlatformCommon.id.label("platform_id"),
+                PlatformCommon.external_id.label("ebay_item_id"),
+                PlatformCommon.listing_url,
+                PlatformCommon.status.label("platform_status"),
+                PlatformCommon.updated_at.label("platform_updated_at"),
+                EbayListing.listing_status,
+                EbayListing.updated_at.label("listing_updated_at"),
+                EbayListing.listing_data["uses_crazylister"].astext.label("uses_crazylister"),
+            )
+            .join(PlatformCommon, PlatformCommon.product_id == Product.id)
+            .join(EbayListing, EbayListing.platform_id == PlatformCommon.id)
+            .where(PlatformCommon.platform_name == "ebay")
+            .order_by(func.coalesce(EbayListing.updated_at, PlatformCommon.updated_at).desc())
+        )
+
+        if normalized_product_status != "all":
+            stmt = stmt.where(Product.status == normalized_product_status.upper())
+
+        if search:
+            search_term = f"%{search.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Product.sku.ilike(search_term),
+                    Product.brand.ilike(search_term),
+                    Product.model.ilike(search_term),
+                    Product.title.ilike(search_term),
+                )
+            )
+
+        result = await db.execute(stmt)
+        rows = result.fetchall()
+
+    def classify_flag(raw_value: Any) -> str:
+        if raw_value is None:
+            return "unknown"
+        if isinstance(raw_value, bool):
+            return "applied" if raw_value else "missing"
+        normalized = str(raw_value).strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return "applied"
+        if normalized in {"false", "0", "no"}:
+            return "missing"
+        return "unknown"
+
+    prepared_rows = []
+    summary_counts = {"applied": 0, "missing": 0, "unknown": 0}
+
+    for row in rows:
+        mapping = row._mapping
+        template_status = classify_flag(mapping.get("uses_crazylister"))
+        summary_counts[template_status] += 1
+
+        last_refreshed = mapping.get("listing_updated_at") or mapping.get("platform_updated_at")
+
+        prepared_rows.append({
+            "product_id": mapping.get("product_id"),
+            "platform_id": mapping.get("platform_id"),
+            "sku": mapping.get("sku"),
+            "brand": mapping.get("brand"),
+            "model": mapping.get("model"),
+            "title": mapping.get("title"),
+            "primary_image": mapping.get("primary_image"),
+            "product_status": mapping.get("product_status"),
+            "platform_status": mapping.get("platform_status"),
+            "listing_status": mapping.get("listing_status"),
+            "ebay_item_id": mapping.get("ebay_item_id"),
+            "listing_url": mapping.get("listing_url"),
+            "template_status": template_status,
+            "last_refreshed": last_refreshed,
+        })
+
+    filtered_rows = (
+        prepared_rows if status_filter == "all"
+        else [row for row in prepared_rows if row["template_status"] == status_filter]
+    )
+
+    summary_counts["total"] = len(prepared_rows)
+    coverage_pct = 0.0
+    if summary_counts["total"]:
+        coverage_pct = (summary_counts["applied"] / summary_counts["total"]) * 100
+
+    status_options = [
+        {"value": "all", "label": "All statuses"},
+        {"value": "applied", "label": "Template applied"},
+        {"value": "missing", "label": "Missing template"},
+        {"value": "unknown", "label": "Unknown / not refreshed"},
+    ]
+
+    return templates.TemplateResponse("reports/crazylister_coverage.html", {
+        "request": request,
+        "rows": filtered_rows,
+        "status_filter": status_filter,
+        "status_options": status_options,
+        "product_status_filter": normalized_product_status,
+        "product_status_options": product_status_options,
+        "search_query": search or "",
+        "summary_counts": summary_counts,
+        "coverage_pct": coverage_pct,
+        "filtered_count": len(filtered_rows),
+    })
+
+
+@router.post("/crazylister-coverage/{platform_id}/refresh")
+async def refresh_single_crazylister_listing(
+    platform_id: int,
+    settings: Settings = Depends(get_settings),
+):
+    async with get_session() as db:
+        service = EbayService(db, settings)
+        result = await service.refresh_single_listing_metadata(platform_id=platform_id, dry_run=False)
+
+    if result["status"] == "missing":
+        raise HTTPException(status_code=404, detail=result.get("message", "Listing not found"))
+
+    return result
 
 
 @router.get("/status-mismatches", response_class=HTMLResponse)

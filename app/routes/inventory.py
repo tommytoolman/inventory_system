@@ -34,13 +34,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, get_settings
-from app.core.enums import PlatformName, ProductCondition
+from app.core.enums import (
+    PlatformName,
+    ProductCondition,
+    ProductStatus,
+    Handedness,
+    ManufacturingCountry,
+    InventoryLocation,
+    Storefront,
+    CaseStatus,
+)
 from app.core.events import StockUpdateEvent
 from app.core.exceptions import ProductCreationError, PlatformIntegrationError
 from app.database import async_session
 from app.dependencies import get_db, templates
-from app.models.product import Product, ProductStatus, ProductCondition
+from app.models.product import Product
 from app.models.category_mappings import ReverbCategory
+from app.data.spec_fields import SPEC_FIELD_MAP
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.shipping import ShippingProfile
 from app.models.vr import VRListing
@@ -2211,6 +2221,11 @@ async def add_product_form(
             prefill_draft_id = draft.id
             form_data = _serialize_draft_product(draft)
 
+    manufacturing_countries = list(ManufacturingCountry)
+    handedness_options = list(Handedness)
+    case_status_options = list(CaseStatus)
+    body_type_options = SPEC_FIELD_MAP.get("body_type", {}).get("options", [])
+
     return templates.TemplateResponse(
         "inventory/add.html",
         {
@@ -2225,6 +2240,10 @@ async def add_product_form(
             "tinymce_api_key": settings.TINYMCE_API_KEY,  # This is important
             "form_data": form_data,
             "prefill_draft_id": prefill_draft_id,
+            "manufacturing_countries": manufacturing_countries,
+            "handedness_options": handedness_options,
+            "case_status_options": case_status_options,
+            "body_type_options": body_type_options,
         }
     )
 
@@ -2417,7 +2436,11 @@ async def add_product(
                     "ebay_status": "error",
                     "reverb_status": "error",
                     "vr_status": "error",
-                    "shopify_status": "error"
+                    "shopify_status": "error",
+                    "manufacturing_countries": manufacturing_countries,
+                    "handedness_options": handedness_options,
+                    "case_status_options": case_status_options,
+                    "body_type_options": body_type_options,
                 },
                 status_code=400
             )
@@ -2438,7 +2461,11 @@ async def add_product(
                     "ebay_status": "error",
                     "reverb_status": "error",
                     "vr_status": "error",
-                    "shopify_status": "error"
+                    "shopify_status": "error",
+                    "manufacturing_countries": manufacturing_countries,
+                    "handedness_options": handedness_options,
+                    "case_status_options": case_status_options,
+                    "body_type_options": body_type_options,
                 },
                 status_code=400
             )
@@ -3948,6 +3975,53 @@ def _serialize_draft_product(draft: Product) -> Dict[str, Any]:
         "external_link": draft.external_link,
     }
 
+    artist_names = draft.artist_names or []
+    if isinstance(artist_names, str):
+        try:
+            parsed_names = json.loads(artist_names)
+            if isinstance(parsed_names, list):
+                artist_names = parsed_names
+            elif parsed_names:
+                artist_names = [parsed_names]
+            else:
+                artist_names = []
+        except json.JSONDecodeError:
+            artist_names = [artist_names]
+
+    extra_attributes: Dict[str, Any] = draft.extra_attributes or {}
+    if isinstance(extra_attributes, str):
+        try:
+            maybe_attrs = json.loads(extra_attributes)
+            if isinstance(maybe_attrs, dict):
+                extra_attributes = maybe_attrs
+        except json.JSONDecodeError:
+            extra_attributes = {}
+
+    handedness_value = None
+    if draft.handedness:
+        handedness_value = getattr(draft.handedness, "name", draft.handedness)
+
+    case_status_value = None
+    if draft.case_status:
+        case_status_value = getattr(draft.case_status, "name", draft.case_status)
+
+    manufacturing_country_value = None
+    if draft.manufacturing_country:
+        manufacturing_country_value = getattr(draft.manufacturing_country, "value", draft.manufacturing_country)
+
+    draft_data.update(
+        {
+            "handedness": handedness_value,
+            "serial_number": draft.serial_number,
+            "case_status": case_status_value,
+            "case_details": draft.case_details,
+            "artist_owned": draft.artist_owned,
+            "artist_names": artist_names,
+            "extra_attributes": extra_attributes,
+            "manufacturing_country": manufacturing_country_value,
+        }
+    )
+
     package_dimensions = draft.package_dimensions or {}
     if isinstance(package_dimensions, dict) and "platform_data" in package_dimensions:
         draft_data["platform_data"] = package_dimensions["platform_data"]
@@ -3984,12 +4058,34 @@ async def edit_product_form(
         select(PlatformCommon).where(PlatformCommon.product_id == product_id)
     )
     platform_links = platform_links_result.scalars().all()
+    categories_result = await db.execute(
+        select(ReverbCategory.full_path)
+        .where(ReverbCategory.full_path.isnot(None))
+        .order_by(ReverbCategory.full_path)
+    )
+    canonical_categories: List[str] = []
+    seen_categories: set[str] = set()
+    for (full_path,) in categories_result.all():
+        if not full_path:
+            continue
+        normalized = full_path.strip()
+        if not normalized or normalized in seen_categories:
+            continue
+        canonical_categories.append(normalized)
+        seen_categories.add(normalized)
 
     base_price_value = float(product.base_price or 0)
     platforms: Dict[str, Dict[str, Any]] = {
         name: _build_platform_stub(name, base_price_value)
         for name in ["shopify", "reverb", "ebay", "vr"]
     }
+    brand_result = await db.execute(select(Product.brand).distinct().order_by(Product.brand))
+    brand_options = [row[0] for row in brand_result.fetchall() if row[0]]
+
+    shipping_profiles_result = await db.execute(
+        select(ShippingProfile).order_by(ShippingProfile.name)
+    )
+    shipping_profiles = shipping_profiles_result.scalars().all()
 
     for link in platform_links:
         platform_key = (link.platform_name or "").lower()
@@ -4048,7 +4144,16 @@ async def edit_product_form(
             "product": product,
             "platforms": platforms,
             "conditions": ProductCondition,
-            "statuses": ProductStatus
+            "statuses": ProductStatus,
+            "handedness_options": list(Handedness),
+            "manufacturing_countries": list(ManufacturingCountry),
+            "case_status_options": list(CaseStatus),
+            "inventory_locations": list(InventoryLocation),
+            "storefront_options": list(Storefront),
+            "brand_options": brand_options,
+            "canonical_categories": canonical_categories,
+            "shipping_profiles": shipping_profiles,
+            "body_type_options": SPEC_FIELD_MAP.get("body_type", {}).get("options", []),
         }
     )
 
@@ -4074,6 +4179,11 @@ async def update_product(
         "description": product.description,
         "quantity": product.quantity,
         "base_price": product.base_price,
+        "category": product.category,
+        "serial_number": product.serial_number,
+        "handedness": product.handedness,
+        "manufacturing_country": product.manufacturing_country,
+        "extra_attributes": json.loads(json.dumps(product.extra_attributes or {})),
     }
     
     # Update product fields with validation
@@ -4088,10 +4198,96 @@ async def update_product(
             product.year = int(year_str)
         except ValueError:
             pass  # Keep existing year if invalid
+
+    decade_value = form_data.get("decade")
+    if decade_value is not None:
+        decade_value = decade_value.strip()
+        if decade_value == "":
+            product.decade = None
+        else:
+            if decade_value.lower().endswith("s"):
+                decade_value = decade_value[:-1]
+            try:
+                product.decade = int(decade_value)
+            except ValueError:
+                pass
     
     product.finish = form_data.get('finish') or product.finish
     product.category = form_data.get('category') or product.category
     product.description = form_data.get('description') or product.description
+
+    product.serial_number = form_data.get("serial_number") or None
+
+    handedness_value = form_data.get("handedness")
+    if handedness_value:
+        try:
+            product.handedness = Handedness[handedness_value]
+        except KeyError:
+            pass
+
+    product.artist_owned = form_data.get("artist_owned") == "on"
+    artist_names_raw = form_data.get("artist_names", "")
+    if artist_names_raw:
+        parsed_names = [
+            name.strip()
+            for name in re.split(r"[,\\n]", artist_names_raw)
+            if name.strip()
+        ]
+        product.artist_names = parsed_names
+    else:
+        product.artist_names = []
+
+    manufacturing_country_value = (form_data.get("manufacturing_country") or "").strip()
+    if manufacturing_country_value:
+        try:
+            product.manufacturing_country = ManufacturingCountry(manufacturing_country_value)
+        except ValueError:
+            pass
+    else:
+        product.manufacturing_country = None
+
+    inventory_location_value = form_data.get("inventory_location")
+    if inventory_location_value:
+        try:
+            product.inventory_location = InventoryLocation[inventory_location_value]
+        except KeyError:
+            pass
+
+    storefront_value = form_data.get("storefront")
+    if storefront_value:
+        try:
+            product.storefront = Storefront[storefront_value]
+        except KeyError:
+            pass
+
+    case_status_value = form_data.get("case_status")
+    if case_status_value:
+        try:
+            product.case_status = CaseStatus[case_status_value]
+        except KeyError:
+            pass
+
+    product.case_details = form_data.get("case_details") or None
+
+    extra_attributes = dict(product.extra_attributes or {})
+    extra_attributes["handmade"] = form_data.get("extra_handmade") == "on"
+    body_type_value = (form_data.get("body_type") or "").strip()
+    if body_type_value:
+        extra_attributes["body_type"] = body_type_value
+    else:
+        extra_attributes.pop("body_type", None)
+    product.extra_attributes = extra_attributes
+
+    shipping_profile_value = form_data.get("shipping_profile_id") or form_data.get("shipping_profile")
+    if shipping_profile_value is not None:
+        shipping_profile_value = str(shipping_profile_value).strip()
+        if shipping_profile_value == "":
+            product.shipping_profile_id = None
+        else:
+            try:
+                product.shipping_profile_id = int(shipping_profile_value)
+            except ValueError:
+                logger.warning("Invalid shipping profile value '%s' ignored", shipping_profile_value)
     
     # Handle price with validation
     try:

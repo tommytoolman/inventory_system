@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}CrazyLister Coverage - RIFF{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 mb-16">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">CrazyLister Coverage</h1>
+        <p class="text-gray-600">
+            Track which eBay listings have the CrazyLister template applied. Use this to prioritise refresh runs and spot listings that still need the branding treatment.
+        </p>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="flex flex-wrap gap-3 mb-8 text-sm">
+        <a href="https://crazylister.com/application/user/listings?selectedSellerId=londonvintagegts&statusFilter=Active"
+           target="_blank"
+           rel="noopener"
+           class="px-4 py-3 rounded-lg border border-purple-200 bg-white shadow-sm text-center flex items-center justify-center hover:border-purple-300 hover:shadow transition">
+            <div>
+                <img src="https://crazylister.com/dist/20bd1eca4c7adf7da5d3d3ad6f38f32f.svg"
+                     alt="CrazyLister"
+                     class="h-8 w-auto mx-auto">
+            </div>
+        </a>
+        <div class="px-4 py-3 rounded-lg border border-gray-200 bg-white shadow-sm text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Template applied</p>
+            <p class="text-xl font-semibold text-green-600">{{ summary_counts.applied }}</p>
+        </div>
+        <div class="px-4 py-3 rounded-lg border border-gray-200 bg-white shadow-sm text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Missing template</p>
+            <p class="text-xl font-semibold text-red-600">{{ summary_counts.missing }}</p>
+        </div>
+        <div class="px-4 py-3 rounded-lg border border-gray-200 bg-white shadow-sm text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Awaiting refresh</p>
+            <p class="text-xl font-semibold text-yellow-600">{{ summary_counts.unknown }}</p>
+        </div>
+        <div class="px-4 py-3 rounded-lg border border-gray-200 bg-white shadow-sm text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Coverage</p>
+            <p class="text-xl font-semibold text-blue-600">{{ "%.1f"|format(coverage_pct) }}%</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="mb-8 bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-sm">
+        <form method="get" action="{{ request.url.path }}" class="flex flex-col md:flex-row gap-4 items-start md:items-end" id="coverage-filter-form">
+            <div class="w-full md:w-56">
+                <label for="status" class="block text-sm font-medium text-gray-700 mb-1">Template status</label>
+                <select id="status" name="status" class="w-full p-2 border border-gray-300 rounded-lg auto-submit-select">
+                    {% for option in status_options %}
+                    <option value="{{ option.value }}" {% if option.value == status_filter %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="w-full md:w-56">
+                <label for="product_status" class="block text-sm font-medium text-gray-700 mb-1">Product status</label>
+                <select id="product_status" name="product_status" class="w-full p-2 border border-gray-300 rounded-lg auto-submit-select">
+                    {% for option in product_status_options %}
+                    <option value="{{ option.value }}" {% if option.value == product_status_filter %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex-1 w-full">
+                <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <input id="search"
+                       type="text"
+                       name="search"
+                       value="{{ search_query }}"
+                       placeholder="Search by SKU, brand, or product title"
+                       class="w-full p-2 border border-gray-300 rounded-lg auto-submit-input" />
+            </div>
+            <a href="{{ request.url.path }}" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
+                Reset
+            </a>
+        </form>
+        <p class="text-sm text-gray-500 mt-3">
+            Showing {{ filtered_count }} of {{ summary_counts.total }} listings.
+        </p>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-xl shadow border border-gray-100 overflow-hidden">
+        {% if rows %}
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Refresh</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Refreshed</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% set badge_colors = {
+                    'applied': 'bg-green-100 text-green-800 border-green-200',
+                    'missing': 'bg-red-100 text-red-800 border-red-200',
+                    'unknown': 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                } %}
+                {% for row in rows %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-3 py-4">
+                        {% if (row.listing_status or '').lower() != 'active' %}
+                        <button type="button"
+                                class="refresh-meta-btn w-full flex flex-col items-center text-gray-600 text-[10px] font-semibold gap-1 border border-gray-200 rounded-lg px-2 py-2 hover:border-green-400 hover:text-green-600 transition"
+                                data-platform-id="{{ row.platform_id }}">
+                            <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.6"
+                                      d="M4 4v5h5M20 20v-5h-5M6.5 17.5a7.5 7.5 0 0011.5-5.5M17.5 6.5a7.5 7.5 0 00-11.5 5.5" />
+                            </svg>
+                            <span class="leading-tight text-center">Refresh<br>metadata</span>
+                        </button>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if row.primary_image %}
+                        <img src="{{ row.primary_image }}" alt="{{ row.brand or 'Product' }}" class="w-16 h-16 rounded object-cover border border-gray-200">
+                        {% else %}
+                        <div class="w-16 h-16 rounded bg-gray-100 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-xs">
+                            No Image
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        {% set full_model = row.model or '' %}
+                        {% set display_model = full_model if full_model|length <= 60 else full_model[:57].rstrip() ~ ' …' %}
+                        {% set full_title = row.title or 'No product title' %}
+                        {% set display_title = full_title if full_title|length <= 60 else full_title[:57].rstrip() ~ ' …' %}
+                        <p class="text-sm font-semibold text-gray-900" title="{{ (row.brand or '') ~ (' · ' ~ full_model if full_model else '') }}">
+                            {{ row.brand or 'Unknown Brand' }}
+                            {% if full_model %}
+                                · <span title="{{ full_model }}">{{ display_model }}</span>
+                            {% endif %}
+                        </p>
+                        <p class="text-sm text-gray-600" title="{{ full_title }}">{{ display_title }}</p>
+                        <p class="text-xs text-gray-500 mt-1">SKU: {{ row.sku }}</p>
+                    </td>
+                    <td class="px-6 py-4 text-sm">
+                        {% set product_badge = {
+                            'active': 'bg-green-100 text-green-800 border-green-200',
+                            'draft': 'bg-gray-100 text-gray-800 border-gray-200',
+                            'sold': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+                            'archived': 'bg-gray-100 text-gray-500 border-gray-200'
+                        } %}
+                        {% set product_status_lower = row.product_status|lower if row.product_status else 'unknown' %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full border text-xs font-semibold {{ product_badge.get(product_status_lower, 'bg-gray-100 text-gray-700 border-gray-200') }}">
+                            {{ row.product_status|capitalize if row.product_status else 'Unknown' }}
+                        </span>
+                        {% set ebay_status = (row.listing_status or '').lower() %}
+                        {% set ebay_badges = {
+                            'active': 'text-green-600 font-semibold',
+                            'ended': 'text-gray-600 font-medium',
+                            'sold': 'text-indigo-600 font-semibold',
+                            'unsold': 'text-gray-500'
+                        } %}
+                        <div class="mt-2 text-sm">
+                            <span class="text-gray-500">eBay:</span>
+                            <span class="{{ ebay_badges.get(ebay_status, 'text-gray-700 font-medium') }}">
+                                {{ row.listing_status or 'n/a' }}
+                            </span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4">
+                        {% set badge_class = badge_colors.get(row.template_status, 'bg-gray-100 text-gray-800 border-gray-200') %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium {{ badge_class }}">
+                            {% if row.template_status == 'applied' %}
+                                Template applied
+                            {% elif row.template_status == 'missing' %}
+                                Missing template
+                            {% else %}
+                                Awaiting refresh
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-700">
+                        {% if row.last_refreshed %}
+                            {{ row.last_refreshed.strftime('%Y-%m-%d %H:%M') }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-700">
+                        <div class="flex flex-col gap-2">
+                            <a href="/inventory/product/{{ row.product_id }}" class="text-blue-600 hover:text-blue-800 font-medium" target="_blank">
+                                View product
+                            </a>
+                            {% if row.listing_url %}
+                            <a href="{{ row.listing_url }}" class="text-gray-600 hover:text-gray-800 text-sm" target="_blank" rel="noopener">
+                                eBay listing →
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="p-10 text-center text-gray-500">
+            No listings match the current filters. Try widening your search or run the metadata refresh first.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (function () {
+        const form = document.getElementById('coverage-filter-form');
+        if (!form) return;
+
+        const debounceDelay = 1500;
+        let debounceTimer = null;
+
+        function scheduleSubmit() {
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+            debounceTimer = setTimeout(() => form.submit(), debounceDelay);
+        }
+
+        const autoInputs = form.querySelectorAll('.auto-submit-input');
+        autoInputs.forEach((input) => {
+            input.addEventListener('input', scheduleSubmit);
+        });
+
+        const autoSelects = form.querySelectorAll('.auto-submit-select');
+        autoSelects.forEach((select) => {
+            select.addEventListener('change', scheduleSubmit);
+        });
+
+        const refreshButtons = document.querySelectorAll('.refresh-meta-btn');
+        refreshButtons.forEach((button) => {
+            button.addEventListener('click', async () => {
+                if (button.dataset.loading === '1') {
+                    return;
+                }
+                const platformId = button.dataset.platformId;
+                if (!platformId) return;
+
+                const icon = button.querySelector('svg');
+                button.dataset.loading = '1';
+                button.classList.add('opacity-60', 'pointer-events-none');
+                if (icon) {
+                    icon.classList.add('animate-spin');
+                }
+
+                try {
+                    const response = await fetch(`/reports/crazylister-coverage/${platformId}/refresh`, {
+                        method: 'POST',
+                    });
+
+                    if (!response.ok) {
+                        const detail = await response.json().catch(() => ({}));
+                        throw new Error(detail.detail || 'Failed to refresh metadata');
+                    }
+
+                    showNotification('Metadata refresh requested. Reloading...', 'success');
+                    setTimeout(() => window.location.reload(), 1200);
+                } catch (error) {
+                    console.error(error);
+                    showNotification(error.message || 'Failed to refresh metadata', 'error');
+                    button.classList.remove('opacity-60', 'pointer-events-none');
+                    if (icon) {
+                        icon.classList.remove('animate-spin');
+                    }
+                    button.dataset.loading = '0';
+                }
+            });
+        });
+    })();
+</script>
+{% endblock %}

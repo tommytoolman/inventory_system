@@ -417,6 +417,8 @@ async def _create_product_from_reverb(session: AsyncSession, reverb_data: dict) 
         first_video = videos[0] or {}
         product.video_url = first_video.get('url') or product.video_url
 
+    ReverbService.apply_metadata_from_reverb(product, reverb_data)
+
     session.add(product)
     await session.flush()
 

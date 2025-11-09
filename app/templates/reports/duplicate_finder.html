@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Duplicate Finder - RIFF{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Duplicate Finder</h1>
+        <p class="text-gray-500">High-confidence matches based on brand, model, finish, year, price, and serial numbers.</p>
+    </div>
+
+    <div class="bg-white shadow rounded-lg p-5 mb-6">
+        <form method="get" id="dupFilters" class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div class="flex flex-wrap gap-4 text-sm text-gray-600">
+                <div><span class="font-semibold text-gray-900">{{ pairs|length }}</span> potential pairs</div>
+                <div><span class="font-semibold text-gray-900">{{ summary.serial_matches }}</span> serial matches</div>
+                <div><span class="font-semibold text-gray-900">{{ summary.pairs * 2 }}</span> items analysed</div>
+            </div>
+            <div class="flex flex-wrap items-end gap-4">
+                <label class="flex items-center gap-2 text-xs font-medium text-gray-500">
+                    <span>Minimum Score:</span>
+                    <input type="number" name="min_score" value="{{ min_score }}" min="50" max="100"
+                           class="w-20 rounded-md border-gray-200 text-sm text-right focus:border-indigo-500 focus:ring-indigo-500">
+                </label>
+                <label class="flex items-center gap-2 text-xs font-medium text-gray-500">
+                    <span>Result Limit:</span>
+                    <input type="number" name="limit" value="{{ limit }}" min="20" max="1000"
+                           class="w-24 rounded-md border-gray-200 text-sm text-right focus:border-indigo-500 focus:ring-indigo-500">
+                </label>
+                <label class="inline-flex items-center text-sm text-gray-700">
+                    <input type="checkbox" name="include_archived" value="true" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                           {% if include_archived %}checked{% endif %}>
+                    <span class="ml-2">Include archived</span>
+                </label>
+            </div>
+        </form>
+    </div>
+
+    {% if pairs %}
+    <div class="bg-white shadow overflow-hidden rounded-lg">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product A</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product B</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Match Details</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for pair in pairs %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-4 text-center">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold {% if pair.score == 100 %}bg-red-100 text-red-700{% elif pair.score >= 95 %}bg-amber-100 text-amber-700{% else %}bg-yellow-100 text-yellow-700{% endif %}">
+                            {{ pair.score }}%
+                        </span>
+                    </td>
+                    <td class="px-4 py-4">
+                        <div class="flex items-center space-x-3">
+                            {% if pair.product_a.image %}
+                                <img src="{{ pair.product_a.image }}" alt="" class="w-12 h-12 rounded object-cover border">
+                            {% else %}
+                                <div class="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-400">N/A</div>
+                            {% endif %}
+                            <div>
+                                <a href="/inventory/product/{{ pair.product_a.id }}" class="font-semibold text-indigo-600 hover:text-indigo-800 text-sm">
+                                    {{ pair.product_a.brand }} {{ pair.product_a.model }}
+                                </a>
+                                <p class="text-xs text-gray-500">SKU: {{ pair.product_a.sku or '—' }}</p>
+                                <p class="text-xs text-gray-500">{{ pair.product_a.finish or 'Finish N/A' }} • {{ pair.product_a.year or 'Year N/A' }}</p>
+                                <p class="text-xs text-gray-500">{{ "£{:,.0f}".format(pair.product_a.price or 0) }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-4">
+                        <div class="flex items-center space-x-3">
+                            {% if pair.product_b.image %}
+                                <img src="{{ pair.product_b.image }}" alt="" class="w-12 h-12 rounded object-cover border">
+                            {% else %}
+                                <div class="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-400">N/A</div>
+                            {% endif %}
+                            <div>
+                                <a href="/inventory/product/{{ pair.product_b.id }}" class="font-semibold text-indigo-600 hover:text-indigo-800 text-sm">
+                                    {{ pair.product_b.brand }} {{ pair.product_b.model }}
+                                </a>
+                                <p class="text-xs text-gray-500">SKU: {{ pair.product_b.sku or '—' }}</p>
+                                <p class="text-xs text-gray-500">{{ pair.product_b.finish or 'Finish N/A' }} • {{ pair.product_b.year or 'Year N/A' }}</p>
+                                <p class="text-xs text-gray-500">{{ "£{:,.0f}".format(pair.product_b.price or 0) }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-4">
+                        <ul class="text-xs text-gray-600 list-disc pl-5 space-y-1">
+                            {% for reason in pair.reason %}
+                                <li>{{ reason }}</li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <div class="bg-white rounded-lg shadow p-6 text-center text-gray-500">
+            No potential duplicates found for the selected criteria.
+        </div>
+    {% endif %}
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('dupFilters');
+    if (!form) return;
+    let debounce;
+    const triggerSubmit = () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => form.submit(), 2000);
+    };
+    const clampInput = (input, min, max) => {
+        input.addEventListener('change', () => {
+            let value = parseInt(input.value, 10);
+            if (Number.isNaN(value)) return;
+            if (value < min) value = min;
+            if (max !== null && value > max) value = max;
+            input.value = value;
+        });
+    };
+    form.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', triggerSubmit);
+        input.addEventListener('change', triggerSubmit);
+    });
+    clampInput(form.querySelector('input[name="min_score"]'), 50, 100);
+    clampInput(form.querySelector('input[name="limit"]'), 20, 1000);
+});
+</script>
+{% endblock %}

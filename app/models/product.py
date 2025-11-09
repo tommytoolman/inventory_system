@@ -15,9 +15,16 @@ from datetime import datetime, timezone
 import enum
 from ..database import Base
 
-from app.core.enums import ProductStatus, ProductCondition
+from app.core.enums import (
+    ProductStatus,
+    ProductCondition,
+    Handedness,
+    ManufacturingCountry,
+    InventoryLocation,
+    Storefront,
+    CaseStatus,
+)
 from app.models.shipping import ShippingProfile
-from sqlalchemy.dialects.postgresql import JSONB
 
 UTC_NOW = text("now() AT TIME ZONE 'utc'")
 
@@ -130,6 +137,42 @@ class Product(Base):
     # The business logic flags we've agreed on:
     is_stocked_item = Column(Boolean, default=False, nullable=False, index=True) # The master switch. If False, it's a unique item. If True, it's a stocked item.
     quantity = Column(Integer, nullable=True) # The stock level for items where is_stocked_item is True. This can be NULL for unique items.
+
+    # Provenance & Metadata
+    serial_number = Column(String, nullable=True)
+    handedness = Column(
+        ENUM(Handedness, name="handedness", create_type=False),
+        nullable=False,
+        server_default=Handedness.RIGHT.value,
+    )
+    artist_owned = Column(Boolean, nullable=False, server_default=text("false"))
+    artist_names = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    manufacturing_country = Column(
+        ENUM(
+            ManufacturingCountry,
+            name="manufacturingcountry",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            create_type=False,
+        ),
+        nullable=True,
+    )
+    inventory_location = Column(
+        ENUM(InventoryLocation, name="inventorylocation", create_type=False),
+        nullable=False,
+        server_default=InventoryLocation.HANKS.value,
+    )
+    storefront = Column(
+        ENUM(Storefront, name="storefront", create_type=False),
+        nullable=False,
+        server_default=Storefront.HANKS.value,
+    )
+    case_status = Column(
+        ENUM(CaseStatus, name="casestatus", create_type=False),
+        nullable=False,
+        server_default=CaseStatus.NONE.value,
+    )
+    case_details = Column(String, nullable=True)
+    extra_attributes = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     
     # Media and Links
     primary_image = Column(String)

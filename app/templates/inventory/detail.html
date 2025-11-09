@@ -261,6 +261,13 @@
                             <dd class="text-right">{{ product.serial_number }}</dd>
                         </div>
                         {% endif %}
+                        {% set body_type = (product.extra_attributes or {}).get('body_type') %}
+                        {% if body_type %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Body Type</dt>
+                            <dd class="text-right">{{ body_type }}</dd>
+                        </div>
+                        {% endif %}
                         <div class="flex justify-between">
                             <dt class="text-gray-600">L/R Handed</dt>
                             <dd class="text-right">{{ product.handedness.value|replace('_', ' ')|title if product.handedness else 'Unspecified' }}</dd>

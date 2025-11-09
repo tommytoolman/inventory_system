@@ -4,6 +4,7 @@ import logging
 import uuid
 import json
 import asyncio
+import time
 from decimal import Decimal
 from typing import Optional, Dict, List, Any, Tuple, Set
 from datetime import datetime, timezone, timedelta
@@ -17,6 +18,7 @@ from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.sync_event import SyncEvent
 from app.core.config import Settings
 from app.core.exceptions import EbayAPIError
+from app.core.enums import ManufacturingCountry
 from app.services.ebay.trading import EbayTradingLegacyAPI
 from app.services.match_utils import suggest_product_match
 
@@ -46,14 +48,26 @@ class EbayService:
         # --- NEW: Load the category map from the JSON file on startup ---
         self.category_map = self._load_category_map()
 
+    def _normalize_get_item_response(self, response: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Flatten GetItem responses so callers always see the Item payload at the top level."""
+        if not isinstance(response, dict):
+            return None
+        if "Item" in response and isinstance(response["Item"], dict):
+            return response
+        inner = response.get("GetItemResponse")
+        if isinstance(inner, dict):
+            return inner
+        return response
+
     async def _fetch_full_item_with_retry(self, item_id: str, attempts: int = 3) -> Optional[Dict[str, Any]]:
         """Fetch the full GetItem payload with simple retry/backoff."""
         delay_seconds = 1
         for attempt in range(1, attempts + 1):
             try:
                 response = await self.trading_api.get_item(item_id)
-                if response and response.get('Item'):
-                    return response
+                normalized = self._normalize_get_item_response(response)
+                if normalized and isinstance(normalized.get('Item'), dict):
+                    return normalized
                 logger.warning(
                     "GetItem returned no Item payload for %s on attempt %s/%s",
                     item_id,
@@ -223,6 +237,72 @@ class EbayService:
             "resized-images.crazylister.com",
         ]
         return any(marker in haystack for marker in markers)
+
+    @staticmethod
+    def _extract_picture_urls_from_payload(item_payload: Dict[str, Any]) -> List[str]:
+        """Return the ordered list of PictureURL values from a GetItem payload."""
+        picture_urls: List[str] = []
+        if not isinstance(item_payload, dict):
+            return picture_urls
+        picture_details = item_payload.get("PictureDetails", {})
+        raw_urls = None
+        if isinstance(picture_details, dict):
+            raw_urls = picture_details.get("PictureURL")
+        if not raw_urls:
+            raw_urls = (
+                item_payload.get("PictureURLs")
+                or item_payload.get("PictureURL")
+            )
+        if isinstance(raw_urls, list):
+            picture_urls = [url for url in raw_urls if url]
+        elif raw_urls:
+            picture_urls = [raw_urls]
+        return picture_urls
+
+    @staticmethod
+    def _parse_item_specifics_from_payload(item_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert NameValueList structures into a JSON-friendly dict."""
+        specifics: Dict[str, Any] = {}
+        if not isinstance(item_payload, dict):
+            return specifics
+        container = item_payload.get("ItemSpecifics")
+        if not isinstance(container, dict):
+            return specifics
+        name_value_list = container.get("NameValueList")
+        if not name_value_list:
+            return specifics
+        rows = name_value_list if isinstance(name_value_list, list) else [name_value_list]
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = row.get("Name")
+            value = row.get("Value")
+            if not name or value is None:
+                continue
+            if isinstance(value, list):
+                cleaned_values = [str(v) for v in value if v not in (None, "")]
+                if not cleaned_values:
+                    continue
+                specifics[name] = cleaned_values if len(cleaned_values) > 1 else cleaned_values[0]
+            else:
+                value_str = str(value).strip()
+                if value_str:
+                    specifics[name] = value_str
+        return specifics
+
+    @staticmethod
+    def _ensure_listing_data_dict(payload: Any) -> Dict[str, Any]:
+        """Normalize legacy listing_data payloads into a dict."""
+        if isinstance(payload, dict):
+            return dict(payload)
+        if isinstance(payload, str):
+            try:
+                parsed = json.loads(payload)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                return {"Description": payload}
+        return {}
     
     def _build_item_specifics(self, product: Product, category_id: str) -> Dict[str, str]:
         """
@@ -247,6 +327,10 @@ class EbayService:
         condition_display = self._get_condition_display_name(product.condition)
         if condition_display:
             item_specifics["Condition"] = condition_display
+
+        country_name = self._ebay_country_name(product.manufacturing_country)
+        if country_name:
+            item_specifics["Country of Origin"] = country_name
         
         # Category-specific ItemSpecifics
         if category_id == "38072":  # Guitar Amplifiers
@@ -282,6 +366,42 @@ class EbayService:
                 item_specifics["Type"] = guitar_type
         
         return item_specifics
+
+    @staticmethod
+    def _ebay_country_name(country: Optional[ManufacturingCountry]) -> Optional[str]:
+        if not country:
+            return None
+        if isinstance(country, str):
+            raw = country.strip().upper()
+            try:
+                country = ManufacturingCountry(raw)
+            except ValueError:
+                try:
+                    country = ManufacturingCountry[raw]
+                except KeyError:
+                    return None
+        mapping = {
+            ManufacturingCountry.UNITED_KINGDOM: "United Kingdom",
+            ManufacturingCountry.UNITED_STATES: "United States",
+            ManufacturingCountry.CANADA: "Canada",
+            ManufacturingCountry.JAPAN: "Japan",
+            ManufacturingCountry.GERMANY: "Germany",
+            ManufacturingCountry.FRANCE: "France",
+            ManufacturingCountry.ITALY: "Italy",
+            ManufacturingCountry.SPAIN: "Spain",
+            ManufacturingCountry.SWEDEN: "Sweden",
+            ManufacturingCountry.NORWAY: "Norway",
+            ManufacturingCountry.DENMARK: "Denmark",
+            ManufacturingCountry.MEXICO: "Mexico",
+            ManufacturingCountry.INDONESIA: "Indonesia",
+            ManufacturingCountry.CHINA: "China",
+            ManufacturingCountry.KOREA: "South Korea",
+            ManufacturingCountry.AUSTRALIA: "Australia",
+            ManufacturingCountry.NEW_ZEALAND: "New Zealand",
+            ManufacturingCountry.BRAZIL: "Brazil",
+            ManufacturingCountry.OTHER: "Unknown",
+        }
+        return mapping.get(country)
     
     def _get_condition_display_name(self, condition: ProductCondition) -> str:
         """Maps our ProductCondition enum to a display name."""
@@ -853,12 +973,7 @@ class EbayService:
             )
             return
 
-        listing_data = listing.listing_data or {}
-        if isinstance(listing_data, str):
-            try:
-                listing_data = json.loads(listing_data)
-            except json.JSONDecodeError:
-                listing_data = {"Description": listing_data}
+        listing_data = self._ensure_listing_data_dict(listing.listing_data)
 
         existing_description = listing_data.get("Description")
         existing_flag = listing_data.get("uses_crazylister")
@@ -890,6 +1005,255 @@ class EbayService:
             platform_common_id,
             new_flag,
         )
+
+    def _apply_metadata_refresh(
+        self,
+        listing: EbayListing,
+        item_payload: Dict[str, Any],
+        *,
+        dry_run: bool = False,
+    ) -> bool:
+        """Update local ebay_listings metadata with data from GetItem."""
+        listing_data = self._ensure_listing_data_dict(listing.listing_data)
+        existing_specifics = listing.item_specifics or {}
+        new_specifics = self._parse_item_specifics_from_payload(item_payload)
+        new_pictures = self._extract_picture_urls_from_payload(item_payload)
+        new_gallery_url = new_pictures[0] if new_pictures else None
+        new_description = item_payload.get("Description")
+        new_flag = self._is_crazylister_template(new_description)
+
+        changed = False
+        if new_description is not None and new_description != listing_data.get("Description"):
+            changed = True
+        if listing_data.get("uses_crazylister") != new_flag:
+            changed = True
+        if (listing.picture_urls or []) != new_pictures:
+            changed = True
+        if listing.gallery_url != new_gallery_url:
+            changed = True
+        if existing_specifics != new_specifics:
+            changed = True
+        raw_container = listing_data.get("Raw")
+        if not isinstance(raw_container, dict) or "Item" not in raw_container:
+            changed = True
+
+        if dry_run:
+            return changed
+
+        if not changed:
+            return False
+
+        updated_listing_data = dict(listing_data)
+        if new_description is not None:
+            updated_listing_data["Description"] = new_description
+        updated_listing_data["uses_crazylister"] = new_flag
+        updated_listing_data["Raw"] = {"Item": item_payload}
+
+        listing.listing_data = updated_listing_data
+        listing.item_specifics = new_specifics or None
+        listing.picture_urls = new_pictures
+        listing.gallery_url = new_gallery_url
+        listing.updated_at = datetime.utcnow()
+        listing.last_synced_at = datetime.utcnow()
+        return True
+
+    async def refresh_listing_metadata(
+        self,
+        state: str = "active",
+        limit: Optional[int] = None,
+        batch_size: int = 10,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Run a light GetItem pass to refresh description/pictures/item_specifics for selected listings.
+        This should be scheduled separately from the primary sync to control API usage.
+        """
+        start_time = time.monotonic()
+        state_key = (state or "active").lower()
+        state_filters = {
+            "active": [ListingStatus.ACTIVE.value],
+            "sold": [ListingStatus.SOLD.value],
+            "unsold": [
+                ListingStatus.INACTIVE.value,
+                ListingStatus.ENDED.value,
+                ListingStatus.REMOVED.value,
+                ListingStatus.DELETED.value,
+            ],
+            "all": None,
+        }
+        if state_key not in state_filters:
+            raise ValueError(f"Unsupported listing state '{state}'")
+
+        statuses = state_filters[state_key]
+        max_concurrency = max(1, batch_size or 1)
+
+        logger.info(
+            "Starting eBay metadata refresh (state=%s, limit=%s, batch_size=%s, dry_run=%s)",
+            state_key,
+            limit,
+            max_concurrency,
+            dry_run,
+        )
+
+        query = (
+            select(EbayListing, PlatformCommon, Product)
+            .join(PlatformCommon, EbayListing.platform_id == PlatformCommon.id)
+            .join(Product, PlatformCommon.product_id == Product.id)
+            .where(PlatformCommon.platform_name == 'ebay')
+            .order_by(EbayListing.updated_at.desc())
+        )
+        if statuses:
+            query = query.where(PlatformCommon.status.in_(statuses))
+        if limit:
+            query = query.limit(limit)
+
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        summary = {
+            "total_listings": len(rows),
+            "processed": 0,
+            "updated": 0,
+            "unchanged": 0,
+            "missing": 0,
+            "api_calls": 0,
+            "duration_seconds": 0.0,
+        }
+
+        listings_to_refresh = []
+        for listing, platform_link, product in rows:
+            if not listing or not listing.ebay_item_id:
+                summary["processed"] += 1
+                summary["missing"] += 1
+                logger.warning(
+                    "Skipping metadata refresh for platform_id %s due to missing eBay item ID",
+                    platform_link.id if platform_link else None,
+                )
+                continue
+            listings_to_refresh.append(
+                {
+                    "listing": listing,
+                    "platform": platform_link,
+                    "product": product,
+                }
+            )
+
+        summary["api_calls"] = len(listings_to_refresh)
+        if not listings_to_refresh:
+            summary["duration_seconds"] = round(time.monotonic() - start_time, 3)
+            return summary
+
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def fetch_with_limit(record: Dict[str, Any]) -> Any:
+            async with semaphore:
+                return await self._fetch_full_item_with_retry(record["listing"].ebay_item_id)
+
+        tasks = [asyncio.create_task(fetch_with_limit(record)) for record in listings_to_refresh]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        updates_applied = 0
+        for record, payload in zip(listings_to_refresh, responses):
+            summary["processed"] += 1
+            listing = record["listing"]
+            product = record["product"]
+            sku = product.sku if product else None
+
+            if isinstance(payload, Exception):
+                summary["missing"] += 1
+                logger.error(
+                    "GetItem failed for %s (sku=%s): %s",
+                    listing.ebay_item_id,
+                    sku,
+                    payload,
+                )
+                continue
+
+            if not payload or not isinstance(payload.get("Item"), dict):
+                summary["missing"] += 1
+                logger.warning(
+                    "GetItem returned no Item data for %s (sku=%s)",
+                    listing.ebay_item_id,
+                    sku,
+                )
+                continue
+
+            changed = self._apply_metadata_refresh(
+                listing,
+                payload["Item"],
+                dry_run=dry_run,
+            )
+
+            if changed:
+                summary["updated"] += 1
+                if dry_run:
+                    logger.info(
+                        "DRY RUN: would refresh metadata for %s (sku=%s)",
+                        listing.ebay_item_id,
+                        sku,
+                    )
+                else:
+                    updates_applied += 1
+                    logger.info(
+                        "Refreshed metadata for %s (sku=%s)",
+                        listing.ebay_item_id,
+                        sku,
+                    )
+            else:
+                summary["unchanged"] += 1
+
+        if not dry_run and updates_applied:
+            await self.db.commit()
+
+        summary["duration_seconds"] = round(time.monotonic() - start_time, 3)
+        return summary
+
+    async def refresh_single_listing_metadata(
+        self,
+        platform_id: int,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Refresh metadata for a single listing identified by platform_common.id.
+        Returns a summary dict for UI consumption.
+        """
+        stmt = (
+            select(EbayListing, PlatformCommon, Product)
+            .join(PlatformCommon, EbayListing.platform_id == PlatformCommon.id)
+            .join(Product, PlatformCommon.product_id == Product.id)
+            .where(PlatformCommon.id == platform_id)
+            .where(PlatformCommon.platform_name == "ebay")
+        )
+        result = await self.db.execute(stmt)
+        row = result.first()
+
+        if not row:
+            return {"status": "missing", "message": "Listing not found", "updated": False}
+
+        listing, platform_link, product = row
+        if not listing.ebay_item_id:
+            return {"status": "missing", "message": "Listing missing eBay item ID", "updated": False}
+
+        payload = await self._fetch_full_item_with_retry(listing.ebay_item_id)
+        if not payload or not isinstance(payload.get("Item"), dict):
+            return {"status": "missing", "message": "eBay GetItem returned no data", "updated": False}
+
+        changed = self._apply_metadata_refresh(
+            listing,
+            payload["Item"],
+            dry_run=dry_run,
+        )
+
+        if changed and not dry_run:
+            await self.db.commit()
+
+        return {
+            "status": "updated" if changed else "unchanged",
+            "updated": changed,
+            "message": "Metadata refreshed" if changed else "Already up to date",
+            "product_id": product.id if product else None,
+            "sku": product.sku if product else None,
+        }
 
     async def _batch_mark_removed(self, items: List[Dict], sync_run_id: uuid.UUID, pending_events: set) -> Tuple[int, int]:
         """SYNC PHASE: Only log removal events if no pending event already exists."""
@@ -1222,6 +1586,7 @@ class EbayService:
                 "PostalCode": "SW1A 1AA",  # Required for shipping
                 "Site": "UK"
             }
+            logger.info("  ItemSpecifics payload: %s", json.dumps(item_specifics, indent=2))
             
             # Add shipping/payment/return based on mode
             if use_shipping_profile:
@@ -1695,8 +2060,15 @@ class EbayService:
         title = product.title if "title" in changed_fields else None
         description = product.description if "description" in changed_fields else None
         item_specifics = None
-        if "model" in changed_fields and product.model:
-            item_specifics = {"Model": product.model}
+        if {"model", "manufacturing_country"} & changed_fields:
+            category_id = None
+            if listing and listing.ebay_category_id:
+                category_id = listing.ebay_category_id
+            else:
+                mapped = self._map_category_string_to_ebay(product.category)
+                category_id = mapped.get("CategoryID") if mapped else None
+            category_id = category_id or "33034"
+            item_specifics = self._build_item_specifics(product, category_id)
 
         if title or description or item_specifics:
             response = await self.trading_api.revise_listing_details(

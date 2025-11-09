@@ -71,8 +71,8 @@ class InventoryLocation(str, Enum):
 
 
 class Storefront(str, Enum):
-    HANKS = "Hanks"
-    LONDON_VINTAGE_GUITARS = "London Vintage Guitars"
+    HANKS = "HANKS"
+    LONDON_VINTAGE_GUITARS = "LONDON VINTAGE GUITARS"
     UNSPECIFIED = "UNSPECIFIED"
 
 

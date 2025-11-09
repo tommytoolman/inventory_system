@@ -249,7 +249,7 @@
                                 <option value="UNSPECIFIED" {% if not product.storefront or product.storefront.name == 'UNSPECIFIED' %}selected{% endif %}>Unspecified</option>
                                 {% for option in storefront_options %}
                                     {% if option.name != 'UNSPECIFIED' %}
-                                        <option value="{{ option.name }}" {% if product.storefront and product.storefront.name == option.name %}selected{% endif %}>{{ option.value }}</option>
+                                        <option value="{{ option.name }}" {% if product.storefront and product.storefront.name == option.name %}selected{% endif %}>{{ option.value.replace('_', ' ').title() }}</option>
                                     {% endif %}
                                 {% endfor %}
                             </select>

@@ -5,7 +5,7 @@ import re
 import uuid
 import json
 from datetime import datetime
-from typing import Optional, Dict, List, Any, Tuple, Set
+from typing import Optional, Dict, List, Any, Tuple, Set, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
@@ -18,6 +18,7 @@ from app.models.shopify import ShopifyListing
 from app.models.sync_event import SyncEvent
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ShopifyAPIError
+from app.core.enums import ManufacturingCountry
 from app.services.shopify.client import ShopifyGraphQLClient  # You'll need to create this
 from app.services.reverb_service import ReverbService # We might need this for data mapping later
 from app.services.match_utils import suggest_product_match
@@ -43,6 +44,10 @@ class _PlainTextHTMLParser(HTMLParser):
 class ShopifyService:
     """Service for managing Shopify products and synchronization."""
 
+    COUNTRY_OF_ORIGIN_NAMESPACE = "extra_info"
+    COUNTRY_OF_ORIGIN_KEY = "country_of_origin"
+    COUNTRY_METAFIELD_TYPE = "single_line_text_field"
+
 
     # =========================================================================
     # 1. INITIALIZATION & HELPERS
@@ -55,6 +60,7 @@ class ShopifyService:
         # Initialize Shopify client - it loads settings internally
         self.client = ShopifyGraphQLClient()
         logger.debug(f"ShopifyService initialized")
+        self._country_metafield_definition_ready = False
 
     @staticmethod
     def strip_html_to_plain_text(value: Optional[str]) -> str:
@@ -90,6 +96,137 @@ class ShopifyService:
         if not raw:
             raise ValueError("SHOPIFY_LOCATION_GID is not configured; update the environment settings")
         return raw if str(raw).startswith("gid://") else f"gid://shopify/Location/{raw}"
+
+    @staticmethod
+    def _resolve_country_enum(country: Optional[Union[ManufacturingCountry, str]]) -> Optional[ManufacturingCountry]:
+        if not country:
+            return None
+        if isinstance(country, str):
+            value = country.strip()
+            if not value:
+                return None
+            upper = value.upper()
+            if len(upper) == 2:
+                for enum_value in ManufacturingCountry:
+                    if enum_value.value == upper:
+                        return enum_value
+            normalized = upper.replace("-", "_").replace(" ", "_")
+            try:
+                return ManufacturingCountry[normalized]
+            except KeyError:
+                return None
+        return country if isinstance(country, ManufacturingCountry) else None
+
+    def _country_display_name(self, country_input: Optional[Union[ManufacturingCountry, str]]) -> Optional[str]:
+        country = self._resolve_country_enum(country_input)
+        if not country:
+            return None
+        mapping = {
+            ManufacturingCountry.UNITED_KINGDOM: "United Kingdom",
+            ManufacturingCountry.UNITED_STATES: "United States",
+            ManufacturingCountry.CANADA: "Canada",
+            ManufacturingCountry.JAPAN: "Japan",
+            ManufacturingCountry.GERMANY: "Germany",
+            ManufacturingCountry.FRANCE: "France",
+            ManufacturingCountry.ITALY: "Italy",
+            ManufacturingCountry.SPAIN: "Spain",
+            ManufacturingCountry.SWEDEN: "Sweden",
+            ManufacturingCountry.NORWAY: "Norway",
+            ManufacturingCountry.DENMARK: "Denmark",
+            ManufacturingCountry.MEXICO: "Mexico",
+            ManufacturingCountry.INDONESIA: "Indonesia",
+            ManufacturingCountry.CHINA: "China",
+            ManufacturingCountry.KOREA: "South Korea",
+            ManufacturingCountry.AUSTRALIA: "Australia",
+            ManufacturingCountry.NEW_ZEALAND: "New Zealand",
+            ManufacturingCountry.BRAZIL: "Brazil",
+            ManufacturingCountry.OTHER: "Other",
+        }
+        return mapping.get(country)
+
+    def _country_code(self, country_input: Optional[Union[ManufacturingCountry, str]]) -> Optional[str]:
+        country = self._resolve_country_enum(country_input)
+        return country.value if country else None
+
+    def _ensure_country_metafield_definition(self) -> None:
+        if self._country_metafield_definition_ready:
+            return
+        try:
+            result = self.client.create_metafield_definition(
+                name="Country of Origin",
+                namespace=self.COUNTRY_OF_ORIGIN_NAMESPACE,
+                key=self.COUNTRY_OF_ORIGIN_KEY,
+                type_name=self.COUNTRY_METAFIELD_TYPE,
+                owner_type="PRODUCT",
+                description="Country where the product was manufactured",
+            )
+            errors = result.get("userErrors", []) if result else []
+            blocking_errors = [err for err in errors if "already" not in err.get("message", "").lower()]
+            if blocking_errors:
+                logger.warning("Failed to create Shopify country metafield definition: %s", blocking_errors)
+                return
+            self._country_metafield_definition_ready = True
+        except Exception as exc:
+            logger.warning("Error ensuring Shopify country metafield definition: %s", exc)
+
+    def _resolve_inventory_item_gids(self, product_gid: str) -> List[str]:
+        try:
+            snapshot = self.client.get_product_snapshot_by_id(product_gid, num_variants=5, num_images=0, num_metafields=0)
+        except Exception as exc:
+            logger.warning("Failed to fetch Shopify snapshot for inventory item lookup (%s): %s", product_gid, exc)
+            return []
+
+        variants = (snapshot or {}).get("variants", {}).get("edges") or []
+        inventory_ids: List[str] = []
+        for edge in variants:
+            node = edge.get("node") if isinstance(edge, dict) else {}
+            inventory_item = node.get("inventoryItem") if isinstance(node, dict) else None
+            if inventory_item and inventory_item.get("id"):
+                inventory_ids.append(inventory_item["id"])
+        return inventory_ids
+
+    def _update_inventory_item_country(self, product: Product, product_gid: str, country_code: Optional[str]) -> None:
+        if not country_code:
+            return
+        inventory_item_gids = self._resolve_inventory_item_gids(product_gid)
+        if not inventory_item_gids:
+            logger.info("No inventory item gids found for %s; skipping customs update", product.sku)
+            return
+        for inventory_item_gid in inventory_item_gids:
+            try:
+                result = self.client.update_inventory_item(inventory_item_gid, country_code=country_code)
+                errors = result.get("userErrors", []) if result else []
+                if errors:
+                    logger.warning("Shopify inventoryItemUpdate errors for %s: %s", product.sku, errors)
+            except Exception as exc:
+                logger.warning("Failed to update Shopify inventory item country for %s (inventory item %s): %s",
+                               product.sku,
+                               inventory_item_gid,
+                               exc)
+
+    def _sync_country_of_origin(self, product: Product, product_gid: str) -> None:
+        value = self._country_display_name(product.manufacturing_country)
+        if not value:
+            return
+        self._ensure_country_metafield_definition()
+        metafield_input = [{
+            "ownerId": product_gid,
+            "namespace": self.COUNTRY_OF_ORIGIN_NAMESPACE,
+            "key": self.COUNTRY_OF_ORIGIN_KEY,
+            "type": self.COUNTRY_METAFIELD_TYPE,
+            "value": value,
+        }]
+        try:
+            result = self.client.set_metafields(metafield_input)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify metafieldsSet returned errors for %s: %s", product.sku, errors)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify country metafield for %s: %s", product.sku, exc)
+
+        country_code = self._country_code(product.manufacturing_country)
+        if country_code:
+            self._update_inventory_item_country(product, product_gid, country_code)
 
     def _extract_variant_nodes(self, listing: ShopifyListing) -> List[Dict[str, Any]]:
         variants = []
@@ -437,6 +574,16 @@ class ShopifyService:
             adjustments = self._collect_inventory_adjustments(product, product_gid, variants)
             self._push_inventory_update(product, product_gid, adjustments)
             inventory_updated = True
+
+        if "manufacturing_country" in changed_fields:
+            try:
+                self._sync_country_of_origin(product, product_gid)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify country data on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
 
         return {
             "status": "updated" if pushed or inventory_updated else "no_changes",
@@ -986,6 +1133,11 @@ class ShopifyService:
             product_gid = creation_result["product"]["id"]
             product_legacy_id = creation_result["product"].get("legacyResourceId")
             logger.info(f"Created Shopify product shell with GID: {product_gid}")
+
+            try:
+                self._sync_country_of_origin(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify country data for %s: %s", product.sku, exc)
             
             # Step 3: Update the variant with price, SKU, and inventory
             try:

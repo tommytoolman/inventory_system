@@ -638,6 +638,90 @@ class ShopifyGraphQLClient:
         data = self._make_request(query, variables, estimated_cost=estimated_cost)
         return data["node"] if data and "node" in data else None
 
+    # ------------------------------------------------------------------
+    # Metafield helpers
+    # ------------------------------------------------------------------
+
+    def create_metafield_definition(
+        self,
+        *,
+        name: str,
+        namespace: str,
+        key: str,
+        type_name: str,
+        owner_type: str = "PRODUCT",
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        mutation = """
+        mutation metafieldDefinitionCreate($definition: MetafieldDefinitionInput!) {
+          metafieldDefinitionCreate(definition: $definition) {
+            createdDefinition { id name namespace key }
+            userErrors { field message code }
+          }
+        }
+        """
+        definition_input = {
+            "name": name,
+            "namespace": namespace,
+            "key": key,
+            "type": type_name,
+            "ownerType": owner_type,
+        }
+        if description:
+            definition_input["description"] = description
+
+        variables = {"definition": definition_input}
+        data = self._make_request(mutation, variables, estimated_cost=10)
+        return data.get("metafieldDefinitionCreate", {}) if data else {}
+
+    def set_metafields(self, metafields: List[Dict[str, Any]]) -> Dict[str, Any]:
+        mutation = """
+        mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            metafields { id namespace key value type }
+            userErrors { field message code }
+          }
+        }
+        """
+        variables = {"metafields": metafields}
+        data = self._make_request(mutation, variables, estimated_cost=10)
+        return data.get("metafieldsSet", {}) if data else {}
+
+    def update_inventory_item(self, item_gid: str, *, country_code: Optional[str] = None,
+                              harmonized_code: Optional[str] = None,
+                              province_code: Optional[str] = None) -> Dict[str, Any]:
+        if not (country_code or harmonized_code or province_code):
+            return {}
+        mutation = """
+        mutation inventoryItemUpdate($id: ID!, $input: InventoryItemInput!) {
+          inventoryItemUpdate(id: $id, input: $input) {
+            inventoryItem {
+              id
+              countryCodeOfOrigin
+              provinceCodeOfOrigin
+              harmonizedSystemCode
+            }
+            userErrors { field message }
+          }
+        }
+        """
+        input_payload: Dict[str, Any] = {}
+        if country_code:
+            input_payload["countryCodeOfOrigin"] = country_code
+        if harmonized_code:
+            input_payload["harmonizedSystemCode"] = harmonized_code
+        if province_code:
+            input_payload["provinceCodeOfOrigin"] = province_code
+
+        variables = {"id": item_gid, "input": input_payload}
+        logger.info(
+            "Shopify inventoryItemUpdate payload: id=%s input=%s",
+            item_gid,
+            json.dumps(input_payload),
+        )
+        data = self._make_request(mutation, variables, estimated_cost=10)
+        return data.get("inventoryItemUpdate", {}) if data else {}
+
     def get_shop_locations(self, num_locations: int = 5, query_filter: str = None): # Added query_filter capability
         """
         Fetches the shop's locations directly from QueryRoot.

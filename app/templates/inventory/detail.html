@@ -20,26 +20,27 @@
                     </div>
                     <div class="flex-1">
                         <div class="flex items-start space-x-3">
-                            <div>
+                            <div class="min-w-0">
                                 <h1 class="text-2xl font-bold text-gray-900">
                                     {{ product.title or 'Untitled Product' }}
                                 </h1>
-                                <p class="text-sm text-gray-500">
+                                <div class="mt-1 h-px bg-gray-200 w-full max-w-md"></div>
+                                <p class="mt-1 text-sm text-gray-500">
                                     {{ product.brand|title }} {{ product.model }}
                                 </p>
                             </div>
                             {% set status_val = product.status.value|upper if product.status else '' %}
                             <div class="mt-1">
                                 {% if status_val == 'SOLD' %}
-                                    <span class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800">Sold</span>
+                                    <span class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-700">Sold</span>
                                 {% elif status_val == 'DRAFT' %}
-                                    <span class="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800">Draft</span>
+                                    <span class="px-3 py-1 text-sm rounded-full bg-amber-100 text-amber-700">Draft</span>
                                 {% elif status_val == 'ARCHIVED' %}
-                                    <span class="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800">Archived</span>
+                                    <span class="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-700">Archived</span>
                                 {% elif status_val %}
                                     <span class="px-3 py-1 text-sm rounded-full bg-green-100 text-green-800">{{ status_val|title }}</span>
                                 {% else %}
-                                    <span class="px-3 py-1 text-sm rounded-full bg-gray-100 text-gray-500">Status Unknown</span>
+                                    <span class="px-3 py-1 text-sm rounded-full bg-slate-100 text-slate-600">Status Unknown</span>
                                 {% endif %}
                             </div>
                         </div>
@@ -111,7 +112,7 @@
         </div>
 
         <!-- Platform Status Messages from Add Product -->
-        {% if show_status and platform_messages %}
+        {% if platform_messages %}
             <div class="px-6 py-4 bg-gray-50 border-b">
                 <div class="space-y-2">
                     {% for msg in platform_messages %}
@@ -187,61 +188,57 @@
         {% endif %}
 
         <!-- Product Details -->
-        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-            <!-- Basic Info -->
-            <div>
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-lg font-semibold pl-2">Product Information</h2>
-                    {% set status_val = product.status.value|upper if product.status else '' %}
-                    {% if status_val in ['SOLD', 'ARCHIVED'] %}
-                        <button type="button" disabled
-                                class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-400 cursor-not-allowed"
-                                title="Editing disabled for {{ status_val|title }} products"
-                                aria-disabled="true">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
-                            </svg>
-                        </button>
-                    {% elif status_val == 'DRAFT' %}
-                        <a href="/inventory/add?draft_id={{ product.id }}"
-                           class="inline-flex items-center justify-center w-8 h-8 bg-indigo-100 hover:bg-indigo-200 rounded-full text-indigo-600 hover:text-indigo-700 transition-colors"
-                           title="Resume Draft">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
-                            </svg>
-                        </a>
-                    {% else %}
-                        <a href="/inventory/products/{{ product.id }}/edit" 
-                           class="inline-flex items-center justify-center w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full text-gray-600 hover:text-gray-800 transition-colors"
-                           title="Edit Product">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
-                            </svg>
-                        </a>
-                    {% endif %}
-                </div>
-                <div class="border rounded p-4">
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <!-- Left column: basic info + images -->
+            <div class="space-y-6">
+                <div class="border rounded p-4 bg-white">
+                    <div class="flex items-center justify-between pb-3 mb-4 border-b border-gray-300">
+                        <h2 class="text-lg font-semibold">Product Information</h2>
+                        {% set status_val = product.status.value|upper if product.status else '' %}
+                        {% if status_val in ['SOLD', 'ARCHIVED'] %}
+                            <button type="button" disabled
+                                    class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-400 cursor-not-allowed"
+                                    title="Editing disabled for {{ status_val|title }} products"
+                                    aria-disabled="true">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                </svg>
+                            </button>
+                        {% elif status_val == 'DRAFT' %}
+                            <a href="/inventory/add?draft_id={{ product.id }}"
+                               class="inline-flex items-center justify-center w-8 h-8 bg-indigo-100 hover:bg-indigo-200 rounded-full text-indigo-600 hover:text-indigo-700 transition-colors"
+                               title="Resume Draft">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                </svg>
+                            </a>
+                        {% else %}
+                            <a href="/inventory/products/{{ product.id }}/edit" 
+                               class="inline-flex items-center justify-center w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full text-gray-600 hover:text-gray-800 transition-colors"
+                               title="Edit Product">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                </svg>
+                            </a>
+                        {% endif %}
+                    </div>
                     <dl class="space-y-2">
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Category</dt>
                             <dd class="text-right">{{ product.category or 'N/A' }}</dd>
                         </div>
-                        
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Brand</dt>
                             <dd class="text-right">{{ product.brand|title or 'N/A' }}</dd>
                         </div>
-                        
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Model</dt>
                             <dd class="text-right">{{ product.model or 'N/A' }}</dd>
                         </div>
-                        
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Finish</dt>
                             <dd class="text-right">{{ product.finish or 'N/A' }}</dd>
                         </div>
-                        
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Year</dt>
                             <dd class="text-right">
@@ -254,12 +251,49 @@
                                 {% endif %}
                             </dd>
                         </div>
-                        
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Condition</dt>
                             <dd class="text-right">{{ product.condition.value|title if product.condition else 'N/A' }}</dd>
                         </div>
-                        
+                        {% if product.serial_number %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Serial Number</dt>
+                            <dd class="text-right">{{ product.serial_number }}</dd>
+                        </div>
+                        {% endif %}
+                        {% set body_type = (product.extra_attributes or {}).get('body_type') %}
+                        {% if body_type %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Body Type</dt>
+                            <dd class="text-right">{{ body_type }}</dd>
+                        </div>
+                        {% endif %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">L/R Handed</dt>
+                            <dd class="text-right">{{ product.handedness.value|replace('_', ' ')|title if product.handedness else 'Unspecified' }}</dd>
+                        </div>
+                        {% if product.artist_owned %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Artist Owned</dt>
+                            <dd class="text-right">Yes</dd>
+                        </div>
+                        {% endif %}
+                        {% if product.artist_names %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Artist(s)</dt>
+                            <dd class="text-right">{{ ', '.join(product.artist_names) }}</dd>
+                        </div>
+                        {% endif %}
+                        {% if is_handmade %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Handmade</dt>
+                            <dd class="text-right">Yes</dd>
+                        </div>
+                        {% endif %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Manufacturing Country</dt>
+                            <dd class="text-right">{{ product.manufacturing_country.value if product.manufacturing_country else 'N/A' }}</dd>
+                        </div>
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Base Price</dt>
                             <dd class="text-right">
@@ -270,215 +304,170 @@
                                 {% endif %}
                             </dd>
                         </div>
-                        
                         <div class="flex justify-between">
                             <dt class="text-gray-600">SKU</dt>
                             <dd class="text-right">{{ product.sku or 'N/A' }}</dd>
                         </div>
-                        
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Stocked Item?</dt>
+                            <dd class="text-right">{% if product.is_stocked_item %}Yes{% else %}No{% endif %}</dd>
+                        </div>
                         <div class="flex justify-between">
                             <dt class="text-gray-600">Quantity Available</dt>
-                            <dd class="text-right">
-                                {% if product.is_stocked_item %}
-                                    {{ product.quantity or 0 }}
-                                {% else %}
-                                    1
-                                {% endif %}
-                            </dd>
+                            <dd class="text-right">{% if product.is_stocked_item %}{{ product.quantity or 0 }}{% else %}1{% endif %}</dd>
                         </div>
-                    </dl>
-                </div>
-            </div>
-
-            <!-- Platform Listings -->
-            <div>
-                <div class="flex items-center mb-4">
-                    <h2 class="text-lg font-semibold mr-3 pl-2">Platform Listings</h2>
-                    {% if active_platforms|length > 0 %}
-                        <button onclick="endAllListings()"
-                            class="px-3 py-1 text-sm rounded-full bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300">
-                            End All Listings
-                        </button>
-                    {% endif %}
-                </div>
-                <div class="border rounded p-4 pb-3 h-full">
-                    <div class="space-y-3">
-                    {% if all_platforms_status %}
-                        {% for platform_entry in all_platforms_status %}
-                        <div class="border rounded p-3 bg-gray-50">
-                            <!-- 🔍 DEBUG: Show all available data -->
-                            <!-- <div class="text-xs text-red-500 mb-2 p-2 bg-red-50 border border-red-200 rounded">
-                                <strong>DEBUG DATA:</strong><br>
-                                Platform: {{ platform_entry.name }}<br>
-                                Is Listed: {{ platform_entry.is_listed }}<br>
-                                Has Details: {{ platform_entry.details is not none }}<br>
-                                {% if platform_entry.details %}
-                                    External ID: "{{ platform_entry.details.external_id or 'NONE' }}"<br>
-                                    Listing URL: "{{ platform_entry.details.listing_url or 'NONE' }}"<br>
-                                    Sync Status: "{{ platform_entry.details.sync_status or 'NONE' }}"<br>
-                                    Last Sync: "{{ platform_entry.details.last_sync or 'NONE' }}"<br>
-                                    Details Keys: {{ platform_entry.details.keys() if platform_entry.details is mapping else 'Not a dict' }}
-                                {% endif %}
-                            </div> -->
-
-                            {% if platform_entry.is_listed and platform_entry.details %}
-                                <!-- Listed state -->
-                                <!-- Line 1: Platform Name + Status -->
-                                <div class="flex justify-between items-center mb-2">
-                                    <span class="font-medium">
-                                        {% if platform_entry.name|lower == 'ebay' and platform_entry.details.uses_crazylister %}
-                                            <span class="inline-flex items-center mr-2" title="CrazyLister template detected">
-                                                <img src="https://www.google.com/s2/favicons?sz=32&domain=crazylister.com" alt="CrazyLister" class="w-[18px] h-[18px]">
-                                            </span>
-                                        {% endif %}
-                                        {% if platform_entry.name|lower == 'vr' %}
-                                            Vintage & Rare
-                                        {% else %}
-                                            {{ platform_entry.name|title }}
-                                        {% endif %}
-                                    </span>
-                                    {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
-                                    {% if platform_status in ['SOLD', 'ENDED', 'SOLD_OUT'] %}
-                                        <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
-                                            Sold
-                                        </span>
-                                    {% elif platform_status in ['DRAFT'] %}
-                                        <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                                            Draft
-                                        </span>
-                                    {% elif platform_status in ['ARCHIVED'] %}
-                                        <span class="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
-                                            Archived
-                                        </span>
-                                    {% elif platform_status in ['ACTIVE', 'LIVE'] %}
-                                        <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                            Active
-                                        </span>
-                                    {% else %}
-                                        <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
-                                            {{ platform_status|title }}
-                                        </span>
-                                    {% endif %}
-                                </div>
-                                
-                                <!-- Line 2: ID + Show Listing button + End Listing button -->
-                                <div class="flex justify-between items-center text-sm text-gray-600 mb-1">
-                                    <span>ID: {{ platform_entry.details.external_id or 'N/A' }}</span>
-                                    <div class="flex gap-2">
-                                        {% if platform_entry.details.listing_url %}
-                                            <a href="{{ platform_entry.details.listing_url }}" target="_blank"
-                                            class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
-                                                Show Listing
-                                            </a>
-                                        {% endif %}
-
-                                        <!-- End Listing button - only show for active listings -->
-                                        {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
-                                        {% if platform_status in ['ACTIVE', 'LIVE'] and platform_entry.details.external_id %}
-                                            <button onclick="endListing('{{ platform_entry.name|lower }}', '{{ platform_entry.details.external_id }}', {{ product.id }})"
-                                                class="px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300"
-                                                data-platform-active="true"
-                                                data-platform="{{ platform_entry.name|lower }}"
-                                                data-external-id="{{ platform_entry.details.external_id }}">
-                                                End Listing
-                                            </button>
-                                        {% endif %}
+                        {% if extra_specs %}
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <h3 class="text-sm font-semibold text-gray-800 mb-3">Technical Specs</h3>
+                            <div class="space-y-2">
+                                {% for key, value in extra_specs.items() %}
+                                    {% if value %}
+                                    {% set label = spec_field_map.get(key, key|replace('_', ' ')|title) %}
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-600">{{ label }}</dt>
+                                        <dd class="text-right">{{ value }}</dd>
                                     </div>
-                                </div>
-                                
-                                <!-- Line 3: Last Sync -->
-                                <div class="text-sm text-gray-600">
-                                    Last Sync: {{ platform_entry.details.last_sync.strftime('%Y-%m-%d %H:%M') if platform_entry.details.last_sync else 'Never' }}
-                                </div>
-                            {% else %}
-                                <!-- Not Listed state -->
-                                <!-- Line 1: Platform Name + Status -->
-                                <div class="flex justify-between items-center mb-2">
-                                    <span class="font-medium">
-                                        {% if platform_entry.name|lower == 'vr' %}
-                                            Vintage & Rare
-                                        {% else %}
-                                            {{ platform_entry.name|title }}
-                                        {% endif %}
-                                    </span>
-                                    <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600">
-                                        Not Listed
-                                    </span>
-                                </div>
-                                
-                                <!-- Line 2: List Item button -->
-                                <div class="flex justify-end">
-                                    {% set product_status = product.status.value|upper if product.status else '' %}
-                                    {% if product_status not in ['SOLD', 'ARCHIVED'] %}
-                                        <form action="{{ url_for('create_platform_listing_from_detail', product_id=product.id, platform_slug=platform_entry.slug) }}" method="POST" class="inline">
-                                            <button type="submit" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
-                                                List Item
-                                            </button>
-                                        </form>
-                                    {% else %}
-                                        <button disabled class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-400 cursor-not-allowed">
-                                            List Item
-                                        </button>
                                     {% endif %}
-                                </div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="text-gray-500 italic">
-                            No platform information available or platforms not configured.
-                        </div>
-                    {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Description -->
-            <div class="md:col-span-2">
-                <h2 class="text-lg font-semibold mb-4">Description</h2>
-                <div class="prose max-w-none">
-                    {{ product.description|safe or 'No description available.' }}
-                </div>
-            </div>
-
-            <!-- Media Section -->
-            <div class="md:col-span-2">
-                <div class="flex items-end mb-4 space-x-2">
-                    <h2 class="text-lg font-semibold leading-none pb-0">Images</h2>
-                    {% if reverb_listing_id %}
-                        <button id="refresh-images-btn"
-                                data-refresh-url="{{ url_for('refresh_product_images', product_id=product.id) }}"
-                                class="text-xs text-blue-600 hover:text-blue-800 pb-0.5">
-                            (Check Images)
-                        </button>
-                    {% endif %}
-                </div>
-
-                {% if product.primary_image or product.additional_images %}
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
-                        {% if product.primary_image %}
-                        <div class="aspect-w-4 aspect-h-3">
-                            <img src="{{ product.primary_image }}" 
-                                alt="Primary image" 
-                                class="product-image clickable-image primary-image" 
-                                data-full-url="{{ product.primary_image }}"
-                                title="Primary image - Click to view full size">
+                                {% endfor %}
+                            </div>
                         </div>
                         {% endif %}
-                        {% for image in product.additional_images %}
-                        <div class="aspect-w-4 aspect-h-3">
-                            <img src="{{ image }}" 
-                                alt="Additional image" 
-                                class="product-image clickable-image"
-                                data-full-url="{{ image }}"
-                                title="Click to view full size">
-                        </div>
-                        {% endfor %}
+                        {# Shipping options intentionally hidden from detail view #}
+                    </dl>
+                </div>
+
+                <div class="border rounded p-4 bg-white">
+                    <div class="flex items-end justify-between mb-4 pb-3 border-b border-gray-300">
+                        <h2 class="text-lg font-semibold leading-none pb-0">Images</h2>
+                        {% if reverb_listing_id %}
+                            <button id="refresh-images-btn"
+                                    type="button"
+                                    data-refresh-url="{{ url_for('refresh_product_images', product_id=product.id) }}"
+                                    data-fix-url="{{ url_for('fix_product_images', product_id=product.id) }}"
+                                    data-check-label="Check Images"
+                                    data-fix-label="Fix Images"
+                                    class="inline-flex items-center px-3 py-1 text-xs rounded-full bg-blue-50 text-blue-600 hover:text-blue-800">
+                                Check Images
+                            </button>
+                        {% endif %}
                     </div>
-                {% else %}
-                    <p class="text-sm text-gray-500">No images are currently stored for this product.</p>
-                {% endif %}
+                    {% if product.primary_image or product.additional_images %}
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {% if product.primary_image %}
+                                <div class="overflow-hidden rounded aspect-w-4 aspect-h-3 bg-white">
+                                    <img src="{{ product.primary_image }}" alt="Primary image" class="w-full h-full object-contain product-image clickable-image primary-image" data-full-url="{{ product.primary_image }}" title="Primary image - Click to view full size">
+                                </div>
+                            {% endif %}
+                            {% for image in product.additional_images %}
+                                <div class="overflow-hidden rounded aspect-w-4 aspect-h-3 bg-white">
+                                    <img src="{{ image }}" alt="Additional image" class="w-full h-full object-contain product-image clickable-image" data-full-url="{{ image }}" title="Click to view full size">
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-gray-500">No images are currently stored for this product.</p>
+                    {% endif %}
+                </div>
             </div>
+
+            <!-- Right column: platforms + description -->
+            <div class="space-y-6">
+                <div class="border rounded px-4 pt-3 pb-3 bg-white">
+                    <div class="flex items-center justify-between pb-3 mb-4 border-b border-gray-300">
+                        <h2 class="text-lg font-semibold">Platform Listings</h2>
+                        {% if active_platforms|length > 0 %}
+                            <button onclick="endAllListings()" class="inline-flex items-center px-3 py-1 text-sm rounded-full bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-12.728 12.728m0-12.728l12.728 12.728" />
+                                </svg>
+                                End All Listings
+                            </button>
+                        {% endif %}
+                    </div>
+                    <div class="space-y-3">
+                        {% if all_platforms_status %}
+                            {% for platform_entry in all_platforms_status %}
+                                <div class="border rounded p-3 bg-gray-50"
+                                     {% if platform_entry.is_listed and platform_entry.details %}
+                                     data-platform="{{ platform_entry.name|lower }}"
+                                     data-external-id="{{ platform_entry.details.external_id }}"
+                                     data-platform-active="{% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}{% if platform_status in ['ACTIVE', 'LIVE'] %}true{% else %}false{% endif %}"
+                                     {% endif %}>
+                                    {% if platform_entry.is_listed and platform_entry.details %}
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-medium">
+                                                {% if platform_entry.name|lower == 'ebay' and platform_entry.details.uses_crazylister %}
+                                                    <span class="inline-flex items-center mr-2" title="CrazyLister template detected">
+                                                        <img src="https://www.google.com/s2/favicons?sz=32&domain=crazylister.com" alt="CrazyLister" class="w-[18px] h-[18px]">
+                                                    </span>
+                                                {% endif %}
+                                                {% if platform_entry.name|lower == 'vr' %}
+                                                    Vintage & Rare
+                                                {% else %}
+                                                    {{ platform_entry.name|title }}
+                                                {% endif %}
+                                            </span>
+                                            {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
+                                            {% if platform_status in ['SOLD', 'ENDED', 'SOLD_OUT'] %}
+                                                <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">Sold</span>
+                                            {% elif platform_status in ['DRAFT'] %}
+                                                <span class="px-2 py-1 text-xs rounded-full bg-amber-100 text-amber-700">Draft</span>
+                                            {% elif platform_status in ['ARCHIVED'] %}
+                                                <span class="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-700">Archived</span>
+                                            {% elif platform_status in ['ACTIVE', 'LIVE'] %}
+                                                <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Active</span>
+                                            {% else %}
+                                                <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">{{ platform_status|title }}</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="flex justify-between items-center text-sm text-gray-600 mb-1">
+                                            <span>ID: {{ platform_entry.details.external_id or 'N/A' }}</span>
+                                            <div class="flex gap-2">
+                                                {% if platform_entry.details.listing_url %}
+                                                    <a href="{{ platform_entry.details.listing_url }}" target="_blank" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">Show Listing</a>
+                                                {% endif %}
+                                                {% if platform_status in ['ACTIVE', 'LIVE'] and platform_entry.details.external_id %}
+                                                    <button onclick="endListing('{{ platform_entry.name|lower }}', '{{ platform_entry.details.external_id }}', {{ product.id }})" class="px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300">End Listing</button>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="text-sm text-gray-600">Last Sync: {{ platform_entry.details.last_sync.strftime('%Y-%m-%d %H:%M') if platform_entry.details.last_sync else 'Never' }}</div>
+                                    {% else %}
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-medium">{% if platform_entry.name|lower == 'vr' %}Vintage & Rare{% else %}{{ platform_entry.name|title }}{% endif %}</span>
+                                            <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600">Not Listed</span>
+                                        </div>
+                                        <div class="flex justify-end">
+                                            {% set product_status = product.status.value|upper if product.status else '' %}
+                                            {% if product_status not in ['SOLD', 'ARCHIVED'] %}
+                                                <form action="{{ url_for('create_platform_listing_from_detail', product_id=product.id, platform_slug=platform_entry.slug) }}" method="POST" class="inline">
+                                                    <button type="submit" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">List Item</button>
+                                                </form>
+                                            {% else %}
+                                                <button disabled class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-400 cursor-not-allowed">List Item</button>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-gray-500 italic">No platform information available or platforms not configured.</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="border rounded p-4 bg-white">
+                    <h2 class="text-lg font-semibold mb-4 border-b border-gray-300 pb-3">Description</h2>
+                    {% if product.description %}
+                        <div class="border border-gray-200 rounded p-4 bg-gray-50 text-sm text-gray-700">
+                            {{ product.description|safe }}
+                        </div>
+                    {% else %}
+                        <div class="border border-gray-200 rounded p-4 bg-gray-50 text-sm text-gray-500">No description available.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
 
 
         </div>
@@ -487,8 +476,8 @@
 
 <style>
     .product-image {
-        max-width: 250px;
-        max-height: 250px;
+        width: 100%;
+        height: 100%;
         object-fit: contain;
         border-radius: 8px;
         transition: all 0.3s ease;
@@ -534,30 +523,96 @@
             });
         });
 
+        const storedImageFlash = sessionStorage.getItem('imageHealthFlash');
+        if (storedImageFlash) {
+            try {
+                const parsed = JSON.parse(storedImageFlash);
+                if (parsed && parsed.message) {
+                    displayMessage(parsed.message, parsed.type || 'info');
+                }
+            } catch (_) {
+                // ignore parsing errors
+            }
+            sessionStorage.removeItem('imageHealthFlash');
+        }
+
         const refreshButton = document.getElementById('refresh-images-btn');
         if (refreshButton) {
+            const checkLabel = refreshButton.dataset.checkLabel || '(Check Images)';
+            const fixLabel = refreshButton.dataset.fixLabel || 'Fix Images';
+
+            const setMode = (mode, tooltipText = '') => {
+                refreshButton.dataset.mode = mode;
+                if (mode === 'fix') {
+                    refreshButton.innerHTML = `<strong>${fixLabel}</strong>`;
+                } else {
+                    refreshButton.textContent = checkLabel;
+                }
+                refreshButton.title = tooltipText;
+            };
+
+            setMode('check');
+
             refreshButton.addEventListener('click', async () => {
-                const originalText = refreshButton.textContent;
-                refreshButton.textContent = 'Checking…';
+                const mode = refreshButton.dataset.mode || 'check';
+                const targetUrl = mode === 'fix' ? refreshButton.dataset.fixUrl : refreshButton.dataset.refreshUrl;
+                if (!targetUrl) {
+                    return;
+                }
+
                 refreshButton.disabled = true;
+                if (mode === 'fix') {
+                    refreshButton.innerHTML = `<strong>${fixLabel}…</strong>`;
+                } else {
+                    refreshButton.textContent = 'Checking…';
+                }
 
                 try {
-                    const response = await fetch(refreshButton.dataset.refreshUrl, {
+                    const response = await fetch(targetUrl, {
                         method: 'POST',
                         headers: { 'Accept': 'application/json' }
                     });
                     const data = await response.json();
-                    if (data.status === 'success') {
-                        window.location.reload();
-                    } else {
-                        alert(data.message || 'Reverb has not provided images yet.');
-                        refreshButton.textContent = originalText;
+
+                    if (data.status !== 'success') {
+                        displayMessage(data.message || 'Unable to refresh images.', data.message_type || 'error');
+                        setMode('check');
                         refreshButton.disabled = false;
+                        return;
                     }
+
+                    if (data.message) {
+                        displayMessage(data.message, data.message_type || (data.needs_fix ? 'warning' : 'success'));
+                    }
+
+                    const summaryLines = (data.platform_results || [])
+                        .filter(res => res && res.needs_fix && !res.error && res.available)
+                        .map(res => `${res.platform.charAt(0).toUpperCase() + res.platform.slice(1)}: ${res.platform_count}/${res.canonical_count}`);
+
+                    if (data.needs_fix) {
+                        const tooltip = summaryLines.length ? `Needs sync – ${summaryLines.join(', ')}` : 'Needs sync';
+                        setMode('fix', tooltip);
+                    } else {
+                        const tooltip = summaryLines.length ? summaryLines.join(', ') : 'Images are in sync';
+                        setMode('check', tooltip);
+                    }
+
+                    if (data.canonical_updated && (mode === 'fix' || !data.needs_fix)) {
+                        if (data.message) {
+                            sessionStorage.setItem('imageHealthFlash', JSON.stringify({
+                                message: data.message,
+                                type: data.message_type || 'info'
+                            }));
+                        }
+                        window.location.reload();
+                        return;
+                    }
+
+                    refreshButton.disabled = false;
                 } catch (error) {
-                    console.error('Failed to refresh images', error);
-                    alert('Unable to refresh images at this time.');
-                    refreshButton.textContent = originalText;
+                    console.error('Failed to refresh platform images', error);
+                    displayMessage('Unable to refresh images at this time.', 'error');
+                    setMode('check');
                     refreshButton.disabled = false;
                 }
             });
@@ -591,37 +646,56 @@
         }
         
         function displayMessage(message, type) {
-            // Create message element
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `alert alert-${type || 'info'} mb-4 p-4 rounded-md`;
-
-            // Set colors based on message type
-            if (type === 'error') {
-                messageDiv.className += ' bg-red-100 border border-red-400 text-red-700';
-            } else if (type === 'warning') {
-                messageDiv.className += ' bg-yellow-100 border border-yellow-400 text-yellow-700';
-            } else if (type === 'success') {
-                messageDiv.className += ' bg-green-100 border border-green-400 text-green-700';
-            } else {
-                messageDiv.className += ' bg-blue-100 border border-blue-400 text-blue-700';
+            const containerId = 'image-health-toast-container';
+            let container = document.getElementById(containerId);
+            if (!container) {
+                container = document.createElement('div');
+                container.id = containerId;
+                container.style.position = 'fixed';
+                container.style.bottom = '1.5rem';
+                container.style.right = '1.5rem';
+                container.style.zIndex = '9999';
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column';
+                container.style.gap = '0.75rem';
+                document.body.appendChild(container);
             }
 
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'rounded-md border px-4 py-3 text-sm shadow-lg flex items-start gap-3 max-w-md bg-white';
+
+            let toneClasses = 'border-blue-200 text-blue-800 bg-blue-50';
+            if (type === 'error') {
+                toneClasses = 'border-red-200 text-red-800 bg-red-50';
+            } else if (type === 'warning') {
+                toneClasses = 'border-yellow-200 text-yellow-800 bg-yellow-50';
+            } else if (type === 'success') {
+                toneClasses = 'border-green-200 text-green-800 bg-green-50';
+            }
+            messageDiv.className += ` ${toneClasses}`;
+
             messageDiv.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <span>${message.replace(/\+/g, ' ')}</span>
-                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-lg">&times;</button>
-                </div>
+                <span class="flex-1 leading-snug">${message.replace(/\+/g, ' ')}</span>
+                <button class="text-xl leading-none" aria-label="Dismiss" style="color: inherit;">&times;</button>
             `;
 
-            // Insert at the top of the container
-            const container = document.querySelector('.container');
-            container.insertBefore(messageDiv, container.firstChild);
+            const closeBtn = messageDiv.querySelector('button');
+            closeBtn.addEventListener('click', () => {
+                messageDiv.remove();
+                if (!container.hasChildNodes()) {
+                    container.remove();
+                }
+            });
 
-            // Auto-remove success/info messages after 5 seconds
-            if (type === 'success' || type === 'info') {
+            container.appendChild(messageDiv);
+
+            if (type !== 'error') {
                 setTimeout(() => {
                     if (messageDiv.parentElement) {
                         messageDiv.remove();
+                    }
+                    if (!container.hasChildNodes()) {
+                        container.remove();
                     }
                 }, 5000);
             }

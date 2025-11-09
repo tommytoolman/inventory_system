@@ -7,7 +7,15 @@ from pydantic import BaseModel, field_validator, ConfigDict
 from datetime import datetime
 import json # Import json at top level
 
-from app.core.enums import ProductStatus, ProductCondition
+from app.core.enums import (
+    ProductStatus,
+    ProductCondition,
+    Handedness,
+    ManufacturingCountry,
+    InventoryLocation,
+    Storefront,
+    CaseStatus,
+)
 
 class ProductValidationMixin(BaseModel):
     """
@@ -129,6 +137,16 @@ class ProductBase(ProductValidationMixin): # Inherit Mixin (gets config + valida
     is_stocked_item: Optional[bool] = False
     quantity: Optional[int] = None
     shipping_profile_id: Optional[int] = None
+    serial_number: Optional[str] = None
+    handedness: Handedness = Handedness.RIGHT
+    artist_owned: bool = False
+    artist_names: List[str] = []
+    manufacturing_country: Optional[ManufacturingCountry] = None
+    inventory_location: InventoryLocation = InventoryLocation.HANKS
+    storefront: Storefront = Storefront.HANKS
+    case_status: CaseStatus = CaseStatus.NONE
+    case_details: Optional[str] = None
+    extra_attributes: Dict[str, Any] = {}
 
     # Media and links
     primary_image: Optional[str] = None
@@ -184,6 +202,16 @@ class ProductUpdate(ProductValidationMixin): # Inherit Mixin (gets config + vali
     external_link: Optional[str] = None
     processing_time: Optional[int] = None
     platform_data: Optional[Dict[str, Dict[str, Any]]] = None # Allows update to None or new dict
+    serial_number: Optional[str] = None
+    handedness: Optional[Handedness] = None
+    artist_owned: Optional[bool] = None
+    artist_names: Optional[List[str]] = None
+    manufacturing_country: Optional[ManufacturingCountry] = None
+    inventory_location: Optional[InventoryLocation] = None
+    storefront: Optional[Storefront] = None
+    case_status: Optional[CaseStatus] = None
+    case_details: Optional[str] = None
+    extra_attributes: Optional[Dict[str, Any]] = None
 
     # --- NO duplicated validators or model_config needed here ---
 

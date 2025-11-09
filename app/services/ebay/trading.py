@@ -200,6 +200,16 @@ class EbayTradingLegacyAPI:
             logger.error(f"Unexpected error in Trading API request {call_name}: {e_generic}", exc_info=True)
             raise EbayAPIError(f"Unexpected error on {call_name}: {e_generic}")
 
+    @staticmethod
+    def _format_datetime(value: datetime) -> str:
+        if isinstance(value, str):
+            return value
+        if not isinstance(value, datetime):
+            raise ValueError("Datetime value must be datetime or ISO string")
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
     async def end_listing(self, item_id: str, reason_code: str = "NotAvailable") -> Dict:
         """End an active eBay listing"""
         xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -554,6 +564,71 @@ class EbayTradingLegacyAPI:
 
         # print(f"DEBUG: EbayTradingLegacyAPI.get_all_selling_listings - Finished fetching all lists. Total active: {len(all_listings_data['active'])}, sold: {len(all_listings_data['sold'])}, unsold: {len(all_listings_data['unsold'])}")
         return all_listings_data
+
+    async def get_orders(
+        self,
+        *,
+        number_of_days: Optional[int] = 30,
+        created_time_from: Optional[datetime] = None,
+        created_time_to: Optional[datetime] = None,
+        last_modified_from: Optional[datetime] = None,
+        last_modified_to: Optional[datetime] = None,
+        order_status: str = "All",
+        order_role: str = "Seller",
+        entries_per_page: int = 100,
+        page_number: int = 1,
+        detail_level: str = "ReturnAll",
+    ) -> Dict[str, Any]:
+        if entries_per_page <= 0:
+            entries_per_page = 1
+        entries_per_page = min(entries_per_page, 100)
+
+        time_filters = ""
+        if created_time_from and created_time_to:
+            time_filters = (
+                f"<CreateTimeFrom>{self._format_datetime(created_time_from)}</CreateTimeFrom>"
+                f"<CreateTimeTo>{self._format_datetime(created_time_to)}</CreateTimeTo>"
+            )
+        elif last_modified_from and last_modified_to:
+            time_filters = (
+                f"<ModTimeFrom>{self._format_datetime(last_modified_from)}</ModTimeFrom>"
+                f"<ModTimeTo>{self._format_datetime(last_modified_to)}</ModTimeTo>"
+            )
+        elif number_of_days:
+            time_filters = f"<NumberOfDays>{int(number_of_days)}</NumberOfDays>"
+        else:
+            raise ValueError("GetOrders requires number_of_days or a time range")
+
+        xml_request = f"""<?xml version=\"1.0\" encoding=\"utf-8\"?>
+        <GetOrdersRequest xmlns=\"urn:ebay:apis:eBLBaseComponents\">
+          <DetailLevel>{detail_level}</DetailLevel>
+          <Pagination>
+            <EntriesPerPage>{entries_per_page}</EntriesPerPage>
+            <PageNumber>{page_number}</PageNumber>
+          </Pagination>
+          <OrderRole>{order_role}</OrderRole>
+          <OrderStatus>{order_status}</OrderStatus>
+          {time_filters}
+        </GetOrdersRequest>"""
+
+        response = await self._make_request("GetOrders", xml_request)
+        payload = response.get("GetOrdersResponse", {})
+        order_array = payload.get("OrderArray", {})
+        orders = order_array.get("Order", [])
+        if isinstance(orders, dict):
+            orders = [orders]
+
+        has_more = payload.get("HasMoreOrders", False)
+        if isinstance(has_more, str):
+            has_more = has_more.lower() == "true"
+
+        return {
+            "orders": orders or [],
+            "raw": payload,
+            "has_more": has_more,
+            "pagination": payload.get("PaginationResult", {}),
+            "ack": payload.get("Ack"),
+        }
 
     async def get_total_active_listings_count(self) -> int:
         # print("DEBUG: EbayTradingLegacyAPI.get_total_active_listings_count - Entered.")

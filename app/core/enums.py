@@ -42,7 +42,6 @@ class Handedness(str, Enum):
     AMBIDEXTROUS = "AMBIDEXTROUS"
     UNSPECIFIED = "UNSPECIFIED"
 
-
 class ManufacturingCountry(str, Enum):
     UNITED_KINGDOM = "GB"
     UNITED_STATES = "US"
@@ -63,6 +62,29 @@ class ManufacturingCountry(str, Enum):
     NEW_ZEALAND = "NZ"
     BRAZIL = "BR"
     OTHER = "OTHER"
+
+
+class InventoryLocation(str, Enum):
+    HANKS = "HANKS"
+    DONCASTER = "DONCASTER"
+    UNSPECIFIED = "UNSPECIFIED"
+
+
+class Storefront(str, Enum):
+    HANKS = "Hanks"
+    LONDON_VINTAGE_GUITARS = "London Vintage Guitars"
+    UNSPECIFIED = "UNSPECIFIED"
+
+
+class CaseStatus(str, Enum):
+    NONE = "NONE"
+    ORIGINAL = "ORIGINAL"
+    PERIOD_CORRECT = "PERIOD_CORRECT"
+    AFTERMARKET = "AFTERMARKET"
+    GIG_BAG = "GIG_BAG"
+    FLIGHT_CASE = "FLIGHT_CASE"
+    UNSPECIFIED = "UNSPECIFIED"
+
 
 class ListingStatus(str, Enum):
     """Listing status values used in both models and schemas"""

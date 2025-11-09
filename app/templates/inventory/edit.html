@@ -2,208 +2,353 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
-    <div class="max-w-4xl mx-auto">
-        <h1 class="text-2xl font-bold mb-6">Edit Product</h1>
-        
-        <form method="post" action="/inventory/products/{{ product.id }}/edit" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+    <div class="max-w-5xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-6">Edit Product</h1>
+
+        <form method="post" action="/inventory/products/{{ product.id }}/edit" class="space-y-6">
             <!-- Basic Information -->
-            <div class="mb-6">
-                <h2 class="text-lg font-semibold mb-4">Basic Information</h2>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-white shadow rounded-lg border border-gray-100">
+                <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                     <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="title">
-                            Title
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                               id="title" name="title" type="text" value="{{ product.title or '' }}">
+                        <h2 class="text-lg font-semibold text-gray-900">Basic Information</h2>
+                        <p class="text-sm text-gray-500">Core product fields plus extra metadata.</p>
                     </div>
-                    
-                    <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="sku">
-                            SKU (Read-only)
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-100 leading-tight" 
-                               id="sku" type="text" value="{{ product.sku }}" disabled>
+                    <button type="button" class="card-toggle text-gray-500 hover:text-gray-700 transition-transform duration-200 transform" data-target="basic-info-body">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="basic-info-body" class="p-6 space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="title">
+                                Title <span class="text-red-500 ml-0.5">*</span>
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline flex-1" id="title" name="title" type="text" value="{{ product.title or '' }}" required aria-required="true" autocomplete="off">
+                                <button type="button" id="generateTitleBtn" class="inline-flex items-center justify-center px-2.5 py-2 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-200" title="Generate title from brand, model, finish, and year/decade">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 3v2m4.243.757l-1.414 1.414M21 11h-2m-.757 4.243l-1.414-1.414M13 21v-2m-4.243-.757l1.414-1.414M3 13h2m.757-4.243l1.414 1.414M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                                    </svg>
+                                    <span class="sr-only">Auto-generate title</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="sku">
+                                SKU <span class="text-xs font-normal text-gray-500">(read-only)</span>
+                            </label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed focus:outline-none focus:shadow-outline" id="sku" type="text" value="{{ product.sku }}" disabled>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="brand">
+                                Brand <span class="text-red-500 ml-0.5">*</span>
+                            </label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="brand" name="brand" list="brandList" autocomplete="off" type="text" value="{{ product.brand or '' }}" required aria-required="true">
+                            <datalist id="brandList">
+                                {% for brand in brand_options %}
+                                    <option value="{{ brand }}">
+                                {% endfor %}
+                            </datalist>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="model">
+                                Model <span class="text-red-500 ml-0.5">*</span>
+                            </label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="model" name="model" type="text" value="{{ product.model or '' }}" required aria-required="true">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="year">Year</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="year" name="year" type="number" value="{{ product.year or '' }}">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="finish">Finish</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="finish" name="finish" type="text" value="{{ product.finish or '' }}">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="decade">Decade</label>
+                            <input class="shadow appearance-none border rounded w-full md:max-w-[9rem] py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="decade" name="decade" type="text" value="{{ (product.decade|string + 's') if product.decade else '' }}" placeholder="1950s" list="decade-options" inputmode="numeric">
+                            <datalist id="decade-options">
+                                {% for decade in [1890,1900,1910,1920,1930,1940,1950,1960,1970,1980,1990,2000,2010,2020] %}
+                                    <option value="{{ decade }}s"></option>
+                                {% endfor %}
+                            </datalist>
+                            <p class="text-xs text-gray-500 mt-1">Displayed as “1950s” when no exact year exists.</p>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="condition">
+                                Condition <span class="text-red-500 ml-0.5">*</span>
+                            </label>
+                            <select class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="condition" name="condition" required aria-required="true">
+                                {% for condition in conditions %}
+                                    <option value="{{ condition.value }}" {% if product.condition == condition %}selected{% endif %}>
+                                        {{ condition.value }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="category">
+                                Category <span class="text-red-500 ml-0.5">*</span>
+                            </label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="category" name="category" type="text" list="canonicalCategories" autocomplete="off" value="{{ product.category or '' }}" placeholder="Start typing to search categories" required aria-required="true">
+                            <datalist id="canonicalCategories">
+                                {% for category in canonical_categories %}
+                                    <option value="{{ category }}"></option>
+                                {% endfor %}
+                            </datalist>
+                            <p class="text-xs text-gray-500 mt-1">Alphabetical suggestions shown; keep typing to reach the full Reverb taxonomy.</p>
+                        </div>
                     </div>
-                    
-                    <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="brand">
-                            Brand
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                               id="brand" name="brand" type="text" value="{{ product.brand or '' }}">
+
+                    <div class="bg-gray-50 rounded-lg border border-gray-200">
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 class="text-sm font-semibold text-gray-700">Further Information</h3>
+                            <button type="button" class="metadata-toggle inline-flex items-center text-gray-500 hover:text-gray-700 transition-transform duration-200 transform" data-target="metadata-body" data-default-state="collapsed">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                                <span class="sr-only">Toggle metadata</span>
+                            </button>
+                        </div>
+                        <div id="metadata-body" class="p-4 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-4">
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="extra_handmade" name="extra_handmade" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" {% if product.extra_attributes and product.extra_attributes.get('handmade') %}checked{% endif %}>
+                                    <label for="extra_handmade" class="text-sm font-bold text-gray-700">Handmade</label>
+                                </div>
+                                <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="handedness">Handedness</label>
+                            <select id="handedness" name="handedness" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                                {% for option in handedness_options %}
+                                    <option value="{{ option.name }}" {% if product.handedness and product.handedness.name == option.name %}selected{% endif %}>{{ option.name.replace('_', ' ') }}</option>
+                                {% endfor %}
+                            </select>
+                            <p id="handedness-lock-note" class="hidden mt-1 text-xs text-gray-500 italic">
+                                Locked to left-handed because the selected category is a left-handed model.
+                            </p>
+                        </div>
+                                    <div>
+                                        <label class="block text-gray-700 text-sm font-bold mb-2" for="manufacturing_country">
+                                            Country of Manufacture <span class="text-red-500 ml-0.5">*</span>
+                                        </label>
+                                        <select id="manufacturing_country" name="manufacturing_country" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required aria-required="true">
+                                            <option value="">—</option>
+                                            {% for country in manufacturing_countries %}
+                                                <option value="{{ country.value }}" {% if product.manufacturing_country and product.manufacturing_country.value == country.value %}selected{% endif %}>{{ country.name.replace('_', ' ') }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2" for="serial_number">Serial Number</label>
+                                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="serial_number" name="serial_number" type="text" value="{{ product.serial_number or '' }}">
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2" for="body_type">Body Type</label>
+                                <select id="body_type" name="body_type" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                                    <option value="">—</option>
+                                    {% set selected_body_type = (product.extra_attributes or {}).get('body_type') %}
+                                    {% for option in body_type_options %}
+                                        <option value="{{ option }}" {% if selected_body_type == option %}selected{% endif %}>{{ option }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2" for="case_status">Case Status</label>
+                                <select id="case_status" name="case_status" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                                            {% for case_option in case_status_options %}
+                                                <option value="{{ case_option.name }}" {% if product.case_status and product.case_status.name == case_option.name %}selected{% endif %}>{{ case_option.name.replace('_', ' ') }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="space-y-4">
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" id="artist_owned" name="artist_owned" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" {% if product.artist_owned %}checked{% endif %}>
+                                        <label for="artist_owned" class="text-sm font-bold text-gray-700">Artist Owned</label>
+                                    </div>
+                                    <div>
+                                        <label class="block text-gray-700 text-sm font-bold mb-2" for="artist_names">Artist Details</label>
+                                        <textarea id="artist_names" name="artist_names" rows="4" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Separate multiple names with commas">{{ (product.artist_names or []) | join(', ') }}</textarea>
+                                        <p class="text-xs text-gray-500 mt-1">Separate multiple names with commas.</p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-gray-700 text-sm font-bold mb-2" for="case_details">Case Details</label>
+                                        <textarea id="case_details" name="case_details" rows="4" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Notes on original case, gig bag, or accessories">{{ product.case_details or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="bg-white shadow rounded-lg border border-gray-100">
+                <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                     <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="model">
-                            Model
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                               id="model" name="model" type="text" value="{{ product.model or '' }}">
+                        <h2 class="text-lg font-semibold text-gray-900">Description</h2>
                     </div>
-                    
+                    <button type="button" class="card-toggle text-gray-500 hover:text-gray-700 transition-transform duration-200 transform" data-target="description-body">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="description-body" class="p-6 space-y-3">
+                    <p class="text-sm text-gray-600">Paste clean text (no tables) so automated EU footers continue to work.</p>
+                    <textarea class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="description" name="description" rows="9" aria-label="Product description">{{ (product.description or '') | safe }}</textarea>
+                </div>
+            </div>
+
+            <!-- Pricing & Inventory -->
+            <div class="bg-white shadow rounded-lg border border-gray-100">
+                <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                     <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="year">
-                            Year
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                               id="year" name="year" type="number" value="{{ product.year or '' }}">
+                        <h2 class="text-lg font-semibold text-gray-900">Pricing &amp; Inventory</h2>
+                        <p class="text-sm text-gray-500">Base price drives suggested platform prices.</p>
                     </div>
-                    
-                    <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="finish">
-                            Finish
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                               id="finish" name="finish" type="text" value="{{ product.finish or '' }}">
+                    <button type="button" class="card-toggle text-gray-500 hover:text-gray-700 transition-transform duration-200 transform" data-target="pricing-body">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="pricing-body" class="p-6 space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="base_price">Price (£)</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="base_price" name="base_price" type="number" step="0.01" value="{{ product.base_price }}">
+                        </div>
+                        <div class="max-w-[9rem]">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="quantity">Quantity</label>
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="quantity" name="quantity" type="number" value="{{ product.quantity }}">
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" name="is_stocked_item" id="is_stocked_item" class="mr-2" {% if product.is_stocked_item %}checked{% endif %}>
+                            <label class="text-sm font-bold text-gray-700" for="is_stocked_item">Stocked Item</label>
+                        </div>
                     </div>
-                    
-                    <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="category">
-                            Category
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                               id="category" name="category" type="text" value="{{ product.category or '' }}">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" aria-hidden="true">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="inventory_location">Inventory Location</label>
+                            <select id="inventory_location" name="inventory_location" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                                <option value="UNSPECIFIED" {% if not product.inventory_location or product.inventory_location.name == 'UNSPECIFIED' %}selected{% endif %}>Unspecified</option>
+                                {% for location in inventory_locations %}
+                                    {% if location.name != 'UNSPECIFIED' %}
+                                        <option value="{{ location.name }}" {% if product.inventory_location and product.inventory_location.name == location.name %}selected{% endif %}>{{ location.name.replace('_', ' ') }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="storefront">Storefront</label>
+                            <select id="storefront" name="storefront" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                                <option value="UNSPECIFIED" {% if not product.storefront or product.storefront.name == 'UNSPECIFIED' %}selected{% endif %}>Unspecified</option>
+                                {% for option in storefront_options %}
+                                    {% if option.name != 'UNSPECIFIED' %}
+                                        <option value="{{ option.name }}" {% if product.storefront and product.storefront.name == option.name %}selected{% endif %}>{{ option.value }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
-                    
+
+                    <div class="border border-dashed border-gray-200 rounded-lg p-4">
+                        <h3 class="text-sm font-semibold text-gray-700 mb-3">Platform Pricing</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2" for="shopify_price_display">Shopify (read-only)</label>
+                                <input id="shopify_price_display" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100 focus:outline-none focus:shadow-outline" value="{{ platforms['shopify']['price'] }}" readonly>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2" for="ebay_price_display">eBay</label>
+                                <input id="ebay_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['ebay']['price'] }}">
+                                <input type="hidden" id="ebay_price" name="platform_price_ebay" value="{{ platforms['ebay']['price'] }}">
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2" for="reverb_price_display">Reverb</label>
+                                <input id="reverb_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['reverb']['price'] }}">
+                                <input type="hidden" id="reverb_price" name="platform_price_reverb" value="{{ platforms['reverb']['price'] }}">
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2" for="vr_price_display">Vintage &amp; Rare</label>
+                                <input id="vr_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['vr']['price'] }}">
+                                <input type="hidden" id="vr_price" name="platform_price_vr" value="{{ platforms['vr']['price'] }}">
+                            </div>
+                        </div>
+                    </div>
+
                     <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="condition">
-                            Condition
-                        </label>
-                        <select class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                                id="condition" name="condition">
-                            {% for condition in conditions %}
-                                <option value="{{ condition.value }}" {% if product.condition == condition %}selected{% endif %}>
-                                    {{ condition.value }}
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="shipping_profile_id">Shipping Profile</label>
+                        <select id="shipping_profile_id" name="shipping_profile_id" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                            <option value="">-- Select a profile --</option>
+                            {% for profile in shipping_profiles %}
+                                <option value="{{ profile.id }}" {% if product.shipping_profile_id == profile.id %}selected{% endif %}>
+                                    {{ profile.name }}{% if profile.reverb_profile_id %} ({{ profile.reverb_profile_id }}){% endif %}
                                 </option>
                             {% endfor %}
                         </select>
+                        <p class="text-xs text-gray-500 mt-1">Controls shipping rates on Reverb and Vintage &amp; Rare.</p>
                     </div>
-                </div>
-                
-                <div class="mt-4">
-                    <label class="block text-gray-700 text-sm font-bold mb-2" for="description">
-                        Description
-                    </label>
-                    <textarea class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                              id="description" name="description" rows="6">{{ (product.description or '') | safe }}</textarea>
                 </div>
             </div>
-            
-            <!-- Pricing and Inventory -->
-            <div class="mb-6">
-                <h2 class="text-lg font-semibold mb-4">Pricing and Inventory</h2>
-                
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="base_price">
-                            Price (£)
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                               id="base_price" name="base_price" type="number" step="0.01" value="{{ product.base_price }}">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="quantity">
-                            Quantity
-                        </label>
-                        <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-                               id="quantity" name="quantity" type="number" value="{{ product.quantity }}">
-                    </div>
-                    
-                    <div>
-                        <label class="flex items-center mt-8">
-                            <input type="checkbox" name="is_stocked_item" id="is_stocked_item" 
-                                   {% if product.is_stocked_item %}checked{% endif %} 
-                                   class="mr-2">
-                            <span class="text-sm font-bold text-gray-700">Stocked Item</span>
-                        </label>
-                    </div>
-                </div>
 
-                <div class="mt-6">
-                    <h3 class="text-md font-semibold text-gray-800 mb-2">Platform Pricing</h3>
-                    <p class="text-sm text-gray-500 mb-4">Base price auto-calculates suggested prices. Adjust eBay, Reverb, or V&amp;R if you need custom margins.</p>
+            <!-- Platform Details -->
+            <div class="bg-white shadow rounded-lg border border-gray-100">
+                <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">Platform Details</h2>
+                        <p class="text-sm text-gray-500">Review live listings and queue platform sync.</p>
+                    </div>
+                    <button type="button" class="card-toggle text-gray-500 hover:text-gray-700 transition-transform duration-200 transform" data-target="platform-body">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="platform-body" class="p-6 space-y-6">
+                    <div class="border border-dashed border-gray-200 rounded-lg p-4 bg-white">
+                        <p class="text-sm text-gray-600 mb-3">Push these edits to selected platforms:</p>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {% for platform_name, platform_info in platforms.items() %}
+                                <label class="flex items-center gap-2 text-sm text-gray-700">
+                                    <input type="checkbox" name="sync_{{ platform_name }}" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" {% if platform_info.status == 'active' %}checked{% endif %}>
+                                    <span>{{ platform_name|title }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-gray-700 text-sm font-bold mb-2" for="shopify_price_display">Shopify (read-only)</label>
-                            <input id="shopify_price_display" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-100 leading-tight" value="{{ platforms['shopify']['price'] }}" readonly>
-                        </div>
-
-                        <div>
-                            <label class="block text-gray-700 text-sm font-bold mb-2" for="ebay_price_display">eBay</label>
-                            <input id="ebay_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['ebay']['price'] }}">
-                            <input type="hidden" id="ebay_price" name="platform_price_ebay" value="{{ platforms['ebay']['price'] }}">
-                        </div>
-
-                        <div>
-                            <label class="block text-gray-700 text-sm font-bold mb-2" for="reverb_price_display">Reverb</label>
-                            <input id="reverb_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['reverb']['price'] }}">
-                            <input type="hidden" id="reverb_price" name="platform_price_reverb" value="{{ platforms['reverb']['price'] }}">
-                        </div>
-
-                        <div>
-                            <label class="block text-gray-700 text-sm font-bold mb-2" for="vr_price_display">Vintage &amp; Rare</label>
-                            <input id="vr_price_display" type="text" inputmode="decimal" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="{{ platforms['vr']['price'] }}">
-                            <input type="hidden" id="vr_price" name="platform_price_vr" value="{{ platforms['vr']['price'] }}">
-                        </div>
+                        {% for platform_name, platform_info in platforms.items() %}
+                            {% set platform_status = (platform_info.status or 'unknown')|lower %}
+                            <div class="border border-gray-200 rounded-xl bg-white shadow-sm p-4">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div class="min-w-0">
+                                        <p class="text-base font-semibold text-gray-900">{{ platform_name|title }}</p>
+                                        <p class="text-xs text-gray-500 mt-1 break-words">ID: {{ platform_info.external_id or '—' }}</p>
+                                    </div>
+                                    <div class="text-right space-y-1">
+                                        <span class="text-sm font-semibold {% if platform_status in ['active','live'] %}text-green-600{% else %}text-gray-600{% endif %}">{{ platform_info.status|default('Unknown')|title }}</span>
+                                        {% if platform_info.url %}
+                                            <a href="{{ platform_info.url }}" target="_blank" class="text-xs text-indigo-600 hover:underline block">View</a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
-            
-            <!-- Platform Sync Options -->
-            <div class="mb-6">
-                <h2 class="text-lg font-semibold mb-4">Push Changes to Platforms</h2>
-                <p class="text-sm text-gray-600 mb-4">Select platforms to update with these changes:</p>
-                
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {% for platform_name, platform_info in platforms.items() %}
-                        <label class="flex items-center">
-                            <input type="checkbox" name="sync_{{ platform_name }}" class="mr-2"
-                                   {% if platform_info.status == 'active' %}checked{% endif %}>
-                            <span class="text-sm">
-                                {{ platform_name|title }}
-                                {% if platform_info.status == 'active' %}
-                                    <span class="text-green-600">(Active)</span>
-                                {% else %}
-                                    <span class="text-gray-400">(Not Listed)</span>
-                                {% endif %}
-                            </span>
-                        </label>
-                    {% endfor %}
-                </div>
-            </div>
-            
-            <!-- Current Platform Status -->
-            {% if platforms %}
-            <div class="mb-6">
-                <h2 class="text-lg font-semibold mb-4">Current Platform Listings</h2>
-                <div class="bg-gray-50 p-4 rounded">
-                    {% for platform_name, platform_info in platforms.items() %}
-                        {% if platform_info.status == 'active' %}
-                            <div class="mb-2">
-                                <span class="font-semibold">{{ platform_name|title }}:</span>
-                                <a href="{{ platform_info.url }}" target="_blank" class="text-blue-600 hover:underline">
-                                    {{ platform_info.external_id }}
-                                </a>
-                            </div>
-                        {% endif %}
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-            
-            <!-- Action Buttons -->
-            <div class="flex items-center justify-between">
-                <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
-                        type="submit">
-                    Save Changes
+
+            <!-- Actions -->
+            <div class="bg-white shadow rounded-lg border border-gray-100 px-6 py-4 flex items-center justify-end gap-4">
+                <a href="/inventory/product/{{ product.id }}" class="inline-flex w-32 justify-center px-5 py-2 rounded-md border border-red-200 bg-red-50 text-red-800 font-semibold hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-200">Cancel</a>
+                <button class="inline-flex w-32 justify-center px-5 py-2 rounded-md border border-green-500 bg-green-500 text-white font-semibold hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" type="submit">
+                    Save
                 </button>
-                <a href="/inventory/product/{{ product.id }}" 
-                   class="text-gray-600 hover:text-gray-800">
-                    Cancel
-                </a>
             </div>
         </form>
     </div>
@@ -213,22 +358,154 @@
 {% block scripts %}
 {{ super() }}
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+const formInputs = {
+    brand: document.getElementById('brand'),
+    model: document.getElementById('model'),
+    finish: document.getElementById('finish'),
+    year: document.getElementById('year'),
+    decade: document.getElementById('decade'),
+    title: document.getElementById('title'),
+    category: document.getElementById('category'),
+    handedness: document.getElementById('handedness'),
+};
+
+function setupCardToggles() {
+    const registerToggle = (button) => {
+        const targetId = button.getAttribute('data-target');
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        if (button.dataset.defaultState === 'collapsed') {
+            target.classList.add('hidden');
+        }
+        button.addEventListener('click', () => {
+            target.classList.toggle('hidden');
+            button.classList.toggle('rotate-180');
+        });
+    };
+
+    document.querySelectorAll('.card-toggle').forEach(registerToggle);
+    document.querySelectorAll('.metadata-toggle').forEach(registerToggle);
+}
+
+function setupTitleGenerator() {
+    const btn = document.getElementById('generateTitleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        if (!formInputs.title) return;
+        const parts = [];
+        if (formInputs.brand && formInputs.brand.value.trim()) parts.push(formInputs.brand.value.trim());
+        if (formInputs.model && formInputs.model.value.trim()) parts.push(formInputs.model.value.trim());
+        if (formInputs.finish && formInputs.finish.value.trim()) parts.push(formInputs.finish.value.trim());
+        let yearValue = formInputs.year && formInputs.year.value.trim();
+        let decadeValue = formInputs.decade && formInputs.decade.value.trim();
+        if (yearValue) {
+            parts.push(yearValue);
+        } else if (decadeValue) {
+            parts.push(decadeValue + 's');
+        }
+        if (parts.length) {
+            formInputs.title.value = parts.join(' ');
+            formInputs.title.classList.add('ring-2', 'ring-indigo-200');
+            setTimeout(() => formInputs.title.classList.remove('ring-2', 'ring-indigo-200'), 900);
+        }
+    });
+}
+
+function setupPlatformPriceMirrors() {
+    const pairs = [
+        ['ebay_price_display', 'ebay_price'],
+        ['reverb_price_display', 'reverb_price'],
+        ['vr_price_display', 'vr_price'],
+    ];
+    pairs.forEach(([displayId, hiddenId]) => {
+        const display = document.getElementById(displayId);
+        const hidden = document.getElementById(hiddenId);
+        if (!display || !hidden) return;
+        display.addEventListener('input', () => {
+            hidden.value = display.value;
+        });
+    });
+}
+
+function setupHandednessLock() {
+    const categoryInput = formInputs.category;
+    const handednessSelect = formInputs.handedness;
+    const lockNote = document.getElementById('handedness-lock-note');
+    if (!categoryInput || !handednessSelect) return;
+
+    const enforceLock = () => {
+        const categoryValue = (categoryInput.value || '').toLowerCase();
+        const isLeftCategory = categoryValue.includes('left-handed');
+        if (isLeftCategory) {
+            const leftOptionExists = Array.from(handednessSelect.options || []).some(
+                (opt) => opt.value === 'LEFT'
+            );
+            if (leftOptionExists) {
+                handednessSelect.value = 'LEFT';
+            }
+            handednessSelect.dataset.locked = 'true';
+            handednessSelect.classList.add('bg-gray-100', 'cursor-not-allowed', 'text-gray-600');
+            handednessSelect.title = 'Handedness is auto-set because the category is left-handed.';
+            if (lockNote) lockNote.classList.remove('hidden');
+        } else {
+            delete handednessSelect.dataset.locked;
+            handednessSelect.classList.remove('bg-gray-100', 'cursor-not-allowed', 'text-gray-600');
+            handednessSelect.title = '';
+            if (lockNote) lockNote.classList.add('hidden');
+        }
+    };
+
+    handednessSelect.addEventListener('change', () => {
+        if (handednessSelect.dataset.locked === 'true') {
+            handednessSelect.value = 'LEFT';
+        }
+    });
+
+    categoryInput.addEventListener('input', enforceLock);
+    categoryInput.addEventListener('change', enforceLock);
+    enforceLock();
+}
+
+function stripTablesFromHtml(html) {
+    if (!html) return html;
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    container.querySelectorAll('table').forEach((table) => {
+        const fragment = document.createDocumentFragment();
+        const rows = table.querySelectorAll('tr');
+        rows.forEach((row) => {
+            const rowText = Array.from(row.querySelectorAll('th,td'))
+                .map((cell) => cell.textContent.trim())
+                .filter(Boolean)
+                .join(' — ');
+            if (rowText) {
+                const paragraph = document.createElement('p');
+                paragraph.textContent = rowText;
+                fragment.appendChild(paragraph);
+            }
+        });
+        if (!fragment.childNodes.length) {
+            const paragraph = document.createElement('p');
+            paragraph.textContent = table.textContent.trim();
+            fragment.appendChild(paragraph);
+        }
+        table.replaceWith(fragment);
+    });
+    return container.innerHTML;
+}
+
+function setupTinyMCE() {
     if (typeof tinymce === 'undefined') {
         console.warn('TinyMCE library not available on edit page.');
         return;
     }
-
     const existingEditor = tinymce.get('description');
-    if (existingEditor) {
-        existingEditor.remove();
-    }
-
+    if (existingEditor) existingEditor.remove();
     tinymce.init({
         selector: '#description',
         plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount',
         toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table | align lineheight | numlist bullist indent outdent | emoticons charmap | removeformat',
-        height: 300,
+        height: 320,
         menubar: false,
         setup: function (editor) {
             editor.on('init', function () {
@@ -239,147 +516,23 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
     });
-
     const form = document.querySelector('form[action^="/inventory/products/"]');
     if (form) {
         form.addEventListener('submit', function () {
             const editor = tinymce.get('description');
             if (editor) {
+                const cleaned = stripTablesFromHtml(editor.getContent());
+                editor.setContent(cleaned, { format: 'raw' });
                 editor.save();
             }
         });
     }
-});
+}
 
-document.addEventListener('DOMContentLoaded', function () {
-    const basePriceInput = document.getElementById('base_price');
-    const shopifyDisplay = document.getElementById('shopify_price_display');
-    const priceFields = {
-        ebay: {
-            display: document.getElementById('ebay_price_display'),
-            hidden: document.getElementById('ebay_price'),
-        },
-        reverb: {
-            display: document.getElementById('reverb_price_display'),
-            hidden: document.getElementById('reverb_price'),
-        },
-        vr: {
-            display: document.getElementById('vr_price_display'),
-            hidden: document.getElementById('vr_price'),
-        },
-    };
-
-    const formatPrice = (price) => {
-        if (price === null || price === undefined || Number.isNaN(price)) {
-            return '';
-        }
-        return new Intl.NumberFormat('en-GB', {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0,
-        }).format(price);
-    };
-
-    const parsePrice = (value) => {
-        if (value === null || value === undefined || value === '') {
-            return NaN;
-        }
-        const numeric = parseFloat(String(value).replace(/[^0-9.\-]/g, ''));
-        return Number.isNaN(numeric) ? NaN : numeric;
-    };
-
-    const calculateEbayPrice = (base) => Math.round(base * 1.05);
-    const calculateVRPrice = (base) => Math.round(base * 1.05);
-    const calculateReverbPrice = (base) => {
-        const withMargin = base * 1.05;
-        const rounded = Math.ceil(withMargin / 100) * 100;
-        const suggestion = rounded - 1;
-        return suggestion > 0 ? suggestion : 0;
-    };
-
-    const calculators = {
-        ebay: calculateEbayPrice,
-        reverb: calculateReverbPrice,
-        vr: calculateVRPrice,
-    };
-
-    const formatExistingPrices = () => {
-        Object.values(priceFields).forEach(({ display, hidden }) => {
-            if (!display || !hidden) {
-                return;
-            }
-            const numeric = parsePrice(hidden.value || display.value);
-            if (!Number.isNaN(numeric)) {
-                hidden.value = numeric;
-                display.value = formatPrice(numeric);
-            }
-        });
-
-        if (shopifyDisplay) {
-            const shopifyNumeric = basePriceInput ? parseFloat(basePriceInput.value) : NaN;
-            if (!Number.isNaN(shopifyNumeric) && shopifyNumeric > 0) {
-                shopifyDisplay.value = formatPrice(shopifyNumeric);
-            } else {
-                const fallback = parsePrice(shopifyDisplay.value);
-                if (!Number.isNaN(fallback)) {
-                    shopifyDisplay.value = formatPrice(fallback);
-                }
-            }
-        }
-    };
-
-    const updatePlatformPricesFromBase = () => {
-        if (!basePriceInput) {
-            return;
-        }
-
-        const baseValue = parseFloat(basePriceInput.value);
-        if (Number.isNaN(baseValue) || baseValue <= 0) {
-            return;
-        }
-
-        if (shopifyDisplay) {
-            shopifyDisplay.value = formatPrice(baseValue);
-        }
-
-        Object.entries(priceFields).forEach(([platform, { display, hidden }]) => {
-            if (!display || !hidden) {
-                return;
-            }
-            const calculator = calculators[platform];
-            const suggested = calculator ? calculator(baseValue) : baseValue;
-            hidden.value = suggested;
-            display.value = formatPrice(suggested);
-        });
-    };
-
-    const attachManualOverrideHandlers = () => {
-        Object.values(priceFields).forEach(({ display, hidden }) => {
-            if (!display || !hidden) {
-                return;
-            }
-            display.addEventListener('input', () => {
-                const numeric = parsePrice(display.value);
-                hidden.value = Number.isNaN(numeric) ? '' : numeric;
-            });
-
-            display.addEventListener('blur', () => {
-                const numeric = parsePrice(display.value);
-                if (!Number.isNaN(numeric) && numeric > 0) {
-                    hidden.value = numeric;
-                    display.value = formatPrice(numeric);
-                }
-            });
-        });
-    };
-
-    if (basePriceInput) {
-        ['input', 'change'].forEach((eventName) => {
-            basePriceInput.addEventListener(eventName, updatePlatformPricesFromBase);
-        });
-    }
-
-    formatExistingPrices();
-    attachManualOverrideHandlers();
-});
+setupCardToggles();
+setupTitleGenerator();
+setupPlatformPriceMirrors();
+setupHandednessLock();
+setupTinyMCE();
 </script>
 {% endblock %}

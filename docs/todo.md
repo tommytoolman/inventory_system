@@ -8,6 +8,8 @@
 - [ ] **VR removal logic verification** – confirm the updated handling marks "not found on API" as REMOVED (unless corroborated by Reverb) and that the “List Item” UI path reflects the latest logic.
 - [ ] **VR historical shipping profiles** – audit legacy VR listings and update shipping profiles to match the current configuration.
 - [ ] **Shopify shipping profile readiness** – document and validate the pre-launch process for assigning shipping profiles within Shopify.
+- [ ] **Per-platform shipping profile edits** – surface Shopify/eBay shipping policy selectors on the product edit form and ensure changes propagate to live listings, not just Reverb/V&R.
+- [ ] **Left-handed category integrity** – review `platform_category_mappings` to ensure left-handed SKUs use the dedicated categories on every platform (while Reverb uses technical attributes, eBay/Shopify/VR must stay mapped via category).
 - [ ] **Category mapping database migration** – move VR and cross-platform mappings into Alembic-managed tables and validate coverage post-migration.
 - [ ] **VR pending status investigation** – identify why freshly created VR listings remain `pending` instead of `active` and patch the flow.
 - [ ] **Sync event persistence audit** – confirm which sync events write to `_listings` tables versus remaining transient so no updates are missed.

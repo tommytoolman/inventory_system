@@ -1815,6 +1815,22 @@ async def handle_create_platform_listing_from_detail(
             # Fast AJAX brand validation BEFORE expensive Selenium process
             logger.info(f"Validating brand '{product.brand}' with V&R before listing...")
             validation = VRBrandValidator.validate_brand(product.brand)
+            validation_error = validation.get("error_code")
+
+            if validation_error in {"network", "unexpected", "unexpected_response"}:
+                logger.warning(
+                    "Vintage & Rare brand validation unavailable for '%s' (error: %s)",
+                    product.brand,
+                    validation_error,
+                )
+                downtime_message = (
+                    "Vintage & Rare is currently responding very slowly, so we can't"
+                    " list this product right now. Please try again in a few minutes."
+                )
+                return RedirectResponse(
+                    url=f"{redirect_url}?message={quote_plus(downtime_message)}&message_type=error",
+                    status_code=303,
+                )
 
             if not validation["is_valid"]:
                 # Brand not recognized by V&R - offer to proceed with fallback

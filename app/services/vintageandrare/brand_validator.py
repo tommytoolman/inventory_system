@@ -54,7 +54,11 @@ class VRBrandValidator:
                 brand_id = int(response.text.strip())
             except ValueError:
                 logger.error(f"Unexpected V&R response format: '{response.text}'")
-                return cls._error_result(brand_name, "Unexpected response format from V&R")
+                return cls._error_result(
+                    brand_name,
+                    "Unexpected response format from V&R",
+                    error_code="unexpected_response",
+                )
             
             if brand_id == 0:
                 # Brand not found
@@ -63,7 +67,8 @@ class VRBrandValidator:
                     "is_valid": False,
                     "brand_id": None,
                     "message": f"❌ Brand '{brand_name}' is not accepted by Vintage & Rare",
-                    "original_brand": brand_name
+                    "original_brand": brand_name,
+                    "error_code": "not_found",
                 }
             else:
                 # Brand found
@@ -72,24 +77,34 @@ class VRBrandValidator:
                     "is_valid": True,
                     "brand_id": brand_id,
                     "message": f"✅ Brand '{brand_name}' is accepted by Vintage & Rare",
-                    "original_brand": brand_name
+                    "original_brand": brand_name,
+                    "error_code": None,
                 }
                 
         except requests.exceptions.RequestException as e:
             logger.error(f"Network error validating brand '{brand_name}': {str(e)}")
-            return cls._error_result(brand_name, f"Network error: {str(e)}")
+            return cls._error_result(
+                brand_name,
+                "Vintage & Rare is not responding right now",
+                error_code="network",
+            )
         except Exception as e:
             logger.error(f"Unexpected error validating brand '{brand_name}': {str(e)}")
-            return cls._error_result(brand_name, f"Validation failed: {str(e)}")
+            return cls._error_result(
+                brand_name,
+                f"Validation failed: {str(e)}",
+                error_code="unexpected",
+            )
     
     @classmethod
-    def _error_result(cls, brand_name: str, error_message: str) -> Dict[str, Any]:
+    def _error_result(cls, brand_name: str, error_message: str, error_code: str | None = None) -> Dict[str, Any]:
         """Standard error response format"""
         return {
-            "is_valid": False,
+            "is_valid": None if error_code == "network" else False,
             "brand_id": None,
             "message": f"⚠️ Could not validate brand '{brand_name}': {error_message}",
-            "original_brand": brand_name
+            "original_brand": brand_name,
+            "error_code": error_code,
         }
     
     @classmethod
@@ -110,4 +125,3 @@ def get_brand_id(brand_name: str) -> int|None:
     """Get V&R brand ID for a valid brand"""
     result = VRBrandValidator.validate_brand(brand_name)
     return result["brand_id"] if result["is_valid"] else None
-

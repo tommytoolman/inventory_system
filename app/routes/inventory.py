@@ -2604,6 +2604,20 @@ async def add_product(
                     logger.warning("Invalid shipping_profile value '%s'", raw_profile)
 
         # Create product data
+        storefront_raw = form_data.get("storefront")
+        storefront_value = Storefront.HANKS
+        if isinstance(storefront_raw, str) and storefront_raw.strip():
+            candidate = storefront_raw.strip()
+            candidate_upper = candidate.upper()
+            candidate_compact = candidate_upper.replace(" ", "_")
+            for option in Storefront:
+                if (
+                    candidate_upper == option.value.upper()
+                    or candidate_compact == option.name.upper()
+                ):
+                    storefront_value = option
+                    break
+
         product_data = ProductCreate(
             brand=brand,
             model=model,
@@ -2637,6 +2651,7 @@ async def add_product(
             video_url=video_url,
             external_link=external_link,
             shipping_profile_id=selected_shipping_profile_id,
+            storefront=storefront_value,
         )
 
         logger.info(

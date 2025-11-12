@@ -140,6 +140,9 @@ class ShopifyService:
             ManufacturingCountry.AUSTRALIA: "Australia",
             ManufacturingCountry.NEW_ZEALAND: "New Zealand",
             ManufacturingCountry.BRAZIL: "Brazil",
+            ManufacturingCountry.CZECH_REPUBLIC: "Czech Republic",
+            ManufacturingCountry.RUSSIA: "Russia",
+            ManufacturingCountry.VIETNAM: "Vietnam",
             ManufacturingCountry.OTHER: "Other",
         }
         return mapping.get(country)
@@ -161,10 +164,28 @@ class ShopifyService:
                 description="Country where the product was manufactured",
             )
             errors = result.get("userErrors", []) if result else []
-            blocking_errors = [err for err in errors if "already" not in err.get("message", "").lower()]
-            if blocking_errors:
-                logger.warning("Failed to create Shopify country metafield definition: %s", blocking_errors)
-                return
+            if errors:
+                non_blocking_codes = {"TAKEN"}
+                blocking_errors = []
+                for err in errors:
+                    message = err.get("message", "").lower()
+                    code = err.get("code")
+                    if (
+                        "already" in message
+                        or "in use" in message
+                        or code in non_blocking_codes
+                    ):
+                        continue
+                    blocking_errors.append(err)
+                if blocking_errors:
+                    logger.warning(
+                        "Failed to create Shopify country metafield definition: %s",
+                        blocking_errors,
+                    )
+                    return
+                logger.info(
+                    "Country of origin metafield definition already exists; continuing."
+                )
             self._country_metafield_definition_ready = True
         except Exception as exc:
             logger.warning("Error ensuring Shopify country metafield definition: %s", exc)

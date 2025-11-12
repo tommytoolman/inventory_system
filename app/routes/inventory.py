@@ -2344,6 +2344,12 @@ async def add_product(
         except (TypeError, ValueError):
             raise HTTPException(status_code=422, detail=f"{field_name} must be a valid number")
 
+    def _strip_text(value: Optional[str]) -> Optional[str]:
+        if value in BLANK_SENTINELS or value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
     processed_processing_time: Optional[int] = None
     if processing_time not in BLANK_SENTINELS:
         try:
@@ -2603,6 +2609,67 @@ async def add_product(
                 except (TypeError, ValueError):
                     logger.warning("Invalid shipping_profile value '%s'", raw_profile)
 
+        manufacturing_country_enum: Optional[ManufacturingCountry] = None
+        raw_manufacturing_country = _strip_text(form_data.get("manufacturing_country"))
+        if raw_manufacturing_country:
+            try:
+                manufacturing_country_enum = ManufacturingCountry(raw_manufacturing_country)
+            except ValueError:
+                logger.warning("Invalid manufacturing country '%s' provided; defaulting to None", raw_manufacturing_country)
+
+        serial_number_value = _strip_text(form_data.get("serial_number"))
+
+        handedness_enum = Handedness.UNSPECIFIED
+        raw_handedness = _strip_text(form_data.get("handedness"))
+        if raw_handedness:
+            try:
+                handedness_enum = Handedness[raw_handedness.upper()]
+            except KeyError:
+                try:
+                    handedness_enum = Handedness(raw_handedness.upper())
+                except ValueError:
+                    logger.warning("Invalid handedness '%s' provided; defaulting to UNSPECIFIED", raw_handedness)
+
+        artist_owned_flag = form_data.get("artist_owned") == "on"
+        artist_names_raw = form_data.get("artist_names") or ""
+        artist_names_list = [
+            name.strip()
+            for name in re.split(r"[,\\n]", artist_names_raw)
+            if name and name.strip()
+        ]
+
+        inventory_location_enum = InventoryLocation.HANKS
+        raw_inventory_location = _strip_text(form_data.get("inventory_location"))
+        if raw_inventory_location:
+            lookup = raw_inventory_location.upper()
+            try:
+                inventory_location_enum = InventoryLocation[lookup]
+            except KeyError:
+                try:
+                    inventory_location_enum = InventoryLocation(lookup)
+                except ValueError:
+                    logger.warning("Invalid inventory location '%s'; defaulting to %s", raw_inventory_location, inventory_location_enum.value)
+
+        case_status_enum = CaseStatus.UNSPECIFIED
+        raw_case_status = _strip_text(form_data.get("case_status"))
+        if raw_case_status:
+            lookup = raw_case_status.upper()
+            try:
+                case_status_enum = CaseStatus[lookup]
+            except KeyError:
+                try:
+                    case_status_enum = CaseStatus(lookup)
+                except ValueError:
+                    logger.warning("Invalid case status '%s'; defaulting to %s", raw_case_status, case_status_enum.value)
+
+        case_details_value = _strip_text(form_data.get("case_details"))
+
+        extra_handmade_flag = form_data.get("extra_handmade") == "on"
+        body_type_value = _strip_text(form_data.get("body_type"))
+        extra_attributes: Dict[str, Any] = {"handmade": extra_handmade_flag}
+        if body_type_value:
+            extra_attributes["body_type"] = body_type_value
+
         # Create product data
         storefront_raw = form_data.get("storefront")
         storefront_value = Storefront.HANKS
@@ -2652,6 +2719,15 @@ async def add_product(
             external_link=external_link,
             shipping_profile_id=selected_shipping_profile_id,
             storefront=storefront_value,
+            manufacturing_country=manufacturing_country_enum,
+            serial_number=serial_number_value,
+            handedness=handedness_enum,
+            artist_owned=artist_owned_flag,
+            artist_names=artist_names_list,
+            inventory_location=inventory_location_enum,
+            case_status=case_status_enum,
+            case_details=case_details_value,
+            extra_attributes=extra_attributes,
         )
 
         logger.info(

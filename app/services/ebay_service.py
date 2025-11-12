@@ -304,20 +304,25 @@ class EbayService:
                 return {"Description": payload}
         return {}
     
-    def _build_item_specifics(self, product: Product, category_id: str) -> Dict[str, str]:
+    def _build_item_specifics(
+        self,
+        product: Product,
+        category_id: str,
+        existing_specifics: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, str]:
         """
         Build comprehensive ItemSpecifics based on product data and category.
         """
         # Base specifics that apply to all items
+        item_specifics: Dict[str, str] = dict(existing_specifics or {})
+
         model_value = product.model or "Unknown Model"
         model_value = self._truncate_item_specific(model_value, 65)
 
-        item_specifics = {
-            "Brand": product.brand or "Unbranded",
-            "Model": model_value,
-            "UPC": "Does not apply",
-            "MPN": "Does not apply"
-        }
+        item_specifics["Brand"] = product.brand or item_specifics.get("Brand") or "Unbranded"
+        item_specifics["Model"] = model_value
+        item_specifics["UPC"] = "Does not apply"
+        item_specifics["MPN"] = "Does not apply"
         
         # Add year if available
         if product.year:
@@ -331,6 +336,7 @@ class EbayService:
         country_name = self._ebay_country_name(product.manufacturing_country)
         if country_name:
             item_specifics["Country of Origin"] = country_name
+            item_specifics["Country/Region of Manufacture"] = country_name
         
         # Category-specific ItemSpecifics
         if category_id == "38072":  # Guitar Amplifiers
@@ -2068,7 +2074,14 @@ class EbayService:
                 mapped = self._map_category_string_to_ebay(product.category)
                 category_id = mapped.get("CategoryID") if mapped else None
             category_id = category_id or "33034"
-            item_specifics = self._build_item_specifics(product, category_id)
+            existing_specifics = None
+            if listing and listing.item_specifics:
+                existing_specifics = listing.item_specifics
+            item_specifics = self._build_item_specifics(
+                product,
+                category_id,
+                existing_specifics=existing_specifics,
+            )
 
         if title or description or item_specifics:
             response = await self.trading_api.revise_listing_details(

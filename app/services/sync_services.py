@@ -1054,7 +1054,7 @@ class SyncService:
         if not event.product_id or not event.platform_common_id:
             event.notes = "Event is missing product_id or platform_common_id, cannot log price anomaly."
             summary["errors"] += 1
-            return
+            return False
 
         specialist_tables = {
             "reverb": {"table": ReverbListing, "price_col": "price_display"},
@@ -1067,7 +1067,7 @@ class SyncService:
         if not platform_config:
             event.notes = f"No specialist table configuration for platform: {event.platform_name}"
             summary["errors"] += 1
-            return
+            return False
 
         try:
             new_price = float(event.change_data.get('new', 0.0))
@@ -1086,11 +1086,13 @@ class SyncService:
             actions.append(action_desc)
             logger.info(action_desc)
             summary["actions_taken"] += 1
+            return True
 
         except (ValueError, TypeError) as e:
             logger.error(f"Could not parse price from event data: {event.change_data}. Error: {e}")
             event.notes = f"Invalid price data in event: {e}"
             summary["errors"] += 1
+            return False
 
     async def _handle_removed_listing(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
         """Handles a 'removed_listing' event by updating the local status."""
@@ -1099,6 +1101,70 @@ class SyncService:
         if not event.product_id:
             event.notes = f"Event {event.id} is missing product_id, cannot process removed_listing."
             return False
+
+        product = await self._get_product(event.product_id)
+
+        if (
+            event.platform_name == "vr"
+            and product
+            and product.is_stocked_item
+            and (product.quantity or 0) > 0
+        ):
+            remaining_qty = int(product.quantity or 0)
+            action_desc = (
+                f"Detected VR removal for stocked product #{product.id} (qty remaining: {remaining_qty})."
+            )
+            service = self.platform_services.get("vr")
+            if service and hasattr(service, "create_listing_from_product"):
+                if dry_run:
+                    event.notes = (
+                        "DRY RUN: would relist VR listing after sale while stock remains."
+                    )
+                    actions.append(
+                        f"{action_desc} DRY RUN: would relist on VR instead of ending."
+                    )
+                    summary["actions_taken"] += 1
+                    return True
+                else:
+                    try:
+                        result = await service.create_listing_from_product(product)
+                        if result.get("status") == "success":
+                            new_id = result.get("external_id")
+                            event.notes = (
+                                f"Relisted on VR with new ID {new_id} after sale while stock remains."
+                            )
+                            actions.append(
+                                f"{action_desc} Relisted on VR (new ID: {new_id})."
+                            )
+                            summary["actions_taken"] += 1
+                            return True
+                        else:
+                            message = result.get("message") or "Unknown error"
+                            event.notes = (
+                                f"Attempted to relist on VR but received failure: {message}"
+                            )
+                            summary["errors"] += 1
+                            return False
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error(
+                            "Failed to relist VR product %s after removal: %s",
+                            product.id,
+                            exc,
+                            exc_info=True,
+                        )
+                        event.notes = f"Error relisting VR listing: {exc}"
+                        summary["errors"] += 1
+                        return False
+            else:
+                event.notes = (
+                    "VR service unavailable; manual relist required for stocked item."
+                )
+                actions.append(
+                    f"{action_desc} Unable to auto-relist because VR service is unavailable."
+                )
+                summary["actions_taken"] += 1
+                return True
+            return True
 
         # Find the corresponding platform_common record
         stmt = select(PlatformCommon).where(
@@ -1142,6 +1208,10 @@ class SyncService:
             return {"vr"}
 
         return set()
+
+    async def _get_product(self, product_id: int) -> Optional[Product]:
+        stmt = select(Product).where(Product.id == product_id)
+        return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def _get_platform_common(self, product_id: int, platform_name: str) -> Optional[PlatformCommon]:
         stmt = (

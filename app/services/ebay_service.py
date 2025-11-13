@@ -865,10 +865,16 @@ class EbayService:
                 api_data, db_data = item['api_data'], item['db_data']
                 external_id = api_data['external_id']
                 
-                # Price change event check using the correct 'base_price' key
-                db_price_for_compare = float(db_data.get('specialist_price') or db_data.get('base_price') or 0.0)
+                # Price change event check comparing against the last stored platform value
+                db_specialist_price = db_data.get('specialist_price')
+                db_price_for_compare = float(db_specialist_price or db_data.get('base_price') or 0.0)
                 if abs(api_data['price'] - db_price_for_compare) > 0.01:
                     if (external_id, 'price') not in pending_events:
+                        recorded_price = (
+                            float(db_specialist_price)
+                            if db_specialist_price is not None
+                            else db_price_for_compare
+                        )
                         events_to_log.append({
                             'sync_run_id': sync_run_id,
                             'platform_name': 'ebay',
@@ -876,9 +882,12 @@ class EbayService:
                             'platform_common_id': db_data['platform_common_id'],
                             'external_id': external_id,
                             'change_type': 'price',
-                            # IMPORTANT: The 'old' price should always be the MASTER price,
-                            # as the anomaly is the deviation from the canonical price.
-                            'change_data': {'old': db_data.get('base_price'), 'new': api_data['price'], 'item_id': external_id},
+                            'change_data': {
+                                'old': recorded_price,
+                                'new': api_data['price'],
+                                'base_price': db_data.get('base_price'),
+                                'item_id': external_id,
+                            },
                             'status': 'pending'
                         })
 

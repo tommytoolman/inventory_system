@@ -815,8 +815,14 @@ class VRService:
                 )
 
             if result.get("status") == "success":
-                needs_resolution = result.get("needs_id_resolution", False)
+                needs_resolution = bool(result.get("needs_id_resolution", False))
                 vr_listing_id = result.get("vr_listing_id")
+
+                if vr_listing_id is not None:
+                    vr_id_str = str(vr_listing_id).strip()
+                    if vr_id_str and not vr_id_str.upper().startswith(("RIFF", "REV")):
+                        # Looks like a real V&R ID, no further resolution required
+                        needs_resolution = False
 
                 existing_platform_common = await self.db.execute(
                     select(PlatformCommon).where(
@@ -861,10 +867,12 @@ class VRService:
                 except (TypeError, ValueError):
                     price_value = None
 
+                listing_state = 'pending' if needs_resolution else 'active'
+
                 if vr_listing:
                     vr_listing.vr_listing_id = vr_listing_id or vr_listing.vr_listing_id
                     vr_listing.inventory_quantity = product.quantity or vr_listing.inventory_quantity
-                    vr_listing.vr_state = 'pending' if needs_resolution else 'live'
+                    vr_listing.vr_state = listing_state
                     vr_listing.price_notax = price_value
                     vr_listing.extended_attributes = result
                     vr_listing.last_synced_at = datetime.utcnow()
@@ -873,7 +881,7 @@ class VRService:
                         platform_id=platform_common.id,
                         vr_listing_id=vr_listing_id,
                         inventory_quantity=product.quantity or 1,
-                        vr_state='pending' if needs_resolution else 'live',
+                        vr_state=listing_state,
                         price_notax=price_value,
                         extended_attributes=result,
                         last_synced_at=datetime.utcnow()
@@ -1098,6 +1106,8 @@ class VRService:
                 p.id as product_id, 
                 p.sku, 
                 p.base_price,
+                p.is_stocked_item,
+                p.quantity,
                 pc.id as platform_common_id, 
                 pc.external_id, 
                 pc.status as platform_common_status,

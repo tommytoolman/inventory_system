@@ -341,7 +341,12 @@
                         <td class="px-6 py-4 text-sm whitespace-nowrap">
                             <div class="flex flex-col space-y-1">
                                 {% if event.product_id %}
-                                <a href="/inventory/product/{{ event.product_id }}" class="text-blue-600 hover:text-blue-800">View Product</a>
+                                <div class="flex justify-center">
+                                    <a href="/inventory/product/{{ event.product_id }}"
+                                       class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
+                                        View Product
+                                    </a>
+                                </div>
                                 {% endif %}
                                 
                                 {% if event.status == 'pending' and event.change_type == 'status_change' %}
@@ -363,7 +368,7 @@
                                 {% endif %}
                                 
                                 {% if event.status == 'pending' and event.change_type == 'removed_listing' %}
-                                <button class="px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors" 
+                                <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors" 
                                         title="Mark this removal as processed"
                                         onclick="processSyncEvent({{ event.id }}, 'Confirm Removal', {}, this)"
                                         data-event-id="{{ event.id }}">
@@ -377,34 +382,34 @@
 
                                     {% if platform in ['ebay', 'shopify', 'vr'] %}
                                         {% if candidate %}
-                                        <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors" 
+                                        <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors" 
                                                 title="Match to suggested product"
                                                 onclick="matchSyncEvent({{ event.id }}, {{ candidate.product_id }}, this)"
                                                 data-event-id="{{ event.id }}">
                                             <span>Match {{ candidate.sku }}</span>
                                         </button>
                                         {% endif %}
-                                        <button class="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                        <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors"
                                                 title="Select a product to match"
                                                 onclick="manualMatchSyncEvent({{ event.id }}, this)"
                                                 data-event-id="{{ event.id }}">
                                             <span>Manual Match</span>
                                         </button>
-                                        <button class="px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                                        <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors"
                                                 title="Mark this listing as deleted"
                                                 onclick="deleteSyncEvent({{ event.id }}, this)"
                                                 data-event-id="{{ event.id }}">
                                             <span>Delete Listing</span>
                                         </button>
                                     {% else %}
-                                        <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors" 
+                                        <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors" 
                                                 title="Create listing on other platforms"
                                         onclick="processSyncEvent({{ event.id }}, 'Create Listings', { action: 'create' }, this)"
                                         data-event-id="{{ event.id }}">
                                             <span>Create</span>
                                         </button>
                                         {% if candidate %}
-                                        <button class="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                        <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors"
                                                 title="Match to suggested product"
                                                 onclick="matchSyncEvent({{ event.id }}, {{ candidate.product_id }}, this)"
                                                 data-event-id="{{ event.id }}">
@@ -414,12 +419,12 @@
                                     {% endif %}
                                 {% endif %}
                                 
-                                {% if event.status == 'pending' and event.change_type == 'price_change' %}
-                                <button class="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors" 
-                                        title="Update price on all platforms"
-                                        onclick="processSyncEvent({{ event.id }}, 'Update Price', {}, this)"
+                                {% if event.status == 'pending' and event.change_type in ['price_change', 'price'] %}
+                                <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-green-800 bg-white border border-green-600 rounded-md shadow-sm hover:bg-green-50 transition-colors" 
+                                        title="Acknowledge the platform price and update the stored specialist value"
+                                        onclick="processSyncEvent({{ event.id }}, 'Acknowledge Price', {}, this)"
                                         data-event-id="{{ event.id }}">
-                                    <span>Update</span>
+                                    <span>Acknowledge Price</span>
                                 </button>
                                 {% endif %}
                                 
@@ -428,6 +433,7 @@
                                 {% endif %}
 
                                 {% if event.external_id %}
+                                <div class="flex justify-center">
                                     {% if event.platform_name == 'reverb' %}
                                         <a href="https://reverb.com/uk/item/{{ event.external_id }}"
                                            target="_blank"
@@ -453,6 +459,7 @@
                                             View on V&R
                                         </a>
                                     {% endif %}
+                                </div>
                                 {% endif %}
                             </div>
                         </td>

@@ -6,10 +6,10 @@ import json
 import asyncio
 import time
 from decimal import Decimal
-from typing import Optional, Dict, List, Any, Tuple, Set
+from typing import Optional, Dict, List, Any, Tuple, Set, Sequence
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, select, update, delete
+from sqlalchemy import text, select, update, delete, func
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models.ebay import EbayListing
@@ -1069,6 +1069,8 @@ class EbayService:
         limit: Optional[int] = None,
         batch_size: int = 10,
         dry_run: bool = False,
+        skus: Optional[Sequence[str]] = None,
+        item_ids: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         """
         Run a light GetItem pass to refresh description/pictures/item_specifics for selected listings.
@@ -1093,12 +1095,17 @@ class EbayService:
         statuses = state_filters[state_key]
         max_concurrency = max(1, batch_size or 1)
 
+        requested_skus = sorted({sku.strip() for sku in (skus or []) if sku and sku.strip()})
+        requested_item_ids = sorted({item_id.strip() for item_id in (item_ids or []) if item_id and item_id.strip()})
+
         logger.info(
-            "Starting eBay metadata refresh (state=%s, limit=%s, batch_size=%s, dry_run=%s)",
+            "Starting eBay metadata refresh (state=%s, limit=%s, batch_size=%s, dry_run=%s, skus=%s, item_ids=%s)",
             state_key,
             limit,
             max_concurrency,
             dry_run,
+            requested_skus or "ALL",
+            requested_item_ids or "ALL",
         )
 
         query = (
@@ -1110,6 +1117,11 @@ class EbayService:
         )
         if statuses:
             query = query.where(PlatformCommon.status.in_(statuses))
+        if requested_skus:
+            lowered = [sku.lower() for sku in requested_skus]
+            query = query.where(func.lower(Product.sku).in_(lowered))
+        if requested_item_ids:
+            query = query.where(EbayListing.ebay_item_id.in_(requested_item_ids))
         if limit:
             query = query.limit(limit)
 

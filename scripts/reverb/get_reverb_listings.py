@@ -145,7 +145,7 @@ def save_listings(listings, state, output_format, detailed):
     base_filename = f"reverb_listings_{state}{detail_suffix}_{timestamp}"
     
     # Create output directory
-    output_dir = Path("scripts/reverb/output")
+    output_dir = Path("data/reverb")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     if output_format in ["csv", "both"]:

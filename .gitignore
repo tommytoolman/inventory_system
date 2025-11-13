@@ -45,3 +45,8 @@ app/cache/
 cache.json
 sync_state.json
 temp_links.json
+
+data/app backups/
+data/reverb/
+scripts/ebay/output/
+scripts/reverb/output/

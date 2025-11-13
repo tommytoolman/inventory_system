@@ -46,6 +46,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Fetch metadata but do not persist any changes.",
     )
+    parser.add_argument(
+        "--sku",
+        action="append",
+        dest="skus",
+        help="Limit the refresh to one or more SKUs. Repeat the flag for multiple SKUs.",
+    )
+    parser.add_argument(
+        "--item-id",
+        action="append",
+        dest="item_ids",
+        help="Limit the refresh to specific eBay Item IDs (repeat for multiples).",
+    )
     return parser.parse_args()
 
 
@@ -58,6 +70,8 @@ async def run_refresh(args: argparse.Namespace) -> None:
             limit=args.limit,
             batch_size=args.batch_size,
             dry_run=args.dry_run,
+            skus=args.skus,
+            item_ids=args.item_ids,
         )
 
     print("=== eBay Metadata Refresh ===")

@@ -25,6 +25,7 @@ class ProductStatus(str, Enum):
     ACTIVE = "ACTIVE"
     SOLD = "SOLD"
     ARCHIVED = "ARCHIVED"
+    DELETED = "DELETED"
 
 class ProductCondition(str, Enum):
     """Product condition values used in both models and schemas"""

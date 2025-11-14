@@ -1175,7 +1175,23 @@ async def list_products(
         pagination_offset = (page - 1) * per_page
     
     # Handle status/state parameter (state is alias for status)
+    status_query_param = request.query_params.get("status")
+    state_query_param = request.query_params.get("state")
     filter_status = status or state
+
+    if (
+        status_query_param is None
+        and state_query_param is None
+        and not filter_status
+    ):
+        filter_status = "active"
+        status_query_param = "active"
+
+    status_query_value = (
+        status_query_param
+        if status_query_param is not None
+        else state_query_param
+    )
     
     # Build query using async style
     if platform:
@@ -1197,7 +1213,8 @@ async def list_products(
                 'draft': 'draft',
                 'sold': 'sold',
                 'ended': 'ended',
-                'pending': 'pending'
+                'pending': 'pending',
+                'deleted': 'deleted',
             }
             
             mapped_status = status_mapping.get(filter_status.lower(), filter_status)
@@ -1221,6 +1238,7 @@ async def list_products(
                 'archived': ProductStatus.ARCHIVED,
                 'ended': ProductStatus.ARCHIVED,  # Map "ended" to archived
                 'pending': ProductStatus.DRAFT,   # Map "pending" to draft
+                'deleted': ProductStatus.DELETED,
             }
             
             # Get the enum value
@@ -1336,6 +1354,12 @@ async def list_products(
     
     message = request.query_params.get("message")
     message_type = request.query_params.get("message_type", "info")
+    selected_status_value = (
+        filter_status.lower()
+        if isinstance(filter_status, str) and filter_status
+        else None
+    )
+    status_query_value = status_query_value if status_query_value is not None else ""
 
     return templates.TemplateResponse(
         "inventory/list.html",
@@ -1355,7 +1379,8 @@ async def list_products(
             "selected_category": category,
             "selected_brand": brand,
             "selected_platform": platform,    # NEW: Pass to template
-            "selected_status": filter_status,  # NEW: Pass to template
+            "selected_status": selected_status_value,
+            "status_query_value": status_query_value,
             "search": search,
             "has_prev": page > 1,
             "has_next": page < total_pages,

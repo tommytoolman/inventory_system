@@ -10,7 +10,7 @@ import re
 from datetime import datetime, timezone    
 from fastapi import HTTPException
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple, Set, Sequence
+from typing import Dict, List, Optional, Any, Tuple, Set
 from urllib.parse import urlparse, parse_qs
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
@@ -615,21 +615,10 @@ class ReverbService:
     async def _wait_for_listing_assets(
         self,
         listing_id: str,
-        attempt_delays: Optional[Sequence[float]] = None,
+        max_attempts: int = 6,
+        delay_seconds: float = 1.5,
     ) -> Optional[Dict[str, Any]]:
-        """
-        Poll until Reverb has processed photos and shipping data.
-
-        Args:
-            listing_id: Reverb listing identifier.
-            attempt_delays: Explicit sleep schedule between polls. The number of
-                polling attempts equals ``len(attempt_delays) + 1``. When omitted we
-                use a conservative schedule of [2, 5, 10, 30, 60] seconds (roughly two
-                minutes of patience).
-        """
-
-        delays = list(attempt_delays or (2.0, 5.0, 10.0, 30.0, 60.0))
-        attempts = len(delays) + 1
+        """Poll until Reverb has processed photos and shipping data."""
 
         def _assets_ready(payload: Dict[str, Any]) -> bool:
             photos = payload.get("photos") or []
@@ -638,18 +627,12 @@ class ReverbService:
             return bool(photos) and (shipping_profile or shipping_rates)
 
         last_payload: Optional[Dict[str, Any]] = None
-        for attempt in range(1, attempts + 1):
+        for attempt in range(1, max_attempts + 1):
             try:
                 payload = await self.client.get_listing(listing_id)
                 listing_payload = payload.get("listing", payload)
                 last_payload = listing_payload
                 if _assets_ready(listing_payload):
-                    logger.info(
-                        "Reverb listing %s assets became available after attempt %s/%s",
-                        listing_id,
-                        attempt,
-                        attempts,
-                    )
                     return listing_payload
             except Exception as exc:  # noqa: BLE001
                 logger.debug(
@@ -659,22 +642,9 @@ class ReverbService:
                     exc,
                 )
 
-            if attempt < attempts:
-                delay = delays[attempt - 1]
-                logger.debug(
-                    "Reverb listing %s assets not ready (attempt %s/%s); sleeping %.1fs",
-                    listing_id,
-                    attempt,
-                    attempts,
-                    delay,
-                )
-                await asyncio.sleep(delay)
+            if attempt < max_attempts:
+                await asyncio.sleep(delay_seconds)
 
-        logger.warning(
-            "Reverb listing %s assets still missing after %s attempts",
-            listing_id,
-            attempts,
-        )
         return last_payload
 
     async def create_listing_from_product(
@@ -931,23 +901,14 @@ class ReverbService:
 
             if publish and reverb_id:
                 ready_payload = await self._wait_for_listing_assets(reverb_id)
-                assets_ready = bool(ready_payload and (ready_payload.get("photos") or []))
                 if ready_payload:
                     listing_data = ready_payload
                     listing_state = listing_data.get("state", {}).get("slug") or listing_data.get("state")
 
-                if not assets_ready:
-                    logger.warning(
-                        "Listing %s assets (photos/shipping) still missing after extended wait; "
-                        "leaving as draft so Reverb can finish processing.",
-                        reverb_id,
-                    )
-                elif listing_state != "live":
+                if listing_state != "live":
                     try:
                         await self.client.publish_listing(reverb_id)
-                        refreshed_listing = await self._refresh_listing_until_state(
-                            reverb_id, desired_state="live"
-                        )
+                        refreshed_listing = await self._refresh_listing_until_state(reverb_id, desired_state="live")
                         if refreshed_listing:
                             listing_data = refreshed_listing
                             listing_state = listing_data.get("state", {}).get("slug") or listing_data.get("state")

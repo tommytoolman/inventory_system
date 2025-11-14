@@ -99,11 +99,12 @@
             
             <!-- Status Filter -->
             <select name="status" class="p-2 border rounded w-48" onchange="this.form.submit()">
-                <option value="">All Status</option>
+                <option value="" {% if not selected_status %}selected{% endif %}>All Status</option>
                 <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
                 <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Draft</option>
                 <option value="sold" {% if selected_status == 'sold' %}selected{% endif %}>Sold</option>
                 <option value="archived" {% if selected_status == 'archived' %}selected{% endif %}>Archived</option>
+                <option value="deleted" {% if selected_status == 'deleted' %}selected{% endif %}>Deleted</option>
             </select>
             
             <!-- Show Entries Dropdown -->
@@ -243,7 +244,21 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 {% for product in products %}
-                <tr>
+                {% set status_val = product.status.value|upper if product.status else '' %}
+                {% set is_deleted = status_val == 'DELETED' %}
+                {% set text_color_class = '' %}
+                {% set decoration_class = '' %}
+                {% if status_val == 'SOLD' %}
+                    {% set text_color_class = 'text-red-700' %}
+                {% elif status_val == 'DRAFT' %}
+                    {% set text_color_class = 'text-amber-700' %}
+                {% elif status_val == 'ARCHIVED' %}
+                    {% set text_color_class = 'text-purple-700' %}
+                {% elif is_deleted %}
+                    {% set text_color_class = 'text-blue-900' %}
+                    {% set decoration_class = 'line-through' %}
+                {% endif %}
+                <tr class="inventory-row {% if is_deleted %}deleted-row{% endif %}">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="h-10 w-10 rounded-full overflow-hidden">
                             {% if product.primary_image %}
@@ -257,11 +272,9 @@
                             {% endif %}
                         </div>
                     </td>
-                    {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-purple-700{% endif %}">{{ product.brand|title }}</td>
-                    {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-purple-700{% endif %}">
-                        <span title="{{ product.title }}" class="truncate inline-block max-w-xs">
+                    <td class="px-6 py-4 whitespace-nowrap {% if text_color_class %}{{ text_color_class }}{% endif %} {% if decoration_class %}{{ decoration_class }}{% endif %}">{{ product.brand|title }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if text_color_class %}{{ text_color_class }}{% endif %}">
+                        <span title="{{ product.title }}" class="truncate inline-block max-w-xs {% if decoration_class %}{{ decoration_class }}{% endif %}">
                             {% if product.title and product.title|length > 65 %}
                                 {{ product.title[:65] }}...
                             {% else %}
@@ -269,9 +282,8 @@
                             {% endif %}
                         </span>
                     </td>
-                    {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-purple-700{% endif %}">
-                        <span title="{{ product.category or '' }}" class="truncate inline-block max-w-sm">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm {% if text_color_class %}{{ text_color_class }}{% endif %}">
+                        <span title="{{ product.category or '' }}" class="truncate inline-block max-w-sm {% if decoration_class %}{{ decoration_class }}{% endif %}">
                             {% if product.category and product.category|length > 55 %}
                                 {{ product.category[:55] }}...
                             {% else %}
@@ -279,8 +291,7 @@
                             {% endif %}
                         </span>
                     </td>
-                    {% set status_val = product.status.value|upper if product.status else '' %}
-                    <td class="px-6 py-4 whitespace-nowrap {% if status_val == 'SOLD' %}text-red-700{% elif status_val == 'DRAFT' %}text-amber-700{% elif status_val == 'ARCHIVED' %}text-purple-700{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap {% if text_color_class %}{{ text_color_class }}{% endif %} {% if decoration_class %}{{ decoration_class }}{% endif %}">
                         {% if product.base_price and product.base_price > 0 %}
                             £{{ "{:,.0f}".format(product.base_price) }}
                             <!-- ${{ "%.2f"|format(product.base_price) }} -->
@@ -288,27 +299,29 @@
                             <span class="text-gray-500">-</span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        {% set status_val = product.status.value|upper if product.status else '' %}
+                    <td class="px-6 py-4 whitespace-nowrap text-center">
                         {% if status_val == 'SOLD' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-700">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-700 border border-red-300 w-24 justify-center">
                                 Sold
                             </span>
                         {% elif status_val == 'DRAFT' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-700 border border-amber-300 w-24 justify-center">
                                 Draft
                             </span>
                         {% elif status_val == 'ARCHIVED' %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-700">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-700 border border-purple-300 w-24 justify-center">
                                 Archived
                             </span>
+                        {% elif status_val == 'DELETED' %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-900 border border-blue-300 w-24 justify-center">
+                                Deleted
+                            </span>
                         {% else %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 border border-green-200 w-24 justify-center">
                                 {{ status_val|title }}
                             </span>
                         {% endif %}
                     </td>
-                    {% set status_val = product.status.value|upper if product.status else '' %}
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
                         {% if status_val == 'DRAFT' %}
                             <a href="/inventory/add?draft_id={{ product.id }}" class="text-indigo-600 hover:text-indigo-900">
@@ -338,14 +351,14 @@
             </div>
             <div class="flex">
                 {% if has_prev %}
-                <a href="?page={{ page - 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}" 
+                <a href="?page={{ page - 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}&status={{ status_query_value|urlencode }}" 
                 class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-gray-50">
                     Previous
                 </a>
                 {% endif %}
                 
                 {% if has_next %}
-                <a href="?page={{ page + 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}"
+                <a href="?page={{ page + 1 }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if brand %}&brand={{ brand }}{% endif %}&status={{ status_query_value|urlencode }}"
                 class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-gray-50">
                     Next
                 </a>
@@ -406,6 +419,14 @@
     /* Add bottom padding to main container to prevent footer overlap */
     .container {
         padding-bottom: 60px;
+    }
+
+    .inventory-row {
+        transition: background-color 150ms ease;
+    }
+
+    .inventory-row:hover {
+        background-color: #f3f4f6;
     }
 </style>
 

@@ -48,3 +48,11 @@
 
   The most critical issue is #1 - the eBay shipping mismatch that's preventing listings from being created via the
   sync process.
+
+⏺ Low Priority Backlog
+
+  - Status badge consolidation
+    - Problem: `inventory/list.html` and `inventory/detail.html` both define their own Tailwind class stacks for
+      status “bubbles,” which makes future palette/size tweaks repetitive.
+    - Idea: Extract a shared Jinja macro or shared CSS utility classes so badges inherit the same base style with a
+      single change point.

@@ -60,9 +60,10 @@ from app.models.shopify import ShopifyListing
 # from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
 from app.services.category_mapping_service import CategoryMappingService
 from app.services.product_service import ProductService
-from app.services.ebay_service import EbayService
+from app.services.ebay_service import EbayService, MUSICAL_INSTRUMENT_CATEGORY_IDS
 from app.services.reverb_service import ReverbService
 from app.services.shopify_service import ShopifyService
+from app.services.condition_mapping_service import ConditionMappingService
 from app.services.image_reconciliation import (
     refresh_canonical_gallery,
     reconcile_shopify,
@@ -3454,18 +3455,30 @@ async def inspect_payload(
         except:
             pass
 
+    condition_mapping_service = ConditionMappingService(db)
+
     # Ensure the standard footer is present when we have body copy
     description = ensure_description_has_standard_footer(description)
     description_with_footer = description or ""
     
-    # Map condition to Reverb condition UUID
-    import json
-    from pathlib import Path
-    mappings_file = Path(__file__).parent.parent.parent / "data" / "reverb_condition_mappings.json"
-    with open(mappings_file, 'r') as f:
-        mappings_data = json.load(f)
-    condition_map = {k: v["uuid"] for k, v in mappings_data["condition_mappings"].items()}
-    reverb_condition_uuid = condition_map.get(condition, "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d")
+    # Map condition to Reverb condition UUID via DB-backed mappings
+    reverb_condition_uuid = None
+    condition_enum = None
+    try:
+        condition_enum = ProductCondition(condition)
+    except Exception:
+        logger.warning("inspect_payload received invalid condition value: %s", condition)
+
+    if condition_enum:
+        mapping = await condition_mapping_service.get_mapping(
+            PlatformName.REVERB,
+            condition_enum,
+        )
+        if mapping:
+            reverb_condition_uuid = mapping.platform_condition_id
+
+    if not reverb_condition_uuid:
+        reverb_condition_uuid = "df268ad1-c462-4ba6-b6db-e007e23922ea"
     
     # Build response with payloads for each platform
     payloads = {}
@@ -4843,6 +4856,7 @@ async def sync_ebay_submit(
     
     # Initialize services
     mapping_service = CategoryMappingService(db)
+    condition_mapping_service = ConditionMappingService(db)
     ebay_service = EbayService(db, settings)
     
     # Process each product
@@ -4915,10 +4929,24 @@ async def sync_ebay_submit(
             if product.finish:
                 ebay_item_specifics["Finish"] = product.finish
             
+            scope = (
+                "musical_instruments"
+                if category_mapping.target_id in MUSICAL_INSTRUMENT_CATEGORY_IDS
+                else "default"
+            )
+            condition_id = await condition_mapping_service.get_condition_id(
+                PlatformName.EBAY,
+                product.condition or ProductCondition.GOOD,
+                scope=scope,
+                fallbacks=("default",),
+            )
+            if not condition_id:
+                condition_id = "3000"
+
             # Create eBay listing data
             ebay_data = {
                 "category_id": category_mapping.target_id,
-                "condition_id": map_condition_to_ebay(product.condition),
+                "condition_id": condition_id,
                 "price": float(product.base_price) if product.base_price else 0.0,
                 "duration": "GTC",  # Good Till Cancelled
                 "item_specifics": ebay_item_specifics
@@ -4956,24 +4984,6 @@ async def sync_ebay_submit(
             "results": results
         }
     )
-
-def map_condition_to_ebay(condition: str) -> str:
-    """Map our condition values to eBay condition IDs"""
-    # eBay condition IDs: https://developer.ebay.com/devzone/finding/callref/enums/conditionIdList.html
-    condition_mapping = {
-        "NEW": "1000",       # New
-        "EXCELLENT": "1500", # New other (see details)
-        "VERYGOOD": "2000", # Manufacturer refurbished
-        "GOOD": "2500",      # Seller refurbished
-        "FAIR": "3000",      # Used
-        "POOR": "7000"       # For parts or not working
-    }
-    
-    if condition and condition.upper() in condition_mapping:
-        return condition_mapping[condition.upper()]
-    
-    # Default to Used if no mapping found
-    return "3000"
 
 @router.get("/api/dropbox/folders", response_class=JSONResponse)
 async def get_dropbox_folders(

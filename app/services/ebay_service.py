@@ -18,11 +18,28 @@ from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.sync_event import SyncEvent
 from app.core.config import Settings
 from app.core.exceptions import EbayAPIError
-from app.core.enums import ManufacturingCountry
+from app.core.enums import ManufacturingCountry, PlatformName
 from app.services.ebay.trading import EbayTradingLegacyAPI
 from app.services.match_utils import suggest_product_match
+from app.services.condition_mapping_service import ConditionMappingService
 
 logger = logging.getLogger(__name__)
+
+MUSICAL_INSTRUMENT_CATEGORY_IDS = {
+    "33034",  # Electric Guitars
+    "33021",  # Acoustic Guitars
+    "4713",   # Bass Guitars
+    "38072",  # Guitar Amplifiers
+    "41407",  # Effects Pedals
+    "119544", # Classical Guitars
+    "181220", # Lap & Pedal Steel Guitars
+    "159948", # Travel Guitars
+    "181219", # Resonators
+    "10179",  # Mandolins & mandolin family
+    "181224", # Mandolas
+    "16218",  # Banjos & folk instruments
+    "16222",  # Ukuleles
+}
 
 class EbayService:
     """
@@ -37,6 +54,7 @@ class EbayService:
         logger.debug("EbayService.__init__ - Initializing.")
         self.db = db
         self.settings = settings
+        self.condition_mapping_service = ConditionMappingService(db)
         
         sandbox_mode = settings.EBAY_SANDBOX_MODE if settings else False
         logger.debug(f"EbayService.__init__ - Sandbox mode: {sandbox_mode}")
@@ -144,14 +162,11 @@ class EbayService:
             # Default to electric guitars
             return self.category_map.get('default')
 
-    def _get_ebay_condition_id(self, condition: ProductCondition, category_id: str = None) -> str:
+    async def _get_ebay_condition_id(self, condition: ProductCondition, category_id: str = None) -> str:
         """
-        Maps our internal ProductCondition enum to an eBay Condition ID.
-        Musical Instruments categories only support: 1000, 1500, 2500, 3000, 7000
+        Resolve the eBay ConditionID using the database-backed mapping table.
         """
-        
-        # Check if this is a musical instruments category
-        musical_instrument_categories = [
+        musical_instrument_categories = {
             "33034",  # Electric Guitars
             "33021",  # Acoustic Guitars
             "4713",   # Bass Guitars
@@ -165,34 +180,34 @@ class EbayService:
             "181224", # Mandolas
             "16218",  # Banjos & folk instruments
             "16222",  # Ukuleles
-        ]
-        
-        is_musical_instrument = category_id in musical_instrument_categories if category_id else True
-        
-        if is_musical_instrument:
-            # Musical instruments have limited condition options
-            condition_map = {
-                ProductCondition.NEW: "1000",           # New
-                ProductCondition.EXCELLENT: "3000",     # Used - Best for excellent vintage items
-                ProductCondition.VERYGOOD: "3000",      # Used
-                ProductCondition.GOOD: "3000",          # Used  
-                ProductCondition.FAIR: "3000",          # Used
-                ProductCondition.POOR: "7000",          # For parts or not working
-            }
-        else:
-            # Other categories may support more condition codes
-            # This is for future expansion when we add non-musical categories
-            condition_map = {
-                ProductCondition.NEW: "1000",           # New
-                ProductCondition.EXCELLENT: "2000",     # Manufacturer refurbished / Excellent
-                ProductCondition.VERYGOOD: "3000",      # Used
-                ProductCondition.GOOD: "4000",          # Good
-                ProductCondition.FAIR: "5000",          # Acceptable
-                ProductCondition.POOR: "7000",          # For parts or not working
-            }
-        
-        # Default to 'Used' if the condition is not in the map
-        return condition_map.get(condition, "3000")
+        }
+
+        scope = "musical_instruments" if (category_id in musical_instrument_categories if category_id else True) else "default"
+        condition_value = condition
+        if not isinstance(condition_value, ProductCondition):
+            try:
+                condition_value = ProductCondition(condition_value)
+            except Exception:
+                condition_value = None
+
+        mapping = None
+        if condition_value:
+            mapping = await self.condition_mapping_service.get_mapping(
+                PlatformName.EBAY,
+                condition_value,
+                scope=scope,
+                fallbacks=("default",),
+            )
+
+        if mapping:
+            return mapping.platform_condition_id
+
+        logger.warning(
+            "Falling back to generic eBay condition code for condition=%s scope=%s",
+            condition,
+            scope,
+        )
+        return "3000"
     
     def _get_ebay_condition_display_name(self, condition_id: str) -> str:
         """
@@ -1504,7 +1519,7 @@ class EbayService:
             # 2. Map internal Product Condition to an eBay Condition ID (category-specific)
             logger.info(f"=== CONDITION MAPPING ===")
             logger.info(f"  Product condition: {product.condition}")
-            ebay_condition_id = self._get_ebay_condition_id(product.condition, ebay_category_info['CategoryID'])
+            ebay_condition_id = await self._get_ebay_condition_id(product.condition, ebay_category_info['CategoryID'])
             logger.info(f"  Mapped to eBay ConditionID: {ebay_condition_id}")
             logger.info(f"  Condition display name: {self._get_ebay_condition_display_name(ebay_condition_id)}")
             

@@ -13,6 +13,7 @@ from .shipping import Shipment, ShippingProfile
 from .sync_event import SyncEvent
 from .platform_status_mapping import PlatformStatusMapping
 from .sync_stats import SyncStats
+from .condition_mapping import PlatformConditionMapping
 
 # from .product_merges import ProductMerge # We don't currently have a model for this.
 # from .user import User  # Want to add this before we go live 
@@ -40,5 +41,6 @@ __all__ = [
     'ActivityLog',
     'PlatformStatusMapping',
     'SyncStats',
+    'PlatformConditionMapping',
     # 'User',  
 ]

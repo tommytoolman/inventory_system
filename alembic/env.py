@@ -19,6 +19,19 @@ from app.models.shopify import ShopifyListing
 
 settings = get_settings()
 
+def _ensure_async_driver(url: str) -> str:
+    """Convert sync Postgres URLs to asyncpg for Alembic."""
+    if not url:
+        return url
+    normalized = url
+    if normalized.startswith("postgres://"):
+        normalized = normalized.replace("postgres://", "postgresql://", 1)
+    if normalized.startswith("postgresql://"):
+        normalized = normalized.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif normalized.startswith("postgresql+psycopg2://"):
+        normalized = normalized.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+    return normalized
+
 # this is the Alembic Config object
 config = context.config
 
@@ -47,7 +60,7 @@ def include_object_filter(object, name, type_, reflected, compare_to):
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     # url = config.get_main_option("sqlalchemy.url") # deprecated for ser
-    url = settings.DATABASE_URL # Get URL from settings
+    url = _ensure_async_driver(settings.DATABASE_URL) # Get URL from settings
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -86,7 +99,7 @@ async def run_async_migrations() -> None:
 
     # **** IMPORTANT: Override the sqlalchemy.url from alembic.ini ****
     # Use the DATABASE_URL from your application settings instead
-    alembic_config_section["sqlalchemy.url"] = settings.DATABASE_URL
+    alembic_config_section["sqlalchemy.url"] = _ensure_async_driver(settings.DATABASE_URL)
 
     # Create the async engine using the MODIFIED configuration dictionary
     # which now contains the correct database URL from settings.

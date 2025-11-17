@@ -9,7 +9,6 @@ import re
 
 from datetime import datetime, timezone    
 from fastapi import HTTPException
-from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple, Set
 from urllib.parse import urlparse, parse_qs
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +28,7 @@ from app.services.match_utils import suggest_product_match
 from app.core.enums import PlatformName, Handedness, ManufacturingCountry
 from app.models.category_mappings import ReverbCategory
 from app.services.sku_service import generate_next_riff_sku
+from app.services.condition_mapping_service import ConditionMappingService
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ class ReverbService:
         """
         self.db = db
         self.settings = settings
+        self.condition_mapping_service = ConditionMappingService(db)
         
         # Use sandbox API for testing if enabled in settings
         use_sandbox = self.settings.REVERB_USE_SANDBOX
@@ -713,35 +714,17 @@ class ReverbService:
             # Map condition to Reverb UUID
             condition_uuid = reverb_options.get("condition_uuid")
             if not condition_uuid and product.condition:
-                mapping_paths = [
-                    Path(__file__).resolve().parent.parent / "data" / "reverb_condition_mappings.json",
-                    Path(__file__).resolve().parents[2] / "data" / "reverb_condition_mappings.json",
-                    Path.cwd() / "data" / "reverb_condition_mappings.json",
-                ]
-                mapping_loaded = False
-                for mapping_file in mapping_paths:
-                    if mapping_file.exists():
-                        try:
-                            with open(mapping_file, "r") as f:
-                                condition_map_data = json.load(f)
-                            condition_map = {
-                                key.upper(): value["uuid"]
-                                for key, value in condition_map_data.get("condition_mappings", {}).items()
-                            }
-                            condition_uuid = condition_map.get(str(product.condition).upper())
-                            mapping_loaded = True
-                            break
-                        except Exception as mapping_error:
-                            logger.warning(
-                                "Failed to parse condition mapping file %s for product %s: %s",
-                                mapping_file,
-                                product.sku,
-                                mapping_error,
-                            )
-                if not mapping_loaded:
+                mapping = await self.condition_mapping_service.get_mapping(
+                    PlatformName.REVERB,
+                    product.condition,
+                )
+                if mapping:
+                    condition_uuid = mapping.platform_condition_id
+                else:
                     logger.warning(
-                        "Failed to map condition for product %s: condition mapping file not found",
+                        "No Reverb condition mapping found for %s (%s)",
                         product.sku,
+                        product.condition,
                     )
 
             if not condition_uuid:
@@ -1167,7 +1150,7 @@ class ReverbService:
                 raise ListingNotFoundError(f"Product {platform_common.product_id} not found")
             
             # Prepare the listing data for Reverb API
-            api_listing_data = listing_data or self._prepare_listing_data(listing, product)
+            api_listing_data = listing_data or await self._prepare_listing_data(listing, product)
             
             # Create the listing on Reverb
             response = await self.client.create_listing(api_listing_data)
@@ -1526,7 +1509,7 @@ class ReverbService:
         # This now correctly uses the service's own configured client
         return await self.client.get_all_listings(state=state)
     
-    def _prepare_listing_data(self, listing: ReverbListing, product: Product) -> Dict[str, Any]:
+    async def _prepare_listing_data(self, listing: ReverbListing, product: Product) -> Dict[str, Any]:
         """
         Prepare listing data for Reverb API
         
@@ -1537,6 +1520,22 @@ class ReverbService:
         Returns:
             Dict: Listing data formatted for Reverb API
         """
+        condition_uuid = None
+        if product.condition:
+            mapping = await self.condition_mapping_service.get_mapping(
+                PlatformName.REVERB,
+                product.condition,
+            )
+            if mapping:
+                condition_uuid = mapping.platform_condition_id
+
+        if not condition_uuid:
+            logger.warning(
+                "Falling back to Excellent condition while preparing Reverb payload for product %s",
+                product.id,
+            )
+            condition_uuid = "df268ad1-c462-4ba6-b6db-e007e23922ea"
+
         data = {
             "title": product.title or f"{product.brand} {product.model}",
             "description": product.description or "",
@@ -1544,7 +1543,7 @@ class ReverbService:
             "model": product.model,
             # Format condition as object with UUID
             "condition": {
-                "uuid": self._get_condition_uuid(product.condition)
+                "uuid": condition_uuid
             },
             # Format price as object with amount and currency
             "price": {
@@ -1604,20 +1603,6 @@ class ReverbService:
                 )
 
         return data
-
-    def _get_condition_uuid(self, condition_name: str) -> str:
-        """Map condition name to UUID"""
-        condition_map = {
-            "Mint": "ec942c5e-fd9d-4a70-af95-ce686ed439e5",
-            "Excellent": "df268ad1-c462-4ba6-b6db-e007e23922ea",
-            "Very Good": "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d", 
-            "Good": "ddadff2a-188c-42e0-be90-ebed197400a3",
-            "Fair": "a2356006-97f9-487c-bd68-6c148a8ffe93",
-            "Poor": "41b843b5-af33-4f37-9e9e-eec54aac6ce4",
-            "Non Functioning": "196adee9-5415-4b5d-910f-39f2eb72e92f"
-        }
-        # Default to "Excellent" condition if not found
-        return condition_map.get(condition_name, "df268ad1-c462-4ba6-b6db-e007e23922ea")
 
     def _prepare_video_payload(self, video_url: Optional[str]) -> Optional[Dict[str, str]]:
         """Normalize YouTube URLs for Reverb payloads."""

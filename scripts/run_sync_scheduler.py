@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.core.config import get_settings
 from app.database import async_session
@@ -19,10 +19,10 @@ class ScheduledJob:
         self.name = name
         self.interval = timedelta(minutes=interval_minutes)
         self.coro = coro
-        self.next_run = datetime.utcnow()
+        self.next_run = datetime.now(timezone.utc)
 
     def update_next_run(self):
-        self.next_run = datetime.utcnow() + self.interval
+        self.next_run = datetime.now(timezone.utc) + self.interval
 
 
 async def run_job(job: ScheduledJob, settings):
@@ -42,30 +42,60 @@ async def main():
     settings = get_settings()
 
     jobs = [
-        ScheduledJob("reverb_hourly", 60, lambda **kw: run_reverb_sync_background(**kw)),
-        ScheduledJob("ebay_hourly", 60, lambda **kw: run_ebay_sync_background(**kw)),
-        ScheduledJob("shopify_hourly", 60, lambda **kw: run_shopify_sync_background(**kw)),
-        ScheduledJob("vr_every_3h", 180, lambda **kw: run_vr_sync_background(
-            settings.VINTAGE_AND_RARE_USERNAME,
-            settings.VINTAGE_AND_RARE_PASSWORD,
-            **kw,
-        )),
+        ScheduledJob(
+            "reverb_hourly",
+            60,
+            lambda db, settings, sync_run_id: run_reverb_sync_background(
+                api_key=settings.REVERB_API_KEY,
+                db=db,
+                settings=settings,
+                sync_run_id=sync_run_id,
+            ),
+        ),
+        ScheduledJob(
+            "ebay_hourly",
+            60,
+            lambda db, settings, sync_run_id: run_ebay_sync_background(
+                db=db,
+                settings=settings,
+                sync_run_id=sync_run_id,
+            ),
+        ),
+        ScheduledJob(
+            "shopify_hourly",
+            60,
+            lambda db, settings, sync_run_id: run_shopify_sync_background(
+                db=db,
+                settings=settings,
+                sync_run_id=sync_run_id,
+            ),
+        ),
+        ScheduledJob(
+            "vr_every_3h",
+            180,
+            lambda db, settings, sync_run_id: run_vr_sync_background(
+                settings.VINTAGE_AND_RARE_USERNAME,
+                settings.VINTAGE_AND_RARE_PASSWORD,
+                db,
+                sync_run_id,
+            ),
+        ),
     ]
 
     heartbeat_interval = timedelta(minutes=10)
-    next_heartbeat = datetime.utcnow() + heartbeat_interval
+    next_heartbeat = datetime.now(timezone.utc) + heartbeat_interval
 
     while True:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         due_jobs = [job for job in jobs if job.next_run <= now]
 
         for job in due_jobs:
             await run_job(job, settings)
 
-        if datetime.utcnow() >= next_heartbeat:
+        if datetime.now(timezone.utc) >= next_heartbeat:
             schedule = {job.name: job.next_run.isoformat() for job in jobs}
             logger.info("Scheduler heartbeat; next runs: %s", schedule)
-            next_heartbeat = datetime.utcnow() + heartbeat_interval
+            next_heartbeat = datetime.now(timezone.utc) + heartbeat_interval
 
         await asyncio.sleep(60)  # check every minute
 

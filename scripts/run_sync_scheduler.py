@@ -22,7 +22,7 @@ class ScheduledJob:
         self.next_run = datetime.now(timezone.utc)
 
     def update_next_run(self):
-        self.next_run = datetime.utcnow() + self.interval
+        self.next_run = datetime.now(timezone.utc) + self.interval
 
 
 async def run_job(job: ScheduledJob, settings):
@@ -92,10 +92,10 @@ async def main():
         for job in due_jobs:
             await run_job(job, settings)
 
-        if datetime.utcnow() >= next_heartbeat:
+        if datetime.now(timezone.utc) >= next_heartbeat:
             schedule = {job.name: job.next_run.isoformat() for job in jobs}
             logger.info("Scheduler heartbeat; next runs: %s", schedule)
-            next_heartbeat = datetime.utcnow() + heartbeat_interval
+            next_heartbeat = datetime.now(timezone.utc) + heartbeat_interval
 
         await asyncio.sleep(60)  # check every minute
 

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.config import get_settings
 from app.database import async_session
+from app.services.ebay_service import EbayService
 from app.routes.platforms.ebay import run_ebay_sync_background
 from app.routes.platforms.reverb import run_reverb_sync_background
 from app.routes.platforms.shopify import run_shopify_sync_background
@@ -40,6 +41,17 @@ async def run_job(job: ScheduledJob, settings):
 
 async def main():
     settings = get_settings()
+
+    async def refresh_ebay_metadata(db, settings, sync_run_id):
+        service = EbayService(db, settings)
+        await service.refresh_listing_metadata(
+            state="active",
+            limit=None,
+            batch_size=10,
+            dry_run=False,
+            skus=None,
+            item_ids=None,
+        )
 
     jobs = [
         ScheduledJob(
@@ -79,6 +91,11 @@ async def main():
                 db,
                 sync_run_id,
             ),
+        ),
+        ScheduledJob(
+            "ebay_metadata_12h",
+            720,
+            refresh_ebay_metadata,
         ),
     ]
 

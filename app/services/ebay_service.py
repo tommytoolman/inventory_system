@@ -5,6 +5,7 @@ import uuid
 import json
 import asyncio
 import time
+import re
 from decimal import Decimal
 from typing import Optional, Dict, List, Any, Tuple, Set, Sequence
 from datetime import datetime, timezone, timedelta
@@ -41,6 +42,14 @@ MUSICAL_INSTRUMENT_CATEGORY_IDS = {
     "16222",  # Ukuleles
 }
 
+ROSEWOOD_VARIANT_PATTERNS = [
+    re.compile(r"\bbrazilian\s+rosewood\b", re.IGNORECASE),
+    re.compile(r"\bbrazillian\s+rosewood\b", re.IGNORECASE),
+    re.compile(r"\bbrazil\s+rosewood\b", re.IGNORECASE),
+    re.compile(r"\bbrasilian\s+rosewood\b", re.IGNORECASE),
+    re.compile(r"\bbrasil\s+rosewood\b", re.IGNORECASE),
+]
+
 class EbayService:
     """
     Service for managing eBay listings and synchronization.
@@ -65,6 +74,15 @@ class EbayService:
 
         # --- NEW: Load the category map from the JSON file on startup ---
         self.category_map = self._load_category_map()
+
+    def _sanitize_description_for_ebay(self, text: Optional[str]) -> Optional[str]:
+        """Remove phrases that eBay flags while leaving other platform payloads untouched."""
+        if not text:
+            return text
+        sanitized = text
+        for pattern in ROSEWOOD_VARIANT_PATTERNS:
+            sanitized = pattern.sub("Rosewood", sanitized)
+        return sanitized
 
     def _normalize_get_item_response(self, response: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """Flatten GetItem responses so callers always see the Item payload at the top level."""
@@ -1609,9 +1627,12 @@ class EbayService:
             logger.info(f"  Listing price: £{price_str}")
 
             # 7. Build the complete item_data payload for the eBay API
+            description_text = product.description or "No description available."
+            description_text = self._sanitize_description_for_ebay(description_text)
+
             item_data = {
                 "Title": (product.title or f"{product.year or ''} {product.brand} {product.model}".strip())[:80],  # eBay limit is 80 chars
-                "Description": product.description or "No description available.",
+                "Description": description_text,
                 "CategoryID": ebay_category_info['CategoryID'],
                 "Price": price_str,
                 "CurrencyID": "GBP",
@@ -2118,6 +2139,9 @@ class EbayService:
                 category_id,
                 existing_specifics=existing_specifics,
             )
+
+        if description:
+            description = self._sanitize_description_for_ebay(description)
 
         if title or description or item_specifics:
             response = await self.trading_api.revise_listing_details(

@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.models.product import Product, ProductStatus, ProductCondition
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.reverb import ReverbListing
+from app.models.reverb_order import ReverbOrder
 from app.models.sync_event import SyncEvent
 from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
@@ -58,6 +59,7 @@ class ReverbService:
         # api_key = self.settings.REVERB_SANDBOX_API_KEY if use_sandbox else self.settings.REVERB_API_KEY
         
         self.client = ReverbClient(api_key=self.settings.REVERB_API_KEY, use_sandbox=use_sandbox)
+        self.settings = settings
 
     async def _find_remote_listings_by_sku(self, sku: Optional[str]) -> List[Dict[str, Any]]:
         """Return Reverb listings that currently use the given SKU."""
@@ -541,6 +543,113 @@ class ReverbService:
             if isinstance(e, ReverbAPIError):
                 raise
             raise ReverbAPIError(f"Failed to fetch conditions: {str(e)}")
+
+    async def import_orders(self) -> Dict[str, int]:
+        """
+        Fetch sold orders from Reverb and upsert into reverb_orders table.
+
+        Returns a summary dict with counts.
+        """
+        summary = {"fetched": 0, "inserted": 0, "updated": 0, "errors": 0}
+
+        try:
+            orders = await self.client.get_all_listings_detailed(max_concurrent=10, state="sold")
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to fetch Reverb orders: %s", exc, exc_info=True)
+            summary["errors"] += 1
+            return summary
+
+        summary["fetched"] = len(orders or [])
+
+        for order in orders or []:
+            try:
+                order_uuid = str(order.get("id") or order.get("order_number") or "").strip()
+                if not order_uuid:
+                    summary["errors"] += 1
+                    continue
+
+                listing = order.get("listing_info") or order.get("listing") or {}
+                shop = order.get("shop") or {}
+
+                existing = (
+                    await self.db.execute(
+                        select(ReverbOrder).where(ReverbOrder.order_uuid == order_uuid)
+                    )
+                ).scalar_one_or_none()
+
+                data = {
+                    "order_uuid": order_uuid,
+                    "order_number": order.get("order_number"),
+                    "order_bundle_id": order.get("order_bundle_id"),
+                    "reverb_listing_id": listing.get("id") if isinstance(listing, dict) else None,
+                    "title": listing.get("title") if isinstance(listing, dict) else order.get("title"),
+                    "shop_name": shop.get("name") if isinstance(shop, dict) else order.get("shop_name"),
+                    "sku": order.get("sku") or (listing.get("sku") if isinstance(listing, dict) else None),
+                    "status": order.get("status"),
+                    "order_type": order.get("order_type"),
+                    "order_source": order.get("order_source"),
+                    "shipment_status": order.get("shipment_status"),
+                    "shipping_method": order.get("shipping_method"),
+                    "payment_method": order.get("payment_method"),
+                    "local_pickup": order.get("local_pickup"),
+                    "needs_feedback_for_buyer": order.get("needs_feedback_for_buyer"),
+                    "needs_feedback_for_seller": order.get("needs_feedback_for_seller"),
+                    "shipping_taxed": order.get("shipping_taxed"),
+                    "tax_responsible_party": order.get("tax_responsible_party"),
+                    "tax_rate": order.get("tax_rate"),
+                    "quantity": order.get("quantity"),
+                    "buyer_id": order.get("buyer_id"),
+                    "buyer_name": order.get("buyer_name"),
+                    "buyer_first_name": order.get("buyer_first_name"),
+                    "buyer_last_name": order.get("buyer_last_name"),
+                    "buyer_email": order.get("buyer_email"),
+                    "shipping_name": order.get("shipping_name"),
+                    "shipping_phone": order.get("shipping_phone"),
+                    "shipping_city": order.get("shipping_city"),
+                    "shipping_region": order.get("shipping_region"),
+                    "shipping_postal_code": order.get("shipping_postal_code"),
+                    "shipping_country_code": order.get("shipping_country_code"),
+                    "created_at": order.get("created_at"),
+                    "paid_at": order.get("paid_at"),
+                    "updated_at": order.get("updated_at"),
+                    "amount_product": order.get("amount_product"),
+                    "amount_product_currency": order.get("amount_product_currency"),
+                    "amount_product_subtotal": order.get("amount_product_subtotal"),
+                    "amount_product_subtotal_currency": order.get("amount_product_subtotal_currency"),
+                    "shipping_amount": order.get("shipping_amount"),
+                    "shipping_currency": order.get("shipping_currency"),
+                    "tax_amount": order.get("tax_amount"),
+                    "tax_currency": order.get("tax_currency"),
+                    "total_amount": order.get("total_amount"),
+                    "total_currency": order.get("total_currency"),
+                    "direct_checkout_fee_amount": order.get("direct_checkout_fee_amount"),
+                    "direct_checkout_fee_currency": order.get("direct_checkout_fee_currency"),
+                    "direct_checkout_payout_amount": order.get("direct_checkout_payout_amount"),
+                    "direct_checkout_payout_currency": order.get("direct_checkout_payout_currency"),
+                    "tax_on_fees_amount": order.get("tax_on_fees_amount"),
+                    "tax_on_fees_currency": order.get("tax_on_fees_currency"),
+                    "shipping_address": order.get("shipping_address"),
+                    "order_notes": order.get("order_notes"),
+                    "photos": order.get("photos"),
+                    "links": order.get("links"),
+                    "presentment_amounts": order.get("presentment_amounts"),
+                    "raw_payload": order,
+                }
+
+                if existing:
+                    for key, value in data.items():
+                        setattr(existing, key, value)
+                    summary["updated"] += 1
+                else:
+                    self.db.add(ReverbOrder(**data))
+                    summary["inserted"] += 1
+
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to process Reverb order: %s", exc, exc_info=True)
+                summary["errors"] += 1
+
+        await self.db.flush()
+        return summary
             
     async def fetch_and_store_condition_mapping(self) -> Dict[str, str]:
         """

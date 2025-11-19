@@ -3806,6 +3806,7 @@ async def save_draft(
     additional_images_urls: Optional[str] = Form(None),
     video_url: Optional[str] = Form(None),
     external_link: Optional[str] = Form(None),
+    storefront_input: Optional[str] = Form(None),
     # Platform sync fields
     sync_all: Optional[str] = Form("true"),
     sync_platforms: Optional[List[str]] = Form(None),
@@ -3889,7 +3890,7 @@ async def save_draft(
         local_media_urls.extend(additional_images)
         cleanup_draft_media(draft_subdir, local_media_urls)
 
-        storefront_value = _normalize_storefront_input(storefront, Storefront.HANKS) or Storefront.HANKS
+        storefront_value = _normalize_storefront_input(storefront_input, Storefront.HANKS) or Storefront.HANKS
 
         # Create or update product data - only include fields that exist in Product model
         product_data = {

@@ -127,6 +127,39 @@ def _build_platform_stub(platform: str, base_price: Optional[float]) -> Dict[str
     }
 
 
+def _normalize_storefront_input(
+    raw_value: Optional[str],
+    default: Optional[Storefront] = None,
+) -> Optional[Storefront]:
+    """
+    Normalize storefront input strings (enum names/values, mixed casing).
+    Returns the matching Storefront or the provided default.
+    """
+    if not isinstance(raw_value, str):
+        return default
+
+    candidate = raw_value.strip()
+    if not candidate:
+        return default
+
+    candidate_upper = candidate.upper()
+    candidate_compact = candidate_upper.replace(" ", "_")
+
+    for option in Storefront:
+        if (
+            candidate_upper == option.value.upper()
+            or candidate_compact == option.name.upper()
+        ):
+            return option
+
+    logger.warning(
+        "Invalid storefront input '%s'; defaulting to %s",
+        candidate,
+        (default or Storefront.HANKS).value,
+    )
+    return default
+
+
 async def _fetch_current_platform_prices(db: AsyncSession, product_id: int) -> Dict[str, float]:
     """Return the latest stored price for each platform for comparison."""
     result = await db.execute(select(PlatformCommon).where(PlatformCommon.product_id == product_id))
@@ -2376,6 +2409,7 @@ async def add_product(
         text = str(value).strip()
         return text or None
 
+
     processed_processing_time: Optional[int] = None
     if processing_time not in BLANK_SENTINELS:
         try:
@@ -2697,19 +2731,7 @@ async def add_product(
             extra_attributes["body_type"] = body_type_value
 
         # Create product data
-        storefront_raw = form_data.get("storefront")
-        storefront_value = Storefront.HANKS
-        if isinstance(storefront_raw, str) and storefront_raw.strip():
-            candidate = storefront_raw.strip()
-            candidate_upper = candidate.upper()
-            candidate_compact = candidate_upper.replace(" ", "_")
-            for option in Storefront:
-                if (
-                    candidate_upper == option.value.upper()
-                    or candidate_compact == option.name.upper()
-                ):
-                    storefront_value = option
-                    break
+        storefront_value = _normalize_storefront_input(form_data.get("storefront"), Storefront.HANKS) or Storefront.HANKS
 
         product_data = ProductCreate(
             brand=brand,
@@ -4382,12 +4404,9 @@ async def update_product(
         except KeyError:
             pass
 
-    storefront_value = form_data.get("storefront")
-    if storefront_value:
-        try:
-            product.storefront = Storefront[storefront_value]
-        except KeyError:
-            pass
+    storefront_option = _normalize_storefront_input(form_data.get("storefront"), product.storefront)
+    if storefront_option:
+        product.storefront = storefront_option
 
     case_status_value = form_data.get("case_status")
     if case_status_value:

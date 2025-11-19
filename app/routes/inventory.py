@@ -223,7 +223,122 @@ def _parse_price_to_decimal(value: Optional[Any]) -> Optional[Decimal]:
     if isinstance(value, Decimal):
         return value
     if isinstance(value, (int, float)):
-        return Decimal(str(value))
+    return Decimal(str(value))
+
+
+def _extract_saved_platform_price(product: Product, platform_key: str) -> Optional[float]:
+    package_blob = product.package_dimensions if isinstance(product.package_dimensions, dict) else None
+    if not package_blob:
+        return None
+
+    platform_data = package_blob.get("platform_data")
+    if not isinstance(platform_data, dict):
+        return None
+
+    platform_blob = platform_data.get(platform_key)
+    if not isinstance(platform_blob, dict):
+        return None
+
+    raw_price = platform_blob.get("price") or platform_blob.get("price_display")
+    price_decimal = _parse_price_to_decimal(raw_price)
+    return float(price_decimal) if price_decimal is not None else None
+
+
+async def _fetch_latest_platform_listing_price(
+    db: AsyncSession,
+    product_id: int,
+    platform: str,
+) -> Optional[float]:
+    platform = platform.lower()
+
+    if platform == "reverb":
+        stmt = (
+            select(ReverbListing.list_price)
+            .join(PlatformCommon, ReverbListing.platform_id == PlatformCommon.id)
+            .where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "reverb",
+            )
+            .order_by(ReverbListing.updated_at.desc())
+            .limit(1)
+        )
+    elif platform == "ebay":
+        stmt = (
+            select(EbayListing.price)
+            .join(PlatformCommon, EbayListing.platform_id == PlatformCommon.id)
+            .where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "ebay",
+            )
+            .order_by(EbayListing.updated_at.desc())
+            .limit(1)
+        )
+    else:
+        return None
+
+    value = (await db.execute(stmt)).scalar_one_or_none()
+    value_decimal = _parse_price_to_decimal(value)
+    return float(value_decimal) if value_decimal is not None else None
+
+
+async def _determine_vr_price(
+    product: Product,
+    db: AsyncSession,
+    logger_instance: Optional[logging.Logger] = None,
+) -> Optional[float]:
+    if not product:
+        return None
+
+    # 1) Saved platform data (most recent form submission)
+    saved_price = _extract_saved_platform_price(product, "vr")
+    if saved_price is not None:
+        if logger_instance:
+            logger_instance.info(
+                "Using saved VR price %.2f from platform options for SKU %s",
+                saved_price,
+                product.sku,
+            )
+        return saved_price
+
+    # 2) Existing Reverb listing price
+    reverb_price = await _fetch_latest_platform_listing_price(db, product.id, "reverb")
+    if reverb_price is not None:
+        if logger_instance:
+            logger_instance.info(
+                "Using latest Reverb price %.2f for SKU %s as VR reference",
+                reverb_price,
+                product.sku,
+            )
+        return reverb_price
+
+    # 3) Existing eBay listing price
+    ebay_price = await _fetch_latest_platform_listing_price(db, product.id, "ebay")
+    if ebay_price is not None:
+        if logger_instance:
+            logger_instance.info(
+                "Using latest eBay price %.2f for SKU %s as VR reference",
+                ebay_price,
+                product.sku,
+            )
+        return ebay_price
+
+    # 4) Fallback: apply the standard markup logic
+    if product.base_price is not None:
+        fallback = _calculate_default_platform_price("vr", product.base_price)
+        if logger_instance:
+            logger_instance.info(
+                "Calculated fallback VR price %.2f from base price %.2f for SKU %s",
+                fallback,
+                product.base_price,
+                product.sku,
+            )
+        return fallback
+
+    if logger_instance:
+        logger_instance.warning(
+            "Unable to determine VR price for SKU %s; base price missing", product.sku
+        )
+    return None
     if isinstance(value, str):
         cleaned = value.replace(",", "").strip()
         if not cleaned:
@@ -714,10 +829,11 @@ def generate_shopify_handle(brand: Optional[str], model: Optional[str], sku: Opt
 
 
 async def _prepare_vr_payload_from_product_object(
-    product: Product, 
+    product: Product,
     db: AsyncSession,
     logger_instance: logging.Logger,
-    use_fallback_brand: bool = False  # NEW PARAMETER
+    use_fallback_brand: bool = False,
+    override_price: Optional[float] = None,
 ) -> tuple[Dict[str, Any], bool]:
     """
     Prepares the rich dictionary payload for V&R export from an existing Product object.
@@ -877,12 +993,13 @@ async def _prepare_vr_payload_from_product_object(
         payload["condition"] = product.condition.value if isinstance(product.condition, Enum) else str(product.condition)
 
     # --- Item Price ---
-    if product.base_price is None:
+    resolved_price = override_price if override_price is not None else product.base_price
+    if resolved_price is None:
         raise ValueError(f"Price is mandatory for V&R listing (product SKU: {product.sku}).")
     try:
-        payload["price"] = float(Decimal(str(product.base_price))) # Ensure no commas; V&R expects number or string number
+        payload["price"] = float(Decimal(str(resolved_price)))  # Ensure proper formatting
     except Exception:
-        raise ValueError(f"Invalid price format for product SKU '{product.sku}': {product.base_price}")
+        raise ValueError(f"Invalid price format for product SKU '{product.sku}': {resolved_price}")
     payload["currency"] = "GBP"
 
     # --- Media (Structured for client.py) ---
@@ -943,7 +1060,7 @@ async def _prepare_vr_payload_from_product_object(
 
     price_notax_value = getattr(product, "price_notax", None)
     if price_notax_value is None:
-        price_notax_value = product.base_price
+        price_notax_value = resolved_price
     payload["price_notax"] = price_notax_value
 
     processing_time_value = getattr(product, "processing_time", None)
@@ -1868,9 +1985,8 @@ async def handle_create_platform_listing_from_detail(
                         status_code=303,
                     )
 
-            # Prepare the V&R payload using the helper function
-            vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(product, db, logger) # NEW
-        
+            vr_price_override = await _determine_vr_price(product, db, logger)
+
             # Fast AJAX brand validation BEFORE expensive Selenium process
             logger.info(f"Validating brand '{product.brand}' with V&R before listing...")
             validation = VRBrandValidator.validate_brand(product.brand)
@@ -1897,13 +2013,21 @@ async def handle_create_platform_listing_from_detail(
                     logger.info(f"Using fallback brand '{DEFAULT_VR_BRAND}' for {product.sku} (original: '{product.brand}')")
                     # Set a flag so payload preparation knows to use fallback
                     vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(
-                        product, db, logger, use_fallback_brand=True
+                        product,
+                        db,
+                        logger,
+                        use_fallback_brand=True,
+                        override_price=vr_price_override,
                     )
             else:
                 # Brand is valid - proceed normally
                 logger.info(f"✅ Brand '{product.brand}' validated successfully (V&R ID: {validation['brand_id']})")
                 vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(
-                    product, db, logger, use_fallback_brand=False
+                    product,
+                    db,
+                    logger,
+                    use_fallback_brand=False,
+                    override_price=vr_price_override,
                 )
 
             # Instantiate VintageAndRareClient correctly

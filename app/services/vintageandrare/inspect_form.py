@@ -316,7 +316,7 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
             except Exception as health_exc:
                 print(f"ERROR: Selenium Grid health check failed: {health_exc}")
                 raise RuntimeError(
-                    "Remote Selenium browser is unavailable. Please restart the standalone Chrome service."
+                    "Remote Selenium browser is unavailable. Please try again later or contact the system admin to restart the standalone Chrome service."
                 ) from health_exc
 
             driver = webdriver.Remote(

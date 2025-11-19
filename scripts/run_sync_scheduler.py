@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -20,10 +21,22 @@ class ScheduledJob:
         self.name = name
         self.interval = timedelta(minutes=interval_minutes)
         self.coro = coro
-        self.next_run = datetime.now(timezone.utc)
+        self.next_run = self._compute_next_run(datetime.now(timezone.utc))
+
+    def _compute_next_run(self, reference: datetime) -> datetime:
+        """
+        Align the next run to the next interval boundary after `reference`.
+        """
+        interval_seconds = self.interval.total_seconds()
+        reference_ts = reference.timestamp()
+        next_ts = math.ceil(reference_ts / interval_seconds) * interval_seconds
+        next_run = datetime.fromtimestamp(next_ts, tz=timezone.utc)
+        if next_run <= reference:
+            next_run = reference + self.interval
+        return next_run
 
     def update_next_run(self):
-        self.next_run = datetime.now(timezone.utc) + self.interval
+        self.next_run = self.next_run + self.interval
 
 
 async def run_job(job: ScheduledJob, settings):

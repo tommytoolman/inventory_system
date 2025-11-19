@@ -223,7 +223,17 @@ def _parse_price_to_decimal(value: Optional[Any]) -> Optional[Decimal]:
     if isinstance(value, Decimal):
         return value
     if isinstance(value, (int, float)):
-    return Decimal(str(value))
+        return Decimal(str(value))
+    if isinstance(value, str):
+        cleaned = value.replace(",", "").strip()
+        if not cleaned:
+            return None
+        try:
+            return Decimal(cleaned)
+        except Exception:
+            logger.warning("Unable to parse price value '%s'", value)
+            return None
+    return None
 
 
 def _extract_saved_platform_price(product: Product, platform_key: str) -> Optional[float]:

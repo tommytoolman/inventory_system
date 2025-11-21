@@ -198,6 +198,7 @@ class Product(Base):
     #####################################################
 
     platform_listings = relationship("PlatformCommon", back_populates="product")
+    vr_jobs = relationship("VRJob", back_populates="product", cascade="all, delete-orphan")
     sales = relationship("Sale", back_populates="product")
     shipping_profile = relationship("ShippingProfile", back_populates="products")
     

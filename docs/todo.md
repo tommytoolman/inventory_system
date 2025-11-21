@@ -59,13 +59,13 @@
 ## 🆕 New Functionality
 - [ ] (Verify) Add bulk operations API.
 - [ ] (Verify) Implement advanced search.
-- [ ] (Verify) Add reporting system.
-- [ ] (Verify) Create analytics dashboard.
-- [ ] (Verify) Add inventory forecasting.
-- [ ] (Verify) Implement automated pricing system.
+- [X] (Verify) Add reporting system.
+- [X] (Verify) Create analytics dashboard.
+- [X] (Verify) Add inventory forecasting. (Not feasible)
+- [X] (Verify) Implement automated pricing system.
 - [ ] (Verify) Add loading spinner for image uploads.
-- [ ] (Verify) Add drag-and-drop support for images.
-- [ ] (Verify) Add image compression before upload.
+- [X] (Verify) Add drag-and-drop support for images.
+- [X] (Verify) Add image compression before upload.
 - [ ] **Mobile optimisation** – ensure key inventory and sync workflows render well on mobile devices.
 - [ ] **Multi-shop Reverb support** – plan how to ingest and manage listings across two Reverb shops.
 - [ ] **VR queue/threading improvements** – revisit VR queue handling to keep long-running jobs responsive.
@@ -123,6 +123,7 @@
 - [ ] (Verify) Configure backup system.
 - [ ] (Verify) Create disaster recovery plan.
 - [ ] (Verify) Set up staging environment.
+
 ## ✅ Completed
 - [x] **Left-handed tagging** – determine how we consistently label and surface left-handed instruments.
 - [x] **Retrofix missing product titles** – write a script to backfill `products.title` entries where historical edits failed to persist.

@@ -27,8 +27,8 @@ from app.services.reverb_service import ReverbService
 from app.services.reverb.client import ReverbClient
 from app.services.ebay_service import EbayService
 from app.services.shopify_service import ShopifyService
-from app.services.vr_service import VRService
 from app.core.config import get_settings
+from app.services.vr_job_queue import enqueue_vr_job
 
 logger = logging.getLogger(__name__)
 
@@ -1041,66 +1041,31 @@ async def _create_shopify_listing(session: AsyncSession, product: Product, rever
         }
 
 async def _create_vr_listing(session: AsyncSession, product: Product, reverb_data: dict) -> dict:
-    """Create V&R listing with reconciliation"""
+    """Queue a V&R listing job for asynchronous processing."""
     try:
-        vr_service = VRService(session)
-
-        vr_result = await vr_service.create_listing_from_product(
-            product=product,
-            reverb_data=reverb_data
+        payload = {
+            "sync_source": "event_processor",
+            "reverb_data": reverb_data or {},
+        }
+        job = await enqueue_vr_job(
+            session,
+            product_id=product.id,
+            payload=payload,
         )
-
-        if vr_result.get('status') == 'success':
-            logger.info("  ✅ VR listing created on website successfully")
-
-            platform_common_id = vr_result.get('platform_common_id')
-            if platform_common_id:
-                if vr_result.get('needs_id_resolution'):
-                    return {
-                        'success': True,
-                        'needs_reconciliation': True,
-                        'platform_common_id': platform_common_id
-                    }
-                return {
-                    'success': True,
-                    'vr_id': vr_result.get('vr_listing_id')
-                }
-
-            # Fallback for legacy behaviour if service didn't persist data
-            platform_common = PlatformCommon(
-                product_id=product.id,
-                platform_name='vr',
-                external_id=product.sku,
-                status='active',
-                sync_status='pending',
-                last_sync=datetime.utcnow()
-            )
-            session.add(platform_common)
-            await session.flush()
-
-            if vr_result.get('needs_id_resolution'):
-                logger.info("  ⚠️  VR doesn't return listing ID immediately - will reconcile later")
-                return {
-                    'success': True,
-                    'needs_reconciliation': True,
-                    'platform_common_id': platform_common.id
-                }
-            else:
-                return {
-                    'success': True,
-                    'vr_id': vr_result.get('vr_listing_id')
-                }
-        else:
-            return {
-                'success': False,
-                'error': vr_result.get('message', 'Unknown VR error')
-            }
-
-    except Exception as e:
-        logger.error(f"VR creation error: {e}", exc_info=True)
+        await session.commit()
+        logger.info("  ✅ Queued V&R job %s for product %s", job.id, product.sku)
         return {
-            'success': False,
-            'error': str(e)
+            "success": True,
+            "queued": True,
+            "job_id": job.id,
+            "needs_reconciliation": False,
+        }
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"VR queueing error: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
         }
 
 async def _process_status_change(

@@ -74,12 +74,13 @@ from app.services.shopify.utils import (
     generate_shopify_keywords,
     generate_shopify_short_description,
 )
-from app.services.vr_service import VRService
 from app.services.vintageandrare.brand_validator import VRBrandValidator
 from app.services.vintageandrare.client import VintageAndRareClient
 from app.services.vintageandrare.export import VRExportService
+from app.services.vintageandrare.constants import DEFAULT_VR_BRAND
 from app.schemas.product import ProductCreate
 from app.services.sync_services import SyncService
+from app.services.vr_job_queue import enqueue_vr_job
 
 router = APIRouter()
 
@@ -203,7 +204,6 @@ async def _fetch_current_platform_prices(db: AsyncSession, product_id: int) -> D
 
 PRICE_CHANGE_EPSILON = 0.01
 
-DEFAULT_VR_BRAND = "Justin" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR VRAcceptedBrand TABLE***
 # DEFAULT_EBAY_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR eBay Accepted Brands TABLE***
 # DEFAULT_REVERB_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR Reverb Accepted Brands TABLE***
 
@@ -1997,6 +1997,17 @@ async def handle_create_platform_listing_from_detail(
 
             vr_price_override = await _determine_vr_price(product, db, logger)
 
+            saved_platform_options: Dict[str, Any] = {}
+            package_blob = product.package_dimensions if isinstance(product.package_dimensions, dict) else {}
+            if isinstance(package_blob, dict):
+                platform_data_blob = package_blob.get("platform_data")
+                if isinstance(platform_data_blob, dict):
+                    vr_blob = platform_data_blob.get("vr")
+                    if isinstance(vr_blob, dict):
+                        saved_platform_options = vr_blob.copy()
+
+            use_fallback = False
+
             # Fast AJAX brand validation BEFORE expensive Selenium process
             logger.info(f"Validating brand '{product.brand}' with V&R before listing...")
             validation = VRBrandValidator.validate_brand(product.brand)
@@ -2037,67 +2048,39 @@ async def handle_create_platform_listing_from_detail(
                 else:
                     # User confirmed - proceed with fallback brand
                     logger.info(f"Using fallback brand '{DEFAULT_VR_BRAND}' for {product.sku} (original: '{product.brand}')")
-                    # Set a flag so payload preparation knows to use fallback
-                    vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(
-                        product,
-                        db,
-                        logger,
-                        use_fallback_brand=True,
-                        override_price=vr_price_override,
-                    )
             else:
                 # Brand is valid - proceed normally
                 logger.info(f"✅ Brand '{product.brand}' validated successfully (V&R ID: {validation['brand_id']})")
-                vr_payload_dict, brand_defaulted = await _prepare_vr_payload_from_product_object(
-                    product,
+
+            payload: Dict[str, Any] = {
+                "sync_source": "inventory_detail",
+                "platform_options": saved_platform_options,
+            }
+            if use_fallback:
+                payload["use_fallback_brand"] = True
+            if vr_price_override is not None:
+                payload["override_price"] = float(vr_price_override)
+
+            try:
+                job = await enqueue_vr_job(
                     db,
-                    logger,
-                    use_fallback_brand=False,
-                    override_price=vr_price_override,
+                    product_id=product.id,
+                    payload=payload,
+                )
+                await db.commit()
+            except Exception as exc:
+                logger.error("Failed to enqueue V&R job for product %s: %s", product.sku, exc, exc_info=True)
+                message = f"Unable to queue Vintage & Rare listing for SKU '{product.sku}': {exc}"
+                return RedirectResponse(
+                    url=f"{redirect_url}?message={quote_plus(message)}&message_type=error",
+                    status_code=303,
                 )
 
-            # Instantiate VintageAndRareClient correctly
-            vintage_rare_client = VintageAndRareClient(
-                username=settings.VINTAGE_AND_RARE_USERNAME,
-                password=settings.VINTAGE_AND_RARE_PASSWORD,
-                db_session=db 
-            )
-            
-            logger.info(f"Calling create_listing_selenium for product SKU {product.sku} with payload.")
-            # The `raise RuntimeError` for debugging is inside create_listing_selenium in client.py
-            
-            export_result = await vintage_rare_client.create_listing_selenium(
-                product_data=vr_payload_dict, # This is the payload from _prepare_vr_payload_from_product_object
-                test_mode=False,
-                from_scratch=False,
-                db_session=db   
-            )
-        
-        # # ... (elif for ebay, reverb) ...
-        
-            # Handle the result from create_listing_selenium
-            if export_result and export_result.get("status") == "success":
-                # Get the SKU before the async operation
-                product_sku = product.sku  # ✅ Get it early
-                message = f"Successfully initiated V&R listing process for SKU '{product_sku}'. Action: {export_result.get('message', '')}"
-                if brand_defaulted:
-                    # Ensure vr_payload_dict contains the brand key used (e.g., 'brand')
-                    defaulted_brand_name = vr_payload_dict.get('brand', 'the default brand')
-                    message += f" NOTE: Product brand '{product.brand}' was not V&R recognized; defaulted to '{defaulted_brand_name}'. Please verify on V&R."
-                message_type = "success"
-            elif export_result and export_result.get("status") == "debug": # Handling the debug halt
-                message = f"DEBUG: Halted in V&R client for payload inspection. SKU: {product.sku}. Client Message: {export_result.get('message')}"
-                message_type = "info"
-                # Optionally log the detailed payloads if returned in export_result for debug status
-                if "received_payload" in export_result and "prepared_form_data" in export_result:
-                    logger.info(f"DEBUG PAYLOADS for SKU {product.sku}:\nRECEIVED BY CLIENT:\n{json.dumps(export_result['received_payload'], indent=2, default=str)}\nPREPARED FORM DATA:\n{json.dumps(export_result['prepared_form_data'], indent=2, default=str)}")
-
-            else: # Handles "error" status or unexpected structure
-                error_detail = export_result.get("message", "Unknown V&R client error.") if export_result else "No result from V&R client."
-                message = f"Failed to process V&R listing for SKU '{product.sku}': {error_detail}"
-                # message_type is already "error"
-            
-            logger.info(f"V&R processing result for {product.sku}: {message}")
+            message = f"Queued Vintage & Rare listing job #{job.id} for SKU '{product.sku}'."
+            if use_fallback:
+                message += f" Using fallback brand '{DEFAULT_VR_BRAND}'."
+            message_type = "success"
+            logger.info("Queued V&R job %s for product %s with payload %s", job.id, product.sku, payload)
         
         elif platform_slug == "shopify":
             logger.info(f"=== SINGLE PLATFORM LISTING: SHOPIFY ===")
@@ -3273,41 +3256,34 @@ async def add_product(
                 }
         
         if "vr" in platforms_to_sync:
-            logger.info(f"=== CREATING V&R LISTING ===")
-            logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
+            logger.info("=== QUEUING V&R LISTING JOB ===")
             try:
-                # Initialize VR service if not already done
-                if 'vr_service' not in locals():
-                    vr_service = VRService(db)
-                
-                logger.info("Calling vr_service.create_listing_from_product()...")
-                result = await vr_service.create_listing_from_product(
-                    product=product,
-                    reverb_data=enriched_data,
-                    platform_options=platform_data.get("vr")
+                payload = {
+                    "platform_options": platform_data.get("vr") or {},
+                    "sync_source": "multi_create",
+                    "enriched_data": enriched_data or {},
+                }
+                job = await enqueue_vr_job(
+                    db,
+                    product_id=product.id,
+                    payload=payload,
                 )
-                logger.info(f"V&R result: {result}")
-                
-                if result.get("status") == "success":
-                    vr_message = "Successfully created V&R listing"
-                    if result.get("vr_listing_id"):
-                        vr_message = f"V&R listing ID: {result.get('vr_listing_id')}"
-                    platform_statuses["vr"] = {
-                        "status": "success",
-                        "message": vr_message
-                    }
-                    logger.info("✅ V&R listing created successfully")
-                else:
-                    platform_statuses["vr"] = {
-                        "status": "error",
-                        "message": result.get("message", "Failed to create V&R listing")
-                    }
-                    logger.warning(f"❌ V&R listing failed: {result.get('message')}")
-            except Exception as e:
-                logger.error(f"V&R listing error: {str(e)}", exc_info=True)
+                await db.commit()
+                platform_statuses["vr"] = {
+                    "status": "success",
+                    "message": f"Queued V&R job #{job.id}",
+                }
+                logger.info(
+                    "Queued V&R job %s for product %s (%s)",
+                    job.id,
+                    product.sku,
+                    payload,
+                )
+            except Exception as exc:
+                logger.error("Failed to enqueue V&R job: %s", exc, exc_info=True)
                 platform_statuses["vr"] = {
                     "status": "error",
-                    "message": f"Error: {str(e)}"
+                    "message": f"Queue error: {exc}",
                 }
         
         # Reverb is already handled above if it was selected

@@ -39,6 +39,7 @@ from app.services.ebay_service import EbayService
 from app.services.reverb_service import ReverbService
 from app.services.shopify_service import ShopifyService
 from app.services.vr_service import VRService
+from app.services.vr_job_queue import enqueue_vr_job
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -704,6 +705,22 @@ class SyncService:
                                 master_product,
                                 details,
                             )
+                        elif platform == 'vr':
+                            job = await enqueue_vr_job(
+                                self.db,
+                                product_id=master_product.id,
+                                payload={
+                                    "sync_source": "sync_service",
+                                    "reverb_data": details or {},
+                                },
+                            )
+                            await self.db.commit()
+                            logger.info("Queued V&R job %s for product %s via sync service", job.id, master_product.sku)
+                            result = {
+                                "status": "success",
+                                "queued": True,
+                                "job_id": job.id,
+                            }
                         else:
                             result = await service.create_listing_from_product(master_product)
                         

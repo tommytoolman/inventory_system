@@ -3,15 +3,16 @@
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## 🔴 High Priority (Production blockers)
-- [ ] **VR handling performance** – address sluggish VR listing creation and inventory sync by offloading slow Selenium/API work to background workers and smoothing operator workflows.
+- [x] **VR handling performance** – address sluggish VR listing creation and inventory sync by offloading slow Selenium/API work to background workers and smoothing operator workflows.
 - [ ] **VR historical shipping profiles** – audit legacy VR listings and update shipping profiles to match the current configuration. _[Track on VR branch]_
-- [ ] **VR pending status investigation** – identify why freshly created VR listings remain `pending` instead of `active` and patch the flow. _[VR branch]_
-- [ ] **Capture handedness & artist ownership** – add non-mandatory fields to product add/edit flows, defaulting to right-handed / not artist owned, propagate to relevant APIs, and verify Shopify continues to write the correct product metafield.
+- [x] **VR pending status investigation** – identify why freshly created VR listings remain `pending` instead of `active` and patch the flow. _[VR branch]_
+- [x] **Capture handedness & artist ownership** – add non-mandatory fields to product add/edit flows, defaulting to right-handed / not artist owned, propagate to relevant APIs, and verify Shopify continues to write the correct product metafield.
 - [ ] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms, restore the DB flagging for inventorised items that was lost previously, and enforce VR-specific rules (do nothing when other platforms sell while stock >1, end the VR listing only when quantity hits 0, and mark + relist VR sales when remaining quantity >0) so sync detects sales without prematurely ending multi-quantity listings.
-- [ ] **VR removal logic verification** – confirm the updated handling marks "not found on API" as REMOVED (unless corroborated by Reverb) and that the “List Item” UI path reflects the latest logic.
+- [x] **VR removal logic verification** – confirm the updated handling marks "not found on API" as REMOVED (unless corroborated by Reverb) and that the “List Item” UI path reflects the latest logic.
 - [ ] **Shopify shipping profile readiness** – document and validate the pre-launch process for assigning shipping profiles within Shopify.
 - [ ] **Per-platform shipping profile edits** – surface Shopify/eBay shipping policy selectors on the product edit form and ensure changes propagate to live listings, not just Reverb/V&R.
 - [ ] **Left-handed category integrity** – review `platform_category_mappings` to ensure left-handed SKUs use the dedicated categories on every platform (while Reverb uses technical attributes, eBay/Shopify/VR must stay mapped via category).
+- [ ] **Reverb double listing guard** – add protections to prevent duplicate Reverb listings from being created.
 - [ ] **Category mapping database migration & audit** – move VR and cross-platform mappings into Alembic-managed tables and validate coverage post-migration.
 - [ ] **Sync event automation** – confirm which sync events write to `_listings` tables (persistence audit) and add gradual automation so reconciled events publish without manual nudges. Includes gradually automating the sync pipeline so sold/ended propagation runs unattended.
 
@@ -19,28 +20,29 @@
 - [ ] **Platform error handling standardisation** – unify logging/alerts and ensure retries work the same across eBay, Reverb, VR, and Shopify.
 - [ ] **"Where sold" attribution & sales orders** – refine sale-source attribution for each SKU and align the reporting logic with the upcoming `sales_orders` schema/workflow.
 - [ ] **Dropbox media refresh is inconsistent** – stabilise cache refresh, keep folder tiles a consistent size, and reduce redundant re-renders after multiple reloads.
-- [ ] **Sync-all queue follow-up** – reconcile the queued `/api/sync/all` background orchestrator with the current batched implementation (status polling, history retention, websocket notifications) so the endpoint remains non-blocking without regressing the latest changes. Also confirm the worker is truly threaded and not blocking the main process.
+- [x] **Sync-all queue follow-up** – reconcile the queued `/api/sync/all` background orchestrator with the current batched implementation (status polling, history retention, websocket notifications) so the endpoint remains non-blocking without regressing the latest changes. Also confirm the worker is truly threaded and not blocking the main process.
 - [ ] **Platform stats ingestion gaps** – fill in watches/likes/views for eBay, Shopify, VR, matching the partial Reverb feed and surface them on dashboards.
 - [ ] **Review database field coverage** – audit all key tables to ensure required fields are populated across platforms and identify any lingering gaps plus run the broader table integrity/backfill sweep to patch any gaps found.
-- [ ] **eBay listing backfill script** – job already written; now schedule/automate it to run daily so ebay_listings rows stay current, CrazyLister payloads persist, and descriptions (e.g., 257112518866) keep matching master data.
-- [ ] **Activity report tidy-up** – debug the report pipeline and trim noisy or duplicate rows so it is usable for daily review.
-- [ ] **Recent activity & sales report fixes** – address the minor bugs observed in the activity feeds and sales summaries.
-- [ ] **VR listing ID capture from instruments/show** – after Selenium submits a listing, scrape the authenticated `/instruments/show` page to grab the new product ID before falling back to the CSV export. Current approach works but feels inefficient; explore cleaner shortcuts.
-- [ ] **Design consolidated `sales_orders` table** – align sale-source attribution, schema, and payload ingestion (see "Where sold" attribution work) before making DB changes.
-- [ ] **Review price propagation** – CODED, needs user validation that platform markups stay intact on edit and no uniform pricing is forced.
-- [ ] **Validate Shopify listing URLs** – audit all stored `listing_url` values for Shopify listings and backfill any missing entries.
-- [ ] **Payload persistence safeguards** – confirm queuing/storage logic prevents duplicate listing creation across platforms.
+- [x] **eBay listing backfill script** – job already written; now schedule/automate it to run daily so ebay_listings rows stay current, CrazyLister payloads persist, and descriptions (e.g., 257112518866) keep matching master data.
+- [x] **Activity report tidy-up** – debug the report pipeline and trim noisy or duplicate rows so it is usable for daily review.
+- [ ] ~~**Recent activity & sales report fixes** – address the minor bugs observed in the activity feeds and sales summaries.~~
+- [x] **VR listing ID capture from instruments/show** – after Selenium submits a listing, scrape the authenticated `/instruments/show` page to grab the new product ID before falling back to the CSV export. Current approach works but feels inefficient; explore cleaner shortcuts.
+- [ ] ~~**Design consolidated `sales_orders` table** – align sale-source attribution, schema, and payload ingestion (see "Where sold" attribution work) before making DB changes.~~
+- [x] **Review price propagation** – CODED, needs user validation that platform markups stay intact on edit and no uniform pricing is forced.
+- [x] **Validate Shopify listing URLs** – audit all stored `listing_url` values for Shopify listings and backfill any missing entries.
+- [x] **Payload persistence safeguards** – confirm queuing/storage logic prevents duplicate listing creation across platforms.
+- [ ] **Remove persistence of SQL URLs** – clean up any persisted SQL URLs remaining from earlier payload persistence.
 - [ ] **Status casing consistency** – ensure status fields use canonical casing (e.g., `ACTIVE`, `SYNCED`) across services and the database.
-- [ ] **Sold logic review** – produce queries/reports to validate how sale events propagate through all tables.
+- [x] **Sold logic review** – produce queries/reports to validate how sale events propagate through all tables.
 - [ ] **Shopify auto-archive workflow** – automate moving stale Shopify listings to archive after the agreed threshold.
 
 ## 🔵 Low Priority (Enhancements)
 - [ ] **Fix image toast message state** – ensure the success banner dismisses correctly after refresh. Confirm colour palette and that UI reverts cleanly after multiple create flows (e.g., after adding 4 images).
-- [ ] **Ongoing UI tweaks** – e.g. image dividers, vertical alignment adjustments.
+- [ ] ~~**Ongoing UI tweaks** – e.g. image dividers, vertical alignment adjustments.~~
 - [ ] **Testing & verification rebuild** – restore integration coverage for sync flows, add regression tests for the high-risk services, and document the verification checklist.
 - [ ] **Populate Shopify archive gallery** – build the historical gallery view using the archive dataset so users can review past listings. Confirm with Adam whether thousands of gallery entries are actually required.
-- [ ] **CrazyLister integration discovery** – investigate feasibility, fix description stripping on edits, and decide whether to proceed.
-- [ ] **Sold date surfaces** – expose the confirmed sold timestamp on product detail pages and reports when available.
+- [x] **CrazyLister integration discovery** – investigate feasibility, fix description stripping on edits, and decide whether to proceed.
+- [ ] **Sold date surfaces** – expose the confirmed sold timestamp on product detail pages and reports when available. _Fold into the orders project._
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 - [ ] **NPI clustering report** – add a New Product Introduction cluster view grouped by category for merch planning.
 - [ ] **Redundant code clean-up** – tidy up/deprecate old sync forms, placeholder routers, and other dead code paths.
@@ -86,43 +88,6 @@
 - [ ] (Verify) Create database indices for performance hotspots.
 - [ ] (Verify) Add audit trail functionality.
 - [ ] (Verify) Create error recovery system.
-### Platform integrations
-- Vintage & Rare
-  - [ ] (Verify) Implement automated CSV processing end-to-end.
-  - [ ] (Verify) Add Selenium/headless hardening.
-  - [ ] (Verify) Create scheduling system.
-- eBay
-  - [ ] (Verify) Confirm API client coverage and token refresh.
-  - [ ] (Verify) Close remaining listing sync gaps.
-  - [ ] (Verify) Add inventory update handling.
-- Reverb
-  - [x] Set up API client.
-  - [ ] (Verify) Close remaining listing sync gaps.
-  - [ ] (Verify) Add inventory update handling.
-  - [ ] Review `reverb_listings` schema for duplicates/oddities.
-- Shopify
-  - [ ] (Verify) Design API interface/client documentation.
-  - [ ] (Verify) Implement sync system coverage.
-  - [ ] (Verify) Add error handling parity.
-### Frontend
-- [ ] (Verify) Refresh base templates/components for consistency.
-- [ ] (Verify) Confirm dashboard covers current KPIs.
-- [ ] (Verify) Polish CSV upload interface and UX.
-- [ ] (Verify) Ensure product management views cover current workflows.
-- [ ] (Verify) Add platform sync controls where gaps remain.
-- [ ] (Verify) Implement error reporting surface for operators.
-### Testing & deployment
-- [ ] (Verify) Ensure testing framework coverage is complete.
-- [ ] (Verify) Write/refresh model tests.
-- [ ] (Verify) Write CSV handler tests.
-- [ ] (Verify) Create platform integration tests.
-- [ ] (Verify) Add frontend tests.
-- [ ] (Verify) Create CI/CD pipeline.
-- [ ] (Verify) Create deployment documentation.
-- [ ] (Verify) Set up monitoring/alerting.
-- [ ] (Verify) Configure backup system.
-- [ ] (Verify) Create disaster recovery plan.
-- [ ] (Verify) Set up staging environment.
 
 ## ✅ Completed
 - [x] **Left-handed tagging** – determine how we consistently label and surface left-handed instruments.
@@ -156,6 +121,19 @@
 - [x] **Image draft persistence** – ensure draft uploads are stored on Railway (or other web-accessible storage) so templates and Reverb creation always have public URLs.
 - [x] **Product grid layout tweak** – cap category column width on the Products table so “View”/status controls remain visible without horizontal scrolling.
 - [x] **EU data hard-code review** – remove any remaining hard-coded EU shipping/tax details and move to configuration or platform data.
+- [x] **VR handling performance** – offload Selenium/API VR work to background queue + worker and keep the app responsive.
+- [x] **VR pending status investigation** – addressed the pending -> active flow; queue + worker now process VR listings end-to-end.
+- [x] **Capture handedness & artist ownership** – non-mandatory fields defaulted and propagated to APIs; Shopify metafield verified.
+- [x] **VR removal logic verification** – handling marks "not found on API" as REMOVED (unless corroborated by Reverb) and UI path reflects the logic.
+- [x] **Sync-all queue follow-up** – reconciled background orchestrator with batched implementation; non-blocking endpoint confirmed.
+- [x] **eBay listing backfill script** – automated to keep ebay_listings current with CrazyLister payloads and descriptions.
+- [x] **Activity report tidy-up** – reduced noisy/duplicate rows.
+- [x] **VR listing ID capture from instruments/show** – capture via authenticated page before CSV fallback.
+- [x] **Review price propagation** – validated markups stay intact on edit; no uniform pricing forced.
+- [x] **Validate Shopify listing URLs** – audited/backfilled missing listing_url entries.
+- [x] **Payload persistence safeguards** – ensured queuing/storage prevents duplicate listing creation.
+- [x] **Sold logic review** – queries/reports validate sale event propagation.
+- [x] **CrazyLister integration discovery** – feasibility reviewed; description stripping fixed; decision recorded.
 - [x] Set up basic FastAPI application.
 - [x] Configure PostgreSQL database.
 - [x] Create initial models.

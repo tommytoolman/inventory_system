@@ -5,6 +5,7 @@ import signal
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import async_session
 from app.models.product import Product
@@ -42,7 +43,11 @@ for sig in (signal.SIGINT, signal.SIGTERM):
 async def _process_job(session: AsyncSession, job) -> None:
     payload: Dict[str, Any] = job.payload or {}
     sync_source = payload.get("sync_source", "unknown")
-    product = await session.get(Product, job.product_id)
+    product = await session.get(
+        Product,
+        job.product_id,
+        options=[selectinload(Product.shipping_profile)],
+    )
     if not product:
         raise RuntimeError(f"Product {job.product_id} no longer exists")
 

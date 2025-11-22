@@ -50,3 +50,7 @@ data/app backups/
 data/reverb/
 scripts/ebay/output/
 scripts/reverb/output/
+
+# Logs
+logs/
+railway_status.json

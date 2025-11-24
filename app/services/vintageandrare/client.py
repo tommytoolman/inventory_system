@@ -173,26 +173,30 @@ class VintageAndRareClient:
         def _wait_for_cf_clear():
             max_wait = 20
             for _ in range(max_wait):
-                title = driver.title or ""
-                url = driver.current_url or ""
-                if "Just a moment" not in title and "/cdn-cgi/" not in url:
-                    return True
-                # Try to click CF checkbox if present
                 try:
-                    WebDriverWait(driver, 3).until(
-                        EC.frame_to_be_available_and_switch_to_it(
-                            (By.CSS_SELECTOR, "iframe[title*='Cloudflare security challenge']")
-                        )
-                    )
-                    WebDriverWait(driver, 3).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, "label.ctp-checkbox-label"))
-                    ).click()
-                    driver.switch_to.default_content()
-                except Exception:
+                    title = driver.title or ""
+                    url = driver.current_url or ""
+                    if "Just a moment" not in title and "/cdn-cgi/" not in url:
+                        return True
+                    # Try to click CF checkbox if present
                     try:
+                        WebDriverWait(driver, 3).until(
+                            EC.frame_to_be_available_and_switch_to_it(
+                                (By.CSS_SELECTOR, "iframe[title*='Cloudflare security challenge']")
+                            )
+                        )
+                        WebDriverWait(driver, 3).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, "label.ctp-checkbox-label"))
+                        ).click()
                         driver.switch_to.default_content()
                     except Exception:
-                        pass
+                        try:
+                            driver.switch_to.default_content()
+                        except Exception:
+                            pass
+                except Exception:
+                    # If any attribute is None or selenium hiccups, just wait and retry
+                    pass
                 time.sleep(1)
             return False
 

@@ -85,23 +85,34 @@ class VintageAndRareClient:
         self.authenticated = False
         self.db_session = db_session
 
-        # Default headers for requests
-        # self.headers = {
-        #     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7', # Updated Accept
-        #     'Accept-Language': 'en-US,en;q=0.9',
-        #     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
-        # }
+        # Browser-like headers to satisfy Cloudflare
+        chrome_ua = os.environ.get(
+            "VR_USER_AGENT",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        )
         self.headers = {
-            'Accept': '*/*',  # ← Change from text/html to */*
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Content-type': 'application/x-www-form-urlencoded',  # ← Add this (lowercase 't')
-            'X-Requested-With': 'XMLHttpRequest',  # ← Add this for AJAX
-            'Referer': 'https://www.vintageandrare.com/instruments/show',  # ← Change referer
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Cache-Control": "max-age=0",
+            "Connection": "keep-alive",
+            "Host": "www.vintageandrare.com",
+            "Referer": "https://www.vintageandrare.com/",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": chrome_ua,
+            "Pragma": "no-cache",
+            "DNT": "1",
         }
+        # Apply default headers to the requests session so all requests share the same UA/fingerprint.
+        self.session.headers.update(self.headers)
         
         self._selenium_session = None  # ✅ Add this line
         self._selenium_driver = None   # ✅ Add this line
+        self._load_cookies_from_env()
         
         # Initialize mapping service if DB session is provided
         if CategoryMappingService:
@@ -111,6 +122,120 @@ class VintageAndRareClient:
 
         # Temporary files tracking (for saved inventory CSV)
         self.temp_files = []
+
+    def _load_cookies_from_env(self) -> None:
+        """Optionally seed the requests session with cookies from a JSON file."""
+        cookie_file = os.environ.get("VINTAGE_AND_RARE_COOKIES_FILE")
+        if not cookie_file:
+            return
+        try:
+            with open(cookie_file, "r") as f:
+                cookies = json.load(f)
+            loaded = 0
+            for cookie in cookies:
+                if "name" in cookie and "value" in cookie:
+                    self.session.cookies.set(
+                        cookie["name"],
+                        cookie["value"],
+                        domain=cookie.get("domain") or "www.vintageandrare.com",
+                    )
+                    loaded += 1
+            if loaded:
+                logger.info("Seeded %s V&R cookies from %s", loaded, cookie_file)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to load V&R cookies from %s: %s", cookie_file, exc)
+
+    def _apply_selenium_cookies(self, selenium_driver) -> None:
+        """Copy cookies from Selenium into the requests session."""
+        try:
+            cookies = selenium_driver.get_cookies()
+            for cookie in cookies:
+                # requests uses "name"/"value" keys
+                if "name" in cookie and "value" in cookie:
+                    self.session.cookies.set(cookie["name"], cookie["value"], domain=cookie.get("domain"))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to apply Selenium cookies: %s", exc)
+
+    async def _bootstrap_with_selenium(self) -> bool:
+        """Attempt to pass Cloudflare by using Selenium and harvesting cookies."""
+        selenium_grid_url = os.environ.get("SELENIUM_GRID_URL")
+        if not selenium_grid_url:
+            return False
+
+        options = webdriver.ChromeOptions()
+        options.add_argument("--headless=new")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--window-size=1280,1024")
+        driver = None
+        def _wait_for_cf_clear():
+            max_wait = 20
+            for _ in range(max_wait):
+                title = driver.title or ""
+                url = driver.current_url or ""
+                if "Just a moment" not in title and "/cdn-cgi/" not in url:
+                    return True
+                # Try to click CF checkbox if present
+                try:
+                    WebDriverWait(driver, 3).until(
+                        EC.frame_to_be_available_and_switch_to_it(
+                            (By.CSS_SELECTOR, "iframe[title*='Cloudflare security challenge']")
+                        )
+                    )
+                    WebDriverWait(driver, 3).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "label.ctp-checkbox-label"))
+                    ).click()
+                    driver.switch_to.default_content()
+                except Exception:
+                    try:
+                        driver.switch_to.default_content()
+                    except Exception:
+                        pass
+                time.sleep(1)
+            return False
+
+        try:
+            driver = webdriver.Remote(command_executor=selenium_grid_url, options=options)
+            driver.get(self.BASE_URL)
+
+            if not _wait_for_cf_clear():
+                logger.warning("Cloudflare challenge did not clear in time.")
+
+            # Navigate to login page if not already there
+            try:
+                if "/do_login" not in driver.current_url:
+                    driver.get(self.LOGIN_URL)
+            except Exception:
+                pass
+
+            # Basic login form fill
+            try:
+                username_field = driver.find_element(By.NAME, "username")
+                password_field = driver.find_element(By.NAME, "pass")
+                username_field.clear()
+                username_field.send_keys(self.username)
+                password_field.clear()
+                password_field.send_keys(self.password)
+                # Submit the form
+                password_field.submit()
+                time.sleep(3)  # give it a moment
+            except Exception as e:
+                logger.warning("Selenium login form fill failed: %s", e)
+
+            # After load, copy cookies to requests session
+            self._apply_selenium_cookies(driver)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Selenium bootstrap failed: %s", exc)
+            return False
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
 
     async def authenticate(self) -> bool:
         """
@@ -128,7 +253,14 @@ class VintageAndRareClient:
             print(f"Authenticating V&R user: {self.username}")
             response = self.session.get(self.BASE_URL, headers=self.headers)
             print(f"Initial page load status: {response.status_code}")
-            
+
+            # If blocked by Cloudflare, try Selenium bootstrap
+            if response.status_code == 403:
+                used_selenium = await self._bootstrap_with_selenium()
+                if used_selenium:
+                    response = self.session.get(self.BASE_URL, headers=self.headers)
+                    print(f"Post-Selenium base load status: {response.status_code}")
+
             # Prepare login data
             login_data = {
                 'username': self.username,
@@ -146,10 +278,22 @@ class VintageAndRareClient:
             )
             print(f"Login response status: {response.status_code}")
             
+            # If still blocked, one more Selenium attempt to harvest cookies
+            if response.status_code == 403:
+                used_selenium = await self._bootstrap_with_selenium()
+                if used_selenium:
+                    response = self.session.post(
+                        self.LOGIN_URL,
+                        data=login_data,
+                        headers=self.headers,
+                        allow_redirects=True
+                    )
+                    print(f"Post-Selenium login status: {response.status_code}")
+
             # Check if login was successful
-            self.authenticated = 'Sign out' in response.text or '/account' in response.url
+            self.authenticated = 'Sign out' in response.text or '/account' in getattr(response, "url", "")
             print(f"Authentication check - 'Sign out' in response: {'Sign out' in response.text}")
-            print(f"Authentication check - '/account' in URL: {'/account' in response.url}")
+            print(f"Authentication check - '/account' in URL: {'/account' in getattr(response, 'url', '')}")
             print(f"Authentication result: {'Successful' if self.authenticated else 'Failed'}")
             
             return self.authenticated

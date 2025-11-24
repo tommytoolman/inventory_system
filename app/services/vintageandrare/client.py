@@ -158,7 +158,7 @@ class VintageAndRareClient:
 
     async def _bootstrap_with_selenium(self) -> bool:
         """Attempt to pass Cloudflare by using Selenium and harvesting cookies."""
-        selenium_grid_url = os.environ.get("SELENIUM_GRID_URL")
+        selenium_grid_url = (os.environ.get("SELENIUM_GRID_URL") or "").strip()
         if not selenium_grid_url:
             return False
 

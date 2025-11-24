@@ -216,13 +216,17 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
     """
     session = requests.Session()
     
+    ua = os.environ.get(
+        "VR_USER_AGENT",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+    )
     headers = {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'en-US,en;q=0.9',
         'Content-Type': 'application/x-www-form-urlencoded',
         'Origin': 'https://www.vintageandrare.com',
         'Referer': 'https://www.vintageandrare.com/',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+        'User-Agent': ua,
     }
     
     print("1. Getting main page to gather initial cookies...")

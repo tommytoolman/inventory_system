@@ -76,7 +76,12 @@ class Settings(BaseSettings):
     VINTAGE_AND_RARE_USERNAME: str = ""
     VINTAGE_AND_RARE_PASSWORD: str = ""
     VINTAGE_AND_RARE_WEBSITE: str = ""
-    
+    VINTAGE_AND_RARE_COOKIES_FILE: str = ""
+    VR_USER_AGENT: str = ""
+    SELENIUM_GRID_URL: str = ""
+    VINTAGE_AND_RARE_COOKIES_FILE: str = ""
+    VR_USER_AGENT: str = ""
+    SELENIUM_GRID_URL: str = ""
     
     # Shopify API (Optional)
     SHOPIFY_SHOP_URL: Optional[str] = None

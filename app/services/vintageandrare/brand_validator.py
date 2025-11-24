@@ -80,7 +80,7 @@ def _get_session() -> requests.Session:
 
 def _refresh_cookies_with_selenium(session: requests.Session) -> bool:
     """Use Selenium grid to refresh cookies when CF blocks brand checks."""
-    grid_url = os.environ.get("SELENIUM_GRID_URL")
+    grid_url = (os.environ.get("SELENIUM_GRID_URL") or "").strip()
     if not grid_url:
         return False
 

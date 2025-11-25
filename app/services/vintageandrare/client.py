@@ -29,6 +29,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+try:
+    import undetected_chromedriver as uc
+except Exception:
+    uc = None
 
 from app.core.utils import ImageTransformer, ImageQuality
 
@@ -159,10 +163,11 @@ class VintageAndRareClient:
     async def _bootstrap_with_selenium(self) -> bool:
         """Attempt to pass Cloudflare by using Selenium and harvesting cookies."""
         selenium_grid_url = (os.environ.get("SELENIUM_GRID_URL") or "").strip()
-        
-        logger.info("Using SELENIUM_GRID_URL: %s", selenium_grid_url)
-        
-        if not selenium_grid_url:
+        use_udc = os.environ.get("VR_USE_UDC", "1") == "1" and uc is not None
+
+        logger.info("Using SELENIUM_GRID_URL: %s (use_udc=%s)", selenium_grid_url, use_udc)
+
+        if not selenium_grid_url and not use_udc:
             return False
 
         options = webdriver.ChromeOptions()
@@ -174,7 +179,7 @@ class VintageAndRareClient:
         options.add_argument("--window-size=1280,1024")
         driver = None
         def _wait_for_cf_clear():
-            max_wait = 20
+            max_wait = 15
             for _ in range(max_wait):
                 try:
                     title = driver.title or ""
@@ -204,7 +209,10 @@ class VintageAndRareClient:
             return False
 
         try:
-            driver = webdriver.Remote(command_executor=selenium_grid_url, options=options)
+            if use_udc:
+                driver = uc.Chrome(headless=True, options=options)
+            else:
+                driver = webdriver.Remote(command_executor=selenium_grid_url, options=options)
             driver.get(self.BASE_URL)
 
             if not _wait_for_cf_clear():

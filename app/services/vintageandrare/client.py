@@ -31,8 +31,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 try:
     import undetected_chromedriver as uc
-except Exception:
+    logger.info("UDC import ok")
+except Exception as exc:
     uc = None
+    logger.info("UDC import failed: %s", exc)
 
 from app.core.utils import ImageTransformer, ImageQuality
 

@@ -34,7 +34,7 @@ ENV PYTHONPATH=/app
 
 # Railway expects port 8080
 # Force rebuild with timestamp
-ENV REBUILD_TIME="2025-09-19-09:45"
+ENV REBUILD_TIME="2025-11-25-22:50"
 EXPOSE 8080
 
 # Run on Railway's expected port

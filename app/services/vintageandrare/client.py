@@ -29,12 +29,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-try:
-    import undetected_chromedriver as uc
-    logger.info("UDC import ok")
-except Exception as exc:
-    uc = None
-    logger.info("UDC import failed: %s", exc)
 
 from app.core.utils import ImageTransformer, ImageQuality
 
@@ -56,6 +50,14 @@ except ImportError:
     print("Warning: inspect_form or media_handler not found. Selenium operations will fail.")
 
 logger = logging.getLogger(__name__)
+
+# Try to import undetected-chromedriver after logger is defined
+try:
+    import undetected_chromedriver as uc
+    logger.info("UDC import ok")
+except Exception as exc:  # noqa: BLE001
+    uc = None
+    logger.info("UDC import failed: %s", exc)
 
 logging.basicConfig(
     level=logging.INFO, # Use INFO or DEBUG

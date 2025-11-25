@@ -235,7 +235,7 @@ class VintageAndRareClient:
             self._apply_selenium_cookies(driver)
             return True
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Selenium bootstrap failed: %s", exc)
+            logger.warning("Selenium bootstrap failed: %s", exc, exc_info=True)
             return False
         finally:
             if driver:

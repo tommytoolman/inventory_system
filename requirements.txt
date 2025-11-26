@@ -40,6 +40,7 @@ beautifulsoup4==4.12.3
 selenium==4.21.0
 undetected-chromedriver==3.5.5
 webdriver-manager==4.0.1
+curl_cffi>=0.5.0  # Chrome TLS fingerprint for Cloudflare bypass
 
 # XML/HTML Processing
 xmltodict==0.13.0

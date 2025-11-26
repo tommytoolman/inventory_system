@@ -338,6 +338,239 @@ class VintageAndRareClient:
                 except Exception:
                     pass
 
+    async def harvest_cookies_from_grid(self) -> Dict[str, Any]:
+        """
+        Harvest fresh cookies from Selenium Grid running on Railway.
+
+        This method:
+        1. Connects to Selenium Grid (must be on same network as app)
+        2. Navigates to V&R and passes Cloudflare challenge
+        3. Logs in to get authenticated session
+        4. Returns all cookies for storage
+
+        Returns:
+            Dict with status, cookies list, and cf_clearance value
+        """
+        selenium_grid_url = (os.environ.get("SELENIUM_GRID_URL") or "").strip()
+
+        if not selenium_grid_url:
+            return {
+                "status": "error",
+                "message": "SELENIUM_GRID_URL not configured"
+            }
+
+        logger.info(f"Harvesting cookies from Selenium Grid: {selenium_grid_url}")
+
+        options = webdriver.ChromeOptions()
+        # Run visible for better Cloudflare bypass
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--window-size=1920,1080")
+        # Don't run headless - Cloudflare detects it
+        # options.add_argument("--headless=new")
+
+        driver = None
+
+        try:
+            # Health check first
+            import urllib.parse
+            status_url = selenium_grid_url
+            if status_url.endswith('/wd/hub'):
+                status_url = status_url[:-7]
+            status_url = urllib.parse.urljoin(status_url + '/', 'status')
+
+            logger.info(f"Checking Selenium Grid health: {status_url}")
+            health_response = requests.get(status_url, timeout=10)
+            health_json = health_response.json() if health_response.status_code == 200 else {}
+
+            if not health_json.get("value", {}).get("ready", False):
+                return {
+                    "status": "error",
+                    "message": f"Selenium Grid not ready: {health_json}"
+                }
+
+            logger.info("Selenium Grid is ready, connecting...")
+
+            # Ensure URL has /wd/hub
+            grid_url = selenium_grid_url
+            if not grid_url.endswith('/wd/hub'):
+                grid_url = f"{grid_url}/wd/hub"
+
+            driver = webdriver.Remote(command_executor=grid_url, options=options)
+            logger.info("Connected to Selenium Grid")
+
+            # Navigate to V&R
+            logger.info("Navigating to V&R...")
+            driver.get(self.BASE_URL)
+
+            # Wait for Cloudflare to clear
+            max_wait = 30
+            cf_cleared = False
+            for i in range(max_wait):
+                title = driver.title or ""
+                url = driver.current_url or ""
+
+                if "Just a moment" not in title and "/cdn-cgi/" not in url:
+                    cf_cleared = True
+                    logger.info(f"Cloudflare cleared after {i+1} seconds")
+                    break
+
+                # Try to click CF checkbox if present
+                try:
+                    WebDriverWait(driver, 2).until(
+                        EC.frame_to_be_available_and_switch_to_it(
+                            (By.CSS_SELECTOR, "iframe[title*='Cloudflare']")
+                        )
+                    )
+                    checkbox = WebDriverWait(driver, 2).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "label.ctp-checkbox-label, input[type='checkbox']"))
+                    )
+                    checkbox.click()
+                    logger.info("Clicked Cloudflare checkbox")
+                    driver.switch_to.default_content()
+                except Exception:
+                    try:
+                        driver.switch_to.default_content()
+                    except Exception:
+                        pass
+
+                time.sleep(1)
+
+            if not cf_cleared:
+                # Take screenshot for debugging
+                try:
+                    screenshot = driver.get_screenshot_as_base64()
+                    logger.warning("Cloudflare did not clear - screenshot captured")
+                except Exception:
+                    screenshot = None
+
+                return {
+                    "status": "error",
+                    "message": "Cloudflare challenge did not clear within timeout",
+                    "screenshot": screenshot
+                }
+
+            # Now login
+            logger.info("Attempting login...")
+            time.sleep(2)  # Let page settle
+
+            # Check if we need to navigate to login
+            if "account" not in driver.current_url.lower():
+                # Find and click login link or go to login page
+                try:
+                    login_link = driver.find_element(By.PARTIAL_LINK_TEXT, "Login")
+                    login_link.click()
+                    time.sleep(2)
+                except Exception:
+                    # Navigate directly
+                    driver.get(f"{self.BASE_URL}/do_login")
+                    time.sleep(2)
+
+            # Fill login form
+            try:
+                username_field = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.NAME, "username"))
+                )
+                password_field = driver.find_element(By.NAME, "pass")
+
+                username_field.clear()
+                username_field.send_keys(self.username)
+                password_field.clear()
+                password_field.send_keys(self.password)
+
+                # Submit
+                password_field.submit()
+                logger.info("Login form submitted")
+                time.sleep(5)  # Wait for login to complete
+
+            except Exception as e:
+                logger.warning(f"Login form error: {e}")
+
+            # Check login success
+            page_text = driver.page_source
+            logged_in = "Logout" in page_text or "logout" in page_text or "/account" in driver.current_url
+
+            if not logged_in:
+                logger.warning("Login may not have succeeded")
+            else:
+                logger.info("Login successful!")
+
+            # Harvest all cookies
+            selenium_cookies = driver.get_cookies()
+            logger.info(f"Harvested {len(selenium_cookies)} cookies")
+
+            # Find cf_clearance
+            cf_clearance = None
+            for cookie in selenium_cookies:
+                if cookie.get("name") == "cf_clearance":
+                    cf_clearance = cookie.get("value")
+                    logger.info(f"Found cf_clearance: {cf_clearance[:50]}...")
+                    break
+
+            # Convert to our cookie format
+            cookies_list = []
+            for cookie in selenium_cookies:
+                cookies_list.append({
+                    "name": cookie.get("name"),
+                    "value": cookie.get("value"),
+                    "domain": cookie.get("domain", ".vintageandrare.com"),
+                    "path": cookie.get("path", "/"),
+                    "expiry": cookie.get("expiry"),
+                    "httpOnly": cookie.get("httpOnly", False),
+                    "secure": cookie.get("secure", False),
+                    "sameSite": cookie.get("sameSite", "Lax")
+                })
+
+            return {
+                "status": "success",
+                "message": f"Harvested {len(cookies_list)} cookies",
+                "cookies": cookies_list,
+                "cf_clearance": cf_clearance,
+                "logged_in": logged_in,
+                "final_url": driver.current_url
+            }
+
+        except Exception as e:
+            logger.error(f"Cookie harvest failed: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+
+    def reload_cookies_from_list(self, cookies_list: List[Dict]) -> None:
+        """
+        Reload cookies from a list (e.g., from database or harvest).
+        Updates both requests session and curl_cffi session.
+        """
+        logger.info(f"Reloading {len(cookies_list)} cookies into sessions")
+
+        for cookie in cookies_list:
+            name = cookie.get("name")
+            value = cookie.get("value")
+            domain = cookie.get("domain", ".vintageandrare.com")
+            path = cookie.get("path", "/")
+
+            # Add to requests session
+            self.session.cookies.set(name, value, domain=domain, path=path)
+
+            # Add to curl_cffi session if available
+            if self.cf_session:
+                self.cf_session.cookies.set(name, value, domain=domain, path=path)
+
+            if name == "cf_clearance":
+                logger.info(f"Loaded cf_clearance: {value[:30]}...")
+
+        # Reset auth state so next request re-authenticates with new cookies
+        self.authenticated = False
+        logger.info("Cookies reloaded - authentication state reset")
+
     async def authenticate(self) -> bool:
         """
         Authenticate with V&R website.

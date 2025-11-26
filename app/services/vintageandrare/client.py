@@ -236,7 +236,16 @@ class VintageAndRareClient:
             logger.warning("Failed to apply Selenium cookies: %s", exc)
 
     async def _bootstrap_with_selenium(self) -> bool:
-        """Attempt to pass Cloudflare by using Selenium and harvesting cookies."""
+        """Attempt to pass Cloudflare by using Selenium and harvesting cookies.
+
+        Can be disabled by setting VR_SKIP_SELENIUM=1 in environment.
+        This is useful when Selenium Grid is unreliable.
+        """
+        # Allow disabling Selenium fallback entirely
+        if os.environ.get("VR_SKIP_SELENIUM", "0") == "1":
+            logger.info("Selenium bootstrap disabled via VR_SKIP_SELENIUM=1")
+            return False
+
         selenium_grid_url = (os.environ.get("SELENIUM_GRID_URL") or "").strip()
         use_udc = os.environ.get("VR_USE_UDC", "1") == "1" and uc is not None
         headless_mode = os.environ.get("VR_HEADLESS", "true").lower() == "true"

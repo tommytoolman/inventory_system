@@ -31,6 +31,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 from app.core.utils import ImageTransformer, ImageQuality
+import importlib
 
 # Assuming CategoryMappingService is correctly located
 try:
@@ -51,9 +52,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Try to import undetected-chromedriver after logger is defined
+# Try to import undetected-chromedriver after logger is defined, lazy to detect install
+uc = None
 try:
-    import undetected_chromedriver as uc
+    uc = importlib.import_module("undetected_chromedriver")
     logger.info("UDC import ok")
 except Exception as exc:  # noqa: BLE001
     uc = None

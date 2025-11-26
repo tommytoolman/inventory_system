@@ -1419,68 +1419,65 @@ class VintageAndRareClient:
                 pass
     
     async def mark_item_as_sold(self, item_id: str) -> dict:
-        """Mark a single V&R item as sold using AJAX"""
+        """Mark a single V&R item as sold using AJAX.
+
+        Uses curl_cffi with proper AJAX headers for Cloudflare bypass.
+        V&R returns 'true' for success, 'false' for failure.
+        """
         if not self.authenticated:
             return {"success": False, "error": "Not authenticated"}
-            
+
         try:
-            print(f"💰 Marking item as sold ID: {item_id}")
-            
+            print(f"Marking item as sold ID: {item_id}")
+
             # Generate random number for cache busting (like V&R does)
             random_num = random.random()
-            
-            # AJAX mark as sold request (exact endpoint from your discovery)
+            url = f'https://www.vintageandrare.com/ajax/mark_as_sold/{random_num}'
+
+            # AJAX request data
             mark_sold_data = f'product_id={item_id}'
-            
-            response = self.session.post(
-                f'https://www.vintageandrare.com/ajax/mark_as_sold/{random_num}',
-                data=mark_sold_data,
-                headers=self.headers
-            )
-            
-            print(f"📡 Mark sold response status: {response.status_code}")
-            print(f"📝 Response content: '{response.text}'")
-            print(f"📏 Response length: {len(response.text)} characters")
-            
-            if response.status_code == 200:
-                response_text = response.text.strip()
-                
-                # Handle different response types
-                if not response_text:
-                    # Empty response - V&R often returns empty on successful operations
-                    print(f"✅ Empty response (likely successful mark as sold) for {item_id}")
-                    return {"success": True, "response": "empty_success", "item_id": item_id}
-                
-                # Try to parse JSON response
-                try:
-                    result = response.json()
-                    print(f"✅ JSON response for {item_id}: {result}")
-                    
-                    # ✅ ADD: Handle the new 'false' response
-                    if result is False:
-                        print(f"❌ V&R returned 'false' - operation likely failed for {item_id}")
-                        return {"success": False, "response": result, "item_id": item_id}
-                                    
-                    return {"success": True, "response": result, "item_id": item_id}
-                except:
-                    # If not JSON, check for success indicators in text
-                    response_lower = response_text.lower()
-                    if any(keyword in response_lower for keyword in ['success', 'sold', 'marked', 'ok', '1', 'true']):
-                        print(f"✅ Text indicates success for {item_id}")
-                        return {"success": True, "response": response_text, "item_id": item_id}
-                    elif any(keyword in response_lower for keyword in ['error', 'failed', 'not found', 'invalid', 'false']):
-                        print(f"❌ Text indicates failure for {item_id}: {response_text}")
-                        return {"success": False, "error": f"Server error: {response_text}", "item_id": item_id}
-                    else:
-                        print(f"⚠️  Unknown response for {item_id}: '{response_text}'")
-                        # Unknown responses should be treated as failures to be safe
-                        return {"success": False, "error": f"Unknown response: {response_text}", "item_id": item_id}
+
+            # Critical: Must include proper AJAX headers for V&R to accept the request
+            ajax_headers = {
+                **self.headers,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'Referer': 'https://www.vintageandrare.com/account/items',
+            }
+
+            # Use curl_cffi if available (better Cloudflare bypass), fall back to requests
+            if self.cf_session:
+                response = self.cf_session.post(url, data=mark_sold_data, headers=ajax_headers)
             else:
-                print(f"❌ Mark sold failed for {item_id}: HTTP {response.status_code}")
+                response = self.session.post(url, data=mark_sold_data, headers=ajax_headers)
+
+            print(f"Mark sold response status: {response.status_code}")
+            print(f"Response content: '{response.text}'")
+
+            if response.status_code == 200:
+                response_text = response.text.strip().lower()
+
+                # V&R returns 'true' for success, 'false' for failure
+                if response_text == 'true':
+                    print(f"SUCCESS: Item {item_id} marked as sold")
+                    return {"success": True, "response": "true", "item_id": item_id}
+                elif response_text == 'false':
+                    print(f"FAILED: V&R returned 'false' for item {item_id}")
+                    return {"success": False, "error": "V&R rejected the request", "item_id": item_id}
+                elif not response_text:
+                    # Empty response - treat as success (V&R sometimes does this)
+                    print(f"Empty response (assuming success) for {item_id}")
+                    return {"success": True, "response": "empty", "item_id": item_id}
+                else:
+                    # Unexpected response
+                    print(f"Unexpected response for {item_id}: '{response_text}'")
+                    return {"success": False, "error": f"Unexpected response: {response_text}", "item_id": item_id}
+            else:
+                print(f"Mark sold failed for {item_id}: HTTP {response.status_code}")
                 return {"success": False, "error": f"HTTP {response.status_code}: {response.text}", "item_id": item_id}
-                
+
         except Exception as e:
-            print(f"❌ Error marking {item_id} as sold: {str(e)}")
+            print(f"Error marking {item_id} as sold: {str(e)}")
             return {"success": False, "error": str(e), "item_id": item_id}
 
     # Next 2 are for debugging

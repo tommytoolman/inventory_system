@@ -832,6 +832,295 @@ class VintageAndRareClient:
             logger.error(f"FATAL: No V&R mapping found for '{category_name}' and no default mapping available. Falling back to hard-coded default.")
             return {"category_id": "51", "subcategory_id": "83"} # Hardcoded fallback
 
+    async def create_listing_http(
+            self,
+            product_data: Dict[str, Any],
+            test_mode: bool = False,
+            from_scratch: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Create a listing on V&R using pure HTTP requests (no Selenium).
+
+        This method:
+        1. Loads the blank create form to get all required hidden fields
+        2. Fills in product data
+        3. Uploads images via multipart/form-data
+        4. Submits the form
+
+        Args:
+            product_data: Dictionary containing the product details to list.
+            test_mode: If True, returns the prepared payload without submitting.
+            from_scratch: If True, uses internal category mapping. If False, expects
+                        pre-mapped V&R categories in product_data.
+
+        Returns:
+            Dict with status, message, and potentially vr_listing_id.
+        """
+        logger.info(f"Creating V&R listing via HTTP for SKU: {product_data.get('sku')}")
+
+        # Ensure authenticated
+        if not self.authenticated:
+            logger.info("Not authenticated - authenticating first...")
+            if not await self.authenticate():
+                return {"status": "error", "message": "Authentication failed"}
+
+        try:
+            # 1. Load the blank create form page
+            create_url = f"{self.BASE_URL}/instruments/add_edit_item"
+            logger.info(f"Loading create form from: {create_url}")
+
+            # Use curl_cffi session if available for Cloudflare bypass
+            if self.cf_session:
+                response = self.cf_session.get(create_url, headers=self.headers)
+            else:
+                response = self.session.get(create_url, headers=self.headers)
+
+            if response.status_code != 200:
+                return {
+                    "status": "error",
+                    "message": f"Failed to load create form: HTTP {response.status_code}"
+                }
+
+            # 2. Extract all form fields (hidden fields, defaults, etc.)
+            fields = self._extract_form_fields(response.text)
+            field_dict = {name: value for name, value in fields}
+
+            logger.info(f"Extracted {len(fields)} form fields from create page")
+            logger.debug(f"Hidden fields: unique_id={field_dict.get('unique_id')}, version={field_dict.get('version')}")
+
+            # 3. Handle category mapping
+            if from_scratch:
+                category_mapping = await self.map_category(
+                    product_data.get('category', ''),
+                    str(product_data.get('category_id', ''))
+                )
+                self._set_field_value(fields, 'categ_level_0', str(category_mapping['category_id']))
+                self._set_field_value(fields, 'categ_level_1', str(category_mapping['subcategory_id']))
+            else:
+                # Use pre-mapped V&R category strings
+                if product_data.get('Category'):
+                    self._set_field_value(fields, 'categ_level_0', str(product_data['Category']))
+                if product_data.get('SubCategory1'):
+                    self._set_field_value(fields, 'categ_level_1', str(product_data['SubCategory1']))
+                if product_data.get('SubCategory2'):
+                    self._set_field_value(fields, 'categ_level_2', str(product_data['SubCategory2']))
+                if product_data.get('SubCategory3'):
+                    self._set_field_value(fields, 'categ_level_3', str(product_data['SubCategory3']))
+
+            # 4. Fill in product data
+            # Brand/Make
+            if product_data.get('brand'):
+                self._set_field_value(fields, 'recipient_name', product_data['brand'])
+
+            # Model name
+            if product_data.get('model'):
+                self._set_field_value(fields, 'model_name', product_data['model'])
+
+            # Year
+            if product_data.get('year'):
+                self._set_field_value(fields, 'year', str(product_data['year']))
+                # Calculate decade
+                try:
+                    year_int = int(product_data['year'])
+                    decade = str((year_int // 10) * 10)
+                    self._set_field_value(fields, 'decade', decade)
+                except (ValueError, TypeError):
+                    pass
+
+            # Finish/Color
+            if product_data.get('finish'):
+                self._set_field_value(fields, 'finish_color', product_data['finish'])
+
+            # Description (TinyMCE content)
+            if product_data.get('description'):
+                self._set_field_value(fields, 'item_desc', product_data['description'])
+
+            # Price
+            if product_data.get('price'):
+                self._set_field_value(fields, 'price', str(product_data['price']))
+
+            # External ID (our SKU)
+            if product_data.get('sku'):
+                self._set_field_value(fields, 'external_id', product_data['sku'])
+
+            # Processing time
+            processing_time = product_data.get('processing_time', '3')
+            self._set_field_value(fields, 'processing_time', str(processing_time))
+            self._set_field_value(fields, 'hours_days_sel', product_data.get('time_unit', 'Days'))
+
+            # Shipping
+            if product_data.get('available_for_shipment', True):
+                self._set_field_value(fields, 'available_for_shipment', '1')
+
+            # YouTube URL
+            if product_data.get('video_url'):
+                self._set_field_value(fields, 'youtube_upload', product_data['video_url'])
+
+            # 5. Handle image uploads
+            # Images are tricky - V&R uses file inputs that need to be uploaded
+            # We'll prepare the multipart form data with images
+
+            image_files = []
+            images_to_upload = []
+
+            # Collect image URLs
+            if product_data.get('primary_image'):
+                primary_url = ImageTransformer.transform_reverb_url(
+                    product_data['primary_image'], ImageQuality.MAX_RES
+                )
+                images_to_upload.append(primary_url)
+
+            additional_images = product_data.get('additional_images', [])
+            if isinstance(additional_images, str):
+                try:
+                    additional_images = json.loads(additional_images)
+                except json.JSONDecodeError:
+                    additional_images = [additional_images] if additional_images else []
+
+            for img_url in additional_images[:19]:  # Max 20 images total
+                max_res_url = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
+                images_to_upload.append(max_res_url)
+
+            logger.info(f"Preparing to upload {len(images_to_upload)} images")
+
+            # Download images to temp files for upload
+            temp_dir = tempfile.mkdtemp(prefix='vr_upload_')
+            try:
+                for idx, img_url in enumerate(images_to_upload):
+                    try:
+                        img_response = requests.get(img_url, timeout=30)
+                        if img_response.status_code == 200:
+                            # Determine file extension from content-type
+                            content_type = img_response.headers.get('content-type', 'image/jpeg')
+                            ext = '.jpg'
+                            if 'png' in content_type:
+                                ext = '.png'
+                            elif 'webp' in content_type:
+                                ext = '.webp'
+
+                            temp_path = os.path.join(temp_dir, f'image_{idx}{ext}')
+                            with open(temp_path, 'wb') as f:
+                                f.write(img_response.content)
+                            image_files.append(temp_path)
+                            logger.debug(f"Downloaded image {idx + 1} to {temp_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to download image {img_url}: {e}")
+
+                # 6. Prepare multipart form data
+                # Convert fields list to dict for the request
+                form_data = {}
+                for name, value in fields:
+                    if name in form_data:
+                        # Handle multiple values with same name (like shipping_fees_fee[])
+                        if isinstance(form_data[name], list):
+                            form_data[name].append(value)
+                        else:
+                            form_data[name] = [form_data[name], value]
+                    else:
+                        form_data[name] = value
+
+                if test_mode:
+                    # Return the prepared payload without submitting
+                    return {
+                        "status": "test",
+                        "message": "Test mode - form data prepared but not submitted",
+                        "form_data": form_data,
+                        "image_count": len(image_files),
+                        "images": images_to_upload
+                    }
+
+                # 7. Submit the form with images
+                submit_headers = self.headers.copy()
+                submit_headers['Referer'] = create_url
+                # Remove Content-Type - requests will set it for multipart
+                submit_headers.pop('Content-Type', None)
+
+                # Build files dict for multipart upload
+                files_dict = {}
+                for idx, img_path in enumerate(image_files):
+                    field_name = f'upload_file_box_{idx + 1}'
+                    files_dict[field_name] = (
+                        os.path.basename(img_path),
+                        open(img_path, 'rb'),
+                        'image/jpeg'
+                    )
+
+                try:
+                    # Use curl_cffi if available for better Cloudflare handling
+                    if self.cf_session:
+                        submit_response = self.cf_session.post(
+                            create_url,
+                            data=form_data,
+                            files=files_dict if files_dict else None,
+                            headers=submit_headers,
+                            allow_redirects=False
+                        )
+                    else:
+                        submit_response = self.session.post(
+                            create_url,
+                            data=form_data,
+                            files=files_dict if files_dict else None,
+                            headers=submit_headers,
+                            allow_redirects=False
+                        )
+                finally:
+                    # Close file handles
+                    for f in files_dict.values():
+                        if hasattr(f[1], 'close'):
+                            f[1].close()
+
+                logger.info(f"Form submission response: {submit_response.status_code}")
+
+                # Check response
+                if submit_response.status_code in (302, 303):
+                    # Success - V&R redirects after successful submission
+                    redirect_url = submit_response.headers.get('Location', '')
+                    logger.info(f"Submission successful! Redirect to: {redirect_url}")
+
+                    # Try to extract item ID from redirect URL
+                    vr_id = None
+                    id_match = re.search(r'/add_edit_item/(\d+)', redirect_url)
+                    if id_match:
+                        vr_id = id_match.group(1)
+                        logger.info(f"Extracted V&R item ID: {vr_id}")
+
+                    return {
+                        "status": "success",
+                        "message": "Listing created successfully",
+                        "vr_listing_id": vr_id,
+                        "redirect_url": redirect_url,
+                        "needs_id_resolution": vr_id is None
+                    }
+                else:
+                    # Check for success in response body
+                    response_text = submit_response.text.lower()
+                    if 'published and live' in response_text or 'successfully' in response_text:
+                        return {
+                            "status": "success",
+                            "message": "Listing appears to be created (success message found)",
+                            "vr_listing_id": None,
+                            "needs_id_resolution": True
+                        }
+
+                    logger.error(f"Unexpected response: {submit_response.status_code}")
+                    logger.error(f"Response body: {submit_response.text[:500]}")
+                    return {
+                        "status": "error",
+                        "message": f"Unexpected response: {submit_response.status_code}",
+                        "body": submit_response.text[:1000]
+                    }
+
+            finally:
+                # Clean up temp directory
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        except Exception as e:
+            logger.error(f"Error in create_listing_http: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Exception during listing creation: {str(e)}"
+            }
+
     async def create_listing_selenium(
             self, 
             product_data: Dict[str, Any], 

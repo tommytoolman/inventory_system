@@ -61,6 +61,15 @@ except Exception as exc:  # noqa: BLE001
     uc = None
     logger.info("UDC import failed: %s", exc)
 
+# Try to import curl_cffi for better Cloudflare bypass (Chrome TLS fingerprint)
+cf_requests = None
+try:
+    from curl_cffi import requests as cf_requests
+    logger.info("curl_cffi import ok - will use Chrome TLS fingerprint")
+except ImportError:
+    cf_requests = None
+    logger.info("curl_cffi not installed - using standard requests")
+
 logging.basicConfig(
     level=logging.INFO, # Use INFO or DEBUG
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -91,9 +100,16 @@ class VintageAndRareClient:
         """
         self.username = username
         self.password = password
-        self.session = requests.Session() # requests session for HTTP interactions
+        self.session = requests.Session()  # requests session for HTTP interactions
         self.authenticated = False
         self.db_session = db_session
+        self.cloudflare_blocked = False  # Track if we're blocked by Cloudflare
+
+        # Create curl_cffi session if available (better Cloudflare bypass)
+        self.cf_session = None
+        if cf_requests:
+            self.cf_session = cf_requests.Session(impersonate="chrome")
+            logger.info("Created curl_cffi session with Chrome impersonation")
 
         # Browser-like headers to satisfy Cloudflare
         chrome_ua = os.environ.get(
@@ -134,26 +150,79 @@ class VintageAndRareClient:
         self.temp_files = []
 
     def _load_cookies_from_env(self) -> None:
-        """Optionally seed the requests session with cookies from a JSON file."""
-        cookie_file = os.environ.get("VINTAGE_AND_RARE_COOKIES_FILE")
-        if not cookie_file:
+        """
+        Load cookies from environment variable (base64 JSON) or file path.
+
+        Supports two formats:
+        1. VR_COOKIES_BASE64 - Base64-encoded JSON array of cookies (for Railway)
+        2. VINTAGE_AND_RARE_COOKIES_FILE - Path to JSON file (for local dev)
+
+        Priority: Base64 env var > File path
+
+        Key insight: We primarily need cf_clearance to bypass Cloudflare.
+        PHPSESSID is a session cookie that expires immediately, so we'll
+        get a fresh one via login. cf_clearance is valid until May 2026.
+        """
+        import base64
+
+        cookies = None
+        source = None
+
+        # Try base64-encoded cookies first (Railway deployment)
+        cookies_b64 = os.environ.get("VR_COOKIES_BASE64")
+        if cookies_b64:
+            try:
+                cookies_json = base64.b64decode(cookies_b64).decode('utf-8')
+                cookies = json.load(io.StringIO(cookies_json))
+                source = "VR_COOKIES_BASE64 env var"
+            except Exception as exc:
+                logger.warning("Failed to decode VR_COOKIES_BASE64: %s", exc)
+
+        # Fall back to file path (local development)
+        if not cookies:
+            cookie_file = os.environ.get("VINTAGE_AND_RARE_COOKIES_FILE")
+            if cookie_file:
+                try:
+                    with open(cookie_file, "r") as f:
+                        cookies = json.load(f)
+                    source = f"file: {cookie_file}"
+                except Exception as exc:
+                    logger.warning("Failed to load V&R cookies from %s: %s", cookie_file, exc)
+
+        if not cookies:
+            logger.info("No V&R cookies available - will rely on Selenium bootstrap")
             return
-        try:
-            with open(cookie_file, "r") as f:
-                cookies = json.load(f)
-            loaded = 0
-            for cookie in cookies:
-                if "name" in cookie and "value" in cookie:
-                    self.session.cookies.set(
+
+        # Load cookies into both sessions (requests and curl_cffi)
+        loaded = 0
+        cf_clearance_loaded = False
+        for cookie in cookies:
+            if "name" in cookie and "value" in cookie:
+                domain = cookie.get("domain") or "www.vintageandrare.com"
+                # Load into requests session
+                self.session.cookies.set(
+                    cookie["name"],
+                    cookie["value"],
+                    domain=domain,
+                )
+                # Load into curl_cffi session if available
+                if self.cf_session:
+                    self.cf_session.cookies.set(
                         cookie["name"],
                         cookie["value"],
-                        domain=cookie.get("domain") or "www.vintageandrare.com",
+                        domain=domain,
                     )
-                    loaded += 1
-            if loaded:
-                logger.info("Seeded %s V&R cookies from %s", loaded, cookie_file)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to load V&R cookies from %s: %s", cookie_file, exc)
+                loaded += 1
+                if cookie["name"] == "cf_clearance":
+                    cf_clearance_loaded = True
+                    logger.info("cf_clearance cookie loaded (Cloudflare bypass key)")
+
+        if loaded:
+            logger.info("Seeded %s V&R cookies from %s", loaded, source)
+            if self.cf_session:
+                logger.info("Cookies also loaded into curl_cffi session")
+            if not cf_clearance_loaded:
+                logger.warning("cf_clearance NOT found - Cloudflare may block requests")
 
     def _apply_selenium_cookies(self, selenium_driver) -> None:
         """Copy cookies from Selenium into the requests session."""
@@ -170,15 +239,17 @@ class VintageAndRareClient:
         """Attempt to pass Cloudflare by using Selenium and harvesting cookies."""
         selenium_grid_url = (os.environ.get("SELENIUM_GRID_URL") or "").strip()
         use_udc = os.environ.get("VR_USE_UDC", "1") == "1" and uc is not None
+        headless_mode = os.environ.get("VR_HEADLESS", "true").lower() == "true"
 
-        logger.info("Using SELENIUM_GRID_URL: %s (use_udc=%s)", selenium_grid_url, use_udc)
+        logger.info("Using SELENIUM_GRID_URL: %s (use_udc=%s, headless=%s)", selenium_grid_url, use_udc, headless_mode)
 
         if not selenium_grid_url and not use_udc:
             return False
 
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu")
+        if headless_mode:
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-blink-features=AutomationControlled")
@@ -216,7 +287,7 @@ class VintageAndRareClient:
 
         try:
             if use_udc:
-                driver = uc.Chrome(headless=True, options=options)
+                driver = uc.Chrome(headless=headless_mode, options=options)
             else:
                 driver = webdriver.Remote(command_executor=selenium_grid_url, options=options)
             driver.get(self.BASE_URL)
@@ -260,8 +331,12 @@ class VintageAndRareClient:
 
     async def authenticate(self) -> bool:
         """
-        Authenticate with V&R website using the requests Session.
-        Updates self.authenticated state.
+        Authenticate with V&R website.
+
+        Strategy:
+        1. Try curl_cffi first (better Cloudflare bypass with Chrome TLS fingerprint)
+        2. Fall back to requests if curl_cffi unavailable
+        3. Use Selenium bootstrap as last resort
 
         Returns:
             bool: True if authentication is successful.
@@ -269,18 +344,39 @@ class VintageAndRareClient:
         if self.authenticated:
             print("Already authenticated with V&R")
             return True
-        try:
-            # First get the main page to set up cookies
-            print(f"Authenticating V&R user: {self.username}")
-            response = self.session.get(self.BASE_URL, headers=self.headers)
-            print(f"Initial page load status: {response.status_code}")
 
-            # If blocked by Cloudflare, try Selenium bootstrap
-            if response.status_code == 403:
+        try:
+            print(f"Authenticating V&R user: {self.username}")
+
+            # Determine which session to use for initial page load
+            use_curl_cffi = self.cf_session is not None
+            if use_curl_cffi:
+                print("Using curl_cffi (Chrome TLS fingerprint) for Cloudflare bypass")
+
+            # First get the main page to set up cookies
+            if use_curl_cffi:
+                response = self.cf_session.get(self.BASE_URL, headers=self.headers)
+            else:
+                response = self.session.get(self.BASE_URL, headers=self.headers)
+
+            print(f"Initial page load status: {response.status_code}")
+            cf_mitigated = response.headers.get("cf-mitigated", "")
+            if cf_mitigated:
+                print(f"Cloudflare cf-mitigated header: {cf_mitigated}")
+
+            # Check if blocked by Cloudflare
+            if response.status_code == 403 or cf_mitigated == "challenge":
+                print("Blocked by Cloudflare - trying Selenium bootstrap")
+                self.cloudflare_blocked = True
                 used_selenium = await self._bootstrap_with_selenium()
                 if used_selenium:
-                    response = self.session.get(self.BASE_URL, headers=self.headers)
+                    if use_curl_cffi:
+                        response = self.cf_session.get(self.BASE_URL, headers=self.headers)
+                    else:
+                        response = self.session.get(self.BASE_URL, headers=self.headers)
                     print(f"Post-Selenium base load status: {response.status_code}")
+            else:
+                self.cloudflare_blocked = False
 
             # Prepare login data
             login_data = {
@@ -288,37 +384,60 @@ class VintageAndRareClient:
                 'pass': self.password,
                 'open_where': 'header'
             }
-            
+
             # Submit login form
             print("Submitting V&R login form...")
-            response = self.session.post(
-                self.LOGIN_URL,
-                data=login_data,
-                headers=self.headers,
-                allow_redirects=True
-            )
+            if use_curl_cffi:
+                response = self.cf_session.post(
+                    self.LOGIN_URL,
+                    data=login_data,
+                    headers=self.headers,
+                    allow_redirects=True
+                )
+            else:
+                response = self.session.post(
+                    self.LOGIN_URL,
+                    data=login_data,
+                    headers=self.headers,
+                    allow_redirects=True
+                )
             print(f"Login response status: {response.status_code}")
-            
-            # If still blocked, one more Selenium attempt to harvest cookies
+
+            # If still blocked, one more Selenium attempt
             if response.status_code == 403:
+                print("Still blocked after login attempt - trying Selenium again")
+                self.cloudflare_blocked = True
                 used_selenium = await self._bootstrap_with_selenium()
                 if used_selenium:
-                    response = self.session.post(
-                        self.LOGIN_URL,
-                        data=login_data,
-                        headers=self.headers,
-                        allow_redirects=True
-                    )
+                    if use_curl_cffi:
+                        response = self.cf_session.post(
+                            self.LOGIN_URL,
+                            data=login_data,
+                            headers=self.headers,
+                            allow_redirects=True
+                        )
+                    else:
+                        response = self.session.post(
+                            self.LOGIN_URL,
+                            data=login_data,
+                            headers=self.headers,
+                            allow_redirects=True
+                        )
                     print(f"Post-Selenium login status: {response.status_code}")
 
-            # Check if login was successful
-            self.authenticated = 'Sign out' in response.text or '/account' in getattr(response, "url", "")
-            print(f"Authentication check - 'Sign out' in response: {'Sign out' in response.text}")
-            print(f"Authentication check - '/account' in URL: {'/account' in getattr(response, 'url', '')}")
+            # Check if login was successful - V&R uses "Logout" not "Sign out"
+            response_text = response.text
+            response_url = str(getattr(response, "url", ""))
+            has_logout = 'Logout' in response_text or 'logout' in response_text or 'Sign out' in response_text
+            at_account = '/account' in response_url
+
+            self.authenticated = has_logout or at_account
+            print(f"Authentication check - 'Logout' in response: {has_logout}")
+            print(f"Authentication check - '/account' in URL: {at_account}")
             print(f"Authentication result: {'Successful' if self.authenticated else 'Failed'}")
-            
+
             return self.authenticated
-            
+
         except Exception as e:
             print(f"Error during V&R authentication: {str(e)}")
             import traceback
@@ -1349,13 +1468,13 @@ class VintageAndRareClient:
                     if any(keyword in response_lower for keyword in ['success', 'sold', 'marked', 'ok', '1', 'true']):
                         print(f"✅ Text indicates success for {item_id}")
                         return {"success": True, "response": response_text, "item_id": item_id}
-                    elif any(keyword in response_lower for keyword in ['error', 'failed', 'not found', 'invalid']):
+                    elif any(keyword in response_lower for keyword in ['error', 'failed', 'not found', 'invalid', 'false']):
                         print(f"❌ Text indicates failure for {item_id}: {response_text}")
                         return {"success": False, "error": f"Server error: {response_text}", "item_id": item_id}
                     else:
                         print(f"⚠️  Unknown response for {item_id}: '{response_text}'")
-                        # For now, assume success if we got a 200 status
-                        return {"success": True, "response": f"unknown_success: {response_text}", "item_id": item_id}
+                        # Unknown responses should be treated as failures to be safe
+                        return {"success": False, "error": f"Unknown response: {response_text}", "item_id": item_id}
             else:
                 print(f"❌ Mark sold failed for {item_id}: HTTP {response.status_code}")
                 return {"success": False, "error": f"HTTP {response.status_code}: {response.text}", "item_id": item_id}

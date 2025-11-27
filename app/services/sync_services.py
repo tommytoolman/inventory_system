@@ -41,8 +41,7 @@ from app.services.shopify_service import ShopifyService
 from app.services.vr_service import VRService
 from app.services.vr_job_queue import enqueue_vr_job
 
-
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Note: logging.basicConfig removed - use app.core.logging_config instead
 logger = logging.getLogger(__name__)
 
 

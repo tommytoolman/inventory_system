@@ -70,11 +70,7 @@ except ImportError:
     cf_requests = None
     logger.info("curl_cffi not installed - using standard requests")
 
-logging.basicConfig(
-    level=logging.INFO, # Use INFO or DEBUG
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()] # Ensures output to console
-)
+# Note: logging.basicConfig removed - use app.core.logging_config instead
 
 class VintageAndRareClient:
     """

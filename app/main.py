@@ -1,5 +1,9 @@
 # app/main.py
 
+# Configure logging first, before any other imports
+from app.core.logging_config import configure_logging
+configure_logging()
+
 import asyncio
 import os
 from pathlib import Path

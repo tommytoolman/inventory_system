@@ -4,6 +4,7 @@ import uuid
 import json
 import base64
 import os
+from typing import Dict, Any
 
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from app.services.vr_service import VRService
@@ -350,71 +351,110 @@ async def delete_vr_listing(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/vr/cookies/harvest")
-async def harvest_vr_cookies(
-    settings: Settings = Depends(get_settings)
-):
-    """
-    Harvest fresh V&R cookies from Selenium Grid.
+# Track harvest status for async polling
+_harvest_status: Dict[str, Any] = {"status": "idle", "message": "No harvest running"}
 
-    This endpoint uses the Selenium Grid running on Railway to:
-    1. Navigate to V&R
-    2. Pass Cloudflare challenge (from Railway's IP)
-    3. Login and get authenticated session
-    4. Return cookies for use by other V&R operations
 
-    The harvested cookies are cached in memory and used for subsequent requests.
-    Call this endpoint when V&R operations start failing with 403 errors.
-    """
-    global _vr_cookies_cache
+async def _run_harvest_background(username: str, password: str):
+    """Background task to harvest cookies."""
+    global _vr_cookies_cache, _harvest_status
 
     try:
         from app.services.vintageandrare.client import VintageAndRareClient
 
-        logger.info("Starting V&R cookie harvest from Selenium Grid...")
+        _harvest_status = {"status": "running", "message": "Connecting to Selenium Grid..."}
 
-        vr_client = VintageAndRareClient(
-            username=settings.VINTAGE_AND_RARE_USERNAME,
-            password=settings.VINTAGE_AND_RARE_PASSWORD
-        )
+        vr_client = VintageAndRareClient(username=username, password=password)
 
-        # Harvest cookies via Selenium Grid
+        _harvest_status = {"status": "running", "message": "Navigating to V&R..."}
+
         result = await vr_client.harvest_cookies_from_grid()
 
         if result.get("status") == "success":
             cookies = result.get("cookies", [])
-
-            # Cache the cookies in memory
             _vr_cookies_cache = cookies
-            logger.info(f"Cached {len(cookies)} cookies in memory")
 
-            # Also encode as base64 for display/manual backup
             cookies_json = json.dumps(cookies)
             cookies_base64 = base64.b64encode(cookies_json.encode()).decode()
 
-            return {
+            _harvest_status = {
                 "status": "success",
-                "message": f"Harvested {len(cookies)} cookies from Railway's IP",
+                "message": f"Harvested {len(cookies)} cookies",
                 "cf_clearance_found": result.get("cf_clearance") is not None,
                 "logged_in": result.get("logged_in", False),
                 "cookie_count": len(cookies),
-                "cookies_base64": cookies_base64,  # For manual backup if needed
-                "hint": "Cookies are now cached. V&R operations should work."
+                "cookies_base64": cookies_base64,
+                "completed_at": datetime.now().isoformat()
             }
+            logger.info(f"Background harvest completed: {len(cookies)} cookies")
         else:
-            error_msg = result.get("message", "Unknown error")
-            logger.error(f"Cookie harvest failed: {error_msg}")
-
-            return {
+            _harvest_status = {
                 "status": "error",
-                "message": error_msg,
-                "screenshot": result.get("screenshot"),  # Base64 screenshot if available
-                "hint": "Check if Selenium Grid is running and accessible"
+                "message": result.get("message", "Unknown error"),
+                "completed_at": datetime.now().isoformat()
             }
+            logger.error(f"Background harvest failed: {result.get('message')}")
 
     except Exception as e:
-        logger.error(f"Cookie harvest endpoint error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        _harvest_status = {
+            "status": "error",
+            "message": str(e),
+            "completed_at": datetime.now().isoformat()
+        }
+        logger.error(f"Background harvest exception: {e}", exc_info=True)
+
+
+@router.post("/vr/cookies/harvest")
+async def harvest_vr_cookies(
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings)
+):
+    """
+    Start V&R cookie harvest from Selenium Grid (runs in background).
+
+    This endpoint kicks off the harvest and returns immediately.
+    Poll GET /api/vr/cookies/harvest/status to check progress.
+
+    The harvest:
+    1. Connects to Selenium Grid on Railway
+    2. Navigates to V&R and passes Cloudflare challenge
+    3. Logs in and extracts cookies
+    4. Caches cookies for subsequent V&R operations
+    """
+    global _harvest_status
+
+    # Check if already running
+    if _harvest_status.get("status") == "running":
+        return {
+            "status": "already_running",
+            "message": "Harvest already in progress. Poll /api/vr/cookies/harvest/status for updates."
+        }
+
+    _harvest_status = {"status": "starting", "message": "Initializing harvest..."}
+
+    # Run in background
+    background_tasks.add_task(
+        _run_harvest_background,
+        settings.VINTAGE_AND_RARE_USERNAME,
+        settings.VINTAGE_AND_RARE_PASSWORD
+    )
+
+    return {
+        "status": "started",
+        "message": "Cookie harvest started in background. Poll /api/vr/cookies/harvest/status for progress.",
+        "poll_url": "/api/vr/cookies/harvest/status"
+    }
+
+
+@router.get("/vr/cookies/harvest/status")
+async def get_harvest_status():
+    """
+    Check the status of the background cookie harvest.
+
+    Returns current status: idle, starting, running, success, or error.
+    """
+    global _harvest_status
+    return _harvest_status
 
 
 @router.get("/vr/cookies/status")

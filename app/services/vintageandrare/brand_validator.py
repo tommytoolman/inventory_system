@@ -168,12 +168,62 @@ def _to_cache(brand: str, result: Dict[str, Any]) -> None:
 class VRBrandValidator:
     """Fast brand validation using V&R's check_brand_exists endpoint."""
 
+    # TEMPORARY: Set to True to bypass V&R API and use local DB check instead
+    # TODO: Set back to False when V&R Cloudflare issues are resolved
+    USE_LOCAL_DB_CHECK = True
+
+    @classmethod
+    def _check_brand_in_db(cls, brand_name: str) -> Dict[str, Any]:
+        """Check if brand exists in local products table (sync, for temporary CF bypass)."""
+        from sqlalchemy import create_engine, text
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        # Convert async postgres URL to sync if needed
+        db_url = settings.DATABASE_URL
+        if db_url.startswith("postgresql+asyncpg://"):
+            db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+        engine = create_engine(db_url)
+
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("SELECT COUNT(*) FROM products WHERE LOWER(brand) = LOWER(:brand)"),
+                {"brand": brand_name}
+            )
+            count = result.scalar()
+
+        if count and count > 0:
+            return {
+                "is_valid": True,
+                "brand_id": None,
+                "message": f"Brand '{brand_name}' found in inventory",
+                "original_brand": brand_name,
+                "error_code": None,
+            }
+        else:
+            return {
+                "is_valid": False,
+                "brand_id": None,
+                "message": f"Brand '{brand_name}' not found - will use 'Justin' for V&R",
+                "original_brand": brand_name,
+                "error_code": "not_found",
+            }
+
     @classmethod
     def validate_brand(cls, brand_name: str) -> Dict[str, Any]:
         """
         Fast brand validation - NO LOGIN REQUIRED
         Uses seeded CF cookies + shared UA to avoid 403s, and a short timeout.
         """
+        # TEMPORARY: Use local DB check instead of V&R API
+        if cls.USE_LOCAL_DB_CHECK:
+            cached = _from_cache(brand_name)
+            if cached is not None:
+                return cached
+            result = cls._check_brand_in_db(brand_name)
+            _to_cache(brand_name, result)
+            return result
+
         cached = _from_cache(brand_name)
         if cached is not None:
             return cached

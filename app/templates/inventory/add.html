@@ -246,12 +246,22 @@
                                             placeholder="Select or type category...">
                                         <datalist id="categoriesList">
                                             {% if canonical_categories %}
-                                                {% for category in canonical_categories %}
-                                                    <option value="{{ category }}" data-canonical="true"></option>
+                                                {% for cat in canonical_categories %}
+                                                    <option value="{{ cat.full_path }}" data-uuid="{{ cat.uuid }}" data-canonical="true"></option>
                                                 {% endfor %}
                                             {% endif %}
                                         </datalist>
-                                        <p class="mt-1 text-xs text-gray-500">Alphabetical list shown; type to filter the full Reverb taxonomy.</p>
+                                        <input type="hidden" name="category_uuid" id="category_uuid" value="">
+                                        <!-- Category validation warning - matches brand warning style -->
+                                        <div id="categoryError" class="mt-1 p-2 bg-red-50 border border-red-200 rounded-md hidden">
+                                            <p class="text-xs text-red-800">
+                                                <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                                </svg>
+                                                Category '<span id="categoryErrorName"></span>' not recognized. Please select a valid category from the dropdown.
+                                            </p>
+                                        </div>
+                                        <p id="categoryHint" class="mt-1 text-xs text-gray-500">Type to search, then select from the dropdown</p>
                                     </div>
                                     <!-- SKU Field -->
                                     <div class="group md:col-span-1 md:col-start-2 md:row-start-1">
@@ -1710,7 +1720,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const hasProfile = shippingProfileSelect && shippingProfileSelect.value && shippingProfileSelect.value.trim() !== '';
         const hasCountry = manufacturingSelect && manufacturingSelect.value && manufacturingSelect.value.trim() !== '';
-        const readyForSubmit = hasProfile && hasCountry;
+        const categoryUuidField = document.getElementById('category_uuid');
+        const hasValidCategory = categoryUuidField && categoryUuidField.value && categoryUuidField.value.trim() !== '';
+        const readyForSubmit = hasProfile && hasCountry && hasValidCategory;
 
         if (readyForSubmit) {
             createProductBtn.disabled = false;
@@ -1944,9 +1956,69 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add category change listener
     const categoryField = document.getElementById('category');
     const categoriesDatalist = document.getElementById('categoriesList');
+    const categoryUuidField = document.getElementById('category_uuid');
+    const categoryError = document.getElementById('categoryError');
+    const categoryHint = document.getElementById('categoryHint');
     const canonicalCategoryValues = categoriesDatalist ? Array.from(categoriesDatalist.querySelectorAll('option[data-canonical="true"]')).map(option => option.value) : [];
     let categorySearchTimeout = null;
     let categorySearchAbortController = null;
+
+    // Validate category and extract UUID from datalist option
+    function validateAndSetCategoryUuid(categoryValue) {
+        if (!categoryValue || !categoriesDatalist || !categoryUuidField) {
+            return false;
+        }
+
+        // Find matching option in datalist
+        const options = categoriesDatalist.querySelectorAll('option');
+        let matchedUuid = null;
+
+        for (const option of options) {
+            if (option.value === categoryValue) {
+                matchedUuid = option.getAttribute('data-uuid');
+                break;
+            }
+        }
+
+        if (matchedUuid) {
+            // Valid category selected
+            categoryUuidField.value = matchedUuid;
+            if (categoryField) {
+                // Use inline style to override any conflicting CSS
+                categoryField.style.borderColor = '#22c55e'; // green-500
+                categoryField.style.backgroundColor = '#f0fdf4'; // green-50 tint
+            }
+            if (categoryError) categoryError.classList.add('hidden');
+            if (categoryHint) categoryHint.classList.remove('hidden');
+            console.log('Category validated. UUID:', matchedUuid);
+            updateCreateButtonState();
+            return true;
+        } else {
+            // Invalid category (not in dropdown)
+            categoryUuidField.value = '';
+            const categoryErrorName = document.getElementById('categoryErrorName');
+            if (categoryField) {
+                // Only show error styling if user has entered something meaningful
+                if (categoryValue.length > 2) {
+                    // Use inline style to override any conflicting CSS
+                    categoryField.style.borderColor = '#ef4444'; // red-500
+                    categoryField.style.backgroundColor = '#fef2f2'; // red-50 tint
+                    if (categoryErrorName) categoryErrorName.textContent = categoryValue;
+                    if (categoryError) categoryError.classList.remove('hidden');
+                    if (categoryHint) categoryHint.classList.add('hidden');
+                } else {
+                    // Reset to default gray for short/empty input
+                    categoryField.style.borderColor = '#d1d5db'; // gray-300
+                    categoryField.style.backgroundColor = '#f9fafb'; // gray-50
+                    if (categoryError) categoryError.classList.add('hidden');
+                    if (categoryHint) categoryHint.classList.remove('hidden');
+                }
+            }
+            console.log('Category not valid - no matching UUID found for:', categoryValue);
+            updateCreateButtonState();
+            return false;
+        }
+    }
 
     function clearDynamicCategoryOptions() {
         if (!categoriesDatalist) {
@@ -2030,19 +2102,23 @@ document.addEventListener('DOMContentLoaded', function() {
             const selectedCategory = this.value;
             console.log('Category input changed to:', selectedCategory);
             queueCategorySearch(selectedCategory.trim());
-            // Only update if it's a complete category (has /) and different from last
+            // Validate and set UUID (will show error if not valid dropdown option)
+            validateAndSetCategoryUuid(selectedCategory);
+            // Only update platform mappings if it's a complete category (has /) and different from last
             if (selectedCategory && selectedCategory.includes(' / ') && selectedCategory !== lastCategoryUpdate) {
                 lastCategoryUpdate = selectedCategory;
                 updatePlatformCategories(selectedCategory);
                 checkProAudioCategory(selectedCategory);
             }
         });
-        
+
         // Also trigger on change for datalist selection
         categoryField.addEventListener('change', function() {
             const selectedCategory = this.value;
             console.log('Category changed to:', selectedCategory);
             queueCategorySearch(selectedCategory.trim());
+            // Validate and set UUID on change (user selected from dropdown)
+            validateAndSetCategoryUuid(selectedCategory);
             if (selectedCategory && selectedCategory !== lastCategoryUpdate) {
                 lastCategoryUpdate = selectedCategory;
                 updatePlatformCategories(selectedCategory);
@@ -2050,9 +2126,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // If there's already a value, trigger the mapping
+        // If there's already a value, trigger the mapping and validation
         if (categoryField.value) {
             console.log('Initial category value:', categoryField.value);
+            validateAndSetCategoryUuid(categoryField.value);
             updatePlatformCategories(categoryField.value);
             checkProAudioCategory(categoryField.value);
             queueCategorySearch(categoryField.value.trim());
@@ -2370,6 +2447,11 @@ document.addEventListener('DOMContentLoaded', function() {
             brandValidationIcon.innerHTML = '';
             vrBrandWarning.classList.add('hidden');
             brandVRStatus.textContent = '';
+            // Reset to default gray
+            if (brandInput) {
+                brandInput.style.borderColor = '#d1d5db'; // gray-300
+                brandInput.style.backgroundColor = '#f9fafb'; // gray-50
+            }
             return;
         }
         
@@ -2395,6 +2477,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 vrBrandWarning.classList.add('hidden');
                 vrBrandFallback.value = 'false';
                 brandVRStatus.innerHTML = '<span class="text-green-600">✓ V&R</span>';
+                // Green background for valid brand
+                if (brandInput) {
+                    brandInput.style.borderColor = '#22c55e'; // green-500
+                    brandInput.style.backgroundColor = '#f0fdf4'; // green-50 tint
+                }
             } else {
                 // Brand not recognized - will use Justin
                 brandValidationIcon.innerHTML = `
@@ -2406,12 +2493,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 vrBrandWarning.classList.remove('hidden');
                 vrBrandFallback.value = 'true';
                 brandVRStatus.innerHTML = '<span class="text-yellow-600">⚠ V&R: Justin</span>';
+                // Yellow background for unrecognized brand (warning, not error)
+                if (brandInput) {
+                    brandInput.style.borderColor = '#eab308'; // yellow-500
+                    brandInput.style.backgroundColor = '#fefce8'; // yellow-50 tint
+                }
             }
         } catch (error) {
             console.error('Error checking V&R brand:', error);
-            // On error, just clear the icon
+            // On error, just clear the icon and reset styling
             brandValidationIcon.innerHTML = '';
             brandVRStatus.textContent = '';
+            if (brandInput) {
+                brandInput.style.borderColor = '#d1d5db'; // gray-300
+                brandInput.style.backgroundColor = '#f9fafb'; // gray-50
+            }
         }
     }
     

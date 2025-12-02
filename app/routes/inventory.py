@@ -2379,21 +2379,23 @@ async def add_product_form(
     existing_brands = [b[0] for b in existing_brands.all() if b[0]]
 
     # Canonical category suggestions (full Reverb taxonomy, alphabetically sorted)
+    # Include UUID for frontend validation
     canonical_query = (
-        select(ReverbCategory.full_path)
+        select(ReverbCategory.full_path, ReverbCategory.uuid)
         .filter(ReverbCategory.full_path.isnot(None))
+        .filter(ReverbCategory.uuid.isnot(None))
         .order_by(ReverbCategory.full_path)
     )
     canonical_result = await db.execute(canonical_query)
-    canonical_categories: List[str] = []
+    canonical_categories: List[Dict[str, str]] = []
     seen_categories: set[str] = set()
-    for (full_path,) in canonical_result.all():
-        if not full_path:
+    for full_path, uuid in canonical_result.all():
+        if not full_path or not uuid:
             continue
         normalized = full_path.strip()
         if not normalized or normalized in seen_categories:
             continue
-        canonical_categories.append(normalized)
+        canonical_categories.append({"full_path": normalized, "uuid": uuid})
         seen_categories.add(normalized)
 
     # Get existing products for "copy from" feature

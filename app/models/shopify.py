@@ -32,7 +32,10 @@ class ShopifyListing(Base):
     category_full_name = Column(String(500), nullable=True)
     category_assigned_at = Column(DateTime, nullable=True)
     category_assignment_status = Column(String(20), nullable=True)  # PENDING, ASSIGNED, FAILED
-    
+
+    # Shipping profile tracking
+    shipping_profile_id = Column(String(100), nullable=True)  # Shopify DeliveryProfile GID
+
     # EXISTING: Shopify specific fields
     seo_title = Column(String)
     seo_description = Column(String)

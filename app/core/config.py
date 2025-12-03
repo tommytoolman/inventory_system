@@ -79,9 +79,8 @@ class Settings(BaseSettings):
     VINTAGE_AND_RARE_COOKIES_FILE: str = ""
     VR_USER_AGENT: str = ""
     SELENIUM_GRID_URL: str = ""
-    VINTAGE_AND_RARE_COOKIES_FILE: str = ""
-    VR_USER_AGENT: str = ""
-    SELENIUM_GRID_URL: str = ""
+    VR_USE_UDC: bool = False
+    VR_HEADLESS: bool = True
     
     # Shopify API (Optional)
     SHOPIFY_SHOP_URL: Optional[str] = None

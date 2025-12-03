@@ -706,6 +706,9 @@ async def _persist_shopify_listing(
     if not product_gid:
         product_gid = f"gid://shopify/Product/{external_id}"
 
+    # Get shipping profile GID from result if it was assigned
+    shipping_profile_gid = shopify_result.get("shipping_profile_gid")
+
     listing_payload = {
         "platform_id": platform_common.id,
         "shopify_product_id": product_gid,
@@ -723,6 +726,7 @@ async def _persist_shopify_listing(
         "seo_title": seo_title,
         "seo_description": seo_description,
         "seo_keywords": resolved_keywords,
+        "shipping_profile_id": shipping_profile_gid,
         "extended_attributes": platform_payload,
         "last_synced_at": datetime.utcnow(),
     }
@@ -2415,7 +2419,8 @@ async def add_product_form(
             prefill_draft_id = draft.id
             form_data = _serialize_draft_product(draft)
 
-    manufacturing_countries = list(ManufacturingCountry)
+    # Exclude OTHER from dropdown - Reverb doesn't accept it
+    manufacturing_countries = [c for c in ManufacturingCountry if c != ManufacturingCountry.OTHER]
     handedness_options = list(Handedness)
     case_status_options = list(CaseStatus)
     body_type_options = SPEC_FIELD_MAP.get("body_type", {}).get("options", [])
@@ -4430,7 +4435,7 @@ async def edit_product_form(
             "conditions": ProductCondition,
             "statuses": ProductStatus,
             "handedness_options": list(Handedness),
-            "manufacturing_countries": list(ManufacturingCountry),
+            "manufacturing_countries": [c for c in ManufacturingCountry if c != ManufacturingCountry.OTHER],
             "case_status_options": list(CaseStatus),
             "inventory_locations": list(InventoryLocation),
             "storefront_options": list(Storefront),

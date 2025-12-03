@@ -97,6 +97,50 @@ class ShopifyService:
             raise ValueError("SHOPIFY_LOCATION_GID is not configured; update the environment settings")
         return raw if str(raw).startswith("gid://") else f"gid://shopify/Location/{raw}"
 
+    async def _get_shopify_shipping_profile_gid(self, product: Product) -> Optional[str]:
+        """
+        Look up the Shopify delivery profile GID for a product based on its shipping profile.
+
+        Uses the product's shipping_profile_id to find the corresponding Shopify GID
+        from the shipping_profiles table.
+
+        Args:
+            product: The Product model instance
+
+        Returns:
+            The Shopify delivery profile GID or None if not found
+        """
+        if not hasattr(product, 'shipping_profile_id') or not product.shipping_profile_id:
+            logger.debug("Product %s has no shipping_profile_id set", product.sku)
+            return None
+
+        try:
+            result = await self.db.execute(
+                text("""
+                    SELECT shopify_profile_id
+                    FROM shipping_profiles
+                    WHERE id = :profile_id
+                      AND shopify_profile_id IS NOT NULL
+                """),
+                {"profile_id": product.shipping_profile_id}
+            )
+            row = result.fetchone()
+            if row and row[0]:
+                logger.debug(
+                    "Found Shopify shipping profile GID %s for product %s (profile_id=%s)",
+                    row[0], product.sku, product.shipping_profile_id
+                )
+                return row[0]
+            else:
+                logger.warning(
+                    "No Shopify shipping profile GID found for product %s (profile_id=%s)",
+                    product.sku, product.shipping_profile_id
+                )
+                return None
+        except Exception as e:
+            logger.error("Error looking up Shopify shipping profile: %s", e)
+            return None
+
     @staticmethod
     def _resolve_country_enum(country: Optional[Union[ManufacturingCountry, str]]) -> Optional[ManufacturingCountry]:
         if not country:
@@ -1159,8 +1203,9 @@ class ShopifyService:
                 self._sync_country_of_origin(product, product_gid)
             except Exception as exc:
                 logger.warning("Failed to sync Shopify country data for %s: %s", product.sku, exc)
-            
+
             # Step 3: Update the variant with price, SKU, and inventory
+            variant_gid = None  # Initialize for use in shipping profile assignment
             try:
                 if creation_result["product"].get("variants", {}).get("edges"):
                     variant_gid = creation_result["product"]["variants"]["edges"][0]["node"]["id"]
@@ -1323,7 +1368,31 @@ class ShopifyService:
                     logger.warning("Could not find Online Store publication GID")
             except Exception as e:
                 logger.warning(f"Failed to publish product: {e}")
-            
+
+            # Step 7: Assign shipping profile if product has one configured
+            shipping_profile_gid_assigned = None
+            try:
+                shopify_shipping_gid = await self._get_shopify_shipping_profile_gid(product)
+                if shopify_shipping_gid and variant_gid:
+                    logger.info(
+                        "Assigning shipping profile %s to variant %s for product %s",
+                        shopify_shipping_gid, variant_gid, product.sku
+                    )
+                    profile_result = self.client.assign_variants_to_delivery_profile(
+                        shopify_shipping_gid,
+                        [variant_gid]
+                    )
+                    if profile_result and not profile_result.get("userErrors"):
+                        shipping_profile_gid_assigned = shopify_shipping_gid
+                        logger.info("✅ Shipping profile assigned successfully")
+                    else:
+                        errors = profile_result.get("userErrors", []) if profile_result else []
+                        logger.warning("Failed to assign shipping profile: %s", errors)
+                elif not shopify_shipping_gid:
+                    logger.debug("No shipping profile to assign for product %s", product.sku)
+            except Exception as e:
+                logger.warning(f"Failed to assign shipping profile: {e}")
+
             if not product_legacy_id:
                 return {"status": "error", "message": "No legacy ID returned"}
 
@@ -1357,6 +1426,7 @@ class ShopifyService:
                 "category_gid": category_gid_assigned,
                 "category_name": category_name_assigned,
                 "category_full_name": category_full_name_assigned,
+                "shipping_profile_gid": shipping_profile_gid_assigned,
                 "snapshot": snapshot,
             }
 

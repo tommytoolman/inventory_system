@@ -1623,3 +1623,58 @@ class ShopifyGraphQLClient:
         
         data = self._make_request(mutation, variables, estimated_cost=estimated_cost)
         return data["publishablePublish"] if data and "publishablePublish" in data else None
+
+    def assign_variants_to_delivery_profile(self, delivery_profile_gid: str, variant_gids: List[str]) -> Dict[str, Any]:
+        """
+        Assigns variant(s) to a delivery (shipping) profile using deliveryProfileUpdate mutation.
+
+        Args:
+            delivery_profile_gid: The GID of the delivery profile (e.g., "gid://shopify/DeliveryProfile/123")
+            variant_gids: List of variant GIDs to assign to the profile
+
+        Returns:
+            The mutation result or None if failed
+        """
+        if not variant_gids:
+            logger.warning("No variant GIDs provided for delivery profile assignment")
+            return None
+
+        mutation = """
+        mutation deliveryProfileUpdate($id: ID!, $profile: DeliveryProfileInput!) {
+          deliveryProfileUpdate(id: $id, profile: $profile) {
+            profile {
+              id
+              name
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        """
+
+        variables = {
+            "id": delivery_profile_gid,
+            "profile": {
+                "variantsToAssociate": variant_gids
+            }
+        }
+
+        estimated_cost = 10 + len(variant_gids)
+
+        try:
+            data = self._make_request(mutation, variables, estimated_cost=estimated_cost)
+            if data and "deliveryProfileUpdate" in data:
+                result = data["deliveryProfileUpdate"]
+                user_errors = result.get("userErrors", [])
+                if user_errors:
+                    logger.warning(f"Delivery profile assignment had errors: {user_errors}")
+                else:
+                    profile = result.get("profile", {})
+                    logger.info(f"Successfully assigned {len(variant_gids)} variant(s) to delivery profile: {profile.get('name')}")
+                return result
+            return None
+        except Exception as e:
+            logger.error(f"Failed to assign variants to delivery profile: {e}")
+            return None

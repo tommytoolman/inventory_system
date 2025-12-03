@@ -59,6 +59,7 @@ class ManufacturingCountry(str, Enum):
     INDONESIA = "ID"
     CHINA = "CN"
     KOREA = "KR"
+    TAIWAN = "TW"
     AUSTRALIA = "AU"
     NEW_ZEALAND = "NZ"
     BRAZIL = "BR"

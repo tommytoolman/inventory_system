@@ -2,6 +2,9 @@
 
 ## If making edits to existing functions, classes DO NOT change these names unless there is a compelling reason to. Too often your "helpful" changes break stuff.
 
+## 🚫 NO CO-AUTHOR CREDITS IN COMMITS
+Do NOT add co-author credits, "Generated with Claude Code" footers, or any AI attribution to git commits. Keep commit messages clean and professional.
+
 ## 🚫 NEVER USE CONDA - CRITICAL
 **NEVER EVER install packages using conda. DO NOT suggest conda commands. DO NOT use conda environments.**
 - Always use the project's virtual environment: `source venv/bin/activate`

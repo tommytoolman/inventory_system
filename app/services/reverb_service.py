@@ -195,7 +195,10 @@ class ReverbService:
 
     @staticmethod
     def _origin_country_code(country: Optional[Any]) -> Optional[str]:
-        """Return the ISO alpha-2 country code expected by Reverb."""
+        """Return the ISO alpha-2 country code expected by Reverb.
+
+        Note: Reverb only accepts valid ISO country codes, not "OTHER".
+        """
 
         if country is None:
             return None
@@ -217,7 +220,11 @@ class ReverbService:
                     enum_value = ManufacturingCountry[raw.upper()]
                 except KeyError:
                     normalized = raw.upper()
-                    return normalized if len(normalized) == 2 else raw
+                    return normalized if len(normalized) == 2 else None
+
+        # Reverb doesn't accept "OTHER" - only valid ISO country codes
+        if enum_value and enum_value.value == "OTHER":
+            return None
 
         return enum_value.value if enum_value else None
 

@@ -221,13 +221,20 @@ class VintageAndRareClient:
                 logger.warning("cf_clearance NOT found - Cloudflare may block requests")
 
     def _apply_selenium_cookies(self, selenium_driver) -> None:
-        """Copy cookies from Selenium into the requests session."""
+        """Copy cookies from Selenium into both requests and curl_cffi sessions."""
         try:
             cookies = selenium_driver.get_cookies()
             for cookie in cookies:
                 # requests uses "name"/"value" keys
                 if "name" in cookie and "value" in cookie:
-                    self.session.cookies.set(cookie["name"], cookie["value"], domain=cookie.get("domain"))
+                    domain = cookie.get("domain")
+                    # Set on regular requests session
+                    self.session.cookies.set(cookie["name"], cookie["value"], domain=domain)
+                    # Also set on curl_cffi session if available
+                    if self.cf_session:
+                        self.cf_session.cookies.set(cookie["name"], cookie["value"], domain=domain)
+            if self.cf_session:
+                logger.info("Applied Selenium cookies to both requests and curl_cffi sessions")
         except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to apply Selenium cookies: %s", exc)
 
@@ -925,12 +932,15 @@ class VintageAndRareClient:
         
         # Configure timeout - 3 minutes max for inventory download
         INVENTORY_TIMEOUT = 180  # 180 seconds = 3 minutes
-        
+
         try:
             # Download the inventory file using the authenticated session
-            print(f"Requesting inventory CSV from {self.EXPORT_URL}")
+            # Use curl_cffi session if available (better Cloudflare bypass)
+            active_session = self.cf_session if self.cf_session else self.session
+            session_type = "curl_cffi" if self.cf_session else "requests"
+            print(f"Requesting inventory CSV from {self.EXPORT_URL} using {session_type}")
             print(f"Timeout set to {INVENTORY_TIMEOUT} seconds")
-            response = self.session.get(
+            response = active_session.get(
                 self.EXPORT_URL,
                 headers=self.headers,
                 allow_redirects=True,

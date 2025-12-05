@@ -272,7 +272,6 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
         options.add_argument("--remote-debugging-port=9222")
         
         # Check for Selenium Grid URL from environment
-        import os
         selenium_grid_url = os.environ.get('SELENIUM_GRID_URL')
 
         if selenium_grid_url:

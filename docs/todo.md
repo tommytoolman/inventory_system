@@ -1,16 +1,70 @@
 # Project TODO – Inventory Management System
-*Last updated: 2025-11-03*
+*Last updated: 2025-12-05*
 > We only tick or strike items once we have confirmed they are done in production.
 
+## 📋 Category-to-Specs Mapping (Needs Design)
+
+**Context:** Reverb's "Improve your listing with product specs" feature shows category-specific required fields. We've implemented `number_of_strings` but need a proper mapping of which specs apply to which categories, and should show/hide form fields accordingly.
+
+### Reverb Required Specs by Category
+
+| Category Type | Handedness | Number of Strings | Body Type |
+|---------------|:----------:|:-----------------:|:---------:|
+| Electric Guitars | ✓ Required | ✓ Required | ✓ Required |
+| Acoustic Guitars | ✓ Required | ✓ Required | ✗ |
+| Classical Guitars | ✓ Required | ✓ Required | ✗ |
+| Bass Guitars | ✓ Required | ✓ Required | ✗ |
+| Travel Guitars | ✓ Required | ✓ Required | ✗ |
+| Resonators | ✓ Required | ✓ Required | ✗ |
+| Lap & Pedal Steel | ✓ Required | ✓ Required | ✗ |
+| Ukuleles/Mandolins/Banjos | ? | ? | ✗ |
+| Keyboards/Synths/Pianos | ✗ | ✗ | ✗ |
+| Amps/Effects/Pro Audio | ✗ | ✗ | ✗ |
+| Drums/Percussion | ✗ | ✗ | ✗ |
+
+### Reverb Advanced Specs (UI-only, cannot send via API)
+These specs appear in Reverb's UI but **cannot be sent via API** - they must be entered manually on Reverb's website:
+- Body Shape, Wood Top Style, Finish Features, Finish Style
+- Frets, Fretboard Material, Body Material, Top Material, Neck Material
+- Offset Body, Scale Length, Nut Width, Fretboard Radius
+- Bridge/Tailpiece Type, Neck Construction, String Type
+- Finish Pattern, Pickup Configuration
+
+**Options:** We could still capture these in our system for internal reference and potentially use them for eBay ItemSpecifics where there's overlap.
+
+### eBay Category-Specific ItemSpecifics (Already Implemented)
+| eBay Category ID | Category Name | Required Fields |
+|------------------|---------------|-----------------|
+| 29946 | Microphones | Form Factor |
+| 4713 | Bass Guitars | Type |
+| 38072 | Guitar Amplifiers | Amplifier Type |
+| 38071 | Synthesizers | Type |
+| 38088 | Electronic Keyboards | Type |
+| 85860 | Digital Pianos | Type + Keys |
+| 14985 | Headphones | Connectivity, Earpiece, Form Factor, Features |
+
+### TODO
+- [ ] Create category-to-specs mapping file (JSON) defining which Reverb categories require which specs
+- [ ] Update add.html to show/hide `number_of_strings`, `body_type`, `handedness` based on selected category
+- [ ] Add validation to require these fields for applicable categories before allowing listing creation
+- [ ] Consider adding Advanced Specs section for internal tracking (even if we can't send to Reverb API)
+- [ ] Cross-reference with eBay ItemSpecifics to maximize data reuse
+
 ## 🔴 High Priority (Production blockers)
+- [ ] **eBay category-specific required fields** – eBay requires certain item specifics per category that will cause listing creation/updates to fail if missing. These MUST be captured in UI and sent in API payloads:
+  - **Microphones**: `Form Factor` required (values: `Dynamic Microphone`, `Condenser Microphone`)
+  - **Guitar Amplifiers**: `Amplifier Type` required (values: `Combo`, `Head`, etc.)
+  - **Bass Guitars**: `Type` required (values: `Electric Bass Guitar`, `Acoustic Bass Guitar`, `Electro-Acoustic Bass Guitar` - but accepts any text)
+  - **Keyboards/Organs**: `Number of Keys` required
+  - _Note: These fields appear optional in eBay's UI but are mandatory via API. "Brand missing" errors often actually mean a category-specific field is missing._
 - [x] **VR handling performance** – address sluggish VR listing creation and inventory sync by offloading slow Selenium/API work to background workers and smoothing operator workflows.
 - [ ] **VR historical shipping profiles** – audit legacy VR listings and update shipping profiles to match the current configuration. _[Track on VR branch]_
 - [x] **VR pending status investigation** – identify why freshly created VR listings remain `pending` instead of `active` and patch the flow. _[VR branch]_
 - [x] **Capture handedness & artist ownership** – add non-mandatory fields to product add/edit flows, defaulting to right-handed / not artist owned, propagate to relevant APIs, and verify Shopify continues to write the correct product metafield.
 - [ ] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms, restore the DB flagging for inventorised items that was lost previously, and enforce VR-specific rules (do nothing when other platforms sell while stock >1, end the VR listing only when quantity hits 0, and mark + relist VR sales when remaining quantity >0) so sync detects sales without prematurely ending multi-quantity listings.
 - [x] **VR removal logic verification** – confirm the updated handling marks "not found on API" as REMOVED (unless corroborated by Reverb) and that the “List Item” UI path reflects the latest logic.
-- [ ] **Shopify shipping profile readiness** – document and validate the pre-launch process for assigning shipping profiles within Shopify.
-- [ ] **Per-platform shipping profile edits** – surface Shopify/eBay shipping policy selectors on the product edit form and ensure changes propagate to live listings, not just Reverb/V&R.
+- [x] **Shopify shipping profile readiness** – document and validate the pre-launch process for assigning shipping profiles within Shopify.
+- [x] **Per-platform shipping profile edits** – surface Shopify/eBay shipping policy selectors on the product edit form and ensure changes propagate to live listings, not just Reverb/V&R. _(eBay done; VR tracked separately)_
 - [ ] **Left-handed category integrity** – review `platform_category_mappings` to ensure left-handed SKUs use the dedicated categories on every platform (while Reverb uses technical attributes, eBay/Shopify/VR must stay mapped via category).
 - [ ] **Reverb double listing guard** – add protections to prevent duplicate Reverb listings from being created.
 - [ ] **Category mapping database migration & audit** – move VR and cross-platform mappings into Alembic-managed tables and validate coverage post-migration.
@@ -134,6 +188,8 @@
 - [x] **Payload persistence safeguards** – ensured queuing/storage prevents duplicate listing creation.
 - [x] **Sold logic review** – queries/reports validate sale event propagation.
 - [x] **CrazyLister integration discovery** – feasibility reviewed; description stripping fixed; decision recorded.
+- [x] **Shopify shipping profile readiness** – documented and validated shipping profile assignment process.
+- [x] **Per-platform shipping profile edits** – eBay shipping policy selectors done; VR tracked separately.
 - [x] Set up basic FastAPI application.
 - [x] Configure PostgreSQL database.
 - [x] Create initial models.

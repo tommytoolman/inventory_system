@@ -373,9 +373,20 @@ class EbayService:
         
         # Category-specific ItemSpecifics
         if category_id == "38072":  # Guitar Amplifiers
-            # For amplifiers, use 'Amplifier Type'
-            amp_type = self._extract_amplifier_type(product)
-            item_specifics["Amplifier Type"] = amp_type
+            # Amplifier Type is required - read from extra_attributes first
+            extra_attrs = product.extra_attributes or {}
+            if isinstance(extra_attrs, str):
+                try:
+                    extra_attrs = json.loads(extra_attrs)
+                except (json.JSONDecodeError, TypeError):
+                    extra_attrs = {}
+            amplifier_type = extra_attrs.get("ebay_amplifier_type")
+            if amplifier_type:
+                item_specifics["Amplifier Type"] = amplifier_type
+            else:
+                # Fallback: guess from title/category
+                amp_type = self._extract_amplifier_type(product)
+                item_specifics["Amplifier Type"] = amp_type
         elif category_id == "33034":  # Electric Guitars
             # For electric guitars, use 'Type'
             item_specifics["Type"] = "Electric Guitar"
@@ -387,8 +398,28 @@ class EbayService:
         elif category_id == "33021":  # Acoustic Guitars
             item_specifics["Type"] = "Acoustic Guitar"
         elif category_id == "4713":  # Bass Guitars
-            item_specifics["Type"] = "Bass Guitar"
-            # Check for number of strings
+            # Type is required for Bass Guitars - read from extra_attributes
+            extra_attrs = product.extra_attributes or {}
+            if isinstance(extra_attrs, str):
+                try:
+                    extra_attrs = json.loads(extra_attrs)
+                except (json.JSONDecodeError, TypeError):
+                    extra_attrs = {}
+            bass_type = extra_attrs.get("ebay_bass_type")
+            if bass_type:
+                item_specifics["Type"] = bass_type
+            else:
+                # Fallback: guess from title/category
+                title_lower = (product.title or "").lower()
+                category_lower = (product.category or "").lower()
+                if "acoustic" in title_lower or "acoustic" in category_lower:
+                    if "electro" in title_lower or "electric" in title_lower:
+                        item_specifics["Type"] = "Electro-Acoustic Bass Guitar"
+                    else:
+                        item_specifics["Type"] = "Acoustic Bass Guitar"
+                else:
+                    item_specifics["Type"] = "Electric Bass Guitar"  # Default
+            # Check for number of strings (optional but helpful)
             if product.title:
                 if "5 string" in product.title.lower() or "5-string" in product.title.lower():
                     item_specifics["String Configuration"] = "5 String"
@@ -398,6 +429,133 @@ class EbayService:
                     item_specifics["String Configuration"] = "4 String"  # Default
         elif category_id == "41407":  # Effects Pedals
             item_specifics["Type"] = "Effects Pedal"
+        elif category_id == "29946":  # Microphones
+            # Form Factor is required for Microphones category
+            extra_attrs = product.extra_attributes or {}
+            if isinstance(extra_attrs, str):
+                try:
+                    extra_attrs = json.loads(extra_attrs)
+                except (json.JSONDecodeError, TypeError):
+                    extra_attrs = {}
+            form_factor = extra_attrs.get("ebay_form_factor")
+            if form_factor:
+                item_specifics["Form Factor"] = form_factor
+        elif category_id == "38071":  # Synthesizers
+            # Type is required for Synthesizers
+            extra_attrs = product.extra_attributes or {}
+            if isinstance(extra_attrs, str):
+                try:
+                    extra_attrs = json.loads(extra_attrs)
+                except (json.JSONDecodeError, TypeError):
+                    extra_attrs = {}
+            synth_type = extra_attrs.get("ebay_synth_type")
+            if synth_type:
+                item_specifics["Type"] = synth_type
+            else:
+                # Fallback: guess from title
+                title_lower = (product.title or "").lower()
+                if "modular" in title_lower or "eurorack" in title_lower:
+                    item_specifics["Type"] = "Modular Synthesizer"
+                elif "desktop" in title_lower or "module" in title_lower:
+                    item_specifics["Type"] = "Desktop Synthesizer"
+                elif "rackmount" in title_lower or "rack mount" in title_lower:
+                    item_specifics["Type"] = "Rackmount Synthesizer"
+                else:
+                    item_specifics["Type"] = "Keyboard Synthesizer"  # Default
+        elif category_id == "38088":  # Electronic Keyboards
+            # Type is required for Electronic Keyboards
+            extra_attrs = product.extra_attributes or {}
+            if isinstance(extra_attrs, str):
+                try:
+                    extra_attrs = json.loads(extra_attrs)
+                except (json.JSONDecodeError, TypeError):
+                    extra_attrs = {}
+            keyboard_type = extra_attrs.get("ebay_keyboard_type")
+            if keyboard_type:
+                item_specifics["Type"] = keyboard_type
+            else:
+                # Fallback: guess from title
+                title_lower = (product.title or "").lower()
+                if "arranger" in title_lower:
+                    item_specifics["Type"] = "Arranger Keyboard"
+                elif "organ" in title_lower:
+                    item_specifics["Type"] = "Organ"
+                elif "workstation" in title_lower:
+                    item_specifics["Type"] = "Workstation Keyboard"
+                elif "synth" in title_lower:
+                    item_specifics["Type"] = "Synthesizer Keyboard"
+                else:
+                    item_specifics["Type"] = "Portable Keyboard"  # Default
+        elif category_id == "85860":  # Digital Pianos
+            # Type and Keys are required for Digital Pianos
+            extra_attrs = product.extra_attributes or {}
+            if isinstance(extra_attrs, str):
+                try:
+                    extra_attrs = json.loads(extra_attrs)
+                except (json.JSONDecodeError, TypeError):
+                    extra_attrs = {}
+            piano_type = extra_attrs.get("ebay_piano_type")
+            piano_keys = extra_attrs.get("ebay_piano_keys")
+            if piano_type:
+                item_specifics["Type"] = piano_type
+            else:
+                title_lower = (product.title or "").lower()
+                if "stage" in title_lower:
+                    item_specifics["Type"] = "Stage Piano"
+                elif "grand" in title_lower:
+                    item_specifics["Type"] = "Grand Digital Piano"
+                elif "upright" in title_lower:
+                    item_specifics["Type"] = "Upright Digital Piano"
+                else:
+                    item_specifics["Type"] = "Portable Digital Piano"  # Default
+            if piano_keys:
+                item_specifics["Keys"] = piano_keys
+            else:
+                item_specifics["Keys"] = "88"  # Default for digital pianos
+        elif category_id == "14985":  # Headphones
+            # Connectivity, Earpiece Design, Form Factor, Features are required
+            extra_attrs = product.extra_attributes or {}
+            if isinstance(extra_attrs, str):
+                try:
+                    extra_attrs = json.loads(extra_attrs)
+                except (json.JSONDecodeError, TypeError):
+                    extra_attrs = {}
+            # Connectivity
+            connectivity = extra_attrs.get("ebay_headphones_connectivity")
+            if connectivity:
+                item_specifics["Connectivity"] = connectivity
+            else:
+                title_lower = (product.title or "").lower()
+                if "bluetooth" in title_lower:
+                    item_specifics["Connectivity"] = "Bluetooth"
+                elif "wireless" in title_lower:
+                    item_specifics["Connectivity"] = "Wireless"
+                else:
+                    item_specifics["Connectivity"] = "Wired"  # Default
+            # Earpiece Design
+            earpiece = extra_attrs.get("ebay_headphones_earpiece")
+            if earpiece:
+                item_specifics["Earpiece Design"] = earpiece
+            else:
+                title_lower = (product.title or "").lower()
+                if "earbud" in title_lower or "in-ear" in title_lower:
+                    item_specifics["Earpiece Design"] = "Earbud (In Ear)"
+                elif "over-ear" in title_lower:
+                    item_specifics["Earpiece Design"] = "Over-Ear"
+                else:
+                    item_specifics["Earpiece Design"] = "Over-Ear"  # Default
+            # Form Factor
+            hp_form_factor = extra_attrs.get("ebay_headphones_form_factor")
+            if hp_form_factor:
+                item_specifics["Form Factor"] = hp_form_factor
+            else:
+                item_specifics["Form Factor"] = "Headband"  # Default
+            # Features
+            features = extra_attrs.get("ebay_headphones_features")
+            if features:
+                item_specifics["Features"] = features
+            else:
+                item_specifics["Features"] = "Built-in Microphone"  # Default
         else:
             # For other categories, try to extract type from title/category
             guitar_type = self._extract_guitar_type(product)

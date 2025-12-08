@@ -2867,9 +2867,17 @@ async def add_product(
 
         extra_handmade_flag = form_data.get("extra_handmade") == "on"
         body_type_value = _strip_text(form_data.get("body_type"))
+        number_of_strings_value = _strip_text(form_data.get("number_of_strings"))
         extra_attributes: Dict[str, Any] = {"handmade": extra_handmade_flag}
         if body_type_value:
             extra_attributes["body_type"] = body_type_value
+        if number_of_strings_value:
+            extra_attributes["number_of_strings"] = number_of_strings_value
+
+        # eBay category-specific attributes (e.g., Form Factor for Microphones)
+        ebay_form_factor = _strip_text(form_data.get("platform_data__ebay__form_factor"))
+        if ebay_form_factor:
+            extra_attributes["ebay_form_factor"] = ebay_form_factor
 
         # Create product data
         storefront_value = _normalize_storefront_input(form_data.get("storefront"), Storefront.HANKS) or Storefront.HANKS
@@ -3917,6 +3925,9 @@ async def save_draft(
     year: Optional[int] = Form(None),
     finish: Optional[str] = Form(None),
     processing_time: int = Form(3),
+    cost_price: Optional[float] = Form(None),
+    collective_discount: Optional[float] = Form(None),
+    artist_names: Optional[str] = Form(None),
     # Inventory fields
     location: Optional[str] = Form(None),
     stock_warning_level: Optional[int] = Form(None),
@@ -3969,6 +3980,30 @@ async def save_draft(
     shopify_category_gid: Optional[str] = Form(None),
     shopify_price: Optional[float] = Form(None),
     shopify_product_type: Optional[str] = Form(None),
+    # Additional product fields
+    manufacturing_country: Optional[str] = Form(None),
+    shipping_profile_id: Optional[int] = Form(None),
+    handedness: Optional[str] = Form(None),
+    serial_number: Optional[str] = Form(None),
+    artist_owned: Optional[bool] = Form(False),
+    inventory_location: Optional[str] = Form(None),
+    case_status: Optional[str] = Form(None),
+    case_details: Optional[str] = Form(None),
+    extra_handmade: Optional[str] = Form(None),
+    body_type: Optional[str] = Form(None),
+    number_of_strings: Optional[str] = Form(None),
+    # eBay category-specific fields
+    ebay_form_factor: Optional[str] = Form(None),
+    ebay_bass_type: Optional[str] = Form(None),
+    ebay_amplifier_type: Optional[str] = Form(None),
+    ebay_synth_type: Optional[str] = Form(None),
+    ebay_keyboard_type: Optional[str] = Form(None),
+    ebay_piano_type: Optional[str] = Form(None),
+    ebay_piano_keys: Optional[str] = Form(None),
+    ebay_headphones_connectivity: Optional[str] = Form(None),
+    ebay_headphones_earpiece: Optional[str] = Form(None),
+    ebay_headphones_form_factor: Optional[str] = Form(None),
+    ebay_headphones_features: Optional[str] = Form(None),
     # Draft ID for updating existing draft
     draft_id: Optional[int] = Form(None)
 ):
@@ -4025,6 +4060,128 @@ async def save_draft(
 
         storefront_value = _normalize_storefront_input(storefront_input, Storefront.HANKS) or Storefront.HANKS
 
+        # Process manufacturing_country enum
+        manufacturing_country_enum = None
+        if manufacturing_country and manufacturing_country.strip():
+            try:
+                manufacturing_country_enum = ManufacturingCountry(manufacturing_country.strip())
+            except ValueError:
+                try:
+                    manufacturing_country_enum = ManufacturingCountry[manufacturing_country.strip().upper()]
+                except KeyError:
+                    pass
+
+        # Process handedness enum
+        handedness_enum = None
+        if handedness and handedness.strip():
+            try:
+                handedness_enum = Handedness(handedness.strip())
+            except ValueError:
+                try:
+                    handedness_enum = Handedness[handedness.strip().upper()]
+                except KeyError:
+                    pass
+
+        # Process inventory_location enum - default to UNSPECIFIED (NOT NULL constraint)
+        inventory_location_enum = InventoryLocation.UNSPECIFIED
+        if inventory_location and inventory_location.strip() and inventory_location.strip().lower() not in ('none', ''):
+            try:
+                inventory_location_enum = InventoryLocation(inventory_location.strip())
+            except ValueError:
+                try:
+                    inventory_location_enum = InventoryLocation[inventory_location.strip().upper()]
+                except KeyError:
+                    inventory_location_enum = InventoryLocation.UNSPECIFIED
+
+        # Process case_status enum - default to UNSPECIFIED
+        case_status_enum = CaseStatus.UNSPECIFIED
+        if case_status and case_status.strip() and case_status.strip().lower() not in ('none', ''):
+            try:
+                case_status_enum = CaseStatus(case_status.strip())
+            except ValueError:
+                try:
+                    case_status_enum = CaseStatus[case_status.strip().upper()]
+                except KeyError:
+                    case_status_enum = CaseStatus.UNSPECIFIED
+
+        # Build extra_attributes
+        extra_attributes: Dict[str, Any] = {"handmade": extra_handmade == "on"}
+        if body_type and body_type.strip():
+            extra_attributes["body_type"] = body_type.strip()
+        if number_of_strings and number_of_strings.strip():
+            extra_attributes["number_of_strings"] = number_of_strings.strip()
+
+        # Get ebay_form_factor - check both direct parameter and form field name
+        form_data = await request.form()
+        form_factor_from_form = form_data.get("platform_data__ebay__form_factor")
+        print(f"[SAVE DRAFT] ebay_form_factor param: {ebay_form_factor}")
+        print(f"[SAVE DRAFT] platform_data__ebay__form_factor from form: {form_factor_from_form}")
+        ebay_form_factor_value = ebay_form_factor or form_factor_from_form
+        print(f"[SAVE DRAFT] Final ebay_form_factor_value: {ebay_form_factor_value}")
+        if ebay_form_factor_value and str(ebay_form_factor_value).strip():
+            extra_attributes["ebay_form_factor"] = str(ebay_form_factor_value).strip()
+            print(f"[SAVE DRAFT] Added to extra_attributes: {extra_attributes}")
+
+        # Get ebay_bass_type - check both direct parameter and form field name
+        bass_type_from_form = form_data.get("platform_data__ebay__bass_type")
+        print(f"[SAVE DRAFT] ebay_bass_type param: {ebay_bass_type}")
+        print(f"[SAVE DRAFT] platform_data__ebay__bass_type from form: {bass_type_from_form}")
+        ebay_bass_type_value = ebay_bass_type or bass_type_from_form
+        print(f"[SAVE DRAFT] Final ebay_bass_type_value: {ebay_bass_type_value}")
+        if ebay_bass_type_value and str(ebay_bass_type_value).strip():
+            extra_attributes["ebay_bass_type"] = str(ebay_bass_type_value).strip()
+            print(f"[SAVE DRAFT] Added bass_type to extra_attributes: {extra_attributes}")
+
+        # Get ebay_amplifier_type - check both direct parameter and form field name
+        amplifier_type_from_form = form_data.get("platform_data__ebay__amplifier_type")
+        ebay_amplifier_type_value = ebay_amplifier_type or amplifier_type_from_form
+        if ebay_amplifier_type_value and str(ebay_amplifier_type_value).strip():
+            extra_attributes["ebay_amplifier_type"] = str(ebay_amplifier_type_value).strip()
+
+        # Get ebay_synth_type
+        synth_type_from_form = form_data.get("platform_data__ebay__synth_type")
+        ebay_synth_type_value = ebay_synth_type or synth_type_from_form
+        if ebay_synth_type_value and str(ebay_synth_type_value).strip():
+            extra_attributes["ebay_synth_type"] = str(ebay_synth_type_value).strip()
+
+        # Get ebay_keyboard_type
+        keyboard_type_from_form = form_data.get("platform_data__ebay__keyboard_type")
+        ebay_keyboard_type_value = ebay_keyboard_type or keyboard_type_from_form
+        if ebay_keyboard_type_value and str(ebay_keyboard_type_value).strip():
+            extra_attributes["ebay_keyboard_type"] = str(ebay_keyboard_type_value).strip()
+
+        # Get Digital Piano fields
+        piano_type_from_form = form_data.get("platform_data__ebay__piano_type")
+        ebay_piano_type_value = ebay_piano_type or piano_type_from_form
+        if ebay_piano_type_value and str(ebay_piano_type_value).strip():
+            extra_attributes["ebay_piano_type"] = str(ebay_piano_type_value).strip()
+
+        piano_keys_from_form = form_data.get("platform_data__ebay__piano_keys")
+        ebay_piano_keys_value = ebay_piano_keys or piano_keys_from_form
+        if ebay_piano_keys_value and str(ebay_piano_keys_value).strip():
+            extra_attributes["ebay_piano_keys"] = str(ebay_piano_keys_value).strip()
+
+        # Get Headphones fields
+        hp_connectivity_from_form = form_data.get("platform_data__ebay__headphones_connectivity")
+        ebay_hp_connectivity_value = ebay_headphones_connectivity or hp_connectivity_from_form
+        if ebay_hp_connectivity_value and str(ebay_hp_connectivity_value).strip():
+            extra_attributes["ebay_headphones_connectivity"] = str(ebay_hp_connectivity_value).strip()
+
+        hp_earpiece_from_form = form_data.get("platform_data__ebay__headphones_earpiece")
+        ebay_hp_earpiece_value = ebay_headphones_earpiece or hp_earpiece_from_form
+        if ebay_hp_earpiece_value and str(ebay_hp_earpiece_value).strip():
+            extra_attributes["ebay_headphones_earpiece"] = str(ebay_hp_earpiece_value).strip()
+
+        hp_form_factor_from_form = form_data.get("platform_data__ebay__headphones_form_factor")
+        ebay_hp_form_factor_value = ebay_headphones_form_factor or hp_form_factor_from_form
+        if ebay_hp_form_factor_value and str(ebay_hp_form_factor_value).strip():
+            extra_attributes["ebay_headphones_form_factor"] = str(ebay_hp_form_factor_value).strip()
+
+        hp_features_from_form = form_data.get("platform_data__ebay__headphones_features")
+        ebay_hp_features_value = ebay_headphones_features or hp_features_from_form
+        if ebay_hp_features_value and str(ebay_hp_features_value).strip():
+            extra_attributes["ebay_headphones_features"] = str(ebay_hp_features_value).strip()
+
         # Create or update product data - only include fields that exist in Product model
         product_data = {
             "sku": sku,
@@ -4040,6 +4197,8 @@ async def save_draft(
             "year": year,
             "finish": finish,
             "processing_time": processing_time,
+            "cost_price": cost_price,
+            "collective_discount": collective_discount or 0.0,
             "offer_discount": offer_discount,
             "in_collective": in_collective,
             "in_inventory": in_inventory,
@@ -4055,6 +4214,16 @@ async def save_draft(
             "video_url": video_url,
             "external_link": external_link,
             "storefront": storefront_value,
+            "manufacturing_country": manufacturing_country_enum,
+            "shipping_profile_id": shipping_profile_id,
+            "handedness": handedness_enum,
+            "serial_number": serial_number.strip() if serial_number and serial_number.strip().lower() not in ('none', '') else None,
+            "artist_owned": artist_owned,
+            "artist_names": [name.strip() for name in re.split(r"[,\n]", artist_names or "") if name.strip()] if artist_names else [],
+            "inventory_location": inventory_location_enum,
+            "case_status": case_status_enum,
+            "case_details": case_details.strip() if case_details and case_details.strip().lower() not in ('none', '') else None,
+            "extra_attributes": extra_attributes,
             "status": "DRAFT"  # Always save as DRAFT
         }
 
@@ -4063,7 +4232,7 @@ async def save_draft(
             "sync_all": sync_all == "true",
             "sync_platforms": sync_platforms or [],
             "ebay": {
-                "category": ebay_category,
+                "category": ebay_category or form_data.get("ebay_category"),
                 "category_name": ebay_category_name,
                 "price": ebay_price,
                 "payment_policy": ebay_payment_policy,
@@ -4071,7 +4240,10 @@ async def save_draft(
                 "shipping_policy": ebay_shipping_policy,
                 "location": ebay_location,
                 "country": ebay_country,
-                "postal_code": ebay_postal_code
+                "postal_code": ebay_postal_code,
+                "form_factor": ebay_form_factor_value,
+                "bass_type": ebay_bass_type_value,
+                "amplifier_type": ebay_amplifier_type_value
             },
             "reverb": {
                 "product_type": reverb_product_type,
@@ -4183,6 +4355,60 @@ async def delete_draft(
     )
 
 
+@router.get("/api/ebay/category-aspects", response_class=JSONResponse)
+async def get_ebay_category_aspects(
+    category_id: Optional[str] = None,
+):
+    """
+    Get eBay category-specific aspects (like Form Factor for Microphones).
+    Returns cached data from JSON file.
+
+    Args:
+        category_id: Optional eBay category ID to filter results
+    """
+    cache_file = Path(__file__).parent.parent / "static" / "data" / "ebay_category_aspects.json"
+
+    try:
+        async with aiofiles.open(cache_file, 'r') as f:
+            content = await f.read()
+            data = json.loads(content)
+
+        if category_id:
+            # Return aspects for specific category
+            category_data = data.get("categories", {}).get(category_id)
+            if category_data:
+                return JSONResponse({
+                    "success": True,
+                    "category_id": category_id,
+                    "category_name": category_data.get("name"),
+                    "required_aspects": category_data.get("required_aspects", {})
+                })
+            else:
+                return JSONResponse({
+                    "success": True,
+                    "category_id": category_id,
+                    "category_name": None,
+                    "required_aspects": {}
+                })
+        else:
+            # Return all categories
+            return JSONResponse({
+                "success": True,
+                "last_updated": data.get("last_updated"),
+                "categories": data.get("categories", {})
+            })
+    except FileNotFoundError:
+        return JSONResponse({
+            "success": False,
+            "error": "Category aspects cache file not found"
+        }, status_code=500)
+    except json.JSONDecodeError:
+        return JSONResponse({
+            "success": False,
+            "error": "Invalid cache file format"
+        }, status_code=500)
+
+
 def _serialize_draft_product(draft: Product) -> Dict[str, Any]:
     """Produce a serialisable representation of a draft product."""
     additional_images: Any = draft.additional_images or []
@@ -4248,6 +4474,8 @@ def _serialize_draft_product(draft: Product) -> Dict[str, Any]:
         "year": draft.year,
         "finish": draft.finish,
         "processing_time": processing_time,
+        "cost_price": float(draft.cost_price) if draft.cost_price is not None else None,
+        "collective_discount": float(draft.collective_discount) if draft.collective_discount is not None else 0.0,
         "offer_discount": offer_discount,
         "in_collective": draft.in_collective,
         "in_inventory": draft.in_inventory,
@@ -4308,6 +4536,7 @@ def _serialize_draft_product(draft: Product) -> Dict[str, Any]:
             "artist_names": artist_names,
             "extra_attributes": extra_attributes,
             "manufacturing_country": manufacturing_country_value,
+            "shipping_profile_id": draft.shipping_profile_id,
         }
     )
 
@@ -4562,6 +4791,11 @@ async def update_product(
         extra_attributes["body_type"] = body_type_value
     else:
         extra_attributes.pop("body_type", None)
+    number_of_strings_value = (form_data.get("number_of_strings") or "").strip()
+    if number_of_strings_value:
+        extra_attributes["number_of_strings"] = number_of_strings_value
+    else:
+        extra_attributes.pop("number_of_strings", None)
     product.extra_attributes = extra_attributes
 
     shipping_profile_value = form_data.get("shipping_profile_id") or form_data.get("shipping_profile")

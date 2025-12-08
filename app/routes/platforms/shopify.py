@@ -345,7 +345,7 @@ async def archive_shopify_product(
             # Update local database status
             query = text("""
                 UPDATE platform_common pc
-                SET status = 'ARCHIVED',
+                SET status = 'archived',
                     last_sync = CURRENT_TIMESTAMP
                 WHERE pc.platform_name = 'shopify'
                 AND pc.external_id = :product_id

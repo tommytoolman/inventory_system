@@ -265,7 +265,7 @@ async def end_ebay_listing(
             # Update local database status
             query = text("""
                 UPDATE platform_common pc
-                SET status = 'ENDED',
+                SET status = 'ended',
                     last_sync = CURRENT_TIMESTAMP
                 WHERE pc.platform_name = 'ebay'
                 AND pc.external_id = :listing_id

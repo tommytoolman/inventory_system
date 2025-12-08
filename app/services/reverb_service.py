@@ -941,6 +941,12 @@ class ReverbService:
             if handedness_value:
                 listing_payload["handedness"] = handedness_value
 
+            # Add number_of_strings from extra_attributes
+            extra_attrs = getattr(product, "extra_attributes", None) or {}
+            number_of_strings = extra_attrs.get("number_of_strings")
+            if number_of_strings:
+                listing_payload["number_of_strings"] = number_of_strings
+
             listing_payload["handmade"] = self._handmade_flag(product)
 
             serial_value = (product.serial_number or "").strip() if product.serial_number else ""
@@ -1395,6 +1401,11 @@ class ReverbService:
             payload["serial_number"] = serial_value or None
         if "extra_attributes" in changed_fields:
             payload["handmade"] = self._handmade_flag(product)
+            # Also update number_of_strings when extra_attributes changes
+            extra_attrs = getattr(product, "extra_attributes", None) or {}
+            number_of_strings = extra_attrs.get("number_of_strings")
+            if number_of_strings:
+                payload["number_of_strings"] = number_of_strings
         if "category" in changed_fields:
             category_uuid = await self._resolve_reverb_category_uuid(getattr(product, "category", None))
             if category_uuid:
@@ -1686,6 +1697,12 @@ class ReverbService:
         handedness_value = self._handedness_value(getattr(product, "handedness", None))
         if handedness_value:
             data["handedness"] = handedness_value
+
+        # Add number_of_strings from extra_attributes
+        extra_attrs = getattr(product, "extra_attributes", None) or {}
+        number_of_strings = extra_attrs.get("number_of_strings")
+        if number_of_strings:
+            data["number_of_strings"] = number_of_strings
 
         serial_value = (product.serial_number or "").strip() if product.serial_number else ""
         if serial_value:
@@ -2710,7 +2727,7 @@ class ReverbService:
         # Always start by updating platform_common using the external_id.
         platform_update = text("""
             UPDATE platform_common
-            SET status = 'ENDED',
+            SET status = 'ended',
                 sync_status = 'SYNCED',
                 last_sync = timezone('utc', now()),
                 updated_at = timezone('utc', now())

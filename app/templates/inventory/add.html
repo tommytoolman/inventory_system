@@ -261,6 +261,15 @@
                                                 Category '<span id="categoryErrorName"></span>' not recognized. Please select a valid category from the dropdown.
                                             </p>
                                         </div>
+                                        <!-- Category eBay aspects warning - shows when additional eBay fields required -->
+                                        <div id="categoryEbayWarning" class="mt-1 p-2 bg-amber-50 border border-amber-300 rounded-md hidden">
+                                            <p class="text-xs text-amber-800">
+                                                <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                                </svg>
+                                                <span id="categoryEbayWarningText">This category requires additional eBay fields. Please complete Form Factor in Platform Settings > eBay tab.</span>
+                                            </p>
+                                        </div>
                                         <p id="categoryHint" class="mt-1 text-xs text-gray-500">Type to search, then select from the dropdown</p>
                                     </div>
                                     <!-- SKU Field -->
@@ -440,6 +449,26 @@
                                                                         {{ option }}
                                                                     </option>
                                                                 {% endfor %}
+                                                            </select>
+                                                        </div>
+                                                        <!-- Number of Strings - shown for guitar/bass categories -->
+                                                        <div id="number_of_strings_container">
+                                                            <label class="block text-sm font-semibold text-gray-700 mb-2" for="number_of_strings">Number of Strings</label>
+                                                            <select id="number_of_strings" name="number_of_strings"
+                                                                    class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200">
+                                                                <option value="">—</option>
+                                                                <!-- Common options first -->
+                                                                <option value="4-String">4-String</option>
+                                                                <option value="5-String">5-String</option>
+                                                                <option value="6-String">6-String</option>
+                                                                <!-- Less common options -->
+                                                                <option value="3-String">3-String</option>
+                                                                <option value="7-String">7-String</option>
+                                                                <option value="8-String">8-String</option>
+                                                                <option value="9-String">9-String</option>
+                                                                <option value="10-String">10-String</option>
+                                                                <option value="11-String">11-String</option>
+                                                                <option value="12-String">12-String</option>
                                                             </select>
                                                         </div>
                                                         <div>
@@ -1144,6 +1173,226 @@
                                             <option value="">-- Select eBay Category --</option>
                                         </select>
                                     </div>
+                                    <!-- Form Factor - Required for Microphones category (29946) -->
+                                    <!-- Populated via API, with hardcoded fallback if API fails -->
+                                    <div id="ebay_form_factor_container" class="hidden">
+                                        <label class="block text-sm font-medium text-gray-700">
+                                            Form Factor<span class="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select name="platform_data__ebay__form_factor" id="ebay_form_factor"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="">-- Select Form Factor --</option>
+                                            <!-- Fallback options - replaced by API data when available -->
+                                            <option value="Dynamic Microphone">Dynamic Microphone</option>
+                                            <option value="Condenser Microphone">Condenser Microphone</option>
+                                            <option value="Ribbon Microphone">Ribbon Microphone</option>
+                                            <option value="USB Microphone">USB Microphone</option>
+                                            <option value="Wireless Microphone">Wireless Microphone</option>
+                                            <option value="Lavalier/Lapel Microphone">Lavalier/Lapel Microphone</option>
+                                        </select>
+                                        <p class="text-xs text-amber-600 mt-1" id="ebay_form_factor_warning">
+                                            <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Required by eBay for Microphones category
+                                        </p>
+                                    </div>
+                                    <!-- Bass Type - Required for Bass Guitars category (4713) -->
+                                    <div id="ebay_bass_type_container" class="hidden">
+                                        <label class="block text-sm font-medium text-gray-700">
+                                            Type<span class="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select name="platform_data__ebay__bass_type" id="ebay_bass_type"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="">-- Select Type --</option>
+                                            <option value="Acoustic Bass Guitar">Acoustic Bass Guitar</option>
+                                            <option value="Electric Bass Guitar">Electric Bass Guitar</option>
+                                            <option value="Electro-Acoustic Bass Guitar">Electro-Acoustic Bass Guitar</option>
+                                        </select>
+                                        <p class="text-xs text-amber-600 mt-1" id="ebay_bass_type_warning">
+                                            <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Required by eBay for Bass Guitars category
+                                        </p>
+                                    </div>
+                                    <!-- Amplifier Type - Required for Guitar Amplifiers category (38072) -->
+                                    <div id="ebay_amplifier_type_container" class="hidden">
+                                        <label class="block text-sm font-medium text-gray-700">
+                                            Amplifier Type<span class="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select name="platform_data__ebay__amplifier_type" id="ebay_amplifier_type"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="">-- Select Amplifier Type --</option>
+                                            <option value="Cabinet">Cabinet</option>
+                                            <option value="Combo">Combo</option>
+                                            <option value="Head">Head</option>
+                                            <option value="Stack">Stack</option>
+                                        </select>
+                                        <p class="text-xs text-amber-600 mt-1" id="ebay_amplifier_type_warning">
+                                            <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Required by eBay for Guitar Amplifiers category
+                                        </p>
+                                    </div>
+                                    <!-- Synthesizer Type - Required for Synthesizers category (38071) -->
+                                    <div id="ebay_synth_type_container" class="hidden">
+                                        <label class="block text-sm font-medium text-gray-700">
+                                            Type<span class="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select name="platform_data__ebay__synth_type" id="ebay_synth_type"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="">-- Select Type --</option>
+                                            <option value="Desktop Synthesizer">Desktop Synthesizer</option>
+                                            <option value="Handheld Synthesizer">Handheld Synthesizer</option>
+                                            <option value="Keyboard Synthesizer">Keyboard Synthesizer</option>
+                                            <option value="Keytar Synthesizer">Keytar Synthesizer</option>
+                                            <option value="Modular Synthesizer">Modular Synthesizer</option>
+                                            <option value="Rackmount Synthesizer">Rackmount Synthesizer</option>
+                                        </select>
+                                        <p class="text-xs text-amber-600 mt-1" id="ebay_synth_type_warning">
+                                            <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Required by eBay for Synthesizers category
+                                        </p>
+                                    </div>
+                                    <!-- Keyboard Type - Required for Electronic Keyboards category (38088) -->
+                                    <div id="ebay_keyboard_type_container" class="hidden">
+                                        <label class="block text-sm font-medium text-gray-700">
+                                            Type<span class="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select name="platform_data__ebay__keyboard_type" id="ebay_keyboard_type"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="">-- Select Type --</option>
+                                            <option value="Arranger Keyboard">Arranger Keyboard</option>
+                                            <option value="Digital Piano">Digital Piano</option>
+                                            <option value="Organ">Organ</option>
+                                            <option value="Portable Keyboard">Portable Keyboard</option>
+                                            <option value="Synthesizer Keyboard">Synthesizer Keyboard</option>
+                                            <option value="Workstation Keyboard">Workstation Keyboard</option>
+                                        </select>
+                                        <p class="text-xs text-amber-600 mt-1" id="ebay_keyboard_type_warning">
+                                            <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Required by eBay for Electronic Keyboards category
+                                        </p>
+                                    </div>
+                                    <!-- Digital Piano fields - Required for Digital Pianos category (85860) -->
+                                    <div id="ebay_digital_piano_container" class="hidden">
+                                        <div class="space-y-3">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">
+                                                    Type<span class="text-red-500 ml-1">*</span>
+                                                </label>
+                                                <select name="platform_data__ebay__piano_type" id="ebay_piano_type"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                    <option value="">-- Select Type --</option>
+                                                    <option value="Console Digital Piano">Console Digital Piano</option>
+                                                    <option value="Grand Digital Piano">Grand Digital Piano</option>
+                                                    <option value="Portable Digital Piano">Portable Digital Piano</option>
+                                                    <option value="Stage Piano">Stage Piano</option>
+                                                    <option value="Upright Digital Piano">Upright Digital Piano</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">
+                                                    Keys<span class="text-red-500 ml-1">*</span>
+                                                </label>
+                                                <select name="platform_data__ebay__piano_keys" id="ebay_piano_keys"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                    <option value="">-- Select Keys --</option>
+                                                    <option value="25">25</option>
+                                                    <option value="44">44</option>
+                                                    <option value="61">61</option>
+                                                    <option value="76">76</option>
+                                                    <option value="88">88</option>
+                                                    <option value="Other">Other</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <p class="text-xs text-amber-600 mt-1" id="ebay_digital_piano_warning">
+                                            <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Required by eBay for Digital Pianos category (Type + Keys)
+                                        </p>
+                                    </div>
+                                    <!-- Headphones fields - Required for Headphones category (14985) -->
+                                    <div id="ebay_headphones_container" class="hidden">
+                                        <div class="space-y-3">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">
+                                                    Connectivity<span class="text-red-500 ml-1">*</span>
+                                                </label>
+                                                <select name="platform_data__ebay__headphones_connectivity" id="ebay_headphones_connectivity"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                    <option value="">-- Select Connectivity --</option>
+                                                    <option value="Bluetooth">Bluetooth</option>
+                                                    <option value="USB">USB</option>
+                                                    <option value="Wired">Wired</option>
+                                                    <option value="Wireless">Wireless</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">
+                                                    Earpiece Design<span class="text-red-500 ml-1">*</span>
+                                                </label>
+                                                <select name="platform_data__ebay__headphones_earpiece" id="ebay_headphones_earpiece"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                    <option value="">-- Select Earpiece Design --</option>
+                                                    <option value="Ear-Pad (On the Ear)">Ear-Pad (On the Ear)</option>
+                                                    <option value="Earbud (In Ear)">Earbud (In Ear)</option>
+                                                    <option value="Headband">Headband</option>
+                                                    <option value="Over-Ear">Over-Ear</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">
+                                                    Form Factor<span class="text-red-500 ml-1">*</span>
+                                                </label>
+                                                <select name="platform_data__ebay__headphones_form_factor" id="ebay_headphones_form_factor"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                    <option value="">-- Select Form Factor --</option>
+                                                    <option value="Ear-hook">Ear-hook</option>
+                                                    <option value="Earbud (In Ear)">Earbud (In Ear)</option>
+                                                    <option value="Headband">Headband</option>
+                                                    <option value="In-Ear only">In-Ear only</option>
+                                                    <option value="Neckband">Neckband</option>
+                                                    <option value="On-Ear">On-Ear</option>
+                                                    <option value="Over-Ear">Over-Ear</option>
+                                                    <option value="True Wireless">True Wireless</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">
+                                                    Features<span class="text-red-500 ml-1">*</span>
+                                                </label>
+                                                <select name="platform_data__ebay__headphones_features" id="ebay_headphones_features"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                    <option value="">-- Select Features --</option>
+                                                    <option value="Active Noise Cancellation">Active Noise Cancellation</option>
+                                                    <option value="Built-in Microphone">Built-in Microphone</option>
+                                                    <option value="Closed Back">Closed Back</option>
+                                                    <option value="Foldable">Foldable</option>
+                                                    <option value="Hi-Res Audio">Hi-Res Audio</option>
+                                                    <option value="Noise Isolation">Noise Isolation</option>
+                                                    <option value="Open Back">Open Back</option>
+                                                    <option value="Sweat Resistant">Sweat Resistant</option>
+                                                    <option value="Volume Control">Volume Control</option>
+                                                    <option value="Water-Resistant">Water-Resistant</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <p class="text-xs text-amber-600 mt-1" id="ebay_headphones_warning">
+                                            <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Required by eBay for Headphones category (4 fields required)
+                                        </p>
+                                    </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700">eBay Price</label>
                                         <div class="mt-1 relative rounded-md shadow-sm">
@@ -1535,6 +1784,7 @@ function buildDescriptionTemplate() {
     const decade = getInputValue('decade');
     const manufacturingCountry = getSelectedOptionText('manufacturing_country');
     const bodyType = getInputValue('body_type');
+    const numberOfStrings = getInputValue('number_of_strings');
     const handednessRaw = getInputValue('handedness');
     const handednessLabel = getHandednessLabel(handednessRaw);
     const serialNumber = getInputValue('serial_number');
@@ -1550,6 +1800,7 @@ function buildDescriptionTemplate() {
 
     const attributeSegments = [];
     if (bodyType) attributeSegments.push(`${escapeHtml(bodyType)} body`);
+    if (numberOfStrings) attributeSegments.push(escapeHtml(numberOfStrings));
     if (handednessLabel) attributeSegments.push(escapeHtml(handednessLabel));
     if (manufacturingCountry && manufacturingCountry !== 'Select a country...') {
         attributeSegments.push(`Crafted in ${escapeHtml(manufacturingCountry)}`);
@@ -1644,6 +1895,7 @@ function setupDescriptionTemplateAutomation() {
         'decade',
         'manufacturing_country',
         'body_type',
+        'number_of_strings',
         'handedness',
         'serial_number',
         'case_status',
@@ -1713,6 +1965,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const manufacturingSelect = document.getElementById('manufacturing_country');
     const manufacturingError = document.getElementById('manufacturingCountryError');
 
+    // Define updateCreateButtonState and expose to global scope for handleFormFactorChange
     function updateCreateButtonState() {
         if (!createProductBtn) {
             return;
@@ -1722,7 +1975,70 @@ document.addEventListener('DOMContentLoaded', function() {
         const hasCountry = manufacturingSelect && manufacturingSelect.value && manufacturingSelect.value.trim() !== '';
         const categoryUuidField = document.getElementById('category_uuid');
         const hasValidCategory = categoryUuidField && categoryUuidField.value && categoryUuidField.value.trim() !== '';
-        const readyForSubmit = hasProfile && hasCountry && hasValidCategory;
+
+        // Check Form Factor requirement for Microphones category
+        const formFactorSelect = document.getElementById('ebay_form_factor');
+        const formFactorValue = formFactorSelect ? formFactorSelect.value : '';
+        const hasFormFactor = !window.ebayFormFactorRequired ||
+                              (formFactorValue && formFactorValue.trim() !== '');
+
+        // Check Bass Type requirement for Bass Guitars category
+        const bassTypeSelect = document.getElementById('ebay_bass_type');
+        const bassTypeValue = bassTypeSelect ? bassTypeSelect.value : '';
+        const hasBassType = !window.ebayBassTypeRequired ||
+                            (bassTypeValue && bassTypeValue.trim() !== '');
+
+        // Check Amplifier Type requirement for Guitar Amplifiers category
+        const amplifierTypeSelect = document.getElementById('ebay_amplifier_type');
+        const amplifierTypeValue = amplifierTypeSelect ? amplifierTypeSelect.value : '';
+        const hasAmplifierType = !window.ebayAmplifierTypeRequired ||
+                                 (amplifierTypeValue && amplifierTypeValue.trim() !== '');
+
+        // Check Synth Type requirement for Synthesizers category
+        const synthTypeSelect = document.getElementById('ebay_synth_type');
+        const synthTypeValue = synthTypeSelect ? synthTypeSelect.value : '';
+        const hasSynthType = !window.ebaySynthTypeRequired ||
+                             (synthTypeValue && synthTypeValue.trim() !== '');
+
+        // Check Keyboard Type requirement for Electronic Keyboards category
+        const keyboardTypeSelect = document.getElementById('ebay_keyboard_type');
+        const keyboardTypeValue = keyboardTypeSelect ? keyboardTypeSelect.value : '';
+        const hasKeyboardType = !window.ebayKeyboardTypeRequired ||
+                                (keyboardTypeValue && keyboardTypeValue.trim() !== '');
+
+        // Check Digital Piano fields requirement (Type + Keys)
+        const pianoTypeSelect = document.getElementById('ebay_piano_type');
+        const pianoKeysSelect = document.getElementById('ebay_piano_keys');
+        const pianoTypeValue = pianoTypeSelect ? pianoTypeSelect.value : '';
+        const pianoKeysValue = pianoKeysSelect ? pianoKeysSelect.value : '';
+        const hasDigitalPianoFields = !window.ebayDigitalPianoRequired ||
+                                      (pianoTypeValue && pianoTypeValue.trim() !== '' &&
+                                       pianoKeysValue && pianoKeysValue.trim() !== '');
+
+        // Check Headphones fields requirement (Connectivity, Earpiece, Form Factor, Features)
+        const hpConnectivity = document.getElementById('ebay_headphones_connectivity');
+        const hpEarpiece = document.getElementById('ebay_headphones_earpiece');
+        const hpFormFactor = document.getElementById('ebay_headphones_form_factor');
+        const hpFeatures = document.getElementById('ebay_headphones_features');
+        const hasHeadphonesFields = !window.ebayHeadphonesRequired ||
+                                    (hpConnectivity?.value?.trim() &&
+                                     hpEarpiece?.value?.trim() &&
+                                     hpFormFactor?.value?.trim() &&
+                                     hpFeatures?.value?.trim());
+
+        // DEBUG logging
+        console.log('[updateCreateButtonState] ebayFormFactorRequired:', window.ebayFormFactorRequired);
+        console.log('[updateCreateButtonState] hasFormFactor:', hasFormFactor);
+        console.log('[updateCreateButtonState] ebayBassTypeRequired:', window.ebayBassTypeRequired);
+        console.log('[updateCreateButtonState] hasBassType:', hasBassType);
+        console.log('[updateCreateButtonState] ebayAmplifierTypeRequired:', window.ebayAmplifierTypeRequired);
+        console.log('[updateCreateButtonState] hasAmplifierType:', hasAmplifierType);
+        console.log('[updateCreateButtonState] hasProfile:', hasProfile, 'hasCountry:', hasCountry, 'hasValidCategory:', hasValidCategory);
+
+        const readyForSubmit = hasProfile && hasCountry && hasValidCategory &&
+                               hasFormFactor && hasBassType && hasAmplifierType &&
+                               hasSynthType && hasKeyboardType && hasDigitalPianoFields && hasHeadphonesFields;
+        console.log('[updateCreateButtonState] readyForSubmit:', readyForSubmit);
 
         if (readyForSubmit) {
             createProductBtn.disabled = false;
@@ -1747,6 +2063,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     }
+    // Expose to global scope so handleFormFactorChange can call it
+    window.updateCreateButtonState = updateCreateButtonState;
 
     if (shippingProfileSelect) {
         shippingProfileSelect.addEventListener('change', () => {
@@ -1889,22 +2207,28 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function checkProAudioCategory(category) {
+        // Check if category is excluded from VR (Pro Audio or Accessories / Headphones)
         const isProAudio = category && category.startsWith('Pro Audio');
-        console.log('Checking category:', category, 'Is Pro Audio:', isProAudio);
-        
+        const isHeadphones = category === 'Accessories / Headphones';
+        const isVRExcluded = isProAudio || isHeadphones;
+        console.log('Checking category:', category, 'Is Pro Audio:', isProAudio, 'Is Headphones:', isHeadphones, 'VR Excluded:', isVRExcluded);
+
         // Get VR elements
         const vrTab = document.getElementById('vr-tab');
         const vrTabContent = document.getElementById('vrTabContent');
         const vrSyncCheckbox = document.getElementById('sync_vr');
         const vrSyncContainer = document.getElementById('sync_vr_container');
         const vrStatusBox = document.getElementById('vr-status-box');
-        
-        if (isProAudio) {
+
+        // Tooltip message based on exclusion reason
+        const exclusionReason = isProAudio ? 'Pro Audio categories' : 'Headphones';
+
+        if (isVRExcluded) {
             // Disable VR tab
             if (vrTab) {
                 vrTab.classList.add('opacity-40', 'cursor-not-allowed');
                 vrTab.disabled = true;
-                vrTab.setAttribute('title', 'V&R not available for Pro Audio categories');
+                vrTab.setAttribute('title', `V&R not available for ${exclusionReason}`);
             }
             
             // Hide VR tab content if it's active
@@ -1923,7 +2247,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (vrSyncContainer) {
                 vrSyncContainer.classList.add('opacity-40');
-                vrSyncContainer.setAttribute('title', 'V&R not available for Pro Audio categories');
+                vrSyncContainer.setAttribute('title', `V&R not available for ${exclusionReason}`);
             }
             
             // Grey out VR status box
@@ -2257,6 +2581,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 if (ebaySelect) {
                                     ebaySelect.value = window.pendingCategorySelections[platform];
                                     console.log(`Set eBay dropdown value to: ${ebaySelect.value}`);
+                                    // Dispatch change event to trigger checkEbayCategoryAspects
+                                    ebaySelect.dispatchEvent(new Event('change'));
+                                    console.log('Dispatched change event for eBay category');
                                 }
                             } else if (platform === 'shopify') {
                                 const shopifySelect = document.getElementById('shopify_category');
@@ -3274,6 +3601,11 @@ function initializeSortable() {
             : {};
         setCheckedIfExists('extra_handmade', !!extraAttributes.handmade);
         setValueIfExists('body_type', extraAttributes.body_type ?? '');
+        setValueIfExists('number_of_strings', extraAttributes.number_of_strings ?? '');
+        // Load eBay Form Factor if present
+        if (extraAttributes.ebay_form_factor) {
+            setValueIfExists('ebay_form_factor', extraAttributes.ebay_form_factor);
+        }
 
         const handednessValue = (data.handedness !== undefined && data.handedness !== null && data.handedness !== '')
             ? data.handedness
@@ -4062,6 +4394,20 @@ function initializeSortable() {
                             if (pd.ebay.location) setFieldValue('ebay_location', pd.ebay.location);
                             if (pd.ebay.country) setFieldValue('ebay_country', pd.ebay.country);
                             if (pd.ebay.postal_code) setFieldValue('ebay_postal_code', pd.ebay.postal_code);
+
+                            // Load Form Factor value if present
+                            if (pd.ebay.form_factor) {
+                                setFieldValue('ebay_form_factor', pd.ebay.form_factor);
+                            }
+
+                            // Check if this eBay category requires additional fields (e.g., Microphones needs Form Factor)
+                            // This must run AFTER setting the category and form_factor values
+                            if (pd.ebay.category) {
+                                // Use setTimeout to ensure the category is set before checking aspects
+                                setTimeout(() => {
+                                    checkEbayCategoryAspects(pd.ebay.category);
+                                }, 100);
+                            }
                         }
 
                         // Reverb
@@ -4142,8 +4488,95 @@ function initializeSortable() {
                         }
                     }
 
+                    // Load additional product fields from draft
+                    if (draft.manufacturing_country) {
+                        setFieldValue('manufacturing_country', draft.manufacturing_country);
+                    }
+                    if (draft.shipping_profile_id) {
+                        setFieldValue('shipping_profile', draft.shipping_profile_id);
+                        // Trigger change event to populate shipping fields
+                        const shippingSelect = document.getElementById('shipping_profile');
+                        if (shippingSelect) {
+                            shippingSelect.dispatchEvent(new Event('change'));
+                        }
+                    }
+                    if (draft.handedness) {
+                        setFieldValue('handedness', draft.handedness);
+                    }
+                    if (draft.serial_number) {
+                        setFieldValue('serial_number', draft.serial_number);
+                    }
+                    if (draft.case_status) {
+                        setFieldValue('case_status', draft.case_status);
+                    }
+                    if (draft.case_details) {
+                        setFieldValue('case_details', draft.case_details);
+                    }
+                    setCheckbox('artist_owned', draft.artist_owned, false);
+
+                    // Handle extra_attributes
+                    if (draft.extra_attributes && typeof draft.extra_attributes === 'object') {
+                        setCheckbox('extra_handmade', draft.extra_attributes.handmade, false);
+                        if (draft.extra_attributes.body_type) {
+                            setFieldValue('body_type', draft.extra_attributes.body_type);
+                        }
+                        if (draft.extra_attributes.number_of_strings) {
+                            setFieldValue('number_of_strings', draft.extra_attributes.number_of_strings);
+                        }
+                        // Load ebay_form_factor from extra_attributes if not in platform_data
+                        if (draft.extra_attributes.ebay_form_factor) {
+                            setFieldValue('ebay_form_factor', draft.extra_attributes.ebay_form_factor);
+                        }
+                        // Load ebay_bass_type from extra_attributes if not in platform_data
+                        if (draft.extra_attributes.ebay_bass_type) {
+                            setFieldValue('ebay_bass_type', draft.extra_attributes.ebay_bass_type);
+                        }
+                        // Load ebay_amplifier_type from extra_attributes if not in platform_data
+                        if (draft.extra_attributes.ebay_amplifier_type) {
+                            setFieldValue('ebay_amplifier_type', draft.extra_attributes.ebay_amplifier_type);
+                        }
+                        // Load ebay_synth_type from extra_attributes
+                        if (draft.extra_attributes.ebay_synth_type) {
+                            setFieldValue('ebay_synth_type', draft.extra_attributes.ebay_synth_type);
+                        }
+                        // Load ebay_keyboard_type from extra_attributes
+                        if (draft.extra_attributes.ebay_keyboard_type) {
+                            setFieldValue('ebay_keyboard_type', draft.extra_attributes.ebay_keyboard_type);
+                        }
+                        // Load Digital Piano fields from extra_attributes
+                        if (draft.extra_attributes.ebay_piano_type) {
+                            setFieldValue('ebay_piano_type', draft.extra_attributes.ebay_piano_type);
+                        }
+                        if (draft.extra_attributes.ebay_piano_keys) {
+                            setFieldValue('ebay_piano_keys', draft.extra_attributes.ebay_piano_keys);
+                        }
+                        // Load Headphones fields from extra_attributes
+                        if (draft.extra_attributes.ebay_headphones_connectivity) {
+                            setFieldValue('ebay_headphones_connectivity', draft.extra_attributes.ebay_headphones_connectivity);
+                        }
+                        if (draft.extra_attributes.ebay_headphones_earpiece) {
+                            setFieldValue('ebay_headphones_earpiece', draft.extra_attributes.ebay_headphones_earpiece);
+                        }
+                        if (draft.extra_attributes.ebay_headphones_form_factor) {
+                            setFieldValue('ebay_headphones_form_factor', draft.extra_attributes.ebay_headphones_form_factor);
+                        }
+                        if (draft.extra_attributes.ebay_headphones_features) {
+                            setFieldValue('ebay_headphones_features', draft.extra_attributes.ebay_headphones_features);
+                        }
+                    }
+
                     // Store draft ID for updating when saving
                     form.dataset.draftId = draftId;
+
+                    // Final check: Ensure eBay category aspects are properly initialized
+                    // This handles cases where form_factor is in extra_attributes but category wasn't in platform_data
+                    const ebayCategorySelect = document.getElementById('ebay_category_id');
+                    if (ebayCategorySelect && ebayCategorySelect.value) {
+                        setTimeout(() => {
+                            console.log('Final check: calling checkEbayCategoryAspects for:', ebayCategorySelect.value);
+                            checkEbayCategoryAspects(ebayCategorySelect.value);
+                        }, 200);
+                    }
 
                     // Show success notification
                     const notification = document.createElement('div');
@@ -4191,6 +4624,19 @@ function initializeSortable() {
 
             // Collect form data just like for normal submission
             const formData = new FormData(form);
+
+            // DEBUG: Check form_factor
+            const formFactorSelect = document.getElementById('ebay_form_factor');
+            const formFactorValue = formFactorSelect ? formFactorSelect.value : null;
+            console.log('[SAVE DRAFT] Form Factor select element:', formFactorSelect);
+            console.log('[SAVE DRAFT] Form Factor value from DOM:', formFactorValue);
+            console.log('[SAVE DRAFT] Form Factor from FormData:', formData.get('platform_data__ebay__form_factor'));
+
+            // Explicitly ensure form_factor is in the form data
+            if (formFactorValue && formFactorValue.trim()) {
+                formData.set('platform_data__ebay__form_factor', formFactorValue);
+                console.log('[SAVE DRAFT] Explicitly set form_factor in FormData:', formFactorValue);
+            }
 
             // Debug: Check if description is in formData
             const descriptionValue = formData.get('description');
@@ -6207,6 +6653,716 @@ async function updatePlatformCategories(reverbCategory) {
         }
     });
 }
+
+// eBay category-specific aspects handling
+// Categories that require additional fields
+const EBAY_CATEGORY_ASPECTS = {
+    '29946': {  // Microphones
+        name: 'Microphones',
+        requiredFields: ['form_factor']
+    }
+};
+
+// Track if Form Factor is required (Microphones)
+window.ebayFormFactorRequired = false;
+// Track if Bass Type is required (Bass Guitars)
+window.ebayBassTypeRequired = false;
+// Track if Amplifier Type is required (Guitar Amplifiers)
+window.ebayAmplifierTypeRequired = false;
+// Track if Synth Type is required (Synthesizers)
+window.ebaySynthTypeRequired = false;
+// Track if Keyboard Type is required (Electronic Keyboards)
+window.ebayKeyboardTypeRequired = false;
+// Track if Digital Piano fields are required (Digital Pianos)
+window.ebayDigitalPianoRequired = false;
+// Track if Headphones fields are required (Headphones)
+window.ebayHeadphonesRequired = false;
+
+// Fetch and cache category aspects from API
+let cachedCategoryAspects = null;
+
+async function fetchCategoryAspects() {
+    if (cachedCategoryAspects) {
+        return cachedCategoryAspects;
+    }
+    try {
+        const response = await fetch('/inventory/api/ebay/category-aspects');
+        if (response.ok) {
+            cachedCategoryAspects = await response.json();
+            return cachedCategoryAspects;
+        }
+    } catch (error) {
+        console.error('Error fetching category aspects:', error);
+    }
+    return null;
+}
+
+async function checkEbayCategoryAspects(categoryId) {
+    console.log('[checkEbayCategoryAspects] CALLED with categoryId:', categoryId);
+
+    // Get all DOM elements
+    const formFactorContainer = document.getElementById('ebay_form_factor_container');
+    const formFactorSelect = document.getElementById('ebay_form_factor');
+    const bassTypeContainer = document.getElementById('ebay_bass_type_container');
+    const bassTypeSelect = document.getElementById('ebay_bass_type');
+    const amplifierTypeContainer = document.getElementById('ebay_amplifier_type_container');
+    const amplifierTypeSelect = document.getElementById('ebay_amplifier_type');
+    const synthTypeContainer = document.getElementById('ebay_synth_type_container');
+    const synthTypeSelect = document.getElementById('ebay_synth_type');
+    const keyboardTypeContainer = document.getElementById('ebay_keyboard_type_container');
+    const keyboardTypeSelect = document.getElementById('ebay_keyboard_type');
+    const digitalPianoContainer = document.getElementById('ebay_digital_piano_container');
+    const pianoTypeSelect = document.getElementById('ebay_piano_type');
+    const pianoKeysSelect = document.getElementById('ebay_piano_keys');
+    const headphonesContainer = document.getElementById('ebay_headphones_container');
+    const hpConnectivitySelect = document.getElementById('ebay_headphones_connectivity');
+    const hpEarpieceSelect = document.getElementById('ebay_headphones_earpiece');
+    const hpFormFactorSelect = document.getElementById('ebay_headphones_form_factor');
+    const hpFeaturesSelect = document.getElementById('ebay_headphones_features');
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+    const mainCategoryField = document.getElementById('category');
+    const categoryEbayWarning = document.getElementById('categoryEbayWarning');
+
+    // Convert to string for comparison (might be number from JSON)
+    const categoryIdStr = String(categoryId);
+    console.log('[checkEbayCategoryAspects] Checking eBay category:', categoryIdStr);
+
+    // Reset all category-specific fields first
+    if (formFactorContainer) formFactorContainer.classList.add('hidden');
+    if (bassTypeContainer) bassTypeContainer.classList.add('hidden');
+    if (amplifierTypeContainer) amplifierTypeContainer.classList.add('hidden');
+    if (synthTypeContainer) synthTypeContainer.classList.add('hidden');
+    if (keyboardTypeContainer) keyboardTypeContainer.classList.add('hidden');
+    if (digitalPianoContainer) digitalPianoContainer.classList.add('hidden');
+    if (headphonesContainer) headphonesContainer.classList.add('hidden');
+    window.ebayFormFactorRequired = false;
+    window.ebayBassTypeRequired = false;
+    window.ebayAmplifierTypeRequired = false;
+    window.ebaySynthTypeRequired = false;
+    window.ebayKeyboardTypeRequired = false;
+    window.ebayDigitalPianoRequired = false;
+    window.ebayHeadphonesRequired = false;
+
+    // Check category and show appropriate fields
+    if (categoryIdStr === '29946') {  // Microphones
+        console.log('Microphones category detected - showing Form Factor field');
+
+        if (formFactorContainer && formFactorSelect) {
+            // Preserve current value before repopulating
+            const currentValue = formFactorSelect.value;
+
+            // Fetch options from API
+            const aspects = await fetchCategoryAspects();
+            if (aspects && aspects.success && aspects.categories && aspects.categories['29946']) {
+                const formFactorOptions = aspects.categories['29946'].required_aspects['Form Factor']?.options;
+                if (formFactorOptions && formFactorOptions.length > 0) {
+                    formFactorSelect.innerHTML = '<option value="">-- Select Form Factor --</option>';
+                    formFactorOptions.forEach(option => {
+                        const opt = document.createElement('option');
+                        opt.value = option;
+                        opt.textContent = option;
+                        formFactorSelect.appendChild(opt);
+                    });
+                    console.log('Populated Form Factor options from API:', formFactorOptions.length);
+
+                    if (currentValue) {
+                        formFactorSelect.value = currentValue;
+                    }
+                }
+            }
+
+            formFactorContainer.classList.remove('hidden');
+            window.ebayFormFactorRequired = true;
+        }
+
+        // Show warning styling
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, formFactorSelect?.value, 'Form Factor');
+
+    } else if (categoryIdStr === '4713') {  // Bass Guitars
+        console.log('Bass Guitars category detected - showing Type field');
+
+        if (bassTypeContainer && bassTypeSelect) {
+            // Preserve current value before repopulating
+            const currentValue = bassTypeSelect.value;
+
+            // Fetch options from API
+            const aspects = await fetchCategoryAspects();
+            if (aspects && aspects.success && aspects.categories && aspects.categories['4713']) {
+                const typeOptions = aspects.categories['4713'].required_aspects['Type']?.options;
+                if (typeOptions && typeOptions.length > 0) {
+                    bassTypeSelect.innerHTML = '<option value="">-- Select Type --</option>';
+                    typeOptions.forEach(option => {
+                        const opt = document.createElement('option');
+                        opt.value = option;
+                        opt.textContent = option;
+                        bassTypeSelect.appendChild(opt);
+                    });
+                    console.log('Populated Bass Type options from API:', typeOptions.length);
+
+                    if (currentValue) {
+                        bassTypeSelect.value = currentValue;
+                    }
+                }
+            }
+
+            // Pre-select based on title if no current value
+            if (!bassTypeSelect.value) {
+                const titleField = document.getElementById('title');
+                const categoryField = document.getElementById('category');
+                const title = (titleField?.value || '').toLowerCase();
+                const category = (categoryField?.value || '').toLowerCase();
+
+                if (title.includes('acoustic') || category.includes('acoustic')) {
+                    if (title.includes('electro') || title.includes('electric')) {
+                        bassTypeSelect.value = 'Electro-Acoustic Bass Guitar';
+                    } else {
+                        bassTypeSelect.value = 'Acoustic Bass Guitar';
+                    }
+                } else {
+                    bassTypeSelect.value = 'Electric Bass Guitar';  // Default
+                }
+                console.log('Pre-selected Bass Type:', bassTypeSelect.value);
+            }
+
+            bassTypeContainer.classList.remove('hidden');
+            window.ebayBassTypeRequired = true;
+        }
+
+        // Show warning styling
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, bassTypeSelect?.value, 'Type');
+
+    } else if (categoryIdStr === '38072') {  // Guitar Amplifiers
+        console.log('Guitar Amplifiers category detected - showing Amplifier Type field');
+
+        if (amplifierTypeContainer && amplifierTypeSelect) {
+            // Preserve current value before repopulating
+            const currentValue = amplifierTypeSelect.value;
+
+            // Fetch options from API
+            const aspects = await fetchCategoryAspects();
+            if (aspects && aspects.success && aspects.categories && aspects.categories['38072']) {
+                const ampTypeOptions = aspects.categories['38072'].required_aspects['Amplifier Type']?.options;
+                if (ampTypeOptions && ampTypeOptions.length > 0) {
+                    amplifierTypeSelect.innerHTML = '<option value="">-- Select Amplifier Type --</option>';
+                    ampTypeOptions.forEach(option => {
+                        const opt = document.createElement('option');
+                        opt.value = option;
+                        opt.textContent = option;
+                        amplifierTypeSelect.appendChild(opt);
+                    });
+                    console.log('Populated Amplifier Type options from API:', ampTypeOptions.length);
+
+                    if (currentValue) {
+                        amplifierTypeSelect.value = currentValue;
+                    }
+                }
+            }
+
+            // Pre-select based on title if no current value
+            if (!amplifierTypeSelect.value) {
+                const titleField = document.getElementById('title');
+                const categoryField = document.getElementById('category');
+                const title = (titleField?.value || '').toLowerCase();
+                const category = (categoryField?.value || '').toLowerCase();
+
+                // Check for combo indicators (speaker configurations)
+                if (title.includes('combo') || title.includes('1x12') || title.includes('2x12') ||
+                    title.includes('1x10') || title.includes('2x10') || title.includes('4x10') ||
+                    title.includes('1x15') || category.includes('combo')) {
+                    amplifierTypeSelect.value = 'Combo';
+                }
+                // Check for head
+                else if (title.includes(' head') || title.includes('amp head') ||
+                         title.includes('amplifier head') || category.includes('head')) {
+                    amplifierTypeSelect.value = 'Head';
+                }
+                // Check for cabinet
+                else if (title.includes('cabinet') || title.includes('cab ') ||
+                         title.includes(' cab') || title.includes('speaker cabinet') ||
+                         category.includes('cabinet')) {
+                    amplifierTypeSelect.value = 'Cabinet';
+                }
+                // Check for stack
+                else if (title.includes('stack') || title.includes('full stack') ||
+                         title.includes('half stack') || category.includes('stack')) {
+                    amplifierTypeSelect.value = 'Stack';
+                }
+                // Default to Combo for general amplifiers
+                else {
+                    amplifierTypeSelect.value = 'Combo';
+                }
+                console.log('Pre-selected Amplifier Type:', amplifierTypeSelect.value);
+            }
+
+            amplifierTypeContainer.classList.remove('hidden');
+            window.ebayAmplifierTypeRequired = true;
+        }
+
+        // Show warning styling
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, amplifierTypeSelect?.value, 'Amplifier Type');
+
+    } else if (categoryIdStr === '38071') {  // Synthesizers
+        console.log('Synthesizers category detected - showing Type field');
+
+        if (synthTypeContainer && synthTypeSelect) {
+            // Pre-select based on title if no current value
+            if (!synthTypeSelect.value) {
+                const titleField = document.getElementById('title');
+                const categoryField = document.getElementById('category');
+                const title = (titleField?.value || '').toLowerCase();
+                const category = (categoryField?.value || '').toLowerCase();
+
+                if (title.includes('modular') || title.includes('eurorack') || category.includes('modular')) {
+                    synthTypeSelect.value = 'Modular Synthesizer';
+                } else if (title.includes('desktop') || title.includes('module') || title.includes('tabletop')) {
+                    synthTypeSelect.value = 'Desktop Synthesizer';
+                } else if (title.includes('rackmount') || title.includes('rack mount') || title.includes('rack-mount')) {
+                    synthTypeSelect.value = 'Rackmount Synthesizer';
+                } else if (title.includes('keytar')) {
+                    synthTypeSelect.value = 'Keytar Synthesizer';
+                } else {
+                    synthTypeSelect.value = 'Keyboard Synthesizer';  // Default
+                }
+                console.log('Pre-selected Synth Type:', synthTypeSelect.value);
+            }
+
+            synthTypeContainer.classList.remove('hidden');
+            window.ebaySynthTypeRequired = true;
+        }
+
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, synthTypeSelect?.value, 'Type');
+
+    } else if (categoryIdStr === '38088') {  // Electronic Keyboards
+        console.log('Electronic Keyboards category detected - showing Type field');
+
+        if (keyboardTypeContainer && keyboardTypeSelect) {
+            // Pre-select based on title if no current value
+            if (!keyboardTypeSelect.value) {
+                const titleField = document.getElementById('title');
+                const categoryField = document.getElementById('category');
+                const title = (titleField?.value || '').toLowerCase();
+                const category = (categoryField?.value || '').toLowerCase();
+
+                if (title.includes('arranger') || category.includes('arranger')) {
+                    keyboardTypeSelect.value = 'Arranger Keyboard';
+                } else if (title.includes('organ') || category.includes('organ')) {
+                    keyboardTypeSelect.value = 'Organ';
+                } else if (title.includes('workstation') || category.includes('workstation')) {
+                    keyboardTypeSelect.value = 'Workstation Keyboard';
+                } else if (title.includes('synthesizer') || title.includes('synth') || category.includes('synth')) {
+                    keyboardTypeSelect.value = 'Synthesizer Keyboard';
+                } else if (title.includes('digital piano') || category.includes('digital piano')) {
+                    keyboardTypeSelect.value = 'Digital Piano';
+                } else {
+                    keyboardTypeSelect.value = 'Portable Keyboard';  // Default
+                }
+                console.log('Pre-selected Keyboard Type:', keyboardTypeSelect.value);
+            }
+
+            keyboardTypeContainer.classList.remove('hidden');
+            window.ebayKeyboardTypeRequired = true;
+        }
+
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, keyboardTypeSelect?.value, 'Type');
+
+    } else if (categoryIdStr === '85860') {  // Digital Pianos
+        console.log('Digital Pianos category detected - showing Type and Keys fields');
+
+        if (digitalPianoContainer && pianoTypeSelect && pianoKeysSelect) {
+            // Pre-select Type based on title if no current value
+            if (!pianoTypeSelect.value) {
+                const titleField = document.getElementById('title');
+                const title = (titleField?.value || '').toLowerCase();
+
+                if (title.includes('stage') || title.includes('stage piano')) {
+                    pianoTypeSelect.value = 'Stage Piano';
+                } else if (title.includes('grand')) {
+                    pianoTypeSelect.value = 'Grand Digital Piano';
+                } else if (title.includes('upright')) {
+                    pianoTypeSelect.value = 'Upright Digital Piano';
+                } else if (title.includes('console')) {
+                    pianoTypeSelect.value = 'Console Digital Piano';
+                } else {
+                    pianoTypeSelect.value = 'Portable Digital Piano';  // Default
+                }
+                console.log('Pre-selected Piano Type:', pianoTypeSelect.value);
+            }
+
+            // Pre-select Keys based on title if no current value
+            if (!pianoKeysSelect.value) {
+                const titleField = document.getElementById('title');
+                const title = (titleField?.value || '').toLowerCase();
+
+                if (title.includes('88 key') || title.includes('88-key') || title.includes('88key')) {
+                    pianoKeysSelect.value = '88';
+                } else if (title.includes('76 key') || title.includes('76-key') || title.includes('76key')) {
+                    pianoKeysSelect.value = '76';
+                } else if (title.includes('61 key') || title.includes('61-key') || title.includes('61key')) {
+                    pianoKeysSelect.value = '61';
+                } else {
+                    pianoKeysSelect.value = '88';  // Default for digital pianos
+                }
+                console.log('Pre-selected Piano Keys:', pianoKeysSelect.value);
+            }
+
+            digitalPianoContainer.classList.remove('hidden');
+            window.ebayDigitalPianoRequired = true;
+        }
+
+        const hasBothPianoFields = pianoTypeSelect?.value && pianoKeysSelect?.value;
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, hasBothPianoFields, 'Type and Keys');
+
+    } else if (categoryIdStr === '14985') {  // Headphones
+        console.log('Headphones category detected - showing all required fields');
+
+        if (headphonesContainer) {
+            // Pre-select based on title if no current value
+            const titleField = document.getElementById('title');
+            const title = (titleField?.value || '').toLowerCase();
+
+            // Connectivity
+            if (!hpConnectivitySelect?.value) {
+                if (title.includes('bluetooth') || title.includes('bt ')) {
+                    hpConnectivitySelect.value = 'Bluetooth';
+                } else if (title.includes('wireless') || title.includes('wifi')) {
+                    hpConnectivitySelect.value = 'Wireless';
+                } else if (title.includes('usb')) {
+                    hpConnectivitySelect.value = 'USB';
+                } else {
+                    hpConnectivitySelect.value = 'Wired';  // Default
+                }
+            }
+
+            // Earpiece Design
+            if (!hpEarpieceSelect?.value) {
+                if (title.includes('earbud') || title.includes('in-ear') || title.includes('in ear')) {
+                    hpEarpieceSelect.value = 'Earbud (In Ear)';
+                } else if (title.includes('over-ear') || title.includes('over ear')) {
+                    hpEarpieceSelect.value = 'Over-Ear';
+                } else if (title.includes('on-ear') || title.includes('on ear')) {
+                    hpEarpieceSelect.value = 'Ear-Pad (On the Ear)';
+                } else {
+                    hpEarpieceSelect.value = 'Over-Ear';  // Default
+                }
+            }
+
+            // Form Factor
+            if (!hpFormFactorSelect?.value) {
+                if (title.includes('true wireless') || title.includes('tws')) {
+                    hpFormFactorSelect.value = 'True Wireless';
+                } else if (title.includes('earbud') || title.includes('in-ear')) {
+                    hpFormFactorSelect.value = 'In-Ear only';
+                } else if (title.includes('over-ear') || title.includes('over ear')) {
+                    hpFormFactorSelect.value = 'Over-Ear';
+                } else if (title.includes('on-ear') || title.includes('on ear')) {
+                    hpFormFactorSelect.value = 'On-Ear';
+                } else {
+                    hpFormFactorSelect.value = 'Headband';  // Default
+                }
+            }
+
+            // Features
+            if (!hpFeaturesSelect?.value) {
+                if (title.includes('noise cancel') || title.includes('anc')) {
+                    hpFeaturesSelect.value = 'Active Noise Cancellation';
+                } else if (title.includes('open back') || title.includes('open-back')) {
+                    hpFeaturesSelect.value = 'Open Back';
+                } else if (title.includes('closed back') || title.includes('closed-back')) {
+                    hpFeaturesSelect.value = 'Closed Back';
+                } else {
+                    hpFeaturesSelect.value = 'Built-in Microphone';  // Default
+                }
+            }
+
+            headphonesContainer.classList.remove('hidden');
+            window.ebayHeadphonesRequired = true;
+        }
+
+        const hasAllHeadphonesFields = hpConnectivitySelect?.value && hpEarpieceSelect?.value &&
+                                        hpFormFactorSelect?.value && hpFeaturesSelect?.value;
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, hasAllHeadphonesFields, 'Headphones fields');
+
+    } else {
+        // No category-specific fields required - clear warning styling
+        if (ebayCategorySelect) {
+            ebayCategorySelect.classList.remove('border-amber-500', 'bg-amber-50', 'border-green-500', 'bg-green-50');
+            ebayCategorySelect.classList.add('border-gray-300');
+        }
+        if (mainCategoryField && categoryEbayWarning) {
+            mainCategoryField.classList.remove('border-amber-500', 'bg-amber-50', 'border-green-500', 'bg-green-50');
+            mainCategoryField.classList.add('border-gray-300');
+            categoryEbayWarning.classList.add('hidden');
+        }
+    }
+
+    // Update Create Product button state
+    if (typeof window.updateCreateButtonState === 'function') {
+        window.updateCreateButtonState();
+    }
+}
+
+// Helper function to update warning styling
+function updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, hasRequiredValue, fieldName) {
+    if (ebayCategorySelect) {
+        if (hasRequiredValue) {
+            ebayCategorySelect.classList.remove('border-amber-500', 'bg-amber-50');
+            ebayCategorySelect.classList.add('border-green-500', 'bg-green-50');
+        } else {
+            ebayCategorySelect.classList.add('border-amber-500', 'bg-amber-50');
+            ebayCategorySelect.classList.remove('border-gray-300', 'border-green-500', 'bg-green-50');
+        }
+    }
+    if (mainCategoryField && categoryEbayWarning) {
+        // Update the warning text dynamically based on the required field
+        const warningTextEl = document.getElementById('categoryEbayWarningText');
+        if (warningTextEl && fieldName) {
+            warningTextEl.textContent = `This category requires additional eBay fields. Please complete ${fieldName} in Platform Settings > eBay tab.`;
+        }
+
+        if (hasRequiredValue) {
+            mainCategoryField.classList.remove('border-amber-500', 'bg-amber-50');
+            mainCategoryField.classList.add('border-green-500', 'bg-green-50');
+            categoryEbayWarning.classList.add('hidden');
+        } else {
+            mainCategoryField.classList.add('border-amber-500', 'bg-amber-50');
+            mainCategoryField.classList.remove('border-gray-300', 'border-green-500', 'bg-green-50');
+            categoryEbayWarning.classList.remove('hidden');
+        }
+    }
+}
+
+function handleFormFactorChange() {
+    const formFactorSelect = document.getElementById('ebay_form_factor');
+    const formFactorValue = formFactorSelect ? formFactorSelect.value : '';
+    console.log('[handleFormFactorChange] CALLED');
+    console.log('[handleFormFactorChange] formFactorValue:', formFactorValue);
+    console.log('[handleFormFactorChange] ebayFormFactorRequired:', window.ebayFormFactorRequired);
+
+    const mainCategoryField = document.getElementById('category');
+    const categoryEbayWarning = document.getElementById('categoryEbayWarning');
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+
+    // Update main category field styling based on Form Factor completion
+    if (mainCategoryField && categoryEbayWarning && window.ebayFormFactorRequired) {
+        if (formFactorSelect && formFactorSelect.value) {
+            // Form Factor is completed - show green
+            mainCategoryField.classList.remove('border-amber-500', 'bg-amber-50');
+            mainCategoryField.classList.add('border-green-500', 'bg-green-50');
+            categoryEbayWarning.classList.add('hidden');
+
+            // Also update eBay category dropdown to green
+            if (ebayCategorySelect) {
+                ebayCategorySelect.classList.remove('border-amber-500', 'bg-amber-50');
+                ebayCategorySelect.classList.add('border-green-500', 'bg-green-50');
+            }
+        } else {
+            // Form Factor not completed - show amber warning
+            mainCategoryField.classList.add('border-amber-500', 'bg-amber-50');
+            mainCategoryField.classList.remove('border-green-500', 'bg-green-50', 'border-gray-300');
+            categoryEbayWarning.classList.remove('hidden');
+
+            // Also update eBay category dropdown to amber
+            if (ebayCategorySelect) {
+                ebayCategorySelect.classList.add('border-amber-500', 'bg-amber-50');
+                ebayCategorySelect.classList.remove('border-green-500', 'bg-green-50', 'border-gray-300');
+            }
+        }
+    }
+
+    if (typeof window.updateCreateButtonState === 'function') {
+        window.updateCreateButtonState();
+    }
+}
+
+function handleBassTypeChange() {
+    const bassTypeSelect = document.getElementById('ebay_bass_type');
+    const bassTypeValue = bassTypeSelect ? bassTypeSelect.value : '';
+    console.log('[handleBassTypeChange] CALLED');
+    console.log('[handleBassTypeChange] bassTypeValue:', bassTypeValue);
+    console.log('[handleBassTypeChange] ebayBassTypeRequired:', window.ebayBassTypeRequired);
+
+    const mainCategoryField = document.getElementById('category');
+    const categoryEbayWarning = document.getElementById('categoryEbayWarning');
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+
+    // Update styling based on Bass Type completion
+    if (window.ebayBassTypeRequired) {
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, bassTypeValue, 'Type');
+    }
+
+    if (typeof window.updateCreateButtonState === 'function') {
+        window.updateCreateButtonState();
+    }
+}
+
+function handleAmplifierTypeChange() {
+    const amplifierTypeSelect = document.getElementById('ebay_amplifier_type');
+    const amplifierTypeValue = amplifierTypeSelect ? amplifierTypeSelect.value : '';
+    console.log('[handleAmplifierTypeChange] CALLED');
+    console.log('[handleAmplifierTypeChange] amplifierTypeValue:', amplifierTypeValue);
+    console.log('[handleAmplifierTypeChange] ebayAmplifierTypeRequired:', window.ebayAmplifierTypeRequired);
+
+    const mainCategoryField = document.getElementById('category');
+    const categoryEbayWarning = document.getElementById('categoryEbayWarning');
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+
+    // Update styling based on Amplifier Type completion
+    if (window.ebayAmplifierTypeRequired) {
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, amplifierTypeValue, 'Amplifier Type');
+    }
+
+    if (typeof window.updateCreateButtonState === 'function') {
+        window.updateCreateButtonState();
+    }
+}
+
+function handleSynthTypeChange() {
+    const synthTypeSelect = document.getElementById('ebay_synth_type');
+    const synthTypeValue = synthTypeSelect ? synthTypeSelect.value : '';
+    const mainCategoryField = document.getElementById('category');
+    const categoryEbayWarning = document.getElementById('categoryEbayWarning');
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+
+    if (window.ebaySynthTypeRequired) {
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, synthTypeValue, 'Type');
+    }
+
+    if (typeof window.updateCreateButtonState === 'function') {
+        window.updateCreateButtonState();
+    }
+}
+
+function handleKeyboardTypeChange() {
+    const keyboardTypeSelect = document.getElementById('ebay_keyboard_type');
+    const keyboardTypeValue = keyboardTypeSelect ? keyboardTypeSelect.value : '';
+    const mainCategoryField = document.getElementById('category');
+    const categoryEbayWarning = document.getElementById('categoryEbayWarning');
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+
+    if (window.ebayKeyboardTypeRequired) {
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, keyboardTypeValue, 'Type');
+    }
+
+    if (typeof window.updateCreateButtonState === 'function') {
+        window.updateCreateButtonState();
+    }
+}
+
+function handleDigitalPianoChange() {
+    const pianoTypeSelect = document.getElementById('ebay_piano_type');
+    const pianoKeysSelect = document.getElementById('ebay_piano_keys');
+    const mainCategoryField = document.getElementById('category');
+    const categoryEbayWarning = document.getElementById('categoryEbayWarning');
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+
+    const hasBothFields = pianoTypeSelect?.value && pianoKeysSelect?.value;
+
+    if (window.ebayDigitalPianoRequired) {
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, hasBothFields, 'Type and Keys');
+    }
+
+    if (typeof window.updateCreateButtonState === 'function') {
+        window.updateCreateButtonState();
+    }
+}
+
+function handleHeadphonesChange() {
+    const hpConnectivity = document.getElementById('ebay_headphones_connectivity');
+    const hpEarpiece = document.getElementById('ebay_headphones_earpiece');
+    const hpFormFactor = document.getElementById('ebay_headphones_form_factor');
+    const hpFeatures = document.getElementById('ebay_headphones_features');
+    const mainCategoryField = document.getElementById('category');
+    const categoryEbayWarning = document.getElementById('categoryEbayWarning');
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+
+    const hasAllFields = hpConnectivity?.value && hpEarpiece?.value &&
+                         hpFormFactor?.value && hpFeatures?.value;
+
+    if (window.ebayHeadphonesRequired) {
+        updateCategoryWarningStyle(ebayCategorySelect, mainCategoryField, categoryEbayWarning, hasAllFields, 'Headphones fields');
+    }
+
+    if (typeof window.updateCreateButtonState === 'function') {
+        window.updateCreateButtonState();
+    }
+}
+
+// Listen for eBay category changes
+document.addEventListener('DOMContentLoaded', function() {
+    const ebayCategorySelect = document.getElementById('ebay_category_id');
+    if (ebayCategorySelect) {
+        ebayCategorySelect.addEventListener('change', function() {
+            const categoryId = this.value;
+            console.log('eBay category changed to:', categoryId);
+            checkEbayCategoryAspects(categoryId);
+        });
+
+        // Check initial value
+        if (ebayCategorySelect.value) {
+            checkEbayCategoryAspects(ebayCategorySelect.value);
+        }
+    }
+
+    // Listen for Form Factor changes to update button state
+    const formFactorSelect = document.getElementById('ebay_form_factor');
+    if (formFactorSelect) {
+        formFactorSelect.addEventListener('change', function() {
+            console.log('[Form Factor Listener] Form factor changed to:', this.value);
+            handleFormFactorChange();
+        });
+    }
+
+    // Listen for Bass Type changes to update button state
+    const bassTypeSelect = document.getElementById('ebay_bass_type');
+    if (bassTypeSelect) {
+        bassTypeSelect.addEventListener('change', function() {
+            console.log('[Bass Type Listener] Bass type changed to:', this.value);
+            handleBassTypeChange();
+        });
+    }
+
+    // Listen for Amplifier Type changes to update button state
+    const amplifierTypeSelect = document.getElementById('ebay_amplifier_type');
+    if (amplifierTypeSelect) {
+        amplifierTypeSelect.addEventListener('change', function() {
+            console.log('[Amplifier Type Listener] Amplifier type changed to:', this.value);
+            handleAmplifierTypeChange();
+        });
+    }
+
+    // Listen for Synth Type changes
+    const synthTypeSelect = document.getElementById('ebay_synth_type');
+    if (synthTypeSelect) {
+        synthTypeSelect.addEventListener('change', handleSynthTypeChange);
+    }
+
+    // Listen for Keyboard Type changes
+    const keyboardTypeSelect = document.getElementById('ebay_keyboard_type');
+    if (keyboardTypeSelect) {
+        keyboardTypeSelect.addEventListener('change', handleKeyboardTypeChange);
+    }
+
+    // Listen for Digital Piano changes (both Type and Keys)
+    const pianoTypeSelect = document.getElementById('ebay_piano_type');
+    const pianoKeysSelect = document.getElementById('ebay_piano_keys');
+    if (pianoTypeSelect) {
+        pianoTypeSelect.addEventListener('change', handleDigitalPianoChange);
+    }
+    if (pianoKeysSelect) {
+        pianoKeysSelect.addEventListener('change', handleDigitalPianoChange);
+    }
+
+    // Listen for Headphones changes (all 4 fields)
+    const hpConnectivity = document.getElementById('ebay_headphones_connectivity');
+    const hpEarpiece = document.getElementById('ebay_headphones_earpiece');
+    const hpFormFactor = document.getElementById('ebay_headphones_form_factor');
+    const hpFeatures = document.getElementById('ebay_headphones_features');
+    [hpConnectivity, hpEarpiece, hpFormFactor, hpFeatures].forEach(select => {
+        if (select) {
+            select.addEventListener('change', handleHeadphonesChange);
+        }
+    });
+});
 
 function updatePlatformPrices(basePrice) {
     if (!basePrice || isNaN(basePrice) || basePrice <= 0) {

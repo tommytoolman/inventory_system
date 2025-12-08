@@ -3,86 +3,56 @@
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <h1 class="text-2xl font-bold mb-4">Platform Coverage Report</h1>
-    <p class="text-gray-600 mb-4">
-        Find products listed on some platforms but missing from others. Identify opportunities to maximize sales reach.
+    <p class="text-gray-600 mb-6">
+        Active products listed on some platforms but missing from others. Identify opportunities to maximize sales reach.
     </p>
-    
-    <!-- Status Filter -->
-    <div class="mb-6">
-        <label for="status-filter" class="block text-sm font-medium text-gray-700 mb-2">Filter by Status:</label>
-        <select id="status-filter" class="border rounded px-3 py-2" onchange="updateFilters()">
-            <option value="ACTIVE" {% if status_filter == 'ACTIVE' %}selected{% endif %}>Active</option>
-            <option value="ARCHIVED" {% if status_filter == 'ARCHIVED' %}selected{% endif %}>Archived</option>
-            <option value="" {% if not status_filter or status_filter == '' %}selected{% endif %}>All</option>
-        </select>
-    </div>
     
     <table class="table-auto w-full bg-white shadow rounded-lg text-sm">
         <thead>
             <tr class="bg-gray-100 text-left">
                 <th class="px-4 py-2">
-                    <a href="/reports/platform-coverage?status_filter={{ status_filter or 'ACTIVE' }}&sort_by=sku&sort_order={% if sort_by == 'sku' and sort_order == 'asc' %}desc{% else %}asc{% endif %}" 
+                    <a href="/reports/platform-coverage?sort_by=sku&sort_order={% if sort_by == 'sku' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
                        class="flex items-center hover:text-blue-600">
                         SKU
                         {% if sort_by == 'sku' %}
-                            {% if sort_order == 'asc' %}
-                                <span class="ml-1">↑</span>
-                            {% else %}
-                                <span class="ml-1">↓</span>
-                            {% endif %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
                         {% endif %}
                     </a>
                 </th>
                 <th class="px-4 py-2">
-                    <a href="/reports/platform-coverage?status_filter={{ status_filter or 'ACTIVE' }}&sort_by=brand&sort_order={% if sort_by == 'brand' and sort_order == 'asc' %}desc{% else %}asc{% endif %}" 
+                    <a href="/reports/platform-coverage?sort_by=brand&sort_order={% if sort_by == 'brand' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
                        class="flex items-center hover:text-blue-600">
                         Brand
                         {% if sort_by == 'brand' %}
-                            {% if sort_order == 'asc' %}
-                                <span class="ml-1">↑</span>
-                            {% else %}
-                                <span class="ml-1">↓</span>
-                            {% endif %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
                         {% endif %}
                     </a>
                 </th>
                 <th class="px-4 py-2">
-                    <a href="/reports/platform-coverage?status_filter={{ status_filter or 'ACTIVE' }}&sort_by=model&sort_order={% if sort_by == 'model' and sort_order == 'asc' %}desc{% else %}asc{% endif %}" 
+                    <a href="/reports/platform-coverage?sort_by=model&sort_order={% if sort_by == 'model' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
                        class="flex items-center hover:text-blue-600">
                         Model
                         {% if sort_by == 'model' %}
-                            {% if sort_order == 'asc' %}
-                                <span class="ml-1">↑</span>
-                            {% else %}
-                                <span class="ml-1">↓</span>
-                            {% endif %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
                         {% endif %}
                     </a>
                 </th>
                 <th class="px-4 py-2">
-                    <a href="/reports/platform-coverage?status_filter={{ status_filter or 'ACTIVE' }}&sort_by=base_price&sort_order={% if sort_by == 'base_price' and sort_order == 'asc' %}desc{% else %}asc{% endif %}" 
+                    <a href="/reports/platform-coverage?sort_by=base_price&sort_order={% if sort_by == 'base_price' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
                        class="flex items-center hover:text-blue-600">
                         Price
                         {% if sort_by == 'base_price' %}
-                            {% if sort_order == 'asc' %}
-                                <span class="ml-1">↑</span>
-                            {% else %}
-                                <span class="ml-1">↓</span>
-                            {% endif %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
                         {% endif %}
                     </a>
                 </th>
                 <th class="px-4 py-2">Listed On</th>
                 <th class="px-4 py-2">
-                    <a href="/reports/platform-coverage?status_filter={{ status_filter or 'ACTIVE' }}&sort_by=missing_count&sort_order={% if sort_by == 'missing_count' and sort_order == 'asc' %}desc{% else %}asc{% endif %}" 
+                    <a href="/reports/platform-coverage?sort_by=missing_count&sort_order={% if sort_by == 'missing_count' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
                        class="flex items-center hover:text-blue-600">
                         Missing Platforms
                         {% if sort_by == 'missing_count' %}
-                            {% if sort_order == 'asc' %}
-                                <span class="ml-1">↑</span>
-                            {% else %}
-                                <span class="ml-1">↓</span>
-                            {% endif %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
                         {% endif %}
                     </a>
                 </th>
@@ -106,19 +76,4 @@
         </tbody>
     </table>
 </div>
-
-<script>
-function updateFilters() {
-    const statusFilter = document.getElementById('status-filter').value;
-    const currentParams = new URLSearchParams(window.location.search);
-    
-    if (statusFilter) {
-        currentParams.set('status_filter', statusFilter);
-    } else {
-        currentParams.delete('status_filter');
-    }
-    
-    window.location.search = currentParams.toString();
-}
-</script>
 {% endblock %}

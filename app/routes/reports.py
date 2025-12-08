@@ -696,21 +696,21 @@ async def non_performing_inventory_report(
                         SELECT 1 FROM platform_common pc_shopify 
                         WHERE pc_shopify.product_id = p.id 
                         AND pc_shopify.platform_name = 'shopify'
-                        AND pc_shopify.status NOT IN ('SOLD', 'ENDED')
+                        AND pc_shopify.status NOT IN ('sold', 'ended')
                     ) THEN 1 ELSE 0 END as has_shopify,
                     
                     CASE WHEN EXISTS (
                         SELECT 1 FROM platform_common pc_ebay 
                         WHERE pc_ebay.product_id = p.id 
                         AND pc_ebay.platform_name = 'ebay'
-                        AND pc_ebay.status NOT IN ('SOLD', 'ENDED')
+                        AND pc_ebay.status NOT IN ('sold', 'ended')
                     ) THEN 1 ELSE 0 END as has_ebay,
                     
                     CASE WHEN EXISTS (
                         SELECT 1 FROM platform_common pc_vr 
                         WHERE pc_vr.product_id = p.id 
                         AND pc_vr.platform_name = 'vr'
-                        AND pc_vr.status NOT IN ('SOLD', 'ENDED')
+                        AND pc_vr.status NOT IN ('sold', 'ended')
                     ) THEN 1 ELSE 0 END as has_vr
 
                 FROM reverb_listings rl
@@ -1100,25 +1100,16 @@ async def sync_events_report(
 @router.get("/platform-coverage", response_class=HTMLResponse)
 async def platform_coverage_report(
     request: Request,
-    status_filter: Optional[str] = Query("ACTIVE", description="Filter by product status"),
     sort_by: Optional[str] = Query("missing_count", description="Sort by column"),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc/desc)")
 ):
     """
-    Platform Coverage Report: Identify products missing from certain platforms.
-    Enhanced with filtering by status and sortable columns.
+    Platform Coverage Report: Identify ACTIVE products missing from certain platforms.
     """
     async with get_session() as db:
-        # Build WHERE clause for status filter
-        status_clause = ""
+        # Only show ACTIVE products
+        status_clause = "WHERE p.status = 'ACTIVE'"
         params = {}
-        
-        if status_filter and status_filter != "ALL":
-            status_clause = "WHERE p.status = :status_filter"
-            params["status_filter"] = status_filter
-        elif status_filter != "ALL":
-            # Default to ACTIVE if no filter specified
-            status_clause = "WHERE p.status = 'ACTIVE'"
         
         # Map sort columns to SQL
         sort_column_map = {
@@ -1136,66 +1127,84 @@ async def platform_coverage_report(
         
         query = text(f"""
         WITH platform_coverage AS (
-            SELECT 
+            SELECT
                 p.id AS product_id,
                 p.sku,
                 p.brand,
                 p.model,
                 p.base_price,
                 p.status,
+                p.category,
                 COALESCE(ARRAY_AGG(pc.platform_name) FILTER (WHERE pc.platform_name IS NOT NULL), ARRAY[]::text[]) AS platforms
             FROM products p
-            LEFT JOIN platform_common pc ON p.id = pc.product_id 
-                AND (pc.status NOT IN ('SOLD', 'ENDED') OR pc.status IS NULL)
+            LEFT JOIN platform_common pc ON p.id = pc.product_id
+                AND (pc.status NOT IN ('sold', 'ended') OR pc.status IS NULL)
             {status_clause}
-            GROUP BY p.id, p.sku, p.brand, p.model, p.base_price, p.status
+            GROUP BY p.id, p.sku, p.brand, p.model, p.base_price, p.status, p.category
+        ),
+        vr_eligible AS (
+            -- Check which categories have VR mappings (have a vintageandrare target row)
+            SELECT DISTINCT source_category_name
+            FROM platform_category_mappings
+            WHERE source_platform = 'reverb' AND target_platform = 'vintageandrare'
         ),
         coverage_data AS (
-            SELECT 
-                product_id,
-                sku,
-                brand,
-                model,
-                base_price,
-                status,
-                platforms,
-                CASE 
-                    WHEN ARRAY_LENGTH(platforms, 1) IS NULL THEN 0 
-                    ELSE ARRAY_LENGTH(platforms, 1) 
+            SELECT
+                pc.product_id,
+                pc.sku,
+                pc.brand,
+                pc.model,
+                pc.base_price,
+                pc.status,
+                pc.platforms,
+                CASE
+                    WHEN ARRAY_LENGTH(pc.platforms, 1) IS NULL THEN 0
+                    ELSE ARRAY_LENGTH(pc.platforms, 1)
                 END AS platform_count,
+                -- Only include 'vr' in expected platforms if category has VR mapping AND is not excluded
+                -- Excluded categories: Pro Audio (all), Accessories / Headphones
+                -- (per add.html checkProAudioCategory and business rules)
                 ARRAY(
-                    SELECT unnest(ARRAY['shopify', 'ebay', 'reverb', 'vr']) 
-                    EXCEPT 
-                    SELECT unnest(platforms)
+                    SELECT unnest(
+                        CASE
+                            WHEN ve.source_category_name IS NOT NULL
+                                 AND pc.category NOT LIKE 'Pro Audio%'
+                                 AND pc.category != 'Accessories / Headphones'
+                            THEN ARRAY['shopify', 'ebay', 'reverb', 'vr']
+                            ELSE ARRAY['shopify', 'ebay', 'reverb']
+                        END
+                    )
+                    EXCEPT
+                    SELECT unnest(pc.platforms)
                 ) AS missing_platforms,
-                CASE 
-                    WHEN ARRAY_LENGTH(platforms, 1) IS NULL THEN 4
-                    ELSE 4 - ARRAY_LENGTH(platforms, 1)
-                END AS missing_count
-            FROM platform_coverage
-            WHERE ARRAY_LENGTH(platforms, 1) IS NULL OR ARRAY_LENGTH(platforms, 1) < 4
+                CASE
+                    WHEN ve.source_category_name IS NOT NULL
+                         AND pc.category NOT LIKE 'Pro Audio%'
+                         AND pc.category != 'Accessories / Headphones' THEN 4
+                    ELSE 3
+                END AS max_platforms
+            FROM platform_coverage pc
+            LEFT JOIN vr_eligible ve ON pc.category = ve.source_category_name
         )
-        SELECT * FROM coverage_data
-        ORDER BY {sort_col} {sort_dir}, 
+        SELECT
+            product_id, sku, brand, model, base_price, status, platforms, platform_count,
+            missing_platforms,
+            ARRAY_LENGTH(missing_platforms, 1) AS missing_count
+        FROM coverage_data
+        WHERE ARRAY_LENGTH(missing_platforms, 1) > 0
+        ORDER BY {sort_col} {sort_dir},
                  ARRAY_TO_STRING(missing_platforms, ',') ASC,
                  sku ASC;
         """)
         
         result = await db.execute(query, params)
         coverage_data = [dict(row._mapping) for row in result.fetchall()]
-        
-        # Get available statuses for filter
-        status_query = text("SELECT DISTINCT status FROM products WHERE status IS NOT NULL ORDER BY status")
-        status_result = await db.execute(status_query)
-        available_statuses = ["ALL"] + [row[0] for row in status_result.fetchall()]
-        
+
         return templates.TemplateResponse("reports/platform_coverage.html", {
             "request": request,
             "coverage_data": coverage_data,
-            "status_filter": status_filter,
             "sort_by": sort_by,
-            "sort_order": sort_order,
-            "available_statuses": available_statuses
+            "sort_order": sort_order
         })
 
 @router.post("/sync-events/process/{event_id}")

@@ -28,20 +28,24 @@ router = APIRouter(prefix="/api", tags=["vr"])
 async def validate_brand(brand: str):
     """
     Validate a brand name against V&R's accepted brand list.
-    Returns whether the brand is valid and will be accepted by V&R.
-    If invalid, the brand will default to 'Justin' when creating V&R listings.
+
+    Returns:
+        valid: True (verified), False (not recognized), None (API unavailable)
+        source: 'vr_api', 'local_db', 'known_brands_file', or None
+        fallback_brand: 'Justin' if brand not recognized, else None
     """
     if not brand or not brand.strip():
-        return {"valid": False, "message": "Brand name is required"}
-    
+        return {"valid": False, "message": "Brand name is required", "source": None}
+
     # Use the V&R brand validator
     result = VRBrandValidator.validate_brand(brand.strip())
-    
+
     return {
         "valid": result["is_valid"],
         "brand_id": result.get("brand_id"),
         "message": result.get("message", ""),
-        "fallback_brand": "Justin" if not result["is_valid"] else None
+        "source": result.get("source"),
+        "fallback_brand": "Justin" if result["is_valid"] is False else None
     }
 
 @router.post("/sync/vr")

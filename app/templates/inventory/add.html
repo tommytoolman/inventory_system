@@ -177,13 +177,22 @@
                                                 <!-- Will show spinner during check, then ✓ or ⚠️ -->
                                             </div>
                                         </div>
-                                <!-- V&R brand warning -->
+                                <!-- V&R brand warning (not recognized) -->
                                 <div id="vrBrandWarning" class="mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded-md hidden">
                                     <p class="text-xs text-yellow-800">
                                         <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                             <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                                         </svg>
                                         Brand '<span id="vrBrandName"></span>' not recognized by V&R. Will use 'Justin' for V&R listings.
+                                    </p>
+                                </div>
+                                <!-- V&R brand unverified (API unavailable) -->
+                                <div id="vrBrandUnverified" class="mt-1 p-2 bg-gray-50 border border-gray-200 rounded-md hidden">
+                                    <p class="text-xs text-gray-600">
+                                        <svg class="inline w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Could not verify brand '<span id="vrBrandNameUnverified"></span>' - V&R API unavailable. Will attempt when listing.
                                     </p>
                                 </div>
                                 <!-- Hidden field to track V&R brand status -->
@@ -2762,17 +2771,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const brandInput = document.getElementById('brand');
     const brandValidationIcon = document.getElementById('brandValidationIcon');
     const vrBrandWarning = document.getElementById('vrBrandWarning');
+    const vrBrandUnverified = document.getElementById('vrBrandUnverified');
     const vrBrandName = document.getElementById('vrBrandName');
+    const vrBrandNameUnverified = document.getElementById('vrBrandNameUnverified');
     const vrBrandFallback = document.getElementById('vrBrandFallback');
     const brandVRStatus = document.getElementById('brandVRStatus');
-    
+
     let brandCheckTimeout;
-    
+
+    // Helper to hide all brand warnings
+    function hideAllBrandWarnings() {
+        vrBrandWarning.classList.add('hidden');
+        vrBrandUnverified.classList.add('hidden');
+    }
+
     // Function to check brand with V&R
     async function checkVRBrand(brand) {
         if (!brand || brand.length < 2) {
             brandValidationIcon.innerHTML = '';
-            vrBrandWarning.classList.add('hidden');
+            hideAllBrandWarnings();
             brandVRStatus.textContent = '';
             // Reset to default gray
             if (brandInput) {
@@ -2781,7 +2798,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             return;
         }
-        
+
         // Show spinner
         brandValidationIcon.innerHTML = `
             <svg class="animate-spin h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -2789,28 +2806,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
         `;
-        
+
         try {
             const response = await fetch(`/api/vr/validate-brand?brand=${encodeURIComponent(brand)}`);
             const data = await response.json();
-            
-            if (data.valid) {
-                // Brand is recognized by V&R
+
+            // Hide all warnings first
+            hideAllBrandWarnings();
+
+            if (data.valid === true) {
+                // Brand is recognized/verified
                 brandValidationIcon.innerHTML = `
                     <svg class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                     </svg>
                 `;
-                vrBrandWarning.classList.add('hidden');
                 vrBrandFallback.value = 'false';
-                brandVRStatus.innerHTML = '<span class="text-green-600">✓ V&R</span>';
+                // Show source if available (vr_api, local_db, known_brands_file)
+                const sourceLabel = data.source === 'vr_api' ? 'V&R' :
+                                   data.source === 'local_db' ? 'DB' :
+                                   data.source === 'known_brands_file' ? 'Known' : 'V&R';
+                brandVRStatus.innerHTML = `<span class="text-green-600">✓ ${sourceLabel}</span>`;
                 // Green background for valid brand
                 if (brandInput) {
                     brandInput.style.borderColor = '#22c55e'; // green-500
                     brandInput.style.backgroundColor = '#f0fdf4'; // green-50 tint
                 }
-            } else {
-                // Brand not recognized - will use Justin
+            } else if (data.valid === false) {
+                // Brand explicitly not recognized by V&R - will use Justin
                 brandValidationIcon.innerHTML = `
                     <svg class="h-5 w-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
@@ -2825,15 +2848,40 @@ document.addEventListener('DOMContentLoaded', function() {
                     brandInput.style.borderColor = '#eab308'; // yellow-500
                     brandInput.style.backgroundColor = '#fefce8'; // yellow-50 tint
                 }
+            } else {
+                // data.valid === null - API unavailable, brand unverified
+                // Show grey/neutral state - allow user to proceed
+                brandValidationIcon.innerHTML = `
+                    <svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                `;
+                vrBrandNameUnverified.textContent = brand;
+                vrBrandUnverified.classList.remove('hidden');
+                vrBrandFallback.value = 'false'; // Don't force Justin - let it try
+                brandVRStatus.innerHTML = '<span class="text-gray-500">? Unverified</span>';
+                // Gray background for unverified brand
+                if (brandInput) {
+                    brandInput.style.borderColor = '#9ca3af'; // gray-400
+                    brandInput.style.backgroundColor = '#f3f4f6'; // gray-100
+                }
             }
         } catch (error) {
             console.error('Error checking V&R brand:', error);
-            // On error, just clear the icon and reset styling
-            brandValidationIcon.innerHTML = '';
-            brandVRStatus.textContent = '';
+            // On error, show unverified state (same as API unavailable)
+            hideAllBrandWarnings();
+            brandValidationIcon.innerHTML = `
+                <svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+            `;
+            vrBrandNameUnverified.textContent = brand;
+            vrBrandUnverified.classList.remove('hidden');
+            vrBrandFallback.value = 'false';
+            brandVRStatus.innerHTML = '<span class="text-gray-500">? Unverified</span>';
             if (brandInput) {
-                brandInput.style.borderColor = '#d1d5db'; // gray-300
-                brandInput.style.backgroundColor = '#f9fafb'; // gray-50
+                brandInput.style.borderColor = '#9ca3af'; // gray-400
+                brandInput.style.backgroundColor = '#f3f4f6'; // gray-100
             }
         }
     }

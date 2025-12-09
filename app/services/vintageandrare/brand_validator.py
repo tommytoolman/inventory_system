@@ -1,5 +1,6 @@
 # app/services/vintageandrare/brand_validator.py
 
+import json
 import logging
 import os
 import time
@@ -28,6 +29,9 @@ _cache: dict[str, tuple[float, Dict[str, Any]]] = {}
 _CACHE_TTL = float(os.environ.get("VR_BRAND_CACHE_TTL", "300"))
 _CACHE_MAX = int(os.environ.get("VR_BRAND_CACHE_MAX", "200"))
 
+# Known brands JSON file path
+KNOWN_BRANDS_FILE = os.environ.get("VR_KNOWN_BRANDS_FILE", "/tmp/vr_known_brands.json")
+
 
 def _build_headers() -> Dict[str, str]:
     ua = os.environ.get("VR_USER_AGENT", DEFAULT_VR_UA)
@@ -47,8 +51,6 @@ def _seed_cookies(session: requests.Session) -> int:
     if not cookie_file:
         return 0
     try:
-        import json
-
         with open(cookie_file, "r") as f:
             cookies = json.load(f)
         loaded = 0
@@ -165,69 +167,99 @@ def _to_cache(brand: str, result: Dict[str, Any]) -> None:
     _cache[brand.lower()] = (time.time(), result)
 
 
-class VRBrandValidator:
-    """Fast brand validation using V&R's check_brand_exists endpoint."""
+# ============================================================================
+# Known Brands JSON File Handling
+# ============================================================================
 
-    # TEMPORARY: Set to True to bypass V&R API and use local DB check instead
-    # TODO: Set back to False when V&R Cloudflare issues are resolved
-    USE_LOCAL_DB_CHECK = True
+def _load_known_brands() -> set:
+    """Load known brands from JSON file. Returns set of title-cased brand names."""
+    try:
+        if os.path.exists(KNOWN_BRANDS_FILE):
+            with open(KNOWN_BRANDS_FILE, "r") as f:
+                data = json.load(f)
+                # Return as set for fast lookup
+                return set(data.get("brands", []))
+    except Exception as exc:
+        logger.warning("Failed to load known brands from %s: %s", KNOWN_BRANDS_FILE, exc)
+    return set()
+
+
+def _save_known_brand(brand_name: str) -> bool:
+    """Add a brand to the known brands JSON file. Stores in Title Case."""
+    brand_title = brand_name.strip().title()
+    try:
+        # Load existing brands
+        known = _load_known_brands()
+
+        # Check if already exists (case-insensitive)
+        if any(b.lower() == brand_title.lower() for b in known):
+            return True  # Already exists
+
+        # Add the new brand
+        known.add(brand_title)
+
+        # Save back to file
+        with open(KNOWN_BRANDS_FILE, "w") as f:
+            json.dump({"brands": sorted(list(known))}, f, indent=2)
+
+        logger.info("Added brand '%s' to known brands file", brand_title)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to save brand '%s' to known brands: %s", brand_name, exc)
+        return False
+
+
+def _is_brand_in_known_file(brand_name: str) -> bool:
+    """Check if brand exists in known brands JSON file (case-insensitive)."""
+    known = _load_known_brands()
+    return any(b.lower() == brand_name.lower() for b in known)
+
+
+# ============================================================================
+# VRBrandValidator Class
+# ============================================================================
+
+class VRBrandValidator:
+    """
+    Brand validation with fallback strategy:
+    1. Try V&R API first (3 second timeout)
+    2. If API fails, check local products DB
+    3. If not in DB, check known_brands.json file
+    4. If not found anywhere, return 'unverified' state (allow user to proceed)
+    """
 
     @classmethod
-    def _check_brand_in_db(cls, brand_name: str) -> Dict[str, Any]:
-        """Check if brand exists in local products table (sync, for temporary CF bypass)."""
+    def _check_brand_in_db(cls, brand_name: str) -> bool:
+        """Check if brand exists in local products table. Returns True/False."""
         from sqlalchemy import create_engine, text
         from app.core.config import get_settings
 
-        settings = get_settings()
-        # Convert async postgres URL to sync if needed
-        db_url = settings.DATABASE_URL
-        if db_url.startswith("postgresql+asyncpg://"):
-            db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
-        engine = create_engine(db_url)
+        try:
+            settings = get_settings()
+            # Convert async postgres URL to sync if needed
+            db_url = settings.DATABASE_URL
+            if db_url.startswith("postgresql+asyncpg://"):
+                db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+            engine = create_engine(db_url)
 
-        with engine.connect() as conn:
-            result = conn.execute(
-                text("SELECT COUNT(*) FROM products WHERE LOWER(brand) = LOWER(:brand)"),
-                {"brand": brand_name}
-            )
-            count = result.scalar()
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT COUNT(*) FROM products WHERE LOWER(brand) = LOWER(:brand)"),
+                    {"brand": brand_name}
+                )
+                count = result.scalar()
 
-        if count and count > 0:
-            return {
-                "is_valid": True,
-                "brand_id": None,
-                "message": f"Brand '{brand_name}' found in inventory",
-                "original_brand": brand_name,
-                "error_code": None,
-            }
-        else:
-            return {
-                "is_valid": False,
-                "brand_id": None,
-                "message": f"Brand '{brand_name}' not found - will use 'Justin' for V&R",
-                "original_brand": brand_name,
-                "error_code": "not_found",
-            }
+            return count and count > 0
+        except Exception as exc:
+            logger.warning("DB brand check failed for '%s': %s", brand_name, exc)
+            return False
 
     @classmethod
-    def validate_brand(cls, brand_name: str) -> Dict[str, Any]:
+    def _try_vr_api(cls, brand_name: str) -> Optional[Dict[str, Any]]:
         """
-        Fast brand validation - NO LOGIN REQUIRED
-        Uses seeded CF cookies + shared UA to avoid 403s, and a short timeout.
+        Try to validate brand via V&R API.
+        Returns result dict if successful, None if API unavailable.
         """
-        # TEMPORARY: Use local DB check instead of V&R API
-        if cls.USE_LOCAL_DB_CHECK:
-            cached = _from_cache(brand_name)
-            if cached is not None:
-                return cached
-            result = cls._check_brand_in_db(brand_name)
-            _to_cache(brand_name, result)
-            return result
-
-        cached = _from_cache(brand_name)
-        if cached is not None:
-            return cached
-
         session = _get_session()
         payload = {"brand_name": brand_name}
 
@@ -237,6 +269,8 @@ class VRBrandValidator:
                 data=payload,
                 timeout=BRAND_CHECK_TIMEOUT,
             )
+
+            # Handle 403 - try Selenium refresh once
             if response.status_code == 403:
                 logger.warning(
                     "V&R brand check returned 403 (brand=%s). Trying Selenium cookie refresh...",
@@ -251,22 +285,14 @@ class VRBrandValidator:
                         )
                     except requests.exceptions.RequestException as exc2:
                         logger.error("Retry after Selenium failed for '%s': %s", brand_name, exc2)
-                        return cls._error_result(
-                            brand_name,
-                            "Vintage & Rare is not responding right now",
-                            error_code="network",
-                        )
+                        return None
+
                 if response.status_code == 403:
                     logger.warning(
-                        "V&R brand check still 403 after Selenium refresh (brand=%s). "
-                        "Re-harvest cookies via scripts/vr/vr_cf_cookie_harvest.py and set VINTAGE_AND_RARE_COOKIES_FILE.",
+                        "V&R brand check still 403 after Selenium refresh (brand=%s).",
                         brand_name,
                     )
-                    return cls._error_result(
-                        brand_name,
-                        "Vintage & Rare blocked the request (403). Refresh cookies.",
-                        error_code="forbidden",
-                    )
+                    return None
 
             response.raise_for_status()
 
@@ -274,56 +300,127 @@ class VRBrandValidator:
                 brand_id = int(response.text.strip())
             except ValueError:
                 logger.error("Unexpected V&R response format: '%s'", response.text)
-                return cls._error_result(
-                    brand_name,
-                    "Unexpected response format from V&R",
-                    error_code="unexpected_response",
-                )
+                return None
 
             if brand_id == 0:
-                result = {
+                # Brand not accepted by V&R
+                return {
                     "is_valid": False,
                     "brand_id": None,
-                    "message": f"❌ Brand '{brand_name}' is not accepted by Vintage & Rare",
+                    "message": f"Brand '{brand_name}' is not accepted by Vintage & Rare",
                     "original_brand": brand_name,
                     "error_code": "not_found",
+                    "source": "vr_api",
                 }
             else:
-                result = {
+                # Brand is valid - save to known brands file for future fallback
+                _save_known_brand(brand_name)
+                return {
                     "is_valid": True,
                     "brand_id": brand_id,
-                    "message": f"✅ Brand '{brand_name}' is accepted by Vintage & Rare",
+                    "message": f"Brand '{brand_name}' is accepted by Vintage & Rare",
                     "original_brand": brand_name,
                     "error_code": None,
+                    "source": "vr_api",
                 }
 
+        except requests.exceptions.Timeout:
+            logger.warning("V&R API timeout for brand '%s'", brand_name)
+            return None
+        except requests.exceptions.RequestException as exc:
+            logger.warning("V&R API error for brand '%s': %s", brand_name, exc)
+            return None
+        except Exception as exc:
+            logger.warning("Unexpected error calling V&R API for '%s': %s", brand_name, exc)
+            return None
+
+    @classmethod
+    def validate_brand(cls, brand_name: str) -> Dict[str, Any]:
+        """
+        Validate brand with fallback strategy:
+        1. Check in-memory cache first
+        2. Try V&R API (3s timeout)
+        3. If API fails, check local DB
+        4. If not in DB, check known_brands.json
+        5. If not found anywhere, return 'unverified' state
+        """
+        if not brand_name or not brand_name.strip():
+            return {
+                "is_valid": False,
+                "brand_id": None,
+                "message": "Brand name is required",
+                "original_brand": brand_name,
+                "error_code": "empty",
+                "source": None,
+            }
+
+        brand_name = brand_name.strip()
+
+        # 1. Check in-memory cache
+        cached = _from_cache(brand_name)
+        if cached is not None:
+            return cached
+
+        # 2. Try V&R API first
+        logger.info("Validating brand '%s' via V&R API...", brand_name)
+        api_result = cls._try_vr_api(brand_name)
+
+        if api_result is not None:
+            # API worked - cache and return
+            _to_cache(brand_name, api_result)
+            return api_result
+
+        # 3. API failed - fallback to local DB
+        logger.info("V&R API unavailable, checking local DB for brand '%s'...", brand_name)
+        if cls._check_brand_in_db(brand_name):
+            result = {
+                "is_valid": True,
+                "brand_id": None,
+                "message": f"Brand '{brand_name}' found in inventory (V&R API unavailable)",
+                "original_brand": brand_name,
+                "error_code": None,
+                "source": "local_db",
+            }
             _to_cache(brand_name, result)
             return result
 
-        except requests.exceptions.RequestException as exc:
-            logger.error("Network error validating brand '%s': %s", brand_name, exc)
-            return cls._error_result(
-                brand_name,
-                "Vintage & Rare is not responding right now",
-                error_code="network",
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Unexpected error validating brand '%s': %s", brand_name, exc)
-            return cls._error_result(
-                brand_name,
-                f"Validation failed: {str(exc)}",
-                error_code="unexpected",
-            )
+        # 4. Not in DB - check known brands JSON file
+        logger.info("Brand '%s' not in DB, checking known brands file...", brand_name)
+        if _is_brand_in_known_file(brand_name):
+            result = {
+                "is_valid": True,
+                "brand_id": None,
+                "message": f"Brand '{brand_name}' previously validated (V&R API unavailable)",
+                "original_brand": brand_name,
+                "error_code": None,
+                "source": "known_brands_file",
+            }
+            _to_cache(brand_name, result)
+            return result
+
+        # 5. Not found anywhere - return unverified state
+        logger.info("Brand '%s' could not be verified (API down, not in DB or known brands)", brand_name)
+        result = {
+            "is_valid": None,  # None = unverified (not True or False)
+            "brand_id": None,
+            "message": f"Could not verify brand '{brand_name}' - V&R API unavailable. Will attempt when listing.",
+            "original_brand": brand_name,
+            "error_code": "api_unavailable",
+            "source": None,
+        }
+        # Don't cache unverified results - try API again next time
+        return result
 
     @classmethod
     def _error_result(cls, brand_name: str, error_message: str, error_code: str | None = None) -> Dict[str, Any]:
         """Standard error response format."""
         return {
-            "is_valid": None if error_code in {"network", "forbidden"} else False,
+            "is_valid": None if error_code in {"network", "forbidden", "api_unavailable"} else False,
             "brand_id": None,
-            "message": f"⚠️ Could not validate brand '{brand_name}': {error_message}",
+            "message": f"Could not validate brand '{brand_name}': {error_message}",
             "original_brand": brand_name,
             "error_code": error_code,
+            "source": None,
         }
 
     @classmethod

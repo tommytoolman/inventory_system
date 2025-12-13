@@ -444,8 +444,8 @@
                                         <div class="flex justify-end">
                                             {% set product_status = product.status.value|upper if product.status else '' %}
                                             {% if product_status not in ['SOLD', 'ARCHIVED'] %}
-                                                <form action="{{ url_for('create_platform_listing_from_detail', product_id=product.id, platform_slug=platform_entry.slug) }}" method="POST" class="inline">
-                                                    <button type="submit" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">List Item</button>
+                                                <form action="{{ url_for('create_platform_listing_from_detail', product_id=product.id, platform_slug=platform_entry.slug) }}" method="POST" class="inline list-item-form" onsubmit="return handleListItemSubmit(this);">
+                                                    <button type="submit" class="list-item-btn px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">List Item</button>
                                                 </form>
                                             {% else %}
                                                 <button disabled class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-400 cursor-not-allowed">List Item</button>
@@ -920,6 +920,20 @@
             }, 2000);
         }
     });
+
+    // Prevent double-click on List Item buttons
+    function handleListItemSubmit(form) {
+        const btn = form.querySelector('.list-item-btn');
+        if (btn.disabled) {
+            return false; // Already submitted, block
+        }
+        // Disable button and show loading state
+        btn.disabled = true;
+        btn.textContent = 'Listing...';
+        btn.classList.remove('bg-blue-100', 'text-blue-700', 'hover:bg-blue-200');
+        btn.classList.add('bg-gray-200', 'text-gray-500', 'cursor-wait');
+        return true; // Allow form submission
+    }
 </script>
 
 {% endblock %}

@@ -17,6 +17,7 @@ from sqlalchemy import select
 from app.models.sync_event import SyncEvent
 from app.models.product import Product, ProductCondition, ProductStatus
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
+from app.core.enums import Storefront, InventoryLocation, Handedness
 from app.models.reverb import ReverbListing
 from app.models.shopify import ShopifyListing
 from app.models.ebay import EbayListing
@@ -227,14 +228,23 @@ async def _process_new_listing(
         await _ensure_platform_common_reverb(session, product, reverb_listing_dict)
 
         # Determine which platforms to create listings on
+        # Default: create local record only (no auto-push to other platforms)
+        # User can manually list on other platforms from the product detail page
         if platforms:
             platforms_to_create = [p for p in platforms if p != 'reverb']
         else:
-            platforms_to_create = ['ebay', 'shopify', 'vr']
+            platforms_to_create = []  # No auto-push - just import to RIFF
 
-        logger.info(f"Creating listings on platforms: {platforms_to_create}")
+        if platforms_to_create:
+            logger.info(f"Creating listings on platforms: {platforms_to_create}")
+        else:
+            logger.info("Importing to RIFF only (no auto-push to other platforms)")
+            result.success = True
+            result.message = f"Imported to RIFF as {product.sku}. Use product detail page to list on other platforms."
+            result.platforms_created = ['reverb']  # Local record created
+            return result
 
-        # Create listings on each platform
+        # Create listings on each platform (only if explicitly requested)
         if 'ebay' in platforms_to_create:
             try:
                 logger.info("\n=== Creating eBay listing ===")
@@ -374,12 +384,27 @@ async def _create_product_from_reverb(session: AsyncSession, reverb_data: dict) 
     categories = reverb_data.get('categories', [])
     category = ' / '.join([cat.get('full_name', '') for cat in categories]) if categories else ''
 
-    # Get price amount
-    price_amount = reverb_data.get('price', {}).get('amount', 0)
-    if isinstance(price_amount, str):
-        price_amount = float(price_amount)
+    # Get price amount from Reverb
+    reverb_price = reverb_data.get('price', {}).get('amount', 0)
+    if isinstance(reverb_price, str):
+        reverb_price = float(reverb_price)
     else:
-        price_amount = float(price_amount)
+        reverb_price = float(reverb_price)
+
+    # Reverse-engineer base price from Reverb price
+    # Reverb price formula: ceil(base * 1.05 / 100) * 100 - 1
+    # Reverse: (reverb_price + 1) / 1.05, then round down to nearest £9
+    # e.g., Reverb £1399 → (1399+1)/1.05 = 1333.33 → base £1329
+    if reverb_price > 0:
+        raw_base = (reverb_price + 1) / 1.05
+        # Round down to nearest value ending in 9 (e.g., 1329, 1339, 1349...)
+        base_price = float(int(raw_base / 10) * 10 - 1)
+        if base_price < 0:
+            base_price = float(int(raw_base))
+    else:
+        base_price = 0.0
+
+    logger.info(f"  Reverb price: £{reverb_price:.0f} → Base price: £{base_price:.0f}")
 
     # Create product - matching original script exactly
     product = Product(
@@ -393,14 +418,18 @@ async def _create_product_from_reverb(session: AsyncSession, reverb_data: dict) 
         title=reverb_data.get('title', ''),
         description=reverb_data.get('description', ''),
         condition=product_condition,
-        base_price=price_amount,  # Now guaranteed to be float
-        price=price_amount,  # Also populate price field
-        status='ACTIVE',
+        base_price=base_price,  # Calculated from Reverb price
+        price=reverb_price,  # Store original Reverb price in price field
+        status=ProductStatus.ACTIVE,
         is_stocked_item=False,  # Single items, not stock
         quantity=1,  # Default quantity of 1
         primary_image=primary_image,  # Store primary image
         additional_images=additional_images,  # Store additional images as list (will be JSONB)
-        processing_time=processing_time
+        processing_time=processing_time,
+        # Explicit enum defaults to avoid case sensitivity issues
+        storefront=Storefront.HANKS,
+        inventory_location=InventoryLocation.HANKS,
+        handedness=Handedness.RIGHT,
     )
 
     # Link local shipping profile if we have a Reverb profile id

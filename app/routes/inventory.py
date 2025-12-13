@@ -93,8 +93,16 @@ DRAFT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DRAFT_UPLOAD_URL_PREFIX = "/static/drafts"
 
 
-def _calculate_default_platform_price(platform: str, base_price: Optional[float]) -> float:
-    """Return the suggested platform price given a base price."""
+def _calculate_default_platform_price(
+    platform: str,
+    base_price: Optional[float],
+    reverb_price: Optional[float] = None,
+) -> float:
+    """Return the suggested platform price given a base price.
+
+    For eBay/VR, if reverb_price is provided (from Reverb import), use that
+    instead of recalculating. This ensures prices match when back-calculating.
+    """
     if base_price is None:
         return 0.0
 
@@ -107,6 +115,9 @@ def _calculate_default_platform_price(platform: str, base_price: Optional[float]
         return base_value
 
     if platform in {"ebay", "vr"}:
+        # Use Reverb price if available (from import), otherwise calculate
+        if reverb_price is not None and reverb_price > 0:
+            return float(reverb_price)
         return float(round(base_value * 1.05))
 
     if platform == "reverb":
@@ -118,13 +129,17 @@ def _calculate_default_platform_price(platform: str, base_price: Optional[float]
     return base_value
 
 
-def _build_platform_stub(platform: str, base_price: Optional[float]) -> Dict[str, Any]:
+def _build_platform_stub(
+    platform: str,
+    base_price: Optional[float],
+    reverb_price: Optional[float] = None,
+) -> Dict[str, Any]:
     """Create a default platform entry for the edit form."""
     return {
         "status": "inactive",
         "external_id": None,
         "url": None,
-        "price": _calculate_default_platform_price(platform, base_price),
+        "price": _calculate_default_platform_price(platform, base_price, reverb_price),
     }
 
 
@@ -334,7 +349,8 @@ async def _determine_vr_price(
 
     # 4) Fallback: apply the standard markup logic
     if product.base_price is not None:
-        fallback = _calculate_default_platform_price("vr", product.base_price)
+        reverb_price_fallback = float(product.price) if product.price else None
+        fallback = _calculate_default_platform_price("vr", product.base_price, reverb_price_fallback)
         if logger_instance:
             logger_instance.info(
                 "Calculated fallback VR price %.2f from base price %.2f for SKU %s",
@@ -2090,7 +2106,25 @@ async def handle_create_platform_listing_from_detail(
             logger.info(f"=== SINGLE PLATFORM LISTING: SHOPIFY ===")
             logger.info(f"Product ID: {product.id}, SKU: {product.sku}")
             logger.info(f"Product: {product.brand} {product.model}")
-            
+
+            # Check for existing Shopify listing to prevent duplicates
+            existing_shopify_stmt = await db.execute(
+                select(PlatformCommon).where(
+                    PlatformCommon.product_id == product.id,
+                    PlatformCommon.platform_name == "shopify"
+                )
+            )
+            existing_shopify = existing_shopify_stmt.scalar_one_or_none()
+            if existing_shopify and existing_shopify.external_id:
+                existing_status = (existing_shopify.status or "").lower()
+                if existing_status in {"active", "live", "draft"}:
+                    message = f"Shopify listing already exists for SKU '{product.sku}' (ID: {existing_shopify.external_id})."
+                    logger.info(f"Skipping duplicate Shopify listing for product {product.sku}")
+                    return RedirectResponse(
+                        url=f"{redirect_url}?message={quote_plus(message)}&message_type=warning",
+                        status_code=303,
+                    )
+
             try:
                 # Initialize Shopify service
                 shopify_service = ShopifyService(db, settings)
@@ -2157,11 +2191,13 @@ async def handle_create_platform_listing_from_detail(
                             local_photo_urls.append(full_url)
 
                 # Prepare enriched data similar to what would come from Reverb
+                # NOTE: Only use local_photos - do NOT also populate cloudinary_photos
+                # as shopify_service processes both and would create duplicates
                 enriched_data = {
                     "title": f"{product.year} {product.brand} {product.model}" if product.year else f"{product.brand} {product.model}",
                     "description": description_with_footer,
                     "photos": [],
-                    "cloudinary_photos": [],
+                    "cloudinary_photos": [],  # Leave empty - using local_photos instead
                     "condition": {"display_name": product.condition},
                     "price": {"amount": str(product.base_price), "currency": "GBP"},
                     "inventory": product.quantity if product.quantity else 1,
@@ -2171,13 +2207,6 @@ async def handle_create_platform_listing_from_detail(
                     "brand": product.brand,
                     "local_photos": local_photo_urls,
                 }
-                
-                # Add images
-                if product.primary_image:
-                    enriched_data["cloudinary_photos"].append({"preview_url": product.primary_image, "url": product.primary_image})
-                if product.additional_images:
-                    for img_url in product.additional_images:
-                        enriched_data["cloudinary_photos"].append({"preview_url": img_url, "url": img_url})
                 
                 result = await shopify_service.create_listing_from_product(
                     product,
@@ -2213,7 +2242,25 @@ async def handle_create_platform_listing_from_detail(
             logger.info(f"Product ID: {product.id}, SKU: {product.sku}")
             logger.info(f"Product: {product.brand} {product.model}")
             logger.warning("⚠️  NOTE: eBay requires proper shipping profiles to be configured")
-            
+
+            # Check for existing eBay listing to prevent duplicates
+            existing_ebay_stmt = await db.execute(
+                select(PlatformCommon).where(
+                    PlatformCommon.product_id == product.id,
+                    PlatformCommon.platform_name == "ebay"
+                )
+            )
+            existing_ebay = existing_ebay_stmt.scalar_one_or_none()
+            if existing_ebay and existing_ebay.external_id:
+                existing_status = (existing_ebay.status or "").lower()
+                if existing_status in {"active", "live"}:
+                    message = f"eBay listing already exists for SKU '{product.sku}' (Item ID: {existing_ebay.external_id})."
+                    logger.info(f"Skipping duplicate eBay listing for product {product.sku}")
+                    return RedirectResponse(
+                        url=f"{redirect_url}?message={quote_plus(message)}&message_type=warning",
+                        status_code=303,
+                    )
+
             try:
                 # Initialize eBay service
                 ebay_service = EbayService(db, settings)
@@ -4593,8 +4640,9 @@ async def edit_product_form(
         seen_categories.add(normalized)
 
     base_price_value = float(product.base_price or 0)
+    reverb_price_value = float(product.price or 0) if product.price else None
     platforms: Dict[str, Dict[str, Any]] = {
-        name: _build_platform_stub(name, base_price_value)
+        name: _build_platform_stub(name, base_price_value, reverb_price_value)
         for name in ["shopify", "reverb", "ebay", "vr"]
     }
     brand_result = await db.execute(select(Product.brand).distinct().order_by(Product.brand))
@@ -4612,7 +4660,7 @@ async def edit_product_form(
 
         entry = platforms.get(platform_key)
         if entry is None:
-            entry = _build_platform_stub(platform_key, base_price_value)
+            entry = _build_platform_stub(platform_key, base_price_value, reverb_price_value)
             platforms[platform_key] = entry
 
         entry["status"] = (link.status or entry.get("status") or "inactive").lower()
@@ -4651,7 +4699,7 @@ async def edit_product_form(
                 price_value = None
 
         if price_value is None:
-            price_value = _calculate_default_platform_price(platform_key, base_price_value)
+            price_value = _calculate_default_platform_price(platform_key, base_price_value, reverb_price_value)
 
         entry["price"] = price_value
     

@@ -402,11 +402,11 @@
                                             <span>Delete Listing</span>
                                         </button>
                                     {% else %}
-                                        <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors" 
-                                                title="Create listing on other platforms"
-                                        onclick="processSyncEvent({{ event.id }}, 'Create Listings', { action: 'create' }, this)"
+                                        <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
+                                                title="Import this Reverb listing into RIFF inventory"
+                                        onclick="processSyncEvent({{ event.id }}, 'Import to RIFF', { action: 'create' }, this)"
                                         data-event-id="{{ event.id }}">
-                                            <span>Create</span>
+                                            <span>Import to RIFF</span>
                                         </button>
                                         {% if candidate %}
                                         <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors"

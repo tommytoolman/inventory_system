@@ -1392,11 +1392,12 @@ class VintageAndRareClient:
             }
 
     async def create_listing_selenium(
-            self, 
-            product_data: Dict[str, Any], 
+            self,
+            product_data: Dict[str, Any],
             test_mode: bool = True,
             from_scratch: bool = False,
-            db_session=None
+            db_session=None,
+            skip_id_resolution: bool = False
             ) -> Dict[str, Any]:
             """
             Create a listing on V&R using Selenium automation via inspect_form.py.
@@ -1407,6 +1408,7 @@ class VintageAndRareClient:
                 test_mode: If True, the form will be filled but not submitted.
                 from_scratch: If True, uses internal category mapping. If False, expects
                             pre-mapped V&R categories in product_data.
+                skip_id_resolution: If True, skip CSV download for ID resolution (for batched processing).
 
             Returns:
                 Dict with status, message, and potentially vr_listing_id (currently None).
@@ -1574,41 +1576,52 @@ class VintageAndRareClient:
                     result.setdefault("form_data", form_data)
                     result.setdefault("shipping_fees", form_data.get("shipping_fees"))
 
-                # 4. If submission was successful and we need ID resolution, try VRExportService here
-                if (result.get("status") == "success" and 
-                    result.get("needs_id_resolution") and 
-                    # not test_mode and 
-                    db_session):
-                    
-                    try:
-                        logger.info("Attempting to resolve V&R item ID via VRExportService...")
-                        
-                        # Wait for V&R to process
-                        logger.info("⏱️  Waiting 5 seconds for V&R to process the new item...")
-                        await asyncio.sleep(5)
-                        
-                        # Enhanced ID resolution with verification
-                        vr_id = await self._get_newly_created_item_id_with_verification(
-                            db_session, 
-                            expected_brand=form_data.get('brand', ''),
-                            expected_model=form_data.get('model_name', ''),
-                            expected_year=form_data.get('year', ''),
-                            expected_category=form_data.get('category', ''),
-                            expected_sku=product_data.get('external_id', ''),  # ✅ Use original product_data SKU
-                            submission_payload=product_data
-                        )
-                        
-                        if vr_id:
-                            result["vr_listing_id"] = vr_id
-                            result["message"] += f" (V&R ID: {vr_id})"
-                            logger.info(f"✅ Resolved and verified V&R item ID: {vr_id}")
-                        else:
-                            logger.warning("❌ Could not find or verify V&R item ID")
-                            
-                    except Exception as e:
-                        logger.warning(f"Could not resolve V&R item ID: {str(e)}")
-                        import traceback
-                        logger.warning(f"VRExportService traceback: {traceback.format_exc()}")
+                # 4. If submission was successful and we need ID resolution
+                if (result.get("status") == "success" and
+                    result.get("needs_id_resolution")):
+
+                    # Store match criteria for later batch resolution
+                    result["match_criteria"] = {
+                        "brand": form_data.get('brand', ''),
+                        "model": form_data.get('model_name', ''),
+                        "year": form_data.get('year', ''),
+                        "category": form_data.get('category', ''),
+                        "sku": product_data.get('external_id', ''),
+                    }
+
+                    # Skip ID resolution if requested (for batched processing)
+                    if skip_id_resolution:
+                        logger.info("⏭️  Skipping ID resolution (batched mode) - will resolve later")
+                    elif db_session:
+                        try:
+                            logger.info("Attempting to resolve V&R item ID via VRExportService...")
+
+                            # Wait for V&R to process
+                            logger.info("⏱️  Waiting 5 seconds for V&R to process the new item...")
+                            await asyncio.sleep(5)
+
+                            # Enhanced ID resolution with verification
+                            vr_id = await self._get_newly_created_item_id_with_verification(
+                                db_session,
+                                expected_brand=form_data.get('brand', ''),
+                                expected_model=form_data.get('model_name', ''),
+                                expected_year=form_data.get('year', ''),
+                                expected_category=form_data.get('category', ''),
+                                expected_sku=product_data.get('external_id', ''),  # ✅ Use original product_data SKU
+                                submission_payload=product_data
+                            )
+
+                            if vr_id:
+                                result["vr_listing_id"] = vr_id
+                                result["message"] += f" (V&R ID: {vr_id})"
+                                logger.info(f"✅ Resolved and verified V&R item ID: {vr_id}")
+                            else:
+                                logger.warning("❌ Could not find or verify V&R item ID")
+
+                        except Exception as e:
+                            logger.warning(f"Could not resolve V&R item ID: {str(e)}")
+                            import traceback
+                            logger.warning(f"VRExportService traceback: {traceback.format_exc()}")
 
                 logger.info(f"V&R Selenium listing creation result: {result}")
                 return result
@@ -1985,7 +1998,177 @@ class VintageAndRareClient:
                 await db_session.rollback()
             except:
                 pass
-    
+
+    async def resolve_vr_ids_batch(
+        self,
+        db_session,
+        pending_items: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Resolve V&R IDs for multiple pending items using a single CSV download.
+
+        Args:
+            db_session: Database session for creating platform entries
+            pending_items: List of dicts with match_criteria and metadata:
+                [
+                    {
+                        "job_id": 123,
+                        "product_id": 456,
+                        "match_criteria": {"brand": "Fender", "model": "Stratocaster", "sku": "REV-123"},
+                        "submission_payload": {...}  # Optional
+                    },
+                    ...
+                ]
+
+        Returns:
+            Dict with results:
+            {
+                "success": True,
+                "resolved": [{"job_id": 123, "vr_id": "129500"}, ...],
+                "failed": [{"job_id": 124, "error": "No match found"}, ...],
+                "csv_items": 1526
+            }
+        """
+        results = {
+            "success": True,
+            "resolved": [],
+            "failed": [],
+            "csv_items": 0
+        }
+
+        if not pending_items:
+            logger.info("No pending items to resolve")
+            return results
+
+        logger.info(f"🔄 Starting batch resolution for {len(pending_items)} pending items...")
+
+        # Wait for V&R to index new items
+        logger.info("⏱️  Waiting 5 seconds for V&R to process new items...")
+        await asyncio.sleep(5)
+
+        # Download CSV once
+        try:
+            logger.info("📥 Downloading V&R inventory CSV for batch resolution...")
+            inventory_df = await self.download_inventory_dataframe(save_to_file=False)
+
+            if inventory_df is None or inventory_df.empty:
+                logger.error("❌ No inventory data received from V&R CSV")
+                for item in pending_items:
+                    results["failed"].append({
+                        "job_id": item.get("job_id"),
+                        "error": "CSV download failed"
+                    })
+                results["success"] = False
+                return results
+
+            results["csv_items"] = len(inventory_df)
+            logger.info(f"📊 Downloaded CSV with {len(inventory_df)} items")
+
+            # Sort by product_id (newest first)
+            inventory_df = inventory_df.sort_values('product_id', ascending=False)
+
+        except Exception as e:
+            logger.error(f"❌ Failed to download CSV: {str(e)}")
+            for item in pending_items:
+                results["failed"].append({
+                    "job_id": item.get("job_id"),
+                    "error": f"CSV download error: {str(e)}"
+                })
+            results["success"] = False
+            return results
+
+        # Resolve each pending item
+        for item in pending_items:
+            job_id = item.get("job_id")
+            criteria = item.get("match_criteria", {})
+            expected_brand = criteria.get("brand", "")
+            expected_model = criteria.get("model", "")
+            expected_sku = criteria.get("sku", "")
+
+            logger.info(f"🔍 Resolving job {job_id}: Brand='{expected_brand}', Model='{expected_model}'")
+
+            try:
+                # Search for match in CSV
+                vr_id = self._find_match_in_dataframe(
+                    inventory_df,
+                    expected_brand,
+                    expected_model
+                )
+
+                if vr_id:
+                    logger.info(f"✅ Job {job_id}: Found V&R ID {vr_id}")
+
+                    # Create platform entries
+                    vr_item_data = {
+                        'vr_id': vr_id,
+                        'brand': expected_brand,
+                        'model': expected_model,
+                    }
+
+                    await self._create_platform_entries(
+                        db_session,
+                        vr_item_data,
+                        expected_sku,
+                        submission_payload=item.get("submission_payload"),
+                    )
+
+                    results["resolved"].append({
+                        "job_id": job_id,
+                        "vr_id": vr_id,
+                        "sku": expected_sku
+                    })
+                else:
+                    logger.warning(f"❌ Job {job_id}: No match found")
+                    results["failed"].append({
+                        "job_id": job_id,
+                        "error": "No match found in CSV"
+                    })
+
+            except Exception as e:
+                logger.error(f"❌ Job {job_id}: Resolution error: {str(e)}")
+                results["failed"].append({
+                    "job_id": job_id,
+                    "error": str(e)
+                })
+
+        logger.info(f"🏁 Batch resolution complete: {len(results['resolved'])} resolved, {len(results['failed'])} failed")
+        return results
+
+    def _find_match_in_dataframe(
+        self,
+        inventory_df,
+        expected_brand: str,
+        expected_model: str,
+    ) -> Optional[str]:
+        """
+        Find a matching V&R ID in the inventory DataFrame.
+
+        Args:
+            inventory_df: Pre-downloaded and sorted DataFrame
+            expected_brand: Brand to match
+            expected_model: Model to match
+
+        Returns:
+            V&R ID string if found, None otherwise
+        """
+        # Check recent items first (sorted by product_id desc)
+        for _, row in inventory_df.head(150).iterrows():
+            vr_id = str(row.get('product_id', '')).strip()
+            brand = str(row.get('brand_name', '')).strip()
+            model = str(row.get('product_model_name', '')).strip()
+
+            if not vr_id or not vr_id.isdigit():
+                continue
+
+            # Check for exact match (Brand + Model)
+            brand_match = brand.lower() == expected_brand.lower()
+            model_match = model.lower() == expected_model.lower()
+
+            if brand_match and model_match:
+                return vr_id
+
+        return None
+
     async def mark_item_as_sold(self, item_id: str) -> dict:
         """Mark a single V&R item as sold using AJAX.
 

@@ -11,6 +11,7 @@ from app.database import Base
 class VRJobStatus(str, Enum):
     QUEUED = "queued"
     IN_PROGRESS = "in_progress"
+    COMPLETED_PENDING_ID = "completed_pending_id"  # Listing created, V&R ID not yet resolved
     COMPLETED = "completed"
     FAILED = "failed"
 

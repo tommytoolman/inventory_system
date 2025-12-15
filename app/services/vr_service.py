@@ -480,8 +480,16 @@ class VRService:
         product: Product,
         reverb_data: Dict[str, Any] = None,
         platform_options: Optional[Dict[str, Any]] = None,
+        skip_id_resolution: bool = False,
     ) -> Dict[str, Any]:
-        """Creates a Vintage & Rare listing from a local master Product object."""
+        """Creates a Vintage & Rare listing from a local master Product object.
+
+        Args:
+            product: The product to list
+            reverb_data: Optional Reverb API data for images/shipping
+            platform_options: Optional platform-specific options (price override, etc.)
+            skip_id_resolution: If True, skip CSV download for ID resolution (for batched processing)
+        """
         logger.info(f"Creating V&R listing for Product ID: {product.id}, SKU: {product.sku}")
         try:
             settings = get_settings()
@@ -719,6 +727,20 @@ class VRService:
                 categories = reverb_data.get('categories', [])
                 if categories and len(categories) > 0:
                     reverb_category_uuid = categories[0].get('uuid')
+
+            # Fallback: Look up UUID from reverb_categories using product.category
+            if not reverb_category_uuid and product.category:
+                logger.info(f"No category UUID in reverb_data, looking up from product.category: {product.category}")
+                uuid_query = text("""
+                    SELECT uuid FROM reverb_categories
+                    WHERE name = :category OR full_path = :category
+                    LIMIT 1
+                """)
+                uuid_result = await self.db.execute(uuid_query, {"category": product.category})
+                uuid_row = uuid_result.fetchone()
+                if uuid_row:
+                    reverb_category_uuid = uuid_row.uuid
+                    logger.info(f"Found category UUID from product.category: {reverb_category_uuid}")
             
             # Default category IDs (as fallback)
             category_ids = {
@@ -784,7 +806,7 @@ class VRService:
                 else:
                     logger.warning(f"No V&R category mapping found for Reverb UUID: {reverb_category_uuid}")
             else:
-                logger.warning("No Reverb category UUID available, using default V&R categories")
+                logger.warning(f"No Reverb category UUID available (product.category={product.category}), using default V&R categories")
             
             # Set the category IDs in product_data
             product_data['Category'] = category_ids['Category']
@@ -796,12 +818,13 @@ class VRService:
             # Check for test mode from environment variable
             test_mode = os.getenv('VR_TEST_MODE', 'false').lower() == 'true'
             
-            logger.info(f"Creating V&R listing via Selenium for SKU: {product.sku} (test_mode={test_mode})")
+            logger.info(f"Creating V&R listing via Selenium for SKU: {product.sku} (test_mode={test_mode}, skip_id={skip_id_resolution})")
             result = await client.create_listing_selenium(
                 product_data=product_data,
                 test_mode=test_mode,
                 from_scratch=False,  # Using category strings, not IDs
-                db_session=self.db
+                db_session=self.db,
+                skip_id_resolution=skip_id_resolution,
             )
             
             logger.info(f"V&R creation result: {result}")

@@ -1,9 +1,9 @@
 """Helpers for enqueuing and managing V&R listing jobs."""
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.vr_job import VRJob, VRJobStatus
@@ -56,4 +56,55 @@ async def mark_job_completed(db: AsyncSession, job: VRJob) -> None:
 async def mark_job_failed(db: AsyncSession, job: VRJob, error_message: str) -> None:
     job.status = VRJobStatus.FAILED.value
     job.error_message = error_message[:2000]
+    await db.flush()
+
+
+async def mark_job_pending_id(
+    db: AsyncSession, job: VRJob, match_criteria: Dict[str, Any]
+) -> None:
+    """Mark job as listing created but V&R ID not yet resolved."""
+    job.status = VRJobStatus.COMPLETED_PENDING_ID.value
+    job.error_message = None
+    # Store match criteria in payload for later resolution
+    payload = job.payload or {}
+    payload["match_criteria"] = match_criteria
+    payload["listing_created"] = True
+    job.payload = payload
+    await db.flush()
+
+
+async def fetch_pending_resolution_jobs(db: AsyncSession) -> List[VRJob]:
+    """Fetch all jobs that need V&R ID resolution."""
+    stmt = (
+        select(VRJob)
+        .where(VRJob.status == VRJobStatus.COMPLETED_PENDING_ID.value)
+        .order_by(VRJob.created_at.asc())
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def count_pending_resolutions(db: AsyncSession) -> int:
+    """Count jobs waiting for V&R ID resolution."""
+    stmt = select(func.count(VRJob.id)).where(
+        VRJob.status == VRJobStatus.COMPLETED_PENDING_ID.value
+    )
+    result = await db.execute(stmt)
+    return result.scalar() or 0
+
+
+async def peek_queue_count(db: AsyncSession) -> int:
+    """Check how many jobs are still queued (without locking)."""
+    stmt = select(func.count(VRJob.id)).where(
+        VRJob.status == VRJobStatus.QUEUED.value
+    )
+    result = await db.execute(stmt)
+    return result.scalar() or 0
+
+
+async def increment_resolution_attempts(db: AsyncSession, job: VRJob) -> None:
+    """Increment resolution attempt counter for a pending job."""
+    payload = job.payload or {}
+    payload["resolution_attempts"] = payload.get("resolution_attempts", 0) + 1
+    job.payload = payload
     await db.flush()

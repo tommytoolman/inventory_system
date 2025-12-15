@@ -2264,7 +2264,14 @@ async def handle_create_platform_listing_from_detail(
             try:
                 # Initialize eBay service
                 ebay_service = EbayService(db, settings)
-                
+
+                # Calculate proper eBay price (use Reverb price if available, otherwise calculate from base)
+                ebay_price = _calculate_default_platform_price(
+                    "ebay",
+                    product.base_price,
+                    float(product.price) if product.price else None
+                )
+
                 # Prepare enriched data
                 enriched_data = {
                     "title": f"{product.year} {product.brand} {product.model}" if product.year else f"{product.brand} {product.model}",
@@ -2272,7 +2279,7 @@ async def handle_create_platform_listing_from_detail(
                     "photos": [],
                     "condition": {"display_name": product.condition},
                     "categories": [],  # Will be populated with Reverb category UUID if available
-                    "price": {"amount": str(product.base_price), "currency": "GBP"},
+                    "price": {"amount": str(ebay_price), "currency": "GBP"},
                     "inventory": product.quantity if product.quantity else 1,
                     "finish": product.finish,
                     "year": str(product.year) if product.year else None,

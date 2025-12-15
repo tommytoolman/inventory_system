@@ -1,110 +1,26 @@
 # Project TODO – Inventory Management System
-*Last updated: 2025-12-08*
+*Last updated: 2025-12-15*
 > We only tick or strike items once we have confirmed they are done in production.
 
-## 📋 Category-to-Specs Mapping (Needs Design)
-
-**Context:** Reverb's "Improve your listing with product specs" feature shows category-specific required fields. We've implemented `number_of_strings` but need a proper mapping of which specs apply to which categories, and should show/hide form fields accordingly.
-
-### Reverb Required Specs by Category
-
-| Category Type | Handedness | Number of Strings | Body Type |
-|---------------|:----------:|:-----------------:|:---------:|
-| Electric Guitars | ✓ Required | ✓ Required | ✓ Required |
-| Acoustic Guitars | ✓ Required | ✓ Required | ✗ |
-| Classical Guitars | ✓ Required | ✓ Required | ✗ |
-| Bass Guitars | ✓ Required | ✓ Required | ✗ |
-| Travel Guitars | ✓ Required | ✓ Required | ✗ |
-| Resonators | ✓ Required | ✓ Required | ✗ |
-| Lap & Pedal Steel | ✓ Required | ✓ Required | ✗ |
-| Ukuleles/Mandolins/Banjos | ? | ? | ✗ |
-| Keyboards/Synths/Pianos | ✗ | ✗ | ✗ |
-| Amps/Effects/Pro Audio | ✗ | ✗ | ✗ |
-| Drums/Percussion | ✗ | ✗ | ✗ |
-
-### Reverb Advanced Specs (UI-only, cannot send via API)
-These specs appear in Reverb's UI but **cannot be sent via API** - they must be entered manually on Reverb's website:
-- Body Shape, Wood Top Style, Finish Features, Finish Style
-- Frets, Fretboard Material, Body Material, Top Material, Neck Material
-- Offset Body, Scale Length, Nut Width, Fretboard Radius
-- Bridge/Tailpiece Type, Neck Construction, String Type
-- Finish Pattern, Pickup Configuration
-
-**Options:** We could still capture these in our system for internal reference and potentially use them for eBay ItemSpecifics where there's overlap.
-
-### eBay Category-Specific ItemSpecifics (Already Implemented)
-| eBay Category ID | Category Name | Required Fields |
-|------------------|---------------|-----------------|
-| 29946 | Microphones | Form Factor |
-| 4713 | Bass Guitars | Type |
-| 38072 | Guitar Amplifiers | Amplifier Type |
-| 38071 | Synthesizers | Type |
-| 38088 | Electronic Keyboards | Type |
-| 85860 | Digital Pianos | Type + Keys |
-| 14985 | Headphones | Connectivity, Earpiece, Form Factor, Features |
-
-### TODO
-- [ ] Create category-to-specs mapping file (JSON) defining which Reverb categories require which specs
-- [ ] Update add.html to show/hide `number_of_strings`, `body_type`, `handedness` based on selected category
-- [ ] Add validation to require these fields for applicable categories before allowing listing creation
-- [ ] Consider adding Advanced Specs section for internal tracking (even if we can't send to Reverb API)
-- [ ] Cross-reference with eBay ItemSpecifics to maximize data reuse
-
 ## 🔴 High Priority (Production blockers)
-- [ ] **eBay category-specific required fields** – eBay requires certain item specifics per category that will cause listing creation/updates to fail if missing. These MUST be captured in UI and sent in API payloads.
-
-  **Implemented (needs testing):**
-  - **Microphones (29946)**: `Form Factor` – Dynamic/Condenser/Ribbon/etc ✓
-  - **Bass Guitars (4713)**: `Type` – Electric/Acoustic/Electro-Acoustic ✓
-  - **Guitar Amplifiers (38072)**: `Amplifier Type` – Combo/Head/Cabinet/Stack ✓
-  - **Synthesizers (38071)**: `Type` – Desktop/Keyboard/Modular/Rackmount ✓
-  - **Electronic Keyboards (38088)**: `Type` – Arranger/Digital Piano/Organ/etc ✓
-  - **Digital Pianos (85860)**: `Type` + `Keys` (2 fields) ✓
-  - **Headphones (14985)**: `Connectivity` + `Earpiece` + `Form Factor` + `Features` (4 fields) ✓
-
-  **Still TODO:**
-  - End-to-end testing of all implemented fields
-  - Verify pre-selection logic works correctly
-  - Check validation prevents submission without required fields
-
-  _Note: These fields appear optional in eBay's UI but are mandatory via API. "Brand missing" errors often actually mean a category-specific field is missing._
-- [x] **VR handling performance** – address sluggish VR listing creation and inventory sync by offloading slow Selenium/API work to background workers and smoothing operator workflows.
-- [x] **VR historical shipping profiles** – audit legacy VR listings and update shipping profiles to match the current configuration. _Completed 2025-12-08: Audited all VR listings, identified 268 discrepancies, batch-fixed 227 items (0 errors). Scripts in `scripts/vr/`._
-- [x] **VR pending status investigation** – identify why freshly created VR listings remain `pending` instead of `active` and patch the flow. _[VR branch]_
-- [x] **Capture handedness & artist ownership** – add non-mandatory fields to product add/edit flows, defaulting to right-handed / not artist owned, propagate to relevant APIs, and verify Shopify continues to write the correct product metafield.
+- [ ] **eBay category-specific required fields** – eBay requires certain item specifics per category that will cause listing creation/updates to fail if missing. These MUST be captured in UI and sent in API payloads. _(Implemented, needs end-to-end testing)_
 - [ ] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms, restore the DB flagging for inventorised items that was lost previously, and enforce VR-specific rules (do nothing when other platforms sell while stock >1, end the VR listing only when quantity hits 0, and mark + relist VR sales when remaining quantity >0) so sync detects sales without prematurely ending multi-quantity listings.
-- [x] **VR removal logic verification** – confirm the updated handling marks "not found on API" as REMOVED (unless corroborated by Reverb) and that the “List Item” UI path reflects the latest logic.
-- [x] **Shopify shipping profile readiness** – document and validate the pre-launch process for assigning shipping profiles within Shopify.
-- [x] **Per-platform shipping profile edits** – surface Shopify/eBay shipping policy selectors on the product edit form and ensure changes propagate to live listings, not just Reverb/V&R. _(eBay done; VR tracked separately)_
 - [ ] **Left-handed category integrity** – review `platform_category_mappings` to ensure left-handed SKUs use the dedicated categories on every platform (while Reverb uses technical attributes, eBay/Shopify/VR must stay mapped via category).
-- [x] **Reverb double listing guard** – add protections to prevent duplicate Reverb listings from being created. _Completed: Multi-layer protection exists - local DB check (`inventory.py:2307-2318`), remote Reverb API SKU search (`reverb_service.py:115-168`), auto-SKU regeneration for RIFF products, and proper error handling with conflict details._
-- [ ] **Category mapping database migration & audit** – move VR and cross-platform mappings into Alembic-managed tables and validate coverage post-migration.
+- [ ] **End-to-end mapping validation** – consolidate category-to-specs mapping (Reverb required fields like `handedness`, `number_of_strings`, `body_type` per category) with the cross-platform category mappings (VR, eBay, Shopify). Move all mappings into Alembic-managed tables, validate coverage post-migration, and update UI to show/hide spec fields based on selected category.
 - [ ] **Sync event automation** – confirm which sync events write to `_listings` tables (persistence audit) and add gradual automation so reconciled events publish without manual nudges. Includes gradually automating the sync pipeline so sold/ended propagation runs unattended.
 
 ## 🟡 Medium Priority (Stability & automation)
 - [ ] **Platform error handling standardisation** – unify logging/alerts and ensure retries work the same across eBay, Reverb, VR, and Shopify.
 - [ ] **"Where sold" attribution & sales orders** – refine sale-source attribution for each SKU and align the reporting logic with the upcoming `sales_orders` schema/workflow.
 - [ ] **Dropbox media refresh is inconsistent** – stabilise cache refresh, keep folder tiles a consistent size, and reduce redundant re-renders after multiple reloads.
-- [x] **Sync-all queue follow-up** – reconcile the queued `/api/sync/all` background orchestrator with the current batched implementation (status polling, history retention, websocket notifications) so the endpoint remains non-blocking without regressing the latest changes. Also confirm the worker is truly threaded and not blocking the main process.
 - [ ] **Platform stats ingestion gaps** – fill in watches/likes/views for eBay, Shopify, VR, matching the partial Reverb feed and surface them on dashboards.
 - [ ] **Review database field coverage** – audit all key tables to ensure required fields are populated across platforms and identify any lingering gaps plus run the broader table integrity/backfill sweep to patch any gaps found.
-- [x] **eBay listing backfill script** – job already written; now schedule/automate it to run daily so ebay_listings rows stay current, CrazyLister payloads persist, and descriptions (e.g., 257112518866) keep matching master data.
-- [x] **Activity report tidy-up** – debug the report pipeline and trim noisy or duplicate rows so it is usable for daily review.
-- [x] **Recent activity & sales report fixes** – address the minor bugs observed in the activity feeds and sales summaries. _Completed._
-- [x] **VR listing ID capture from instruments/show** – after Selenium submits a listing, scrape the authenticated `/instruments/show` page to grab the new product ID before falling back to the CSV export. Current approach works but feels inefficient; explore cleaner shortcuts.
-- [x] **Review price propagation** – CODED, needs user validation that platform markups stay intact on edit and no uniform pricing is forced.
-- [x] **Validate Shopify listing URLs** – audit all stored `listing_url` values for Shopify listings and backfill any missing entries.
-- [x] **Payload persistence safeguards** – confirm queuing/storage logic prevents duplicate listing creation across platforms.
-- [x] **Remove persistence of SQL URLs** – ~~clean up any persisted SQL URLs remaining from earlier payload persistence.~~ _Unclear what this referred to; marked complete as likely obsolete._
-- [x] **Status casing consistency** – ~~ensure status fields use canonical casing (e.g., `ACTIVE`, `SYNCED`) across services and the database.~~ _Fixed: normalized `platform_common.status` to lowercase (ended, archived) and updated raw SQL statements to match `ListingStatus` enum._
-- [x] **Sold logic review** – produce queries/reports to validate how sale events propagate through all tables.
 - [ ] **Shopify auto-archive workflow** – automate moving stale Shopify listings to archive after the agreed threshold.
 
 ## 🔵 Low Priority (Enhancements)
 - [ ] **Fix image toast message state** – ensure the success banner dismisses correctly after refresh. Confirm colour palette and that UI reverts cleanly after multiple create flows (e.g., after adding 4 images).
 - [ ] **Testing & verification rebuild** – restore integration coverage for sync flows, add regression tests for the high-risk services, and document the verification checklist.
 - [ ] **Populate Shopify archive gallery** – build the historical gallery view using the archive dataset so users can review past listings. Confirm with Adam whether thousands of gallery entries are actually required.
-- [x] **CrazyLister integration discovery** – investigate feasibility, fix description stripping on edits, and decide whether to proceed.
 - [ ] **Sold date surfaces** – expose the confirmed sold timestamp on product detail pages and reports when available. _Fold into the orders project._
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 - [ ] **NPI clustering report** – add a New Product Introduction cluster view grouped by category for merch planning.
@@ -124,36 +40,13 @@ These specs appear in Reverb's UI but **cannot be sent via API** - they must be 
 ## 🆕 New Functionality
 - [ ] (Verify) Add bulk operations API.
 - [ ] (Verify) Implement advanced search.
-- [X] (Verify) Add reporting system.
-- [X] (Verify) Create analytics dashboard.
-- [X] (Verify) Add inventory forecasting. (Not feasible)
-- [X] (Verify) Implement automated pricing system.
 - [ ] (Verify) Add loading spinner for image uploads.
-- [X] (Verify) Add drag-and-drop support for images.
-- [X] (Verify) Add image compression before upload.
 - [ ] **Mobile optimisation** – ensure key inventory and sync workflows render well on mobile devices.
 - [ ] **Multi-shop Reverb support** – plan how to ingest and manage listings across two Reverb shops.
-- [x] **VR queue/threading improvements** – revisit VR queue handling to keep long-running jobs responsive. _Completed: Background workers and queue system now handle long-running VR jobs._
 - [ ] **Auto-relist at 180 days** – define and automate the policy for relisting stale inventory.
-- [ ] **Batch VR item creation** – explore queuing multiple VR listings for creation in a single workflow to reduce operator wait time and Selenium overhead.
-
-## 🧱 Platform & infrastructure foundations
-### Core system
-- [x] Set up basic FastAPI application.
-- [x] Configure PostgreSQL database.
-- [x] Create initial models.
-- [x] Set up database migrations end-to-end.
-- [x] Implement user authentication (HTTP Basic via app/core/security.py).
-- [x] Add centralised logging/observability. _Done: Centralized logging config added Dec 2025._
-### Data models
-- [x] Create `Product` model.
-- [x] Create `PlatformListing` model.
-- [x] Add validation rules. _Done: Pydantic schemas provide validation._
-- [x] Create database indices for performance hotspots. _Done: Indices exist on key columns._
-- [ ] **Add audit trail functionality** – track who changed what and when.
-- [x] Create error recovery system. _Done: Background workers have retry logic._
 
 ## ✅ Completed
+- [x] **Batch VR item creation** – job queue batches multiple VR listings, resolves IDs via single CSV download. _Completed 2025-12-15._
 - [x] **Left-handed tagging** – determine how we consistently label and surface left-handed instruments.
 - [x] **Retrofix missing product titles** – write a script to backfill `products.title` entries where historical edits failed to persist.
 - [x] **Product sold flag parity** – think this is covered elsewhere but the original requirement was unclear; monitor reporting for regressions.

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import flag_modified
 
 from app.models.vr_job import VRJob, VRJobStatus
 
@@ -66,10 +67,12 @@ async def mark_job_pending_id(
     job.status = VRJobStatus.COMPLETED_PENDING_ID.value
     job.error_message = None
     # Store match criteria in payload for later resolution
-    payload = job.payload or {}
+    # Use dict copy to ensure SQLAlchemy detects the change
+    payload = dict(job.payload) if job.payload else {}
     payload["match_criteria"] = match_criteria
     payload["listing_created"] = True
     job.payload = payload
+    flag_modified(job, 'payload')  # Explicitly mark JSONB as modified
     await db.flush()
 
 
@@ -104,7 +107,8 @@ async def peek_queue_count(db: AsyncSession) -> int:
 
 async def increment_resolution_attempts(db: AsyncSession, job: VRJob) -> None:
     """Increment resolution attempt counter for a pending job."""
-    payload = job.payload or {}
+    payload = dict(job.payload) if job.payload else {}
     payload["resolution_attempts"] = payload.get("resolution_attempts", 0) + 1
     job.payload = payload
+    flag_modified(job, 'payload')  # Explicitly mark JSONB as modified
     await db.flush()

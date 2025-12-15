@@ -15,7 +15,34 @@ async def enqueue_vr_job(
     product_id: int,
     payload: Dict[str, Any],
 ) -> VRJob:
-    """Create a queued job for a given product/payload."""
+    """Create a queued job for a given product/payload.
+
+    Guards against duplicate jobs - if there's already an active job
+    (QUEUED, IN_PROGRESS, or COMPLETED_PENDING_ID) for this product,
+    returns the existing job instead of creating a duplicate.
+    """
+    # Check for existing active job for this product
+    active_statuses = [
+        VRJobStatus.QUEUED.value,
+        VRJobStatus.IN_PROGRESS.value,
+        VRJobStatus.COMPLETED_PENDING_ID.value,
+    ]
+    existing_stmt = (
+        select(VRJob)
+        .where(
+            VRJob.product_id == product_id,
+            VRJob.status.in_(active_statuses)
+        )
+        .order_by(VRJob.created_at.desc())
+        .limit(1)
+    )
+    existing_result = await db.execute(existing_stmt)
+    existing_job = existing_result.scalar_one_or_none()
+
+    if existing_job:
+        # Return existing job instead of creating duplicate
+        return existing_job
+
     job = VRJob(
         product_id=product_id,
         payload=payload,

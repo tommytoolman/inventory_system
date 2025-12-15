@@ -293,34 +293,54 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
 
             print(f"DEBUG: Formatted Selenium Grid URL: {selenium_grid_url}")
 
-            # Quick health check before attempting to start a Remote session
-            try:
-                import urllib.parse
-                status_url = selenium_grid_url
-                if status_url.endswith('/wd/hub'):
-                    status_url = status_url[:-6]
-                status_url = urllib.parse.urljoin(status_url + '/', 'status')
-                print(f"DEBUG: Pinging Selenium Grid status endpoint: {status_url}")
-                health_response = requests.get(status_url, timeout=5)
-                health_json = {}
+            # Health check with retry logic for container restarts
+            import urllib.parse
+            import time as health_time
+            status_url = selenium_grid_url
+            if status_url.endswith('/wd/hub'):
+                status_url = status_url[:-6]
+            status_url = urllib.parse.urljoin(status_url + '/', 'status')
+
+            max_retries = 5
+            retry_delays = [5, 10, 15, 20, 30]  # Increasing delays between retries
+            last_error = None
+
+            for attempt in range(max_retries):
                 try:
-                    health_json = health_response.json()
-                except Exception:
-                    pass
-                grid_ready = (
-                    health_response.status_code == 200
-                    and isinstance(health_json, dict)
-                    and health_json.get("value", {}).get("ready", False)
-                )
-                if not grid_ready:
-                    raise RuntimeError(
-                        f"Selenium Grid not ready (status={health_response.status_code}, body={health_json})"
+                    print(f"DEBUG: Pinging Selenium Grid status endpoint (attempt {attempt + 1}/{max_retries}): {status_url}")
+                    health_response = requests.get(status_url, timeout=30)
+                    health_json = {}
+                    try:
+                        health_json = health_response.json()
+                    except Exception:
+                        pass
+                    grid_ready = (
+                        health_response.status_code == 200
+                        and isinstance(health_json, dict)
+                        and health_json.get("value", {}).get("ready", False)
                     )
-            except Exception as health_exc:
-                print(f"ERROR: Selenium Grid health check failed: {health_exc}")
+                    if grid_ready:
+                        print(f"DEBUG: Selenium Grid is ready (attempt {attempt + 1})")
+                        break
+                    else:
+                        last_error = RuntimeError(
+                            f"Selenium Grid not ready (status={health_response.status_code}, body={health_json})"
+                        )
+                        print(f"DEBUG: Grid not ready yet: {last_error}")
+                except Exception as health_exc:
+                    last_error = health_exc
+                    print(f"DEBUG: Health check failed (attempt {attempt + 1}): {health_exc}")
+
+                if attempt < max_retries - 1:
+                    wait_time = retry_delays[attempt]
+                    print(f"DEBUG: Waiting {wait_time}s before retry (container may be restarting)...")
+                    health_time.sleep(wait_time)
+            else:
+                # All retries exhausted
+                print(f"ERROR: Selenium Grid health check failed after {max_retries} attempts: {last_error}")
                 raise RuntimeError(
-                    "Remote Selenium browser is unavailable. Please try again later or contact the system admin to restart the standalone Chrome service."
-                ) from health_exc
+                    "Remote Selenium browser is unavailable after multiple retries. The Chrome container may be down or restarting."
+                ) from last_error
 
             driver = webdriver.Remote(
                 command_executor=selenium_grid_url,

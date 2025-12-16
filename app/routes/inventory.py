@@ -2489,6 +2489,11 @@ async def add_product_form(
             "handedness_options": handedness_options,
             "case_status_options": case_status_options,
             "body_type_options": body_type_options,
+            # Platform pricing markups (from env vars)
+            "ebay_markup_percent": settings.EBAY_PRICE_MARKUP_PERCENT,
+            "vr_markup_percent": settings.VR_PRICE_MARKUP_PERCENT,
+            "reverb_markup_percent": settings.REVERB_PRICE_MARKUP_PERCENT,
+            "shopify_markup_percent": settings.SHOPIFY_PRICE_MARKUP_PERCENT,
         }
     )
 

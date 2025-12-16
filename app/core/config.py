@@ -59,7 +59,13 @@ class Settings(BaseSettings):
     EBAY_SANDBOX_USERNAME: str = ""
     EBAY_SANDBOX_PASSWORD: str = ""
     EBAY_DEV_PASSWORD: str = ""
-    
+
+    # Platform Pricing Markups (percentage over base price)
+    SHOPIFY_PRICE_MARKUP_PERCENT: float = 0.0   # Shopify: base price
+    EBAY_PRICE_MARKUP_PERCENT: float = 10.0     # eBay: +10% over base
+    VR_PRICE_MARKUP_PERCENT: float = 5.0        # V&R: +5% over base
+    REVERB_PRICE_MARKUP_PERCENT: float = 5.0    # Reverb: +5% over base
+
     # Reverb API
     REVERB_API_KEY: str = ""
     REVERB_WEBSITE: str = ""

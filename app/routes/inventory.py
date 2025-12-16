@@ -96,37 +96,29 @@ DRAFT_UPLOAD_URL_PREFIX = "/static/drafts"
 def _calculate_default_platform_price(
     platform: str,
     base_price: Optional[float],
-    reverb_price: Optional[float] = None,
+    reverb_price: Optional[float] = None,  # Kept for backwards compatibility, but ignored
 ) -> float:
     """Return the suggested platform price given a base price.
 
-    For eBay/VR, if reverb_price is provided (from Reverb import), use that
-    instead of recalculating. This ensures prices match when back-calculating.
+    Uses centralized pricing from app/services/pricing.py with configurable
+    markup percentages from environment variables:
+    - EBAY_PRICE_MARKUP_PERCENT (default 10%)
+    - VR_PRICE_MARKUP_PERCENT (default 5%)
+    - REVERB_PRICE_MARKUP_PERCENT (default 5%)
+    - SHOPIFY_PRICE_MARKUP_PERCENT (default 0%)
+
+    All platforms calculate from BASE price, not from each other.
     """
+    from app.services.pricing import calculate_platform_price
+
     if base_price is None:
         return 0.0
 
-    platform = (platform or "").lower()
     base_value = float(base_price) if base_price else 0.0
     if base_value <= 0:
         return 0.0
 
-    if platform == "shopify":
-        return base_value
-
-    if platform in {"ebay", "vr"}:
-        # Use Reverb price if available (from import), otherwise calculate
-        if reverb_price is not None and reverb_price > 0:
-            return float(reverb_price)
-        return float(round(base_value * 1.05))
-
-    if platform == "reverb":
-        with_margin = base_value * 1.05
-        rounded = math.ceil(with_margin / 100.0) * 100.0
-        suggestion = rounded - 1.0
-        return float(suggestion if suggestion > 0 else 0.0)
-
-    return base_value
+    return calculate_platform_price(platform, base_value)
 
 
 def _build_platform_stub(

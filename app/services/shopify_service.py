@@ -9,7 +9,7 @@ from typing import Optional, Dict, List, Any, Tuple, Set, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from html.parser import HTMLParser
 
 from app.models.product import Product, ProductCondition, ProductStatus
@@ -1026,6 +1026,116 @@ class ShopifyService:
         except Exception as e:
             logger.error(f"Exception while updating price for Shopify product {external_id}: {e}", exc_info=True)
             return False
+
+    async def relist_listing(self, external_id: str, days_since_sold: int = 0) -> Dict[str, Any]:
+        """Relist a Shopify product by setting it to ACTIVE status and inventory to 1.
+
+        Args:
+            external_id: Shopify product ID (numeric or GID format)
+            days_since_sold: Number of days since the item was sold.
+                - If <= 7 days: product may still be ACTIVE, just set inventory to 1
+                - If > 7 days: product is likely ARCHIVED, set status to ACTIVE AND inventory to 1
+
+        Returns:
+            Dict with status and details of the operation
+        """
+        logger.info(f"Relisting Shopify product {external_id} (days_since_sold={days_since_sold})")
+
+        try:
+            # Build product GID
+            if external_id.startswith("gid://"):
+                product_gid = external_id
+            else:
+                product_gid = f"gid://shopify/Product/{external_id}"
+
+            # Look up the listing to get current status
+            # Database may store as GID or numeric - try both
+            numeric_id = str(external_id).replace("gid://shopify/Product/", "")
+            gid_format = f"gid://shopify/Product/{numeric_id}"
+            listing_stmt = select(ShopifyListing).where(
+                or_(
+                    ShopifyListing.shopify_product_id == numeric_id,
+                    ShopifyListing.shopify_product_id == gid_format
+                )
+            )
+            listing_result = await self.db.execute(listing_stmt)
+            listing = listing_result.scalar_one_or_none()
+
+            current_status = listing.status if listing else None
+            is_archived = current_status == 'archived' or days_since_sold > 7
+
+            results = {"status_updated": False, "inventory_updated": False}
+
+            # Step 1: If archived or > 7 days, update status to ACTIVE
+            if is_archived:
+                logger.info(f"Setting Shopify product {external_id} status to ACTIVE (was: {current_status})")
+                update_payload = {
+                    "id": product_gid,
+                    "status": "ACTIVE"
+                }
+                update_result = self.client.update_product(update_payload)
+                if update_result and update_result.get("product"):
+                    results["status_updated"] = True
+                    logger.info(f"Shopify product {external_id} status set to ACTIVE")
+                else:
+                    logger.warning(f"Failed to update Shopify product {external_id} status")
+
+            # Step 2: Set inventory quantity to 1
+            # Need to get variant info to update inventory
+            if listing:
+                variant_nodes = self._extract_variant_nodes(listing)
+                if not variant_nodes:
+                    variant_nodes = self._fetch_fresh_variant_nodes(product_gid)
+
+                if variant_nodes:
+                    # Create a mock product object for the adjustment function
+                    class MockProduct:
+                        quantity = 1
+                        sku = external_id  # Use external_id as identifier
+
+                    mock_product = MockProduct()
+                    adjustments = self._collect_inventory_adjustments(mock_product, product_gid, variant_nodes)
+
+                    if adjustments:
+                        self._push_inventory_update(mock_product, product_gid, adjustments)
+                        results["inventory_updated"] = True
+                        logger.info(f"Shopify product {external_id} inventory set to 1")
+                    else:
+                        logger.warning(f"No inventory adjustments generated for {external_id}")
+                else:
+                    logger.warning(f"Could not find variant nodes for {external_id}")
+            else:
+                logger.warning(f"No ShopifyListing found for {external_id}, cannot update inventory")
+
+            # Step 3: Update local database
+            if listing and (results["status_updated"] or results["inventory_updated"]):
+                if results["status_updated"]:
+                    listing.status = 'active'
+                listing.last_synced_at = datetime.utcnow()
+                listing.updated_at = datetime.utcnow()
+                self.db.add(listing)
+
+                # Also update platform_common
+                if listing.platform_id:
+                    platform_common = await self.db.get(PlatformCommon, listing.platform_id)
+                    if platform_common:
+                        platform_common.status = ListingStatus.ACTIVE.value
+                        platform_common.last_sync = datetime.utcnow()
+                        self.db.add(platform_common)
+
+                await self.db.commit()
+
+            success = results["status_updated"] or results["inventory_updated"]
+            return {
+                "success": success,
+                "status": "success" if success else "partial",
+                "external_id": external_id,
+                **results
+            }
+
+        except Exception as e:
+            logger.error(f"Exception while relisting Shopify product {external_id}: {e}", exc_info=True)
+            return {"success": False, "status": "error", "message": str(e)}
 
     async def create_listing_from_product(
         self,

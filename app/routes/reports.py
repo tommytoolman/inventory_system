@@ -1260,6 +1260,10 @@ async def process_sync_event(
             if action == 'activate_listing':
                 return await _activate_listing_status(db, event)
 
+            if action == 'relist':
+                # Flow 1: Reverb relisted, propagate to other platforms
+                return await _relist_from_reverb(db, event)
+
             # Route based on event type
             if event.change_type == 'new_listing':
                 # Use the EventProcessor class EXACTLY like the CLI script
@@ -1420,6 +1424,82 @@ async def _activate_listing_status(db: AsyncSession, event: SyncEvent) -> Dict[s
             "reverb_listing_id": getattr(reverb_listing, 'id', None)
         }
     }
+
+
+async def _relist_from_reverb(db: AsyncSession, event: SyncEvent) -> Dict[str, Any]:
+    """
+    Flow 1: Reverb listing was relisted (status changed to active/live).
+    Propagate the relist to other platforms (eBay, Shopify, V&R).
+
+    This uses the EventProcessor._process_status_change() method which handles:
+    - eBay: RelistFixedPriceItem (creates new ItemID, orphans old listing)
+    - Shopify: Set to ACTIVE with inventory=1
+    - V&R: restore_from_sold
+    """
+    from app.services.event_processor import EventProcessor
+
+    platform_name = (event.platform_name or '').lower()
+    if platform_name != 'reverb':
+        return {
+            "status": "error",
+            "message": "Relist propagation is only available for Reverb status changes"
+        }
+
+    if event.change_type != 'status_change':
+        return {
+            "status": "error",
+            "message": "Relist is only available for status change events"
+        }
+
+    change_data = event.change_data or {}
+    new_status = str(change_data.get('new') or '').lower()
+    if new_status not in {'live', 'active'}:
+        return {
+            "status": "error",
+            "message": f"Cannot relist - new status is '{new_status or 'unknown'}', expected 'live' or 'active'"
+        }
+
+    if not event.product_id:
+        return {
+            "status": "error",
+            "message": "Cannot relist - no product_id associated with this event"
+        }
+
+    # Use the EventProcessor to handle the relist propagation
+    processor = EventProcessor(db, dry_run=False)
+    result = await processor.process_sync_event(event)
+
+    if result.success:
+        # Mark event as processed
+        now_utc = datetime.utcnow()
+        event.status = 'processed'
+        event.processed_at = now_utc
+        notes_msg = f"Relisted via Sync Events UI. Platforms: {', '.join(result.platforms_created) if result.platforms_created else 'none'}"
+        if result.platforms_failed:
+            notes_msg += f". Failed: {', '.join(result.platforms_failed)}"
+        event.notes = f"{event.notes}\n{notes_msg}" if event.notes else notes_msg
+        db.add(event)
+        await db.commit()
+
+        return {
+            "status": "success" if not result.platforms_failed else "partial",
+            "message": result.message,
+            "details": {
+                "product_id": result.product_id,
+                "platforms_created": result.platforms_created,
+                "platforms_failed": result.platforms_failed,
+                "errors": result.errors
+            }
+        }
+    else:
+        return {
+            "status": "error",
+            "message": result.message,
+            "details": {
+                "errors": result.errors,
+                "platforms_failed": result.platforms_failed
+            }
+        }
 
 
 async def _apply_manual_delete(db: AsyncSession, event: SyncEvent) -> Dict[str, Any]:

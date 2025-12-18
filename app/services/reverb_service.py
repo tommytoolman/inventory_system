@@ -1483,7 +1483,7 @@ class ReverbService:
             
             # Update local database records
             platform_common.status = ListingStatus.ACTIVE.value
-            listing.reverb_state = "published"
+            listing.reverb_state = "live"
             
             self.db.add(platform_common)
             self.db.add(listing)

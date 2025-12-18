@@ -28,6 +28,7 @@ from app.services.reverb_service import ReverbService
 from app.services.reverb.client import ReverbClient
 from app.services.ebay_service import EbayService
 from app.services.shopify_service import ShopifyService
+from app.services.vr_service import VRService
 from app.core.config import get_settings
 from app.services.vr_job_queue import enqueue_vr_job
 
@@ -1102,11 +1103,275 @@ async def _process_status_change(
     event: SyncEvent,
     platforms: Optional[List[str]]
 ) -> EventProcessingResult:
-    """Process status change events (sold, ended, removed)"""
+    """Process status change events - handles both sold/ended AND relist (live/active) scenarios.
+
+    For relist scenarios (sold → live/active):
+    - Updates local Reverb status to 'live'
+    - Propagates relist to other platforms:
+      - V&R: calls restore_from_sold()
+      - eBay: calls relist_item() (returns new ItemID)
+      - Shopify: sets status to ACTIVE and inventory to 1
+    """
     result = EventProcessingResult()
-    result.message = "Status change processing not yet implemented in event_processor"
-    result.success = False
-    return result
+    settings = get_settings()
+
+    try:
+        change_data = event.change_data or {}
+        old_status = str(change_data.get('old', '')).lower()
+        new_status = str(change_data.get('new', '')).lower()
+        source_platform = (event.platform_name or '').lower()
+
+        logger.info(f"Processing status_change event {event.id}: {old_status} → {new_status} (source: {source_platform})")
+
+        # Determine if this is a RELIST scenario (sold/ended → live/active)
+        off_market = ['sold', 'ended', 'removed', 'archived']
+        on_market = ['live', 'active']
+
+        is_relist = old_status in off_market and new_status in on_market
+        is_ending = old_status in on_market and new_status in off_market
+
+        if not is_relist and not is_ending:
+            result.message = f"Status change {old_status} → {new_status} does not require cross-platform action"
+            result.success = True
+            return result
+
+        # Get the product
+        product = None
+        if event.product_id:
+            product = await session.get(Product, event.product_id)
+
+        if not product:
+            result.message = "No product associated with this event"
+            result.success = False
+            return result
+
+        result.product_id = product.id
+
+        # === RELIST SCENARIO ===
+        if is_relist:
+            logger.info(f"RELIST detected for product {product.sku}: {old_status} → {new_status}")
+
+            # Calculate days since sold for Shopify logic
+            days_since_sold = 0
+            if event.detected_at:
+                now_utc = datetime.now(timezone.utc)
+                detected_at = event.detected_at
+                # Handle timezone-naive datetimes from DB
+                if detected_at.tzinfo is None:
+                    detected_at = detected_at.replace(tzinfo=timezone.utc)
+                days_since_sold = (now_utc - detected_at).days
+
+            # Determine which platforms to update
+            target_platforms = platforms or ['reverb', 'ebay', 'shopify', 'vr']
+            # Remove the source platform - it's already relisted there
+            target_platforms = [p for p in target_platforms if p.lower() != source_platform]
+
+            # Get all platform listings for this product
+            pc_query = select(PlatformCommon).where(PlatformCommon.product_id == product.id)
+            pc_result = await session.execute(pc_query)
+            platform_commons = {pc.platform_name: pc for pc in pc_result.scalars().all()}
+
+            # --- Update source platform (Reverb) local status ---
+            if source_platform == 'reverb' and 'reverb' not in target_platforms:
+                reverb_pc = platform_commons.get('reverb')
+                if reverb_pc:
+                    reverb_pc.status = ListingStatus.ACTIVE.value
+                    reverb_pc.sync_status = SyncStatus.SYNCED.value
+                    reverb_pc.last_sync = datetime.utcnow()
+                    session.add(reverb_pc)
+
+                    # Update reverb_listings table
+                    rl_query = select(ReverbListing).where(ReverbListing.platform_id == reverb_pc.id)
+                    rl_result = await session.execute(rl_query)
+                    reverb_listing = rl_result.scalar_one_or_none()
+                    if reverb_listing:
+                        reverb_listing.reverb_state = 'live'
+                        reverb_listing.last_synced_at = datetime.utcnow()
+                        session.add(reverb_listing)
+
+                    result.platforms_created.append('reverb')
+                    logger.info(f"Updated local Reverb status to 'live' for {product.sku}")
+
+            # --- Propagate to V&R ---
+            if 'vr' in target_platforms:
+                vr_pc = platform_commons.get('vr')
+                if vr_pc and vr_pc.external_id:
+                    try:
+                        vr_service = VRService(session)
+                        vr_success = await vr_service.restore_from_sold(vr_pc.external_id)
+                        if vr_success:
+                            result.platforms_created.append('vr')
+                            logger.info(f"V&R relist successful for {product.sku}")
+                        else:
+                            result.platforms_failed.append('vr')
+                            result.errors.append("V&R restore_from_sold returned False")
+                    except Exception as e:
+                        result.platforms_failed.append('vr')
+                        result.errors.append(f"V&R error: {str(e)}")
+                        logger.error(f"V&R relist failed for {product.sku}: {e}")
+                else:
+                    logger.info(f"No V&R listing found for {product.sku}, skipping")
+
+            # --- Propagate to eBay ---
+            if 'ebay' in target_platforms:
+                ebay_pc = platform_commons.get('ebay')
+                if ebay_pc and ebay_pc.external_id:
+                    try:
+                        from app.services.ebay.trading import EbayTradingLegacyAPI
+                        ebay_api = EbayTradingLegacyAPI(sandbox=False)
+
+                        # Use RelistFixedPriceItem for fixed-price listings (not RelistItem which is for auctions)
+                        relist_response = await ebay_api.relist_fixed_price_item(ebay_pc.external_id)
+
+                        ack = relist_response.get('Ack', '')
+                        if ack in ['Success', 'Warning']:
+                            # Get the new ItemID from response
+                            new_item_id = relist_response.get('ItemID')
+                            if new_item_id:
+                                old_item_id = ebay_pc.external_id
+                                now_utc = datetime.utcnow()
+
+                                # Step 1: Find and orphan the OLD ebay_listings row
+                                old_listing_query = select(EbayListing).where(
+                                    EbayListing.ebay_item_id == old_item_id
+                                )
+                                old_listing_result = await session.execute(old_listing_query)
+                                old_ebay_listing = old_listing_result.scalar_one_or_none()
+
+                                if old_ebay_listing:
+                                    # Orphan the old listing - remove link to platform_common
+                                    old_ebay_listing.platform_id = None
+                                    old_ebay_listing.listing_status = 'ENDED'
+                                    old_ebay_listing.updated_at = now_utc
+
+                                    # Add relist history to listing_data
+                                    listing_data = old_ebay_listing.listing_data or {}
+                                    listing_data['_relist_info'] = {
+                                        'reason': 'cancelled_order',
+                                        'relisted_to_item_id': new_item_id,
+                                        'relisted_at': now_utc.isoformat(),
+                                        'original_product_sku': product.sku,
+                                        'original_product_id': product.id
+                                    }
+                                    old_ebay_listing.listing_data = listing_data
+                                    session.add(old_ebay_listing)
+                                    logger.info(f"Orphaned old eBay listing {old_item_id} with relist history")
+
+                                # Step 2: Create NEW ebay_listings row linked to platform_common
+                                new_ebay_listing = EbayListing(
+                                    ebay_item_id=new_item_id,
+                                    listing_status='ACTIVE',
+                                    platform_id=ebay_pc.id,
+                                    title=old_ebay_listing.title if old_ebay_listing else None,
+                                    price=old_ebay_listing.price if old_ebay_listing else None,
+                                    quantity=old_ebay_listing.quantity if old_ebay_listing else 1,
+                                    quantity_available=1,
+                                    ebay_category_id=old_ebay_listing.ebay_category_id if old_ebay_listing else None,
+                                    ebay_category_name=old_ebay_listing.ebay_category_name if old_ebay_listing else None,
+                                    ebay_condition_id=old_ebay_listing.ebay_condition_id if old_ebay_listing else None,
+                                    condition_display_name=old_ebay_listing.condition_display_name if old_ebay_listing else None,
+                                    picture_urls=old_ebay_listing.picture_urls if old_ebay_listing else None,
+                                    item_specifics=old_ebay_listing.item_specifics if old_ebay_listing else None,
+                                    payment_policy_id=old_ebay_listing.payment_policy_id if old_ebay_listing else None,
+                                    return_policy_id=old_ebay_listing.return_policy_id if old_ebay_listing else None,
+                                    shipping_policy_id=old_ebay_listing.shipping_policy_id if old_ebay_listing else None,
+                                    start_time=now_utc,
+                                    listing_data={
+                                        '_relisted_from': old_item_id,
+                                        '_relisted_at': now_utc.isoformat()
+                                    }
+                                )
+                                session.add(new_ebay_listing)
+                                logger.info(f"Created new eBay listing row for {new_item_id}")
+
+                                # Step 3: Update platform_common with new external_id and URL
+                                ebay_pc.external_id = new_item_id
+                                ebay_pc.listing_url = f"https://www.ebay.co.uk/itm/{new_item_id}"
+                                ebay_pc.status = ListingStatus.ACTIVE.value
+                                ebay_pc.sync_status = SyncStatus.SYNCED.value
+                                ebay_pc.last_sync = now_utc
+                                session.add(ebay_pc)
+
+                                result.platforms_created.append('ebay')
+                                result.details['ebay_old_item_id'] = old_item_id
+                                result.details['ebay_new_item_id'] = new_item_id
+                                logger.info(f"eBay relist successful for {product.sku}: {old_item_id} → {new_item_id}")
+                            else:
+                                result.platforms_failed.append('ebay')
+                                result.errors.append("eBay relist succeeded but no new ItemID returned")
+                        else:
+                            errors = relist_response.get('Errors', [])
+                            error_msg = "; ".join([e.get('LongMessage', 'Unknown') for e in (errors if isinstance(errors, list) else [errors])])
+                            result.platforms_failed.append('ebay')
+                            result.errors.append(f"eBay relist failed: {error_msg}")
+                            logger.error(f"eBay relist failed for {product.sku}: {error_msg}")
+                    except Exception as e:
+                        result.platforms_failed.append('ebay')
+                        result.errors.append(f"eBay error: {str(e)}")
+                        logger.error(f"eBay relist failed for {product.sku}: {e}")
+                else:
+                    logger.info(f"No eBay listing found for {product.sku}, skipping")
+
+            # --- Propagate to Shopify ---
+            if 'shopify' in target_platforms:
+                shopify_pc = platform_commons.get('shopify')
+                if shopify_pc and shopify_pc.external_id:
+                    try:
+                        shopify_service = ShopifyService(session)
+                        shopify_result = await shopify_service.relist_listing(
+                            shopify_pc.external_id,
+                            days_since_sold=days_since_sold
+                        )
+                        if shopify_result.get('success'):
+                            result.platforms_created.append('shopify')
+                            result.details['shopify_status_updated'] = shopify_result.get('status_updated')
+                            result.details['shopify_inventory_updated'] = shopify_result.get('inventory_updated')
+                            logger.info(f"Shopify relist successful for {product.sku}")
+                        else:
+                            result.platforms_failed.append('shopify')
+                            result.errors.append(f"Shopify relist failed: {shopify_result.get('message', 'Unknown')}")
+                    except Exception as e:
+                        result.platforms_failed.append('shopify')
+                        result.errors.append(f"Shopify error: {str(e)}")
+                        logger.error(f"Shopify relist failed for {product.sku}: {e}")
+                else:
+                    logger.info(f"No Shopify listing found for {product.sku}, skipping")
+
+            # Update product status
+            product.status = ProductStatus.ACTIVE
+            session.add(product)
+
+            # Mark event as processed
+            event.status = 'processed'
+            event.processed_at = datetime.utcnow()
+            event.notes = f"Relist propagated to: {', '.join(result.platforms_created)}" if result.platforms_created else "No platforms updated"
+            if result.platforms_failed:
+                event.notes += f" | Failed: {', '.join(result.platforms_failed)}"
+            session.add(event)
+
+            await session.commit()
+
+            result.success = len(result.platforms_failed) == 0
+            result.message = f"Relist processed: {len(result.platforms_created)} platforms updated"
+            if result.platforms_failed:
+                result.message += f", {len(result.platforms_failed)} failed"
+
+        # === ENDING SCENARIO (sold/ended) ===
+        elif is_ending:
+            # This is handled by other parts of the sync system
+            # Just mark locally for now
+            logger.info(f"ENDING detected for product {product.sku}: {old_status} → {new_status}")
+            result.message = "Ending events are handled by the sync detection process"
+            result.success = True
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error processing status_change event {event.id}: {e}", exc_info=True)
+        result.message = f"Error: {str(e)}"
+        result.errors.append(str(e))
+        result.success = False
+        return result
 
 async def _process_price_change(
     session: AsyncSession,

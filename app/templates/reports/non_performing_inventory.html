@@ -230,7 +230,7 @@
                                         {% endif %}
                                         <div class="ml-4">
                                             <div class="text-sm font-medium text-gray-900">
-                                                <a href="/inventory/product/{{ item.sku.split('-')[1] if '-' in item.sku else item.sku }}" class="hover:text-blue-600">
+                                                <a href="/inventory/product/{{ item.product_id }}" class="hover:text-blue-600">
                                                     {{ item.brand }} {{ item.model }}
                                                 </a>
                                             </div>
@@ -311,7 +311,7 @@
                                         <a href="https://reverb.com/item/{{ item.reverb_listing_id }}" 
                                            target="_blank" 
                                            class="text-blue-600 hover:text-blue-900">View</a>
-                                        <a href="/inventory/product/{{ item.sku.split('-')[1] if '-' in item.sku else item.sku }}" 
+                                        <a href="/inventory/product/{{ item.product_id }}"
                                            class="text-green-600 hover:text-green-900">Edit</a>
                                     </div>
                                 </td>

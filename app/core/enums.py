@@ -101,6 +101,7 @@ class ListingStatus(str, Enum):
     REMOVED = "removed"
     DELETED = "deleted"
     UNMATCHED = "unmatched"
+    REFRESHED = "refreshed"  # Orphaned record from stale listing refresh (Flow 3)
 
 class SyncStatus(str, Enum):
     """Consolidated sync status values used across the application."""

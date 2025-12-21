@@ -2342,6 +2342,7 @@ class EbayService:
             LEFT JOIN products p      ON p.id = pc.product_id
             LEFT JOIN ebay_listings el ON pc.id = el.platform_id
             WHERE pc.platform_name = 'ebay'
+              AND pc.status != 'refreshed'
         """)
         result = await self.db.execute(query)
         return [row._asdict() for row in result.fetchall()]

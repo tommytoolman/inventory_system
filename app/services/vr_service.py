@@ -1139,6 +1139,7 @@ class VRService:
             LEFT JOIN products p ON p.id = pc.product_id
             LEFT JOIN vr_listings vl ON vl.platform_id = pc.id
             WHERE pc.platform_name = 'vr'
+              AND pc.status != 'refreshed'
         """)
         result = await self.db.execute(query)
         return [row._asdict() for row in result.fetchall()]    

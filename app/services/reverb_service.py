@@ -1924,6 +1924,7 @@ class ReverbService:
             FROM platform_common pc
             LEFT JOIN products p ON p.id = pc.product_id
             WHERE pc.platform_name = 'reverb'
+              AND pc.status != 'refreshed'
         """)
         result = await self.db.execute(query)
         return [row._asdict() for row in result.fetchall()]

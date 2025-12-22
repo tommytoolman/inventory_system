@@ -768,21 +768,21 @@ class EbayService:
             api_items = self._prepare_api_data(ebay_api_items)
             db_items = self._prepare_db_data(existing_data)
             
-            # --- ADD THIS DEBUG BLOCK ---
-            logger.info("--- [DEBUG] DICTIONARY INSPECTION ---")
-            logger.info(f"Total API items prepared: {len(api_items)}")
-            logger.info(f"Total DB items prepared : {len(db_items)}")
-            
+            # --- DEBUG BLOCK (demoted to debug level) ---
+            logger.debug("--- [DEBUG] DICTIONARY INSPECTION ---")
+            logger.debug(f"Total API items prepared: {len(api_items)}")
+            logger.debug(f"Total DB items prepared : {len(db_items)}")
+
             # Print a few keys from each to check for type mismatches (e.g., str vs int)
             if api_items:
-                logger.info(f"Sample API keys: {list(api_items.keys())[:5]}")
+                logger.debug(f"Sample API keys: {list(api_items.keys())[:5]}")
             if db_items:
-                logger.info(f"Sample DB keys : {list(db_items.keys())[:5]}")
-            
+                logger.debug(f"Sample DB keys : {list(db_items.keys())[:5]}")
+
             # Check for our specific test item in both dictionaries
             test_id = '257056048177'
-            logger.info(f"Test item '{test_id}' in api_items: {test_id in api_items}")
-            logger.info(f"Test item '{test_id}' in db_items : {test_id in db_items}")
+            logger.debug(f"Test item '{test_id}' in api_items: {test_id in api_items}")
+            logger.debug(f"Test item '{test_id}' in db_items : {test_id in db_items}")
             # --- END DEBUG BLOCK ---
 
             # Step 3: Calculate differences
@@ -854,14 +854,14 @@ class EbayService:
 
         # Case 2: Items to check for updates
         for eid in api_ids & db_ids:
-            # --- FINAL, TYPE-SAFE DEBUG BLOCK ---
+            # --- FINAL, TYPE-SAFE DEBUG BLOCK (demoted to debug level) ---
             test_id = '257056048177'
             # Explicitly cast eid to a string for a reliable comparison
             if str(eid) == test_id:
-                logger.info(f"--- [FINAL DEBUG] MATCH FOUND FOR TEST ITEM IN INTERSECTION LOOP ---")
-                logger.info(f"    Item ID (eid): '{eid}' (type: {type(eid)})")
-                logger.info(f"    DB Item being passed to _has_changed: {db_items[eid]}")
-                logger.info(f"    Calling _has_changed...")
+                logger.debug(f"--- [FINAL DEBUG] MATCH FOUND FOR TEST ITEM IN INTERSECTION LOOP ---")
+                logger.debug(f"    Item ID (eid): '{eid}' (type: {type(eid)})")
+                logger.debug(f"    DB Item being passed to _has_changed: {db_items[eid]}")
+                logger.debug(f"    Calling _has_changed...")
             # --- END FINAL DEBUG BLOCK ---
             
             if self._has_changed(api_items[eid], db_items[eid]):
@@ -1163,7 +1163,7 @@ class EbayService:
 
         new_description = raw_listing.get("Description")
         if new_description is None:
-            logger.info(
+            logger.debug(
                 "No description returned for platform_id %s; skipping refresh",
                 platform_common_id,
             )

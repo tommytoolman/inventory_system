@@ -699,12 +699,12 @@ class ShopifyService:
         db_price = float(db_item.get('base_price') or 0.0)
         api_price = api_item.get('price', 0.0)
         if abs(api_price - db_price) > 0.01:
-            logger.info(f"--- [DEBUG] Change Detected for ID {api_item['external_id']}: PRICE MISMATCH ---")
-            logger.info(f"    API Price: '{api_price}' vs DB Price: '{db_price}'")
+            logger.debug(f"--- [DEBUG] Change Detected for ID {api_item['external_id']}: PRICE MISMATCH ---")
+            logger.debug(f"    API Price: '{api_price}' vs DB Price: '{db_price}'")
             return True
 
         if api_item.get('listing_url') and api_item['listing_url'] != db_item.get('listing_url'):
-            logger.info(f"--- [DEBUG] Change Detected for ID {api_item['external_id']}: URL MISMATCH ---")
+            logger.debug(f"--- [DEBUG] Change Detected for ID {api_item['external_id']}: URL MISMATCH ---")
             return True
 
         return False
@@ -1630,7 +1630,7 @@ class ShopifyService:
     
     def _prepare_api_data(self, shopify_products: List[Dict]) -> Dict[str, Dict]:
         """Prepares Shopify API data into a standardized lookup dictionary."""
-        logger.info("--- [DEBUG] Entering _prepare_api_data ---")
+        logger.debug("--- [DEBUG] Entering _prepare_api_data ---")
         prepared_items = {}
         for product in shopify_products:
             product_gid = str(product.get('id', ''))
@@ -1679,10 +1679,10 @@ class ShopifyService:
     def _prepare_db_data(self, existing_data: List[Dict]) -> Dict[str, Dict]:
         """Prepares local DB data into a lookup dictionary keyed by external_id."""
         db_items = {str(row['external_id']): row for row in existing_data if row.get('external_id')}
-        logger.info(f"Prepared {len(db_items)} DB items for comparison")
+        logger.debug(f"Prepared {len(db_items)} DB items for comparison")
         if db_items:
             sample_keys = list(db_items.keys())[:5]
-            logger.info(f"Sample DB keys: {sample_keys}")
+            logger.debug(f"Sample DB keys: {sample_keys}")
         return db_items
 
 

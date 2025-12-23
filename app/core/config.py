@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     
     # Basic Auth (temporary)
     ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD: str
+    ADMIN_PASSWORD: str = "changeme"
     BASIC_AUTH_USERNAME: Optional[str] = None
     BASIC_AUTH_PASSWORD: Optional[str] = None
     

@@ -48,6 +48,7 @@ from app.core.config import get_settings
 from app.database import async_session
 from app.models.reverb_order import ReverbOrder
 from app.models.platform_common import PlatformCommon
+from app.services.order_sale_processor import OrderSaleProcessor
 
 def _parse_decimal(value: Any) -> Optional[Decimal]:
     if value in (None, "", "null"):
@@ -262,8 +263,14 @@ async def get_sold_orders(
     if insert_db:
         async with async_session() as db:
             summary = await upsert_orders(db, orders)
+            # Process orders for inventory management
+            processor = OrderSaleProcessor(db)
+            sale_summary = await processor.process_unprocessed_orders("reverb", dry_run=False)
+            await db.commit()
         if not json_output:
             print(f"\n💾 DB upsert summary: {summary}")
+            print(f"📦 Sale processing: {sale_summary['sales_detected']} sales detected, "
+                  f"{sale_summary['quantity_decrements']} quantity decrements")
     
     # Save to file if requested
     if save_to_file:

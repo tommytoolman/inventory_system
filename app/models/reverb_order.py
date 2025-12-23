@@ -76,3 +76,7 @@ class ReverbOrder(Base):
     platform_listing_id = Column(Integer)
     created_row_at = Column(DateTime, nullable=False, server_default=text("timezone('utc', now())"))
     updated_row_at = Column(DateTime, nullable=False, server_default=text("timezone('utc', now())"))
+
+    # Sale processing for inventory management
+    sale_processed = Column(Boolean, nullable=False, server_default=text("false"))
+    sale_processed_at = Column(DateTime, nullable=True)

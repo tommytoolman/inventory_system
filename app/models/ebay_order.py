@@ -59,3 +59,7 @@ class EbayOrder(Base):
     platform_listing_id = Column(Integer)
     created_at = Column(DateTime, nullable=False, server_default=text("timezone('utc', now())"))
     updated_at = Column(DateTime, nullable=False, server_default=text("timezone('utc', now())"))
+
+    # Sale processing for inventory management
+    sale_processed = Column(Boolean, nullable=False, server_default=text("false"))
+    sale_processed_at = Column(DateTime, nullable=True)

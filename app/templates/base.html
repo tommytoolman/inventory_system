@@ -6,7 +6,9 @@
     <title>{% block title %}Inventory Management System{% endblock %}</title>
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.tiny.cloud/1/{p7dbrca6tfr9mkuv9lb0x2k5elocoqe08092v79w9je6kjz7}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+    {% if tinymce_api_key %}
+    <script src="https://cdn.tiny.cloud/1/{{ tinymce_api_key }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+    {% endif %}
 
     <style>
         body {
@@ -58,9 +60,13 @@
                         class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                         Add Product
                     </a>
-                    <a href="/reports/sales" 
+                    <a href="/reports/sales"
                         class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                        Sales &amp; Orders
+                        Sales
+                    </a>
+                    <a href="/orders"
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Orders
                     </a>
                     <!-- <a href="/matching" 
                         class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">

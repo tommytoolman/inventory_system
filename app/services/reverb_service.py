@@ -2360,9 +2360,14 @@ class ReverbService:
                 try:
                     details = await self.client.get_listing_details(reverb_id)
                     new_status = details.get('state', {}).get('slug', 'unknown')
-                    
+
+                    # Only log if status actually changed (avoid false positives from API lag/pagination)
+                    if new_status == 'live':
+                        logger.info(f"Item {reverb_id} still live on API - skipping false positive status_change")
+                        continue
+
                     events_to_log.append(self._prepare_sync_event(
-                        sync_run_id, 'status_change', 
+                        sync_run_id, 'status_change',
                         external_id=reverb_id,
                         product_id=db_item['product_id'],
                         platform_common_id=db_item['platform_common_id'],
@@ -2502,9 +2507,14 @@ class ReverbService:
                     # This second API call is crucial to get the new status (e.g., 'sold', 'ended').
                     details = await self.client.get_listing_details(reverb_id)
                     new_status = details.get('state', {}).get('slug', 'unknown')
-                    
+
+                    # Only log if status actually changed (avoid false positives from API lag/pagination)
+                    if new_status == 'live':
+                        logger.info(f"Item {reverb_id} still live on API - skipping false positive status_change")
+                        continue
+
                     events_to_log.append(self._prepare_sync_event(
-                        sync_run_id, 'status_change', 
+                        sync_run_id, 'status_change',
                         external_id=reverb_id,
                         product_id=db_item['product_id'],
                         platform_common_id=db_item['platform_common_id'],

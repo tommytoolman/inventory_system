@@ -1,6 +1,11 @@
 # Project TODO – Inventory Management System
-*Last updated: 2025-12-15*
+*Last updated: 2025-12-24*
 > We only tick or strike items once we have confirmed they are done in production.
+
+## ✅ Security & Configuration Hardening
+- [x] **TinyMCE API Key Secure:** Removed hardcoded API key from `base.html` and moved to `TINYMCE_API_KEY` environment variable.
+- [x] **Admin Password Enforced:** Removed insecure default from `config.py` requiring `ADMIN_PASSWORD` environment variable.
+- [ ] **Review User Authentication:** Acknowledge existing internal authentication. Further formal review of auth/auth stack (User model, require_auth dependency) needed to ensure robustness and proper role management, especially for additional user access. _(Deferred by user for now)_
 
 ## 🔴 High Priority (Production blockers)
 - [ ] **eBay category-specific required fields** – eBay requires certain item specifics per category that will cause listing creation/updates to fail if missing. These MUST be captured in UI and sent in API payloads. _(Implemented, needs end-to-end testing)_
@@ -21,7 +26,6 @@
 - [ ] **Fix image toast message state** – ensure the success banner dismisses correctly after refresh. Confirm colour palette and that UI reverts cleanly after multiple create flows (e.g., after adding 4 images).
 - [ ] **Testing & verification rebuild** – restore integration coverage for sync flows, add regression tests for the high-risk services, and document the verification checklist.
 - [ ] **Populate Shopify archive gallery** – build the historical gallery view using the archive dataset so users can review past listings. Confirm with Adam whether thousands of gallery entries are actually required.
-- [ ] **Sold date surfaces** – expose the confirmed sold timestamp on product detail pages and reports when available. _Fold into the orders project._
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 - [ ] **NPI clustering report** – add a New Product Introduction cluster view grouped by category for merch planning.
 - [ ] **Redundant code clean-up** – tidy up/deprecate old sync forms, placeholder routers, and other dead code paths.
@@ -46,6 +50,7 @@
 - [ ] **Auto-relist at 180 days** – define and automate the policy for relisting stale inventory.
 
 ## ✅ Completed
+- [x] **Sold date surfaces** – exposed sold timestamp on product detail pages via `get_sale_info()` in inventory.py; shows sale platform and date. _Completed 2025-12-24._
 - [x] **Batch VR item creation** – job queue batches multiple VR listings, resolves IDs via single CSV download. _Completed 2025-12-15._
 - [x] **Left-handed tagging** – determine how we consistently label and surface left-handed instruments.
 - [x] **Retrofix missing product titles** – write a script to backfill `products.title` entries where historical edits failed to persist.
@@ -62,7 +67,7 @@
 
 - [x] **Reinstate Shopify SEO keyword generator button** – revert the auto-fill experiment and restore the manual generate flow (with richer keyword logic) once requirements are clarified. FIXED – currently hidden from users until next UX pass.
 - [x] **eBay condition/category parsing** – fix the 'list' object has no attribute "get" error, consolidate service modules, and flesh out the remaining condition/category mappings.
-- [x] **eBay shipping profiles out of sync** – align listing UI and background sync with the correct Business Policy IDs (Adam to supply new profiles) and expose configuration instead of hardcoding.
+- [x] **eBay shipping profiles out of sync** – align listing UI and background sync with the correct Business Policy IDs (Adam to supply new profiles) and validate configuration is exposed instead of hardcoding.
 - [x] **Reverb new listing flow fails** – diagnose current API/CSV path so new products publish end-to-end without manual intervention.
 - [x] **Sold item email alerts** – implemented via `EmailNotificationService.send_sale_alert` and invoked from `SyncService` sale handling flow.
 - [x] **Offload platform sync workloads** – move long-running sync jobs (especially Vintage & Rare) into background workers/threads so the FastAPI app stays responsive during imports and item creation.

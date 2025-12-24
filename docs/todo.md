@@ -16,7 +16,6 @@
 
 ## 🟡 Medium Priority (Stability & automation)
 - [ ] **Platform error handling standardisation** – unify logging/alerts and ensure retries work the same across eBay, Reverb, VR, and Shopify.
-- [ ] **"Where sold" attribution & sales orders** – refine sale-source attribution for each SKU and align the reporting logic with the upcoming `sales_orders` schema/workflow.
 - [ ] **Dropbox media refresh is inconsistent** – stabilise cache refresh, keep folder tiles a consistent size, and reduce redundant re-renders after multiple reloads.
 - [ ] **Platform stats ingestion gaps** – fill in watches/likes/views for eBay, Shopify, VR, matching the partial Reverb feed and surface them on dashboards.
 - [ ] **Review database field coverage** – audit all key tables to ensure required fields are populated across platforms and identify any lingering gaps plus run the broader table integrity/backfill sweep to patch any gaps found.
@@ -50,6 +49,7 @@
 - [ ] **Auto-relist at 180 days** – define and automate the policy for relisting stale inventory.
 
 ## ✅ Completed
+- [x] **"Where sold" attribution & sales orders** – sale-source attribution in sales report correctly identifies platform vs OFFLINE; aligned with orders workflow. _Completed 2025-12-24._
 - [x] **Sold date surfaces** – exposed sold timestamp on product detail pages via `get_sale_info()` in inventory.py; shows sale platform and date. _Completed 2025-12-24._
 - [x] **Batch VR item creation** – job queue batches multiple VR listings, resolves IDs via single CSV download. _Completed 2025-12-15._
 - [x] **Left-handed tagging** – determine how we consistently label and surface left-handed instruments.

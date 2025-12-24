@@ -1698,9 +1698,12 @@ async def sales_report(
         sort_dir = "DESC" if sort_order == "desc" else "ASC"
         
         # Query for sold/ended items with platform detection logic
+        # Logic:
+        # - If a platform shows 'sold' status (is_sold=True), that's where it sold
+        # - If all platforms only show 'ended' (is_sold=False), it's an offline/private sale
         sales_query = text(f"""
             WITH ranked_sales AS (
-                SELECT 
+                SELECT
                     p.id as product_id,
                     p.sku,
                     p.brand,
@@ -1712,9 +1715,13 @@ async def sales_report(
                     se.platform_name as reporting_platform,
                     se.detected_at as sale_date,
                     se.change_data->>'new' as change_type,
+                    COALESCE((se.change_data->>'is_sold')::boolean, false) as is_sold,
                     ROW_NUMBER() OVER (
-                        PARTITION BY p.id, DATE(se.detected_at) 
-                        ORDER BY se.detected_at DESC
+                        PARTITION BY p.id, DATE(se.detected_at)
+                        ORDER BY
+                            -- Prioritize 'sold' over 'ended' events
+                            CASE WHEN se.change_data->>'new' = 'sold' THEN 0 ELSE 1 END,
+                            se.detected_at DESC
                     ) as rn
                 FROM sync_events se
                 JOIN products p ON se.product_id = p.id
@@ -1723,65 +1730,38 @@ async def sales_report(
                 {" AND " + " AND ".join(where_clauses) if where_clauses else ""}
             ),
             sales_data AS (
-                SELECT 
+                SELECT
                     rs.*,
-                    
-                    -- Count active platforms at time of sale
-                    (SELECT COUNT(DISTINCT pc2.platform_name) 
-                     FROM platform_common pc2 
-                     WHERE pc2.product_id = rs.product_id 
-                     AND pc2.status IN ('ACTIVE', 'DRAFT')
-                    ) as active_platform_count,
-                    
-                    -- Get all platforms that had this product
-                    (SELECT ARRAY_AGG(DISTINCT pc.platform_name)
-                     FROM platform_common pc
-                     WHERE pc.product_id = rs.product_id
-                    ) as all_platforms,
-                    
-                    -- Determine sale platform
-                    CASE 
-                        -- If only one platform had it active, it sold there
-                        WHEN (SELECT COUNT(DISTINCT pc2.platform_name) 
-                              FROM platform_common pc2 
-                              WHERE pc2.product_id = rs.product_id 
-                              AND pc2.status IN ('ACTIVE', 'DRAFT')
-                             ) = 1 
+
+                    -- Determine sale platform based on actual sale indicators
+                    CASE
+                        -- If this platform explicitly shows 'sold' with is_sold=True, it sold there
+                        WHEN rs.change_type = 'sold' OR rs.is_sold = true
                         THEN rs.reporting_platform
-                        
-                        -- If multiple platforms but only one reports sold, it sold there
-                        WHEN (SELECT COUNT(DISTINCT se2.platform_name)
-                              FROM sync_events se2
-                              WHERE se2.product_id = rs.product_id
-                              AND se2.change_type = 'status_change'
-                              AND se2.change_data->>'new' IN ('sold', 'ended')
-                             ) = 1
-                        THEN rs.reporting_platform
-                        
-                        -- If all platforms report ended/sold, it was removed offline
-                        WHEN (SELECT COUNT(DISTINCT pc2.platform_name) 
-                              FROM platform_common pc2 
-                              WHERE pc2.product_id = rs.product_id
-                             ) = 
-                             (SELECT COUNT(DISTINCT se2.platform_name)
-                              FROM sync_events se2
-                              WHERE se2.product_id = rs.product_id
-                              AND se2.change_type = 'status_change'
-                              AND se2.change_data->>'new' IN ('sold', 'ended')
-                             )
-                        THEN 'offline'
-                        
-                        -- Otherwise, use the reporting platform
-                        ELSE rs.reporting_platform
-                    END as sale_platform,
-                    
-                    -- Sale confidence score
-                    CASE 
-                        WHEN rs.change_type = 'sold' THEN 'confirmed'
-                        WHEN rs.change_type = 'ended' THEN 'likely'
-                        ELSE 'uncertain'
-                    END as sale_confidence
-                    
+
+                        -- Check if ANY platform reported an actual sale for this product
+                        WHEN EXISTS (
+                            SELECT 1 FROM sync_events se2
+                            WHERE se2.product_id = rs.product_id
+                            AND se2.change_type = 'status_change'
+                            AND (se2.change_data->>'new' = 'sold'
+                                 OR (se2.change_data->>'is_sold')::boolean = true)
+                        )
+                        THEN (
+                            -- Return the platform that actually sold it
+                            SELECT se2.platform_name FROM sync_events se2
+                            WHERE se2.product_id = rs.product_id
+                            AND se2.change_type = 'status_change'
+                            AND (se2.change_data->>'new' = 'sold'
+                                 OR (se2.change_data->>'is_sold')::boolean = true)
+                            ORDER BY se2.detected_at DESC
+                            LIMIT 1
+                        )
+
+                        -- No platform shows actual sale - it's an offline/private sale
+                        ELSE 'offline'
+                    END as sale_platform
+
                 FROM ranked_sales rs
                 WHERE rs.rn = 1
             )

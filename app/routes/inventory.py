@@ -49,6 +49,7 @@ from app.core.exceptions import ProductCreationError, PlatformIntegrationError
 from app.database import async_session
 from app.dependencies import get_db, templates
 from app.models.product import Product
+from app.models.sync_event import SyncEvent
 from app.models.category_mappings import ReverbCategory
 from app.data.spec_fields import SPEC_FIELD_MAP
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
@@ -1570,6 +1571,68 @@ list_inventory_route = list_products
 # Explicitly export the alias
 __all__ = ["list_inventory_route", "router"]
 
+
+async def get_sale_info(db: AsyncSession, product_id: int) -> Optional[Dict]:
+    """
+    Get sale information for a product by analyzing sync_events.
+
+    Returns dict with:
+    - sold_platform: platform where item was sold (or None if private sale)
+    - sold_date: when it was sold
+    - ended_platforms: list of platforms where it was ended
+    - is_private_sale: True if ended on platforms but no platform shows 'sold'
+    """
+    # Query all status change events for this product that indicate sold/ended
+    result = await db.execute(
+        select(SyncEvent)
+        .where(
+            SyncEvent.product_id == product_id,
+            SyncEvent.change_type == 'status_change',
+        )
+        .order_by(SyncEvent.detected_at.desc())
+    )
+    events = result.scalars().all()
+
+    if not events:
+        return None
+
+    sold_platform = None
+    sold_date = None
+    ended_platforms = []
+
+    for event in events:
+        change_data = event.change_data or {}
+        new_status = (change_data.get('new') or '').lower()
+
+        if new_status == 'sold':
+            # This platform shows a confirmed sale
+            if not sold_platform:  # Take the most recent
+                sold_platform = event.platform_name
+                sold_date = event.detected_at
+        elif new_status in ('ended', 'sold_out'):
+            ended_platforms.append({
+                'platform': event.platform_name,
+                'date': event.detected_at
+            })
+
+    if not sold_platform and not ended_platforms:
+        return None
+
+    # If no platform shows 'sold' but we have 'ended' events, it's a private sale
+    is_private_sale = sold_platform is None and len(ended_platforms) > 0
+
+    # For private sales, use the most recent ended date
+    if is_private_sale and ended_platforms:
+        sold_date = ended_platforms[0]['date']  # Already sorted desc
+
+    return {
+        'sold_platform': sold_platform,
+        'sold_date': sold_date,
+        'ended_platforms': ended_platforms,
+        'is_private_sale': is_private_sale,
+    }
+
+
 @router.get("/product/{product_id}", response_class=HTMLResponse)
 async def product_detail(
     request: Request,
@@ -1778,6 +1841,11 @@ async def product_detail(
         if reverb_listing and reverb_listing.external_id:
             reverb_listing_id = reverb_listing.external_id
 
+        # Get sale info for sold products
+        sale_info = None
+        if product.status and product.status.value.upper() == 'SOLD':
+            sale_info = await get_sale_info(db, product_id)
+
         context = {
             "request": request,
             "product": product,
@@ -1786,6 +1854,7 @@ async def product_detail(
             "prev_product": prev_product,
             "next_product": next_product,
             "reverb_listing_id": reverb_listing_id,
+            "sale_info": sale_info,
         }
 
         response = templates.TemplateResponse("inventory/detail.html", context)

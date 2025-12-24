@@ -134,8 +134,6 @@
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reporting Platform</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Platform</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">All Platforms</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -181,24 +179,6 @@
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
                                     {{ sale.sale_platform|upper }}
                                 </span>
-                            {% endif %}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-center">
-                            {% if sale.sale_confidence == 'confirmed' %}
-                                <span class="text-green-600">✓ Confirmed</span>
-                            {% elif sale.sale_confidence == 'likely' %}
-                                <span class="text-orange-600">~ Likely</span>
-                            {% else %}
-                                <span class="text-gray-500">? Uncertain</span>
-                            {% endif %}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-center text-xs text-gray-500">
-                            {% if sale.all_platforms %}
-                                {% for platform in sale.all_platforms %}
-                                    <span class="inline-block px-1">{{ platform|upper }}</span>
-                                {% endfor %}
-                            {% else %}
-                                -
                             {% endif %}
                         </td>
                     </tr>

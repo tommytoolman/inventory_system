@@ -33,6 +33,19 @@
                             <div class="mt-1 text-center">
                                 {% if status_val == 'SOLD' %}
                                     <span class="inline-flex justify-center w-24 px-3 py-1 text-sm font-semibold rounded-full bg-red-100 text-red-700 border border-red-300">Sold</span>
+                                    {% if sale_info %}
+                                    <div class="mt-2 px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded border border-gray-200">
+                                        {% if sale_info.is_private_sale %}
+                                            {% if sale_info.ended_platforms %}
+                                            Ended on {{ sale_info.ended_platforms[0].platform|capitalize }} on {{ sale_info.sold_date.strftime('%d-%m-%Y') if sale_info.sold_date else 'N/A' }} • Sold off-line
+                                            {% else %}
+                                            Sold off-line
+                                            {% endif %}
+                                        {% else %}
+                                            Sold on {{ sale_info.sold_platform|capitalize }} on {{ sale_info.sold_date.strftime('%d-%m-%Y') if sale_info.sold_date else 'N/A' }}
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
                                 {% elif status_val == 'DRAFT' %}
                                     <span class="inline-flex justify-center w-24 px-3 py-1 text-sm font-semibold rounded-full bg-amber-100 text-amber-700 border border-amber-300">Draft</span>
                                 {% elif status_val == 'ARCHIVED' %}

@@ -1078,7 +1078,7 @@ async def sync_events_report(
 
     available_platforms = ["reverb", "ebay", "shopify", "vr"]
     available_change_types = [
-        "new_listing", "price_change", "status_change", "removed_listing", "title", "description"
+        "new_listing", "price_change", "status_change", "removed_listing", "order_sale", "title", "description"
     ]
 
     return templates.TemplateResponse("reports/sync_events_report.html", {
@@ -2699,3 +2699,296 @@ async def get_platform_status_options(platform: str):
     except Exception as e:
         logger.error(f"Error getting platform status options: {str(e)}")
         return JSONResponse([])
+
+
+@router.get("/inventory-reconciliation", response_class=HTMLResponse)
+async def inventory_reconciliation_report(request: Request):
+    """
+    Show all inventoried (stocked) items with quantities across all platforms.
+    Allows reconciliation of quantities to match RIFF as the source of truth.
+    """
+    async with get_session() as db:
+        # Get all stocked items with their platform quantities
+        query = text("""
+            SELECT
+                p.id,
+                p.sku,
+                p.title,
+                p.quantity as riff_qty,
+                p.primary_image,
+                rl.inventory_quantity as reverb_qty,
+                rl.reverb_listing_id,
+                el.quantity_available as ebay_qty,
+                el.ebay_item_id,
+                CASE WHEN sl.id IS NOT NULL THEN true ELSE false END as shopify_listed,
+                sl.shopify_product_id,
+                sl.handle as shopify_handle,
+                sl.extended_attributes as shopify_extended,
+                CASE WHEN vl.id IS NOT NULL THEN true ELSE false END as vr_listed,
+                vl.vr_listing_id,
+                pc_reverb.status as reverb_status,
+                pc_ebay.status as ebay_status,
+                pc_shopify.status as shopify_status,
+                pc_vr.status as vr_status
+            FROM products p
+            LEFT JOIN platform_common pc_reverb ON pc_reverb.product_id = p.id AND pc_reverb.platform_name = 'reverb'
+            LEFT JOIN reverb_listings rl ON rl.platform_id = pc_reverb.id
+            LEFT JOIN platform_common pc_ebay ON pc_ebay.product_id = p.id AND pc_ebay.platform_name = 'ebay'
+            LEFT JOIN ebay_listings el ON el.platform_id = pc_ebay.id
+            LEFT JOIN platform_common pc_shopify ON pc_shopify.product_id = p.id AND pc_shopify.platform_name = 'shopify'
+            LEFT JOIN shopify_listings sl ON sl.platform_id = pc_shopify.id
+            LEFT JOIN platform_common pc_vr ON pc_vr.product_id = p.id AND pc_vr.platform_name = 'vr'
+            LEFT JOIN vr_listings vl ON vl.platform_id = pc_vr.id
+            WHERE p.is_stocked_item = true
+            AND p.status = 'ACTIVE'
+            ORDER BY p.title
+        """)
+
+        result = await db.execute(query)
+        rows = result.fetchall()
+
+        items = []
+        out_of_sync_count = 0
+
+        for row in rows:
+            row_dict = row._mapping
+
+            # Check if quantities are in sync
+            riff_qty = row_dict['riff_qty'] or 0
+            reverb_qty = row_dict['reverb_qty']
+            ebay_qty = row_dict['ebay_qty']
+
+            # Extract Shopify quantity from extended_attributes
+            shopify_qty = None
+            shopify_extended = row_dict.get('shopify_extended')
+            if shopify_extended and isinstance(shopify_extended, dict):
+                # Prefer totalInventory as the authoritative value
+                shopify_qty = shopify_extended.get('totalInventory')
+                # Fallback to variants if totalInventory not present
+                if shopify_qty is None:
+                    variants = shopify_extended.get('variants', {})
+                    nodes = variants.get('nodes', [])
+                    if nodes and len(nodes) > 0:
+                        shopify_qty = nodes[0].get('inventoryQuantity')
+                    # Also check edges[].node structure (older format)
+                    if shopify_qty is None:
+                        edges = variants.get('edges', [])
+                        if edges and len(edges) > 0:
+                            node = edges[0].get('node', {})
+                            shopify_qty = node.get('inventoryQuantity')
+
+            # Consider out of sync if any active platform has different qty
+            is_synced = True
+            if reverb_qty is not None and reverb_qty != riff_qty:
+                is_synced = False
+            if ebay_qty is not None and ebay_qty != riff_qty:
+                is_synced = False
+            if shopify_qty is not None and shopify_qty != riff_qty:
+                is_synced = False
+
+            if not is_synced:
+                out_of_sync_count += 1
+
+            items.append({
+                'id': row_dict['id'],
+                'sku': row_dict['sku'],
+                'title': row_dict['title'],
+                'primary_image': row_dict['primary_image'],
+                'riff_qty': riff_qty,
+                'reverb_qty': reverb_qty,
+                'reverb_listing_id': row_dict['reverb_listing_id'],
+                'reverb_status': row_dict['reverb_status'],
+                'ebay_qty': ebay_qty,
+                'ebay_item_id': row_dict['ebay_item_id'],
+                'ebay_status': row_dict['ebay_status'],
+                'shopify_listed': row_dict['shopify_listed'],
+                'shopify_product_id': row_dict['shopify_product_id'],
+                'shopify_handle': row_dict['shopify_handle'],
+                'shopify_qty': shopify_qty,
+                'shopify_status': row_dict['shopify_status'],
+                'vr_listed': row_dict['vr_listed'],
+                'vr_listing_id': row_dict['vr_listing_id'],
+                'vr_status': row_dict['vr_status'],
+                'is_synced': is_synced,
+            })
+
+        return templates.TemplateResponse("reports/inventory_reconciliation.html", {
+            "request": request,
+            "items": items,
+            "total_count": len(items),
+            "out_of_sync_count": out_of_sync_count,
+        })
+
+
+@router.post("/inventory-reconciliation/reconcile/{product_id}")
+async def reconcile_inventory(product_id: int, request: Request):
+    """
+    Smart reconciliation for stocked items.
+
+    Flow:
+    1. Check each platform's ACTUAL remote quantity
+    2. If remote matches RIFF target qty -> just update local DB (no API call)
+    3. If remote differs from RIFF target qty -> push update to that platform only
+    4. Only update RIFF if the new_quantity differs from current
+    """
+    from fastapi.responses import JSONResponse
+    from app.models.reverb import ReverbListing
+    from app.models.ebay import EbayListing
+    from app.models.shopify import ShopifyListing
+    from app.services.shopify.client import ShopifyGraphQLClient
+    from datetime import datetime
+
+    try:
+        body = await request.json()
+        target_quantity = int(body.get('quantity', 0))
+    except (ValueError, TypeError):
+        return JSONResponse({"status": "error", "message": "Invalid quantity"}, status_code=400)
+
+    async with get_session() as db:
+        product = await db.get(Product, product_id)
+        if not product:
+            return JSONResponse({"status": "error", "message": "Product not found"}, status_code=404)
+
+        if not product.is_stocked_item:
+            return JSONResponse({"status": "error", "message": "Product is not a stocked item"}, status_code=400)
+
+        results = {"riff": "unchanged", "reverb": "skipped", "ebay": "skipped", "shopify": "skipped"}
+
+        # Update RIFF if needed
+        if product.quantity != target_quantity:
+            product.quantity = target_quantity
+            results["riff"] = f"updated to {target_quantity}"
+
+        # Get platform links
+        platform_links = (
+            await db.execute(
+                select(PlatformCommon).where(PlatformCommon.product_id == product_id)
+            )
+        ).scalars().all()
+
+        vr_executor = getattr(request.app.state, "vr_executor", None)
+
+        for link in platform_links:
+            try:
+                if link.platform_name == "reverb":
+                    # Check Reverb
+                    listing_result = await db.execute(
+                        select(ReverbListing).where(ReverbListing.platform_id == link.id)
+                    )
+                    listing = listing_result.scalar_one_or_none()
+                    if listing:
+                        if listing.inventory_quantity != target_quantity:
+                            # Need to update Reverb
+                            from app.services.reverb_service import ReverbService
+                            reverb_service = ReverbService(db)
+                            success = await reverb_service.update_listing_quantity(
+                                listing.reverb_listing_id, target_quantity
+                            )
+                            if success:
+                                listing.inventory_quantity = target_quantity
+                                listing.last_synced_at = datetime.utcnow()
+                                results["reverb"] = f"updated to {target_quantity}"
+                            else:
+                                results["reverb"] = "update failed"
+                        else:
+                            results["reverb"] = "already correct"
+
+                elif link.platform_name == "ebay":
+                    # Check eBay
+                    listing_result = await db.execute(
+                        select(EbayListing).where(EbayListing.platform_id == link.id)
+                    )
+                    listing = listing_result.scalar_one_or_none()
+                    if listing:
+                        if listing.quantity_available != target_quantity:
+                            # Need to update eBay
+                            from app.services.ebay_service import EbayService
+                            ebay_service = EbayService(db)
+                            success = await ebay_service.update_listing_quantity(
+                                listing.ebay_item_id, target_quantity
+                            )
+                            if success:
+                                listing.quantity_available = target_quantity
+                                listing.last_synced_at = datetime.utcnow()
+                                results["ebay"] = f"updated to {target_quantity}"
+                            else:
+                                results["ebay"] = "update failed"
+                        else:
+                            results["ebay"] = "already correct"
+
+                elif link.platform_name == "shopify":
+                    # Check Shopify - need to poll actual remote qty
+                    listing_result = await db.execute(
+                        select(ShopifyListing).where(ShopifyListing.platform_id == link.id)
+                    )
+                    listing = listing_result.scalar_one_or_none()
+                    if listing and listing.shopify_product_id:
+                        # Get actual Shopify qty
+                        shopify_client = ShopifyGraphQLClient()
+                        query = """
+                        query getProduct($id: ID!) {
+                          product(id: $id) {
+                            totalInventory
+                          }
+                        }
+                        """
+                        response = shopify_client.execute(query, {'id': listing.shopify_product_id})
+                        product_data = response.get('product') or (response.get('data', {}) or {}).get('product')
+                        actual_shopify_qty = product_data.get('totalInventory') if product_data else None
+
+                        if actual_shopify_qty is not None and actual_shopify_qty != target_quantity:
+                            # Need to update Shopify
+                            from app.services.shopify_service import ShopifyService
+                            shopify_service = ShopifyService(db, shopify_client)
+                            # Use apply_product_update which handles inventory
+                            await shopify_service.apply_product_update(product, link, {"quantity"})
+                            results["shopify"] = f"updated to {target_quantity}"
+                        else:
+                            # Remote is correct, just update local extended_attributes if stale
+                            if listing.extended_attributes:
+                                ext = dict(listing.extended_attributes)
+
+                                # Check current local qty (handle both nodes[] and edges[].node structures)
+                                variants = ext.get('variants', {})
+                                local_qty = ext.get('totalInventory')
+                                nodes = variants.get('nodes', [])
+                                edges = variants.get('edges', [])
+
+                                if local_qty is None and nodes:
+                                    local_qty = nodes[0].get('inventoryQuantity')
+                                if local_qty is None and edges:
+                                    local_qty = edges[0].get('node', {}).get('inventoryQuantity')
+
+                                if local_qty != target_quantity:
+                                    # Update totalInventory
+                                    ext['totalInventory'] = target_quantity
+                                    # Update nodes structure if present
+                                    if nodes:
+                                        nodes[0]['inventoryQuantity'] = target_quantity
+                                        ext['variants']['nodes'] = nodes
+                                    # Update edges structure if present
+                                    if edges:
+                                        edges[0]['node']['inventoryQuantity'] = target_quantity
+                                        ext['variants']['edges'] = edges
+                                    listing.extended_attributes = ext
+                                    listing.last_synced_at = datetime.utcnow()
+                                    results["shopify"] = "local data corrected"
+                                else:
+                                    results["shopify"] = "already correct"
+                            else:
+                                results["shopify"] = "already correct"
+
+            except Exception as exc:
+                logger.error("Error reconciling %s for product %s: %s", link.platform_name, product.sku, exc)
+                results[link.platform_name] = f"error: {str(exc)[:50]}"
+
+        await db.commit()
+
+        logger.info("Smart reconciliation for product %s: %s", product.sku, results)
+
+        return JSONResponse({
+            "status": "success",
+            "message": f"Reconciliation complete",
+            "target_quantity": target_quantity,
+            "results": results,
+        })

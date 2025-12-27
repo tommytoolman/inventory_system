@@ -114,6 +114,7 @@
                             {% if event.change_type == 'status' %}{% set type_color = 'bg-purple-100 text-purple-800' %}{% endif %}
                             {% if event.change_type == 'status_change' %}{% set type_color = 'bg-purple-100 text-purple-800' %}{% endif %}
                             {% if event.change_type == 'removed_listing' %}{% set type_color = 'bg-red-100 text-red-800' %}{% endif %}
+                            {% if event.change_type == 'order_sale' %}{% set type_color = 'bg-amber-100 text-amber-800' %}{% endif %}
                             <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {{ type_color }} whitespace-nowrap">
                                 {{ event.change_type.replace('_', ' ').title() }}
                             </span>
@@ -326,6 +327,52 @@
                                         {% endif %}
                                     </div>
                                 </div>
+                            {% elif event.change_type == 'order_sale' %}
+                                <div class="flex items-start space-x-3">
+                                    {% if has_image %}
+                                    <div class="flex-shrink-0">
+                                        <img src="{{ image_url }}"
+                                             alt="{{ event.change_data.product_title or product_title }}"
+                                             class="w-16 h-16 object-cover rounded-md border border-gray-200">
+                                    </div>
+                                    {% endif %}
+                                    {% if event.change_data.listing_url %}
+                                    <a href="{{ event.change_data.listing_url }}"
+                                       target="_blank"
+                                       class="flex-shrink-0 mt-0.5">
+                                        <svg class="w-4 h-4 text-gray-500 hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                        </svg>
+                                    </a>
+                                    {% endif %}
+                                    <div class="flex-grow">
+                                        <div class="font-semibold text-gray-900">
+                                            {{ event.change_data.product_title or product_title }}
+                                        </div>
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            <span class="text-gray-500">Quantity:</span>
+                                            <strong class="text-gray-800">{{ event.change_data.current_quantity }}</strong>
+                                            →
+                                            <strong class="text-amber-600">{{ event.change_data.new_quantity }}</strong>
+                                            <span class="text-gray-400">(sold {{ event.change_data.quantity_sold or 1 }})</span>
+                                        </div>
+                                        {% if event.change_data.sale_amount %}
+                                        <div class="text-xs text-gray-500 mt-0.5">
+                                            <span class="text-gray-500">Sale:</span>
+                                            <strong class="text-green-600">£{{ "{:,.2f}".format(event.change_data.sale_amount|float) }}</strong>
+                                        </div>
+                                        {% endif %}
+                                        {% if event.change_data.order_number %}
+                                        <div class="text-xs text-gray-400 mt-0.5">
+                                            Order #{{ event.change_data.order_number }}
+                                            {% if event.change_data.buyer_name %} • {{ event.change_data.buyer_name }}{% endif %}
+                                        </div>
+                                        {% endif %}
+                                        {% if event.change_data.product_sku %}
+                                            <div class="text-xs text-gray-400 mt-0.5">SKU: {{ event.change_data.product_sku }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
                             {% else %}
                                 <div class="text-xs overflow-auto font-mono bg-gray-50 p-2 rounded">{{ event.change_data | tojson(indent=2) }}</div>
                             {% endif %}
@@ -420,11 +467,20 @@
                                 {% endif %}
                                 
                                 {% if event.status == 'pending' and event.change_type in ['price_change', 'price'] %}
-                                <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-green-800 bg-white border border-green-600 rounded-md shadow-sm hover:bg-green-50 transition-colors" 
+                                <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-green-800 bg-white border border-green-600 rounded-md shadow-sm hover:bg-green-50 transition-colors"
                                         title="Acknowledge the platform price and update the stored specialist value"
                                         onclick="processSyncEvent({{ event.id }}, 'Acknowledge Price', {}, this)"
                                         data-event-id="{{ event.id }}">
                                     <span>Acknowledge Price</span>
+                                </button>
+                                {% endif %}
+
+                                {% if event.status == 'pending' and event.change_type == 'order_sale' %}
+                                <button class="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md transition-colors"
+                                        title="Record sale: decrement quantity and sync to all platforms"
+                                        onclick="processSyncEvent({{ event.id }}, 'Record Sale', { action: 'process' }, this)"
+                                        data-event-id="{{ event.id }}">
+                                    <span>Record Sale</span>
                                 </button>
                                 {% endif %}
                                 

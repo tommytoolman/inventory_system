@@ -9,15 +9,14 @@
 
 ## 🔴 High Priority (Production blockers)
 - [ ] **eBay category-specific required fields** – eBay requires certain item specifics per category that will cause listing creation/updates to fail if missing. These MUST be captured in UI and sent in API payloads. _(Implemented, needs end-to-end testing)_
-- [ ] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms, restore the DB flagging for inventorised items that was lost previously, and enforce VR-specific rules (do nothing when other platforms sell while stock >1, end the VR listing only when quantity hits 0, and mark + relist VR sales when remaining quantity >0) so sync detects sales without prematurely ending multi-quantity listings.
+- [x] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms, restore the DB flagging for inventorised items that was lost previously, and enforce VR-specific rules (do nothing when other platforms sell while stock >1, end the VR listing only when quantity hits 0, and mark + relist VR sales when remaining quantity >0) so sync detects sales without prematurely ending multi-quantity listings. _Completed 2025-12-27: Added Inventory Reconciliation report with smart reconciliation (only updates out-of-sync platforms), order_sale sync events for stocked items, sale email alerts for inventorised stock._
 - [ ] **Left-handed category integrity** – review `platform_category_mappings` to ensure left-handed SKUs use the dedicated categories on every platform (while Reverb uses technical attributes, eBay/Shopify/VR must stay mapped via category).
 - [ ] **End-to-end mapping validation** – consolidate category-to-specs mapping (Reverb required fields like `handedness`, `number_of_strings`, `body_type` per category) with the cross-platform category mappings (VR, eBay, Shopify). Move all mappings into Alembic-managed tables, validate coverage post-migration, and update UI to show/hide spec fields based on selected category.
 - [ ] **Sync event automation** – confirm which sync events write to `_listings` tables (persistence audit) and add gradual automation so reconciled events publish without manual nudges. Includes gradually automating the sync pipeline so sold/ended propagation runs unattended.
 
 ## 🟡 Medium Priority (Stability & automation)
-- [ ] **Platform error handling standardisation** – unify logging/alerts and ensure retries work the same across eBay, Reverb, VR, and Shopify.
 - [ ] **Dropbox media refresh is inconsistent** – stabilise cache refresh, keep folder tiles a consistent size, and reduce redundant re-renders after multiple reloads.
-- [ ] **Platform stats ingestion gaps** – fill in watches/likes/views for eBay, Shopify, VR, matching the partial Reverb feed and surface them on dashboards.
+- [ ] **Platform stats ingestion gaps** – Shopify/VR don't expose engagement stats via API (confirmed). For Reverb: add daily detailed refresh (like eBay metadata feed) to update `view_count`/`watch_count` - code exists in `reverb/client.py` (`get_all_listings_detailed`), needs scheduling + upsert logic. For eBay: extract `WatchCount` from `listing_data.Raw.Item` to dedicated column during metadata refresh.
 - [ ] **Review database field coverage** – audit all key tables to ensure required fields are populated across platforms and identify any lingering gaps plus run the broader table integrity/backfill sweep to patch any gaps found.
 - [ ] **Shopify auto-archive workflow** – automate moving stale Shopify listings to archive after the agreed threshold.
 
@@ -49,6 +48,7 @@
 - [ ] **Auto-relist at 180 days** – define and automate the policy for relisting stale inventory.
 
 ## ✅ Completed
+- [x] **Platform error handling standardisation** – error handling across all platform services now graceful and consistent. _Completed 2025-12-24._
 - [x] **"Where sold" attribution & sales orders** – sale-source attribution in sales report correctly identifies platform vs OFFLINE; aligned with orders workflow. _Completed 2025-12-24._
 - [x] **Sold date surfaces** – exposed sold timestamp on product detail pages via `get_sale_info()` in inventory.py; shows sale platform and date. _Completed 2025-12-24._
 - [x] **Batch VR item creation** – job queue batches multiple VR listings, resolves IDs via single CSV download. _Completed 2025-12-15._

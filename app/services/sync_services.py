@@ -363,6 +363,8 @@ class SyncService:
                 success = await self._handle_removed_listing(event, summary, actions, dry_run)
             elif event.change_type == 'quantity_change':
                 success = await self._handle_quantity_change(event, summary, actions, dry_run)
+            elif event.change_type == 'order_sale':
+                success = await self._handle_order_sale(event, summary, actions, dry_run)
 
             if success:
                 event.status = 'processed'
@@ -1567,6 +1569,202 @@ class SyncService:
         actions.append(action_desc)
         summary['actions_taken'] += 1
         event.notes = f"Quantity updated to {new_quantity_int}."
+        return True
+
+    async def _handle_order_sale(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
+        """
+        Handle an order_sale event for stocked (inventoried) items.
+
+        This decrements quantity on RIFF and propagates to other platforms:
+        - eBay: Update quantity
+        - Shopify: Update inventory
+        - VR: No action if qty > 0 (VR doesn't support multi-qty)
+        - If qty reaches 0: End listings on all platforms
+        """
+        if not event.product_id:
+            event.notes = "Event is missing product_id, cannot process order sale."
+            return False
+
+        product = await self.db.get(Product, event.product_id)
+        if not product:
+            event.notes = f"Product {event.product_id} not found."
+            return False
+
+        change_data = event.change_data or {}
+        quantity_sold = change_data.get('quantity_sold', 1)
+        order_number = change_data.get('order_number', 'unknown')
+        current_qty = product.quantity or 0
+
+        try:
+            quantity_sold = int(quantity_sold)
+        except (TypeError, ValueError):
+            quantity_sold = 1
+
+        new_quantity = max(0, current_qty - quantity_sold)
+
+        action_desc = (
+            f"[{'DRY RUN' if dry_run else 'ACTION'}] Order sale for Product #{product.id} "
+            f"(order {order_number}): qty {current_qty} -> {new_quantity}"
+        )
+
+        if dry_run:
+            actions.append(action_desc)
+            summary['actions_taken'] += 1
+            event.notes = f"Dry run - would decrement quantity to {new_quantity}."
+            return True
+
+        # 1. Update RIFF product quantity
+        product.quantity = new_quantity
+        if new_quantity == 0:
+            product.status = ProductStatus.SOLD
+            summary['sales'] += 1
+            logger.info(f"Product #{product.id} quantity reached 0. Marking as SOLD.")
+        self.db.add(product)
+
+        # 2. Update reverb_listings.inventory_quantity
+        reverb_listing_stmt = (
+            select(ReverbListing)
+            .join(PlatformCommon, ReverbListing.platform_id == PlatformCommon.id)
+            .where(PlatformCommon.product_id == product.id)
+        )
+        reverb_listing_result = await self.db.execute(reverb_listing_stmt)
+        reverb_listing = reverb_listing_result.scalar_one_or_none()
+        if reverb_listing:
+            reverb_listing.inventory_quantity = new_quantity
+            self.db.add(reverb_listing)
+            logger.info(f"Updated reverb_listings.inventory_quantity to {new_quantity} for product #{product.id}")
+
+        # 3. Mark the order as processed
+        order_uuid = change_data.get('order_uuid')
+        if order_uuid:
+            from app.models.reverb_order import ReverbOrder
+            order_stmt = select(ReverbOrder).where(ReverbOrder.order_uuid == order_uuid)
+            order_result = await self.db.execute(order_stmt)
+            order = order_result.scalar_one_or_none()
+            if order:
+                order.sale_processed = True
+                order.sale_processed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                self.db.add(order)
+                logger.info(f"Marked order {order_number} as sale_processed")
+
+        # 4. Propagate to other platforms
+        propagation_results = []
+
+        # eBay: Update quantity
+        ebay_link_stmt = select(PlatformCommon).where(
+            PlatformCommon.product_id == product.id,
+            PlatformCommon.platform_name == "ebay",
+            PlatformCommon.status == ListingStatus.ACTIVE.value,
+        )
+        ebay_link_result = await self.db.execute(ebay_link_stmt)
+        ebay_link = ebay_link_result.scalar_one_or_none()
+
+        if ebay_link and ebay_link.external_id:
+            try:
+                ebay_service = self.platform_services.get("ebay")
+                if ebay_service and hasattr(ebay_service, 'update_quantity'):
+                    await ebay_service.update_quantity(ebay_link.external_id, new_quantity)
+                    propagation_results.append(f"eBay: qty updated to {new_quantity}")
+                    logger.info(f"Updated eBay quantity to {new_quantity} for item {ebay_link.external_id}")
+
+                    # Update local ebay_listings
+                    from app.models.ebay import EbayListing
+                    ebay_listing_stmt = select(EbayListing).where(EbayListing.platform_id == ebay_link.id)
+                    ebay_listing = (await self.db.execute(ebay_listing_stmt)).scalar_one_or_none()
+                    if ebay_listing:
+                        ebay_listing.quantity_available = new_quantity
+                        self.db.add(ebay_listing)
+
+                    if new_quantity == 0:
+                        ebay_link.status = ListingStatus.ENDED.value
+                        self.db.add(ebay_link)
+                else:
+                    propagation_results.append("eBay: service not available for qty update")
+            except Exception as e:
+                propagation_results.append(f"eBay: failed - {str(e)}")
+                logger.warning(f"Failed to update eBay quantity: {e}")
+
+        # Shopify: Update inventory
+        shopify_link_stmt = select(PlatformCommon).where(
+            PlatformCommon.product_id == product.id,
+            PlatformCommon.platform_name == "shopify",
+            PlatformCommon.status == ListingStatus.ACTIVE.value,
+        )
+        shopify_link_result = await self.db.execute(shopify_link_stmt)
+        shopify_link = shopify_link_result.scalar_one_or_none()
+
+        if shopify_link and shopify_link.external_id:
+            try:
+                shopify_service = self.platform_services.get("shopify")
+                if shopify_service and hasattr(shopify_service, 'update_inventory'):
+                    await shopify_service.update_inventory(shopify_link.external_id, new_quantity)
+                    propagation_results.append(f"Shopify: inventory updated to {new_quantity}")
+                    logger.info(f"Updated Shopify inventory to {new_quantity} for product {shopify_link.external_id}")
+
+                    if new_quantity == 0:
+                        shopify_link.status = ListingStatus.ENDED.value
+                        self.db.add(shopify_link)
+                else:
+                    propagation_results.append("Shopify: service not available for inventory update")
+            except Exception as e:
+                propagation_results.append(f"Shopify: failed - {str(e)}")
+                logger.warning(f"Failed to update Shopify inventory: {e}")
+
+        # VR: Only take action if qty reaches 0 (end listing)
+        # VR doesn't support multi-qty, so no action needed when qty > 0
+        if new_quantity == 0:
+            vr_link_stmt = select(PlatformCommon).where(
+                PlatformCommon.product_id == product.id,
+                PlatformCommon.platform_name == "vr",
+                PlatformCommon.status == ListingStatus.ACTIVE.value,
+            )
+            vr_link_result = await self.db.execute(vr_link_stmt)
+            vr_link = vr_link_result.scalar_one_or_none()
+
+            if vr_link and vr_link.external_id:
+                try:
+                    vr_service = self.platform_services.get("vr")
+                    if vr_service and hasattr(vr_service, 'end_listing'):
+                        await vr_service.end_listing(vr_link.external_id)
+                        propagation_results.append("VR: listing ended (qty=0)")
+                        vr_link.status = ListingStatus.ENDED.value
+                        self.db.add(vr_link)
+                        logger.info(f"Ended VR listing for product #{product.id}")
+                    else:
+                        propagation_results.append("VR: service not available to end listing")
+                except Exception as e:
+                    propagation_results.append(f"VR: failed to end - {str(e)}")
+                    logger.warning(f"Failed to end VR listing: {e}")
+        else:
+            propagation_results.append(f"VR: no action (qty={new_quantity} > 0)")
+
+        actions.append(action_desc)
+        if propagation_results:
+            actions.extend([f"  - {r}" for r in propagation_results])
+
+        summary['actions_taken'] += 1
+        summary['non_sale_changes'] += 1
+
+        # Send sale alert email (same as non-inventoried items)
+        sale_amount = change_data.get('sale_amount')
+        listing_url = change_data.get('listing_url')
+        try:
+            propagated_platforms_list = [p.split(':')[0] for p in propagation_results if 'updated' in p.lower() or 'ended' in p.lower()]
+            await self._send_sale_alert(
+                product=product,
+                platform="reverb",
+                sale_price=float(sale_amount) if sale_amount else None,
+                external_reference=order_number,
+                sale_status=f"Order Sale (qty: {quantity_sold})",
+                listing_url=listing_url,
+                detected_at=datetime.now(timezone.utc).isoformat(),
+                propagated_platforms=propagated_platforms_list if propagated_platforms_list else None,
+            )
+            logger.info(f"Sale alert email queued for order {order_number}")
+        except Exception as e:
+            logger.warning(f"Failed to send sale alert email for order {order_number}: {e}")
+
+        event.notes = f"Order sale processed. Qty {current_qty} -> {new_quantity}. " + "; ".join(propagation_results)
         return True
 
     async def sync_product_to_platforms(

@@ -640,6 +640,21 @@ class ShopifyService:
             self._push_inventory_update(product, product_gid, adjustments)
             inventory_updated = True
 
+            # Update local extended_attributes with new quantity
+            if listing.extended_attributes and isinstance(listing.extended_attributes, dict):
+                ext = dict(listing.extended_attributes)
+                # Update totalInventory
+                ext["totalInventory"] = product.quantity
+                # Update variants -> nodes[0] -> inventoryQuantity if present
+                if "variants" in ext and isinstance(ext["variants"], dict):
+                    nodes = ext["variants"].get("nodes", [])
+                    if nodes and len(nodes) > 0:
+                        nodes[0]["inventoryQuantity"] = product.quantity
+                        ext["variants"]["nodes"] = nodes
+                listing.extended_attributes = ext
+                listing.last_synced_at = datetime.utcnow()
+                self.db.add(listing)
+
         if "manufacturing_country" in changed_fields:
             try:
                 self._sync_country_of_origin(product, product_gid)

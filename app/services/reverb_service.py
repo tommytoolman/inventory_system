@@ -560,7 +560,10 @@ class ReverbService:
         summary = {"fetched": 0, "inserted": 0, "updated": 0, "errors": 0}
 
         try:
-            orders = await self.client.get_all_listings_detailed(max_concurrent=10, state="sold")
+            # IMPORTANT: Use get_all_sold_orders() NOT get_all_listings_detailed()
+            # See CLAUDE.md "Reverb API: LISTINGS vs ORDERS" for why this matters
+            # Limit to 2 pages (100 orders) - same as scheduler's fetch_reverb_orders
+            orders = await self.client.get_all_sold_orders(per_page=50, max_pages=2)
         except Exception as exc:  # noqa: BLE001
             logger.error("Failed to fetch Reverb orders: %s", exc, exc_info=True)
             summary["errors"] += 1
@@ -657,7 +660,124 @@ class ReverbService:
 
         await self.db.flush()
         return summary
-            
+
+    async def create_sync_events_for_stocked_orders(self, sync_run_id: uuid.UUID) -> Dict[str, int]:
+        """
+        Create sync_events for unprocessed orders on stocked (inventoried) items.
+
+        This handles the case where a stocked item sells - the listing stays live
+        but quantity needs to be decremented across all platforms.
+
+        Returns a summary dict with counts.
+        """
+        summary = {"events_created": 0, "skipped_existing": 0, "skipped_non_stocked": 0, "skipped_no_product": 0, "errors": 0}
+
+        # Valid order statuses that indicate a confirmed sale
+        SALE_ORDER_STATUSES = {"paid", "shipped", "received", "payment_pending"}
+
+        try:
+            # Find unprocessed Reverb orders linked to stocked products
+            stmt = (
+                select(ReverbOrder, Product)
+                .join(Product, ReverbOrder.product_id == Product.id)
+                .where(
+                    ReverbOrder.sale_processed == False,
+                    ReverbOrder.product_id.isnot(None),
+                    Product.is_stocked_item == True,
+                )
+            )
+            result = await self.db.execute(stmt)
+            rows = result.all()
+
+            for order, product in rows:
+                try:
+                    # Check if order status indicates a sale
+                    order_status = (order.status or "").lower()
+                    if order_status not in SALE_ORDER_STATUSES:
+                        logger.debug(
+                            f"Order {order.order_number} has status '{order.status}' - not a confirmed sale, skipping"
+                        )
+                        continue
+
+                    external_id = order.reverb_listing_id or order.order_number
+
+                    # Check if a pending sync_event already exists for this listing/order_sale
+                    existing_stmt = select(SyncEvent).where(
+                        SyncEvent.platform_name == "reverb",
+                        SyncEvent.external_id == external_id,
+                        SyncEvent.change_type == "order_sale",
+                        SyncEvent.status == "pending",
+                    )
+                    existing_result = await self.db.execute(existing_stmt)
+                    if existing_result.scalar_one_or_none():
+                        logger.debug(f"Pending order_sale sync_event already exists for {external_id}, skipping")
+                        summary["skipped_existing"] += 1
+                        continue
+
+                    # Get platform_common for this product on Reverb
+                    pc_stmt = select(PlatformCommon).where(
+                        PlatformCommon.product_id == product.id,
+                        PlatformCommon.platform_name == "reverb",
+                    )
+                    pc_result = await self.db.execute(pc_stmt)
+                    platform_common = pc_result.scalar_one_or_none()
+
+                    # Calculate what the new quantity would be
+                    order_qty = order.quantity or 1
+                    current_qty = product.quantity or 0
+                    new_qty = max(0, current_qty - order_qty)
+
+                    # Construct listing URL if we have the listing ID
+                    listing_url = None
+                    if order.reverb_listing_id:
+                        listing_url = f"https://reverb.com/item/{order.reverb_listing_id}"
+
+                    # Create the sync event
+                    sync_event = SyncEvent(
+                        sync_run_id=sync_run_id,
+                        platform_name="reverb",
+                        product_id=product.id,
+                        platform_common_id=platform_common.id if platform_common else None,
+                        external_id=external_id,
+                        change_type="order_sale",
+                        change_data={
+                            "order_number": order.order_number,
+                            "order_uuid": order.order_uuid,
+                            "order_status": order.status,
+                            "quantity_sold": order_qty,
+                            "current_quantity": current_qty,
+                            "new_quantity": new_qty,
+                            "is_stocked_item": True,
+                            "product_sku": product.sku,
+                            "product_title": product.title,
+                            "sale_amount": float(order.total_amount) if order.total_amount else None,
+                            "sale_currency": order.total_currency,
+                            "buyer_name": order.buyer_name,
+                            "listing_url": listing_url,
+                        },
+                        status="pending",
+                    )
+                    self.db.add(sync_event)
+                    summary["events_created"] += 1
+
+                    logger.info(
+                        f"Created order_sale sync_event for order {order.order_number} "
+                        f"(product {product.sku}, qty {current_qty} -> {new_qty})"
+                    )
+
+                except Exception as exc:
+                    logger.warning(f"Error creating sync_event for order: {exc}")
+                    await self.db.rollback()
+                    summary["errors"] += 1
+
+            await self.db.flush()
+
+        except Exception as exc:
+            logger.error(f"Error in create_sync_events_for_stocked_orders: {exc}", exc_info=True)
+            summary["errors"] += 1
+
+        return summary
+
     async def fetch_and_store_condition_mapping(self) -> Dict[str, str]:
         """
         Fetch conditions from Reverb and store for future use

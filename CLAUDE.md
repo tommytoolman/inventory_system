@@ -133,3 +133,89 @@ The sync flow is typically:
 3. **Column Name Mismatches**: Always check actual schema, never assume
 4. **Transaction Issues**: Use commit() not flush() for persistence
 5. **NaN in JSON**: Sanitize with pd.isna() before storing in JSONB columns
+
+### 🔴 Reverb API: LISTINGS vs ORDERS - CRITICAL DISTINCTION
+
+**These are TWO COMPLETELY DIFFERENT APIs that return different data:**
+
+| API Endpoint | Method | Returns | Use For |
+|-------------|--------|---------|---------|
+| `/my/listings` | `get_all_listings_detailed(state="sold")` | **Listing objects** (product info, no buyer data) | Syncing listing status/data |
+| `/my/orders/selling/all` | `get_all_sold_orders()` | **Order objects** (buyer, payment, shipping) | Processing sales & inventory |
+
+**NEVER use `get_all_listings_detailed(state="sold")` to import orders!**
+
+- Listings don't have: `order_number`, `order_uuid`, `buyer_name`, `total_amount`, shipping info
+- Orders have all this data and are what we need for `reverb_orders` table
+
+**Correct Pattern (see `scripts/run_sync_scheduler.py`):**
+```python
+# CORRECT - for fetching order data
+client = ReverbClient(api_key=settings.REVERB_API_KEY)
+orders = await client.get_all_sold_orders()  # Uses /my/orders/selling/all
+
+# WRONG - this returns listings, NOT orders
+orders = await client.get_all_listings_detailed(state="sold")  # Uses /my/listings
+```
+
+**Order Processing Flow:**
+1. Scheduler's `fetch_reverb_orders()` → `get_all_sold_orders()` → upserts to `reverb_orders`
+2. `OrderSaleProcessor.process_unprocessed_orders()` → handles inventory decrements
+3. For stocked items: `create_sync_events_for_stocked_orders()` → creates `order_sale` sync_events
+
+### 🔴 eBay Listing Creation - TWO ROUTES
+
+**Both routes ultimately call `ebay_service.create_listing_from_product()` but differ in how they're triggered:**
+
+#### Route 1: Multi-Platform Create via add.html
+**Endpoint:** `POST /inventory/add` → `add_product()`
+**Location:** `app/routes/inventory.py:3674-3720`
+
+```
+User fills add.html form with platform checkboxes
+    ↓
+add_product() parses form, creates Product
+    ↓
+If "ebay" in platforms_to_sync:
+    ↓
+Builds enriched_data from form fields (category, images, etc.)
+    ↓
+ebay_service.create_listing_from_product(
+    product=product,
+    reverb_api_data=enriched_data,  ← Built from form
+    use_shipping_profile=True,
+    **ebay_policies
+)
+```
+
+#### Route 2: Single Platform via details.html "List on eBay" button
+**Endpoint:** `POST /inventory/product/{id}/list_on/ebay` → `handle_create_platform_listing_from_detail()`
+**Location:** `app/routes/inventory.py:2630-2744`
+
+```
+User clicks "List on eBay" button on product detail page
+    ↓
+Fetches existing Reverb listing to get category UUID (if REV- SKU)
+    ↓
+Builds enriched_data with Reverb category UUID
+    ↓
+ebay_service.create_listing_from_product(
+    product=product,
+    reverb_api_data=enriched_data,  ← Contains Reverb UUID for category mapping
+    use_shipping_profile=True,
+    **policies
+)
+```
+
+#### Common Service Method
+**Location:** `app/services/ebay_service.py:1624-1920` → `create_listing_from_product()`
+
+Both routes converge here. This method:
+1. Maps category via UUID (`_get_ebay_category_from_reverb_uuid`) or string fallback
+2. Maps condition via `_get_ebay_condition_id()`
+3. Builds item specifics via `_build_item_specifics()`
+4. Calls `trading_api.add_fixed_price_item()`
+
+**Available Dynamic APIs (for validation):**
+- `trading_api.get_category_features(category_id)` → Returns `ValidConditions` list
+- `client.get_category_aspects(category_id)` → Returns required Item Specifics

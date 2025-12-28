@@ -42,6 +42,11 @@ MUSICAL_INSTRUMENT_CATEGORY_IDS = {
     "16222",  # Ukuleles
 }
 
+# Cache for category features (valid conditions) - class-level to persist across instances
+# Format: {category_id: {"valid_conditions": [...], "fetched_at": datetime}}
+_CATEGORY_FEATURES_CACHE: Dict[str, Dict[str, Any]] = {}
+_CACHE_TTL_HOURS = 24  # Cache valid conditions for 24 hours
+
 ROSEWOOD_VARIANT_PATTERNS = [
     re.compile(r"\bbrazilian\s+rosewood\b", re.IGNORECASE),
     re.compile(r"\bbrazillian\s+rosewood\b", re.IGNORECASE),
@@ -182,8 +187,43 @@ class EbayService:
 
     async def _get_ebay_condition_id(self, condition: ProductCondition, category_id: str = None) -> str:
         """
-        Resolve the eBay ConditionID using the database-backed mapping table.
+        Resolve the eBay ConditionID dynamically using the eBay API.
+
+        This method:
+        1. Fetches valid conditions for the category from eBay's GetCategoryFeatures API
+        2. Maps our ProductCondition to a valid eBay condition for that specific category
+        3. Falls back to database mapping or generic "3000" (Used) if API fails
         """
+        condition_value = condition
+        if not isinstance(condition_value, ProductCondition):
+            try:
+                condition_value = ProductCondition(condition_value)
+            except Exception:
+                condition_value = None
+                logger.warning(f"Could not parse condition: {condition}")
+
+        # STEP 1: Try dynamic API-based validation if we have a category
+        if category_id and condition_value:
+            valid_conditions = await self._get_valid_conditions_for_category(category_id)
+
+            if valid_conditions:
+                # We have valid conditions from the API - use them!
+                matched_id = self._find_best_matching_condition(condition_value, valid_conditions)
+                if matched_id:
+                    logger.info(
+                        f"Dynamic condition mapping: {condition_value.value} -> ConditionID {matched_id} "
+                        f"(category {category_id} accepts: {[c.get('ID') for c in valid_conditions]})"
+                    )
+                    return matched_id
+                else:
+                    logger.warning(
+                        f"Could not match {condition_value.value} to any valid condition for category {category_id}. "
+                        f"Valid conditions: {valid_conditions}"
+                    )
+
+        # STEP 2: Fallback to database-backed mapping (legacy behavior)
+        logger.info(f"Falling back to database condition mapping for {condition_value}")
+
         musical_instrument_categories = {
             "33034",  # Electric Guitars
             "33021",  # Acoustic Guitars
@@ -201,12 +241,6 @@ class EbayService:
         }
 
         scope = "musical_instruments" if (category_id in musical_instrument_categories if category_id else True) else "default"
-        condition_value = condition
-        if not isinstance(condition_value, ProductCondition):
-            try:
-                condition_value = ProductCondition(condition_value)
-            except Exception:
-                condition_value = None
 
         mapping = None
         if condition_value:
@@ -218,10 +252,11 @@ class EbayService:
             )
 
         if mapping:
+            logger.info(f"Database mapping found: {condition_value.value} -> {mapping.platform_condition_id}")
             return mapping.platform_condition_id
 
         logger.warning(
-            "Falling back to generic eBay condition code for condition=%s scope=%s",
+            "Falling back to generic eBay condition code 3000 (Used) for condition=%s scope=%s",
             condition,
             scope,
         )
@@ -240,6 +275,90 @@ class EbayService:
         }
         
         return condition_display_map.get(condition_id, "Used")
+
+    async def _get_valid_conditions_for_category(self, category_id: str) -> List[Dict[str, str]]:
+        """
+        Fetch valid condition IDs for a category from eBay API with caching.
+
+        Returns list of dicts: [{"ID": "3000", "DisplayName": "Used"}, ...]
+        Returns empty list if API fails (caller should use fallback logic).
+        """
+        global _CATEGORY_FEATURES_CACHE
+
+        # Check cache first
+        cached = _CATEGORY_FEATURES_CACHE.get(category_id)
+        if cached:
+            fetched_at = cached.get("fetched_at")
+            if fetched_at and (datetime.now() - fetched_at) < timedelta(hours=_CACHE_TTL_HOURS):
+                logger.debug(f"Using cached valid conditions for category {category_id}")
+                return cached.get("valid_conditions", [])
+
+        # Fetch from API
+        try:
+            logger.info(f"Fetching valid conditions from eBay API for category {category_id}")
+            features = await self.trading_api.get_category_features(category_id)
+
+            valid_conditions = features.get("ValidConditions", [])
+
+            # Cache the result
+            _CATEGORY_FEATURES_CACHE[category_id] = {
+                "valid_conditions": valid_conditions,
+                "fetched_at": datetime.now(),
+                "condition_enabled": features.get("ConditionEnabled", "Disabled")
+            }
+
+            logger.info(f"Cached {len(valid_conditions)} valid conditions for category {category_id}: {[c.get('ID') for c in valid_conditions]}")
+            return valid_conditions
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch category features for {category_id}: {e}")
+            return []
+
+    def _find_best_matching_condition(
+        self,
+        product_condition: ProductCondition,
+        valid_conditions: List[Dict[str, str]]
+    ) -> Optional[str]:
+        """
+        Find the best matching eBay condition ID from the list of valid conditions.
+
+        Maps our internal ProductCondition to eBay's condition IDs based on what's
+        actually valid for the category.
+        """
+        if not valid_conditions:
+            return None
+
+        valid_ids = {str(c.get("ID")) for c in valid_conditions if c.get("ID")}
+
+        # Define preference order for each ProductCondition
+        # These are ordered by preference - first match wins
+        # eBay condition IDs: 1000=New, 1500=New other, 2500=Refurbished, 3000=Used, 7000=For parts
+        condition_preferences = {
+            ProductCondition.NEW: ["1000", "1500", "3000"],  # New, New other, Used
+            ProductCondition.EXCELLENT: ["3000", "1500", "2500"],  # Used, New other, Refurbished
+            ProductCondition.VERYGOOD: ["3000", "2500"],  # Used, Refurbished
+            ProductCondition.GOOD: ["3000", "2500"],  # Used, Refurbished
+            ProductCondition.FAIR: ["3000", "7000"],  # Used, For parts
+            ProductCondition.POOR: ["7000", "3000"],  # For parts, Used
+        }
+
+        preferences = condition_preferences.get(product_condition, ["3000"])
+
+        for preferred_id in preferences:
+            if preferred_id in valid_ids:
+                logger.info(f"Matched {product_condition.value} to eBay condition {preferred_id} (valid for category)")
+                return preferred_id
+
+        # If no preference matches, use the first valid condition (usually the most common)
+        first_valid = valid_conditions[0].get("ID") if valid_conditions else None
+        if first_valid:
+            logger.warning(
+                f"No preferred condition matched for {product_condition.value}. "
+                f"Using first valid: {first_valid}"
+            )
+            return str(first_valid)
+
+        return None
 
     @staticmethod
     def _truncate_item_specific(value: str, limit: int) -> str:

@@ -3583,11 +3583,13 @@ async def add_product(
                 if not product:
                     raise ValueError(f"Could not re-load product with ID {product_read.id} after platform failure")
 
+            # NOTE: Only use local_photos - do NOT also populate photos/cloudinary_photos
+            # as shopify_service processes all sources and would create duplicates
             enriched_data = {
                 "title": f"{product.year} {product.brand} {product.model}" if product.year else f"{product.brand} {product.model}",
                 "description": product.description,
-                "photos": [],  # Will be populated with images
-                "cloudinary_photos": [],  # For high-res images
+                "photos": [],  # Leave empty - using local_photos instead
+                "cloudinary_photos": [],  # Leave empty - using local_photos instead
                 "condition": {"display_name": product.condition},
                 "categories": [{"uuid": platform_data.get("reverb", {}).get("primary_category")}] if platform_data.get("reverb") else [],
                 "price": {"amount": str(product.base_price), "currency": "GBP"},
@@ -3599,22 +3601,6 @@ async def add_product(
                 "brand": product.brand,
                 "local_photos": local_gallery_full_urls,
             }
-
-            # Add images to enriched data
-            if product.primary_image:
-                enriched_data["photos"].append({
-                    "_links": {"large": {"href": product.primary_image}},
-                    "url": product.primary_image
-                })
-                enriched_data["cloudinary_photos"].append({"preview_url": product.primary_image, "url": product.primary_image})
-
-            if product.additional_images:
-                for img_url in product.additional_images:
-                    enriched_data["photos"].append({
-                        "_links": {"large": {"href": img_url}},
-                        "url": img_url
-                    })
-                    enriched_data["cloudinary_photos"].append({"preview_url": img_url, "url": img_url})
         
         # Create listings on each selected platform
         if "shopify" in platforms_to_sync:

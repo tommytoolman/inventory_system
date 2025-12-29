@@ -1217,20 +1217,35 @@ class ShopifyGraphQLClient:
     async def mark_product_as_sold(self, product_gid: str, reduce_by: int = 1) -> dict:
         """
         Mark a product as sold by reducing inventory and verifying success
-        
+
         Args:
             product_gid: Shopify product GID
             reduce_by: Amount to reduce inventory by (default 1)
-            
+
         Returns:
             dict: Success status and inventory details
         """
         try:
             logger.info(f"Marking Shopify product as sold: {product_gid}")
-            
-            # Step 1: Reduce inventory
+
+            # Step 1: Get current inventory to calculate new absolute value
+            loop = asyncio.get_running_loop()
+            product_data = await loop.run_in_executor(
+                None, self.get_product_snapshot_by_id, product_gid, 1
+            )
+
+            current_quantity = 0
+            if product_data and product_data.get("variants", {}).get("edges"):
+                variant_node = product_data["variants"]["edges"][0]["node"]
+                current_quantity = variant_node.get("inventoryQuantity", 0) or 0
+
+            # Calculate new quantity - ensure it never goes below 0
+            new_quantity = max(0, current_quantity - reduce_by)
+            logger.info(f"Shopify inventory: current={current_quantity}, reducing by {reduce_by}, new={new_quantity}")
+
+            # Step 2: Set inventory to the calculated absolute value
             inventory_updates = {
-                "inventory": f"-{reduce_by}",  # Reduce by specified amount
+                "inventory": new_quantity,  # Absolute value, not relative
                 "tags": ["sold-via-sync", f"reduced-{datetime.now().strftime('%Y%m%d-%H%M%S')}"]
             }
             

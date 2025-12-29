@@ -51,7 +51,7 @@ from app.dependencies import get_db, templates
 from app.models.product import Product
 from app.models.sync_event import SyncEvent
 from app.models.category_mappings import ReverbCategory
-from app.data.spec_fields import SPEC_FIELD_MAP
+from app.data.spec_fields import SPEC_FIELD_MAP, SPEC_FIELDS
 from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
 from app.models.shipping import ShippingProfile
 from app.models.vr import VRListing
@@ -2887,6 +2887,7 @@ async def add_product_form(
             "handedness_options": handedness_options,
             "case_status_options": case_status_options,
             "body_type_options": body_type_options,
+            "spec_fields": SPEC_FIELDS,  # For Additional Specs UI
             # Platform pricing markups (from env vars)
             "ebay_markup_percent": settings.EBAY_PRICE_MARKUP_PERCENT,
             "vr_markup_percent": settings.VR_PRICE_MARKUP_PERCENT,
@@ -3327,6 +3328,15 @@ async def add_product(
         ebay_form_factor = _strip_text(form_data.get("platform_data__ebay__form_factor"))
         if ebay_form_factor:
             extra_attributes["ebay_form_factor"] = ebay_form_factor
+
+        # Merge additional specs from the Additional Specs UI section
+        additional_specs_json = form_data.get("additional_specs_json", "{}")
+        try:
+            additional_specs = json.loads(additional_specs_json) if additional_specs_json else {}
+            if isinstance(additional_specs, dict):
+                extra_attributes.update(additional_specs)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse additional_specs_json: %s", additional_specs_json)
 
         # Create product data
         storefront_value = _normalize_storefront_input(form_data.get("storefront"), Storefront.HANKS) or Storefront.HANKS
@@ -4630,6 +4640,15 @@ async def save_draft(
         ebay_hp_features_value = ebay_headphones_features or hp_features_from_form
         if ebay_hp_features_value and str(ebay_hp_features_value).strip():
             extra_attributes["ebay_headphones_features"] = str(ebay_hp_features_value).strip()
+
+        # Merge additional specs from the Additional Specs UI section
+        additional_specs_json = form_data.get("additional_specs_json", "{}")
+        try:
+            additional_specs = json.loads(additional_specs_json) if additional_specs_json else {}
+            if isinstance(additional_specs, dict):
+                extra_attributes.update(additional_specs)
+        except json.JSONDecodeError:
+            logger.warning("[SAVE DRAFT] Failed to parse additional_specs_json: %s", additional_specs_json)
 
         # Create or update product data - only include fields that exist in Product model
         product_data = {

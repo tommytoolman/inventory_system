@@ -939,6 +939,32 @@ class EbayTradingLegacyAPI:
         response_dict = await self._make_request('RelistItem', xml_request)
         return response_dict.get('RelistItemResponse', {})
 
+    async def relist_fixed_price_item(self, item_id: str) -> Dict[str, Any]:
+        """
+        Relist a fixed-price item that has been ended.
+
+        Use this for fixed-price listings, multi-item listings, or multi-variation listings.
+        For auction-style listings, use relist_item() instead.
+
+        Args:
+            item_id: Original item ID to relist
+
+        Returns:
+            Dict with new item ID and other details
+        """
+        xml_request = f"""<?xml version="1.0" encoding="utf-8"?>
+        <RelistFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+            <RequesterCredentials>
+                <eBayAuthToken>{await self._get_auth_token()}</eBayAuthToken>
+            </RequesterCredentials>
+            <Item>
+                <ItemID>{item_id}</ItemID>
+            </Item>
+        </RelistFixedPriceItemRequest>"""
+
+        response_dict = await self._make_request('RelistFixedPriceItem', xml_request)
+        return response_dict.get('RelistFixedPriceItemResponse', {})
+
     async def create_similar_listing(self, original_item_id: str, append_to_title: str = "- Relisted") -> Dict[str, Any]:
         """
         Create a new listing based on an existing/ended item

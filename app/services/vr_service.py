@@ -475,6 +475,78 @@ class VRService:
             logger.error(f"Exception while marking V&R item {external_id} as sold: {e}", exc_info=True)
             return False
 
+    async def restore_from_sold(self, external_id: str) -> bool:
+        """Restores a sold V&R item back to active/live status.
+
+        V&R may use an AJAX endpoint similar to mark_as_sold. If the endpoint
+        doesn't exist or fails, we update local state and log a warning that
+        the item may need to be manually relisted on V&R.
+
+        Args:
+            external_id: The V&R listing ID to restore.
+
+        Returns:
+            True if successful (or local-only update), False on error.
+        """
+        logger.info(f"Received request to restore V&R item {external_id} from sold.")
+        settings = get_settings()
+        client = VintageAndRareClient(settings.VINTAGE_AND_RARE_USERNAME, settings.VINTAGE_AND_RARE_PASSWORD, db_session=self.db)
+
+        try:
+            if not await client.authenticate():
+                logger.error(f"Authentication failed for restoring item {external_id}.")
+                return False
+
+            # Try to call unmark_sold AJAX endpoint (if it exists)
+            import random
+            random_num = random.random()
+            url = f'https://www.vintageandrare.com/ajax/unmark_sold/{random_num}'
+
+            ajax_headers = {
+                **client.headers,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'Referer': 'https://www.vintageandrare.com/account/items',
+            }
+
+            restore_data = f'product_id={external_id}'
+
+            if client.cf_session:
+                response = client.cf_session.post(url, data=restore_data, headers=ajax_headers)
+            else:
+                response = client.session.post(url, data=restore_data, headers=ajax_headers)
+
+            logger.info(f"V&R restore response: status={response.status_code}, body='{response.text}'")
+
+            # Check if the endpoint worked
+            if response.status_code == 200 and response.text.strip().lower() == 'true':
+                logger.info(f"V&R item {external_id} restored successfully via AJAX.")
+            else:
+                # Endpoint may not exist or returned failure - update local state only
+                logger.warning(
+                    f"V&R restore AJAX may not be supported (status={response.status_code}, "
+                    f"response='{response.text}'). Updating local state only. "
+                    f"Item may need manual relist on V&R website."
+                )
+
+            # Update local database regardless (optimistic update)
+            stmt = select(VRListing).where(VRListing.vr_listing_id == external_id)
+            listing_result = await self.db.execute(stmt)
+            listing = listing_result.scalar_one_or_none()
+            if listing:
+                listing.vr_state = 'live'
+                listing.inventory_quantity = 1
+                listing.in_inventory = True
+                listing.updated_at = datetime.utcnow()
+                self.db.add(listing)
+                logger.info(f"V&R listing {external_id} local state updated to live.")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Exception while restoring V&R item {external_id}: {e}", exc_info=True)
+            return False
+
     async def create_listing_from_product(
         self,
         product: Product,

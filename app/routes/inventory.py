@@ -5032,7 +5032,8 @@ async def get_draft_details(
 async def edit_product_form(
     request: Request,
     product_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ):
     """Show product edit form"""
     product = await db.get(Product, product_id)
@@ -5141,6 +5142,7 @@ async def edit_product_form(
             "canonical_categories": canonical_categories,
             "shipping_profiles": shipping_profiles,
             "body_type_options": SPEC_FIELD_MAP.get("body_type", {}).get("options", []),
+            "tinymce_api_key": settings.TINYMCE_API_KEY,
         }
     )
 

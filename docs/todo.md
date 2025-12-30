@@ -16,6 +16,7 @@
 - [x] **Dropbox media refresh is inconsistent** – _Completed 2025-12-30:_ Complete refactor of Dropbox integration: switched to thumbnail API for browsing (~98% bandwidth savings), added lazy full-res fetch on selection, fixed token persistence, parallel batch fetching, instant visual feedback (green border, checkmark, 50% opacity), two-way sync between browser and preview, smart Select All/Clear toggle button with parallel fetch.
 - [ ] **Platform stats ingestion gaps** – Shopify/VR don't expose engagement stats via API (confirmed). For Reverb: add daily detailed refresh (like eBay metadata feed) to update `view_count`/`watch_count` - code exists in `reverb/client.py` (`get_all_listings_detailed`), needs scheduling + upsert logic. For eBay: extract `WatchCount` from `listing_data.Raw.Item` to dedicated column during metadata refresh.
 - [ ] **Shopify archive** – create archive gallery view for historical listings AND implement auto-archive workflow (e.g., archive after 10 days of no activity).
+- [ ] **DHL API integration** – wire up the tested DHL API to the orders workflow for shipping label generation and tracking. API is tested and ready, just needs UI integration.
 
 ## 🔵 Low Priority (Enhancements)
 - [ ] **Fix image toast message state** – ensure the success banner dismisses correctly after refresh. Confirm colour palette and that UI reverts cleanly after multiple create flows (e.g., after adding 4 images).

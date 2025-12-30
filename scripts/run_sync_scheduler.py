@@ -24,6 +24,7 @@ from shopify.get_shopify_orders import upsert_orders as upsert_shopify_orders, f
 from app.services.shopify.client import ShopifyGraphQLClient
 from app.services.activity_logger import ActivityLogger
 from app.services.order_sale_processor import OrderSaleProcessor
+from app.services.listing_stats_service import ListingStatsService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -212,6 +213,37 @@ async def main():
         except Exception as e:
             logger.warning("Shopify orders fetch failed (expected if no orders): %s", e)
 
+    async def refresh_reverb_stats(db, settings, sync_run_id):
+        """Fetch current Reverb listing stats and store historical snapshot."""
+        logger.info("Refreshing Reverb listing stats...")
+        activity_logger = ActivityLogger(db)
+        try:
+            stats_service = ListingStatsService(db)
+            result = await stats_service.refresh_reverb_stats(
+                api_key=settings.REVERB_API_KEY,
+                dry_run=False
+            )
+
+            if result.get("status") == "success":
+                await activity_logger.log_activity(
+                    action="stats_refresh",
+                    entity_type="listings",
+                    entity_id="reverb",
+                    platform="reverb",
+                    details={
+                        "icon": "📊",
+                        "status": "success",
+                        "message": f"Refreshed Reverb stats ({result.get('listings_fetched', 0)} listings)",
+                        "listings_fetched": result.get("listings_fetched", 0),
+                        "snapshots_inserted": result.get("stats_snapshots_inserted", 0),
+                        "listings_updated": result.get("listings_updated", 0),
+                    }
+                )
+                await db.commit()
+            logger.info("Reverb stats refresh: %s", result)
+        except Exception as e:
+            logger.warning("Reverb stats refresh failed: %s", e)
+
     jobs = [
         ScheduledJob(
             "reverb_hourly",
@@ -255,6 +287,12 @@ async def main():
             "ebay_metadata_12h",
             720,
             refresh_ebay_metadata,
+        ),
+        # Stats refresh jobs - run daily (1440 minutes = 24 hours)
+        ScheduledJob(
+            "reverb_stats_daily",
+            1440,
+            refresh_reverb_stats,
         ),
         # Orders fetch jobs - run hourly after platform syncs
         ScheduledJob(

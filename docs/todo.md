@@ -3,8 +3,6 @@
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
-- [x] **TinyMCE API Key Secure:** Removed hardcoded API key from `base.html` and moved to `TINYMCE_API_KEY` environment variable.
-- [x] **Admin Password Enforced:** Removed insecure default from `config.py` requiring `ADMIN_PASSWORD` environment variable.
 - [ ] **Review User Authentication:** Acknowledge existing internal authentication. Further formal review of auth/auth stack (User model, require_auth dependency) needed to ensure robustness and proper role management, especially for additional user access. _(Deferred by user for now)_
 
 ## 🔴 High Priority (Production blockers)
@@ -46,6 +44,8 @@
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 
 ## ✅ Completed
+- [x] **TinyMCE API Key Secure:** Removed hardcoded API key from `base.html` and moved to `TINYMCE_API_KEY` environment variable.
+- [x] **Admin Password Enforced:** Removed insecure default from `config.py` requiring `ADMIN_PASSWORD` environment variable.
 - [x] **Dropbox media integration overhaul** – _Completed 2025-12-30:_ Complete refactor using thumbnail API (~98% bandwidth savings), lazy full-res fetch, token persistence, parallel fetching, instant visual feedback, two-way selection sync, smart Select All/Clear button.
 - [x] **Platform error handling standardisation** – error handling across all platform services now graceful and consistent. _Completed 2025-12-24._
 - [x] **"Where sold" attribution & sales orders** – sale-source attribution in sales report correctly identifies platform vs OFFLINE; aligned with orders workflow. _Completed 2025-12-24._

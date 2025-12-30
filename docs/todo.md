@@ -1,5 +1,5 @@
 # Project TODO – Inventory Management System
-*Last updated: 2025-12-24*
+*Last updated: 2025-12-30*
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
@@ -8,25 +8,21 @@
 - [ ] **Review User Authentication:** Acknowledge existing internal authentication. Further formal review of auth/auth stack (User model, require_auth dependency) needed to ensure robustness and proper role management, especially for additional user access. _(Deferred by user for now)_
 
 ## 🔴 High Priority (Production blockers)
-- [ ] **eBay category-specific required fields** – eBay requires certain item specifics per category that will cause listing creation/updates to fail if missing. These MUST be captured in UI and sent in API payloads. _(Implemented, needs end-to-end testing)_
-- [x] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms, restore the DB flagging for inventorised items that was lost previously, and enforce VR-specific rules (do nothing when other platforms sell while stock >1, end the VR listing only when quantity hits 0, and mark + relist VR sales when remaining quantity >0) so sync detects sales without prematurely ending multi-quantity listings. _Completed 2025-12-27: Added Inventory Reconciliation report with smart reconciliation (only updates out-of-sync platforms), order_sale sync events for stocked items, sale email alerts for inventorised stock._
-- [ ] **Left-handed category integrity** – review `platform_category_mappings` to ensure left-handed SKUs use the dedicated categories on every platform (while Reverb uses technical attributes, eBay/Shopify/VR must stay mapped via category).
-- [ ] **End-to-end mapping validation** – consolidate category-to-specs mapping (Reverb required fields like `handedness`, `number_of_strings`, `body_type` per category) with the cross-platform category mappings (VR, eBay, Shopify). Move all mappings into Alembic-managed tables, validate coverage post-migration, and update UI to show/hide spec fields based on selected category.
 - [ ] **Sync event automation** – confirm which sync events write to `_listings` tables (persistence audit) and add gradual automation so reconciled events publish without manual nudges. Includes gradually automating the sync pipeline so sold/ended propagation runs unattended.
+- [x] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms, restore the DB flagging for inventorised items that was lost previously, and enforce VR-specific rules (do nothing when other platforms sell while stock >1, end the VR listing only when quantity hits 0, and mark + relist VR sales when remaining quantity >0) so sync detects sales without prematurely ending multi-quantity listings. _Completed 2025-12-27: Added Inventory Reconciliation report with smart reconciliation (only updates out-of-sync platforms), order_sale sync events for stocked items, sale email alerts for inventorised stock._
 
 ## 🟡 Medium Priority (Stability & automation)
-- [ ] **Dropbox media refresh is inconsistent** – stabilise cache refresh, keep folder tiles a consistent size, and reduce redundant re-renders after multiple reloads.
+- [ ] **Category / platform attributes and category mapping** – _Progress 2025-12-29:_ Added UI infrastructure for spec capture: category-based auto-population (body_type, number_of_strings, handedness), "Additional Specs" section in Further Information with predefined options from `spec_fields.py` plus custom specs, all stored in `extra_attributes` JSONB and included in description template. Dynamic eBay condition validation via API also added. **Remaining:** (1) Expand `spec_fields.py` for non-guitar categories: Amps (wattage, tube/solid state, speaker config), Effects Pedals (true bypass, analog/digital), Pro Audio/Microphones (polar pattern, phantom power). (2) Map captured specs to eBay Item Specifics and Shopify tags/metafields during listing creation. (3) End-to-end category mapping audit.
+- [x] **Dropbox media refresh is inconsistent** – _Completed 2025-12-30:_ Complete refactor of Dropbox integration: switched to thumbnail API for browsing (~98% bandwidth savings), added lazy full-res fetch on selection, fixed token persistence, parallel batch fetching, instant visual feedback (green border, checkmark, 50% opacity), two-way sync between browser and preview, smart Select All/Clear toggle button with parallel fetch.
 - [ ] **Platform stats ingestion gaps** – Shopify/VR don't expose engagement stats via API (confirmed). For Reverb: add daily detailed refresh (like eBay metadata feed) to update `view_count`/`watch_count` - code exists in `reverb/client.py` (`get_all_listings_detailed`), needs scheduling + upsert logic. For eBay: extract `WatchCount` from `listing_data.Raw.Item` to dedicated column during metadata refresh.
-- [ ] **Review database field coverage** – audit all key tables to ensure required fields are populated across platforms and identify any lingering gaps plus run the broader table integrity/backfill sweep to patch any gaps found.
-- [ ] **Shopify auto-archive workflow** – automate moving stale Shopify listings to archive after the agreed threshold.
+- [ ] **Shopify archive** – create archive gallery view for historical listings AND implement auto-archive workflow (e.g., archive after 10 days of no activity).
 
 ## 🔵 Low Priority (Enhancements)
 - [ ] **Fix image toast message state** – ensure the success banner dismisses correctly after refresh. Confirm colour palette and that UI reverts cleanly after multiple create flows (e.g., after adding 4 images).
 - [ ] **Testing & verification rebuild** – restore integration coverage for sync flows, add regression tests for the high-risk services, and document the verification checklist.
-- [ ] **Populate Shopify archive gallery** – build the historical gallery view using the archive dataset so users can review past listings. Confirm with Adam whether thousands of gallery entries are actually required.
-- [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 - [ ] **NPI clustering report** – add a New Product Introduction cluster view grouped by category for merch planning.
 - [ ] **Redundant code clean-up** – tidy up/deprecate old sync forms, placeholder routers, and other dead code paths.
+- [ ] **Review database field coverage** – audit all key tables to ensure required fields are populated across platforms and identify any lingering gaps plus run the broader table integrity/backfill sweep to patch any gaps found.
 
 ## 🟠 Documentation & knowledge base
 - [ ] Add example usage to docstrings across core services and routers.
@@ -46,8 +42,10 @@
 - [ ] **Mobile optimisation** – ensure key inventory and sync workflows render well on mobile devices.
 - [ ] **Multi-shop Reverb support** – plan how to ingest and manage listings across two Reverb shops.
 - [ ] **Auto-relist at 180 days** – define and automate the policy for relisting stale inventory.
+- [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 
 ## ✅ Completed
+- [x] **Dropbox media integration overhaul** – _Completed 2025-12-30:_ Complete refactor using thumbnail API (~98% bandwidth savings), lazy full-res fetch, token persistence, parallel fetching, instant visual feedback, two-way selection sync, smart Select All/Clear button.
 - [x] **Platform error handling standardisation** – error handling across all platform services now graceful and consistent. _Completed 2025-12-24._
 - [x] **"Where sold" attribution & sales orders** – sale-source attribution in sales report correctly identifies platform vs OFFLINE; aligned with orders workflow. _Completed 2025-12-24._
 - [x] **Sold date surfaces** – exposed sold timestamp on product detail pages via `get_sale_info()` in inventory.py; shows sale platform and date. _Completed 2025-12-24._

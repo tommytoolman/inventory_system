@@ -94,6 +94,54 @@ DRAFT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DRAFT_UPLOAD_URL_PREFIX = "/static/drafts"
 
 
+async def get_dropbox_client(request: Request, settings: Settings = None) -> 'AsyncDropboxClient':
+    """
+    Get or create a shared Dropbox client with token persistence.
+
+    This solves the token refresh issue where each request was creating a new client
+    with a stale token, causing 401 errors on every request.
+
+    The refreshed token is stored in app.state.dropbox_access_token so it persists
+    across requests.
+    """
+    from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
+
+    if settings is None:
+        settings = get_settings()
+
+    # Check for refreshed token in app.state first (persists across requests)
+    access_token = getattr(request.app.state, 'dropbox_access_token', None)
+
+    # Fall back to settings/environment if no refreshed token
+    if not access_token:
+        access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
+
+    refresh_token = getattr(settings, 'DROPBOX_REFRESH_TOKEN', None) or os.environ.get('DROPBOX_REFRESH_TOKEN')
+    app_key = getattr(settings, 'DROPBOX_APP_KEY', None) or os.environ.get('DROPBOX_APP_KEY')
+    app_secret = getattr(settings, 'DROPBOX_APP_SECRET', None) or os.environ.get('DROPBOX_APP_SECRET')
+
+    client = AsyncDropboxClient(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        app_key=app_key,
+        app_secret=app_secret
+    )
+
+    # Test connection and refresh if needed
+    if not await client.test_connection():
+        # If test failed but we have refresh credentials, token may have been refreshed
+        # Store the new token in app.state for future requests
+        if client.access_token and client.access_token != access_token:
+            request.app.state.dropbox_access_token = client.access_token
+            logging.getLogger(__name__).info("Stored refreshed Dropbox token in app.state")
+    else:
+        # Connection succeeded, store token in case it was refreshed during test
+        if client.access_token:
+            request.app.state.dropbox_access_token = client.access_token
+
+    return client
+
+
 def _calculate_default_platform_price(
     platform: str,
     base_price: Optional[float],
@@ -5894,16 +5942,9 @@ async def get_dropbox_folders(
                     "message": "Dropbox credentials not available. Please configure DROPBOX_ACCESS_TOKEN or DROPBOX_REFRESH_TOKEN in .env file."
                 }
             )
-            
-        
-        # Create client first to check for cached data
-        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
-        client = AsyncDropboxClient(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            app_key=app_key,
-            app_secret=app_secret
-        )
+
+        # Use shared client with token persistence to avoid 401 on every request
+        client = await get_dropbox_client(request, settings)
 
         # Check if we need to initialize a scan
         if (not hasattr(request.app.state, 'dropbox_map') or
@@ -6212,11 +6253,22 @@ async def get_dropbox_images(
                             temp_link = dropbox_map['temp_links'][file['path']]
                             
                         if temp_link:
-                            result.append({
-                                'name': file.get('name', os.path.basename(file['path'])),
-                                'path': file['path'],
-                                'url': temp_link
-                            })
+                            # Handle both old format (string URL) and new format (dict with thumbnail/full)
+                            if isinstance(temp_link, dict):
+                                result.append({
+                                    'name': file.get('name', os.path.basename(file['path'])),
+                                    'path': file['path'],
+                                    'thumbnail_url': temp_link.get('thumbnail'),
+                                    'url': temp_link.get('full') or temp_link.get('thumbnail'),  # Full may be None (lazy fetch)
+                                })
+                            else:
+                                # Legacy string format
+                                result.append({
+                                    'name': file.get('name', os.path.basename(file['path'])),
+                                    'path': file['path'],
+                                    'thumbnail_url': temp_link,
+                                    'url': temp_link
+                                })
             
             # Look through subfolders with a priority for specific resolution folders
             resolution_folders = []
@@ -6248,15 +6300,25 @@ async def get_dropbox_images(
         # APPROACH 3: Final fallback - if still no images found, search entire temp_links
         if not images and 'temp_links' in dropbox_map:
             search_prefix = f"{normalized_folder_path}/"
-            
+
             for path, link in dropbox_map['temp_links'].items():
                 path_lower = path.lower()
                 if path_lower.startswith(search_prefix) and any(path_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
-                    images.append({
-                        'name': os.path.basename(path),
-                        'path': path,
-                        'url': link
-                    })
+                    # Handle both old format (string URL) and new format (dict with thumbnail/full)
+                    if isinstance(link, dict):
+                        images.append({
+                            'name': os.path.basename(path),
+                            'path': path,
+                            'thumbnail_url': link.get('thumbnail'),
+                            'url': link.get('full') or link.get('thumbnail'),
+                        })
+                    else:
+                        images.append({
+                            'name': os.path.basename(path),
+                            'path': path,
+                            'thumbnail_url': link,
+                            'url': link
+                        })
         
         # Sort images by name for consistent ordering
         images.sort(key=lambda x: x.get('name', ''))
@@ -6799,61 +6861,138 @@ async def generate_folder_links(
     folder_path: str,
     settings: Settings = Depends(get_settings)
 ):
-    """Generate temporary links for all images in a specific folder"""
+    """
+    Generate thumbnails for all images in a specific folder.
+
+    Uses the Dropbox thumbnail API to fetch small base64 thumbnails (~12KB each)
+    instead of full temporary links. This is MUCH faster and uses less bandwidth.
+    Full-res links are fetched on-demand when user selects an image.
+    """
     try:
-        # Get access token
-        access_token = getattr(settings, 'DROPBOX_ACCESS_TOKEN', None) or os.environ.get('DROPBOX_ACCESS_TOKEN')
-        
-        # Create client
-        from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
-        client = AsyncDropboxClient(access_token=access_token)
-        
-        # Check connection
-        test_result = await client.test_connection()
-        if not test_result:
-            return {
-                "status": "error", 
-                "message": "Failed to connect to Dropbox API - invalid token"
-            }
-            
+        # Use shared client with token persistence
+        client = await get_dropbox_client(request, settings)
+
         # Get the folder structure from cache if available
         dropbox_map = getattr(request.app.state, 'dropbox_map', None)
         if not dropbox_map:
             return {"status": "error", "message": "No Dropbox cache available"}
-        
-        # Use our new dedicated method to get links for this folder
-        temp_links = await client.get_temp_links_for_folder(folder_path)
-        
-        print(f"Generated {len(temp_links)} temporary links for folder {folder_path}")
-        
-        # Update the cache with new temporary links
-        if dropbox_map and 'temp_links' in dropbox_map:
-            dropbox_map['temp_links'].update(temp_links)
-            print(f"Updated cache with {len(temp_links)} new temporary links")
-        
-        # Return images with links for UI
-        images = []
-        for path, link in temp_links.items():
-            images.append({
-                'name': os.path.basename(path),
-                'path': path,
-                'url': link
-            })
-            
-        return {
-            "status": "success",
-            "message": f"Generated {len(temp_links)} temporary links",
-            "images": images
-        }
-            
+
+        # First, list the folder to get image paths
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            # List folder contents
+            entries = await client.list_folder(folder_path)
+
+            # Filter for images
+            image_paths = []
+            for entry in entries:
+                if entry.get('.tag') == 'file':
+                    path = entry.get('path_lower', '')
+                    if any(path.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+                        image_paths.append(path)
+
+            print(f"Found {len(image_paths)} images in folder {folder_path}")
+
+            if not image_paths:
+                return {
+                    "status": "success",
+                    "message": "No images found in folder",
+                    "images": []
+                }
+
+            # Get thumbnails for all images (FAST - ~12KB each vs ~600KB for full-res)
+            # Run ALL thumbnail fetches in parallel for speed
+            thumbnails = {}
+
+            # Create all tasks at once
+            tasks = [client.get_image_links_with_thumbnails(session, path) for path in image_paths]
+
+            # Run all in parallel (Dropbox API can handle concurrent requests)
+            print(f"Fetching {len(tasks)} thumbnails in parallel...")
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for result in results:
+                if isinstance(result, Exception):
+                    continue  # Skip failed fetches
+                path, links = result
+                if links.get('thumbnail'):
+                    thumbnails[path] = links
+
+            print(f"Generated {len(thumbnails)} thumbnails for folder {folder_path}")
+
+            # Update the cache with thumbnails
+            if dropbox_map and 'temp_links' in dropbox_map:
+                dropbox_map['temp_links'].update(thumbnails)
+                print(f"Updated cache with {len(thumbnails)} thumbnails")
+
+            # Return images with thumbnail data URLs for UI
+            images = []
+            for path, links in thumbnails.items():
+                images.append({
+                    'name': os.path.basename(path),
+                    'path': path,
+                    'url': links.get('thumbnail'),  # Base64 data URL for display
+                    'thumbnail_url': links.get('thumbnail'),
+                    'full_url': None  # Will be fetched on-demand
+                })
+
+            return {
+                "status": "success",
+                "message": f"Generated {len(thumbnails)} thumbnails",
+                "images": images
+            }
+
     except Exception as e:
         import traceback
-        print(f"Error generating links: {str(e)}")
+        print(f"Error generating thumbnails: {str(e)}")
         print(traceback.format_exc())
         return {
-            "status": "error", 
-            "message": f"Error generating links: {str(e)}"
+            "status": "error",
+            "message": f"Error generating thumbnails: {str(e)}"
         }
+
+
+@router.get("/api/dropbox/full-res-link", response_class=JSONResponse)
+async def get_dropbox_full_res_link(
+    request: Request,
+    file_path: str,
+    settings: Settings = Depends(get_settings)
+):
+    """
+    Get a full-resolution temporary link for a single image.
+    Called on-demand when user selects/clicks an image.
+
+    This is the "lazy fetch" approach - thumbnails are shown in browser,
+    full-res is only fetched when actually needed.
+    """
+    try:
+        # Use shared client with token persistence
+        client = await get_dropbox_client(request, settings)
+
+        # Get full-res link for this specific file
+        full_link = await client.get_full_res_link(file_path)
+
+        if full_link:
+            return {
+                "status": "success",
+                "path": file_path,
+                "url": full_link
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Could not get link for {file_path}"
+            }
+
+    except Exception as e:
+        import traceback
+        logger.error(f"Error getting full-res link: {str(e)}")
+        logger.error(traceback.format_exc())
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
 
 @router.get("/shipping-profiles")
 async def get_shipping_profiles(

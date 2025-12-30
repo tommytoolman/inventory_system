@@ -168,33 +168,41 @@ class AsyncDropboxClient:
         return {}
     
     def save_temp_links_cache(self, temp_links: Dict[str, Any]):
-        """Save temporary links cache to disk with both thumbnail and full-res URLs"""
+        """
+        Save thumbnail cache to disk.
+
+        NEW STRATEGY:
+        - Thumbnails are data URLs (base64) - they DON'T expire
+        - Full-res links are fetched on-demand, not cached here
+        - This means cache can be much longer-lived (days, not hours)
+        """
         try:
-            # Convert to storable format with expiry times
             cache_data = {}
-            expiry = datetime.now() + timedelta(hours=3)  # Links are valid for ~4 hours, cache for 3
+            # Thumbnails as data URLs don't expire, but we track when cached for freshness
+            cached_at = datetime.now().isoformat()
 
             for path, link_data in temp_links.items():
                 if isinstance(link_data, str):
-                    # Legacy format - just a URL string
+                    # Legacy format - just a URL string (treat as thumbnail)
                     cache_data[path] = {
-                        'full': link_data,
-                        'thumbnail': link_data,  # Use same URL for now
-                        'expiry': expiry.isoformat()
+                        'thumbnail': link_data,
+                        'path': path,
+                        'cached_at': cached_at
                     }
-                else:
-                    # New format with thumbnail and full URLs
+                elif isinstance(link_data, dict):
+                    # New format with thumbnail data URL
                     cache_data[path] = {
-                        'full': link_data.get('full'),
                         'thumbnail': link_data.get('thumbnail'),
-                        'expiry': expiry.isoformat()
+                        'path': link_data.get('path', path),
+                        'cached_at': cached_at
                     }
+                    # Note: 'full' is intentionally not cached - fetched on demand
 
             with open(self.temp_links_cache_file, 'w') as f:
                 json.dump(cache_data, f)
-            logger.info(f"Saved {len(cache_data)} temp links to cache")
+            logger.info(f"Saved {len(cache_data)} thumbnail cache entries")
         except Exception as e:
-            logger.error(f"Error saving temp links cache: {e}")
+            logger.error(f"Error saving thumbnail cache: {e}")
 
     async def refresh_access_token(self) -> bool:
         """
@@ -487,14 +495,26 @@ class AsyncDropboxClient:
             for path in image_paths:
                 if path in cached_links:
                     cache_entry = cached_links[path]
-                    # Cache loader now always returns dict format
-                    if isinstance(cache_entry, dict) and 'expiry' in cache_entry:
-                        expiry = datetime.fromisoformat(cache_entry['expiry'])
-                        if expiry > now:
+                    if isinstance(cache_entry, dict):
+                        # NEW FORMAT: Thumbnails are data URLs - they don't expire
+                        # Check for thumbnail (preferred) or old expiry-based format
+                        if cache_entry.get('thumbnail'):
+                            # Thumbnails as data URLs don't expire
                             valid_cached_links[path] = {
                                 'thumbnail': cache_entry.get('thumbnail'),
-                                'full': cache_entry.get('full')
+                                'full': cache_entry.get('full'),
+                                'path': path
                             }
+                        elif 'expiry' in cache_entry:
+                            # OLD FORMAT: Check expiry for full-res temp links
+                            expiry = datetime.fromisoformat(cache_entry['expiry'])
+                            if expiry > now:
+                                valid_cached_links[path] = {
+                                    'thumbnail': cache_entry.get('thumbnail'),
+                                    'full': cache_entry.get('full')
+                                }
+                            else:
+                                paths_needing_links.append(path)
                         else:
                             paths_needing_links.append(path)
                     else:
@@ -531,7 +551,8 @@ class AsyncDropboxClient:
                         batch = tasks[i:i + batch_size]
                         results = await asyncio.gather(*batch)
                         for path, links in results:
-                            if links['full']:  # Only add if we got a valid link
+                            # Check for thumbnail (new strategy) OR full link (old strategy)
+                            if links.get('thumbnail') or links.get('full'):
                                 new_links[path] = links
 
                 temp_links = {**valid_cached_links, **new_links}
@@ -573,7 +594,57 @@ class AsyncDropboxClient:
             import traceback
             logger.error(traceback.format_exc())
             raise
-    
+
+    async def list_folder(self, path: str = "") -> List[Dict[str, Any]]:
+        """
+        List contents of a single folder (non-recursive).
+
+        Args:
+            path: Folder path to list
+
+        Returns:
+            List of entry dictionaries with file and folder information
+        """
+        async def _list_folder():
+            """Internal implementation"""
+            all_entries = []
+            async with aiohttp.ClientSession() as session:
+                endpoint = f"{self.BASE_URL}/files/list_folder"
+                data = {
+                    "path": path or "",
+                    "recursive": False,  # Single folder only
+                    "include_media_info": True,
+                    "include_deleted": False,
+                    "include_has_explicit_shared_members": False,
+                    "limit": 2000
+                }
+
+                headers = self.headers.copy()
+                headers['Content-Type'] = 'application/json'
+
+                async with session.post(endpoint, json=data, headers=headers) as response:
+                    if response.status != 200:
+                        text = await response.text()
+                        logger.error(f"list_folder failed: {response.status} - {text}")
+                        return []
+
+                    result = await response.json()
+                    all_entries.extend(result.get('entries', []))
+
+                    # Handle pagination
+                    while result.get('has_more'):
+                        cursor = result.get('cursor')
+                        continue_endpoint = f"{self.BASE_URL}/files/list_folder/continue"
+                        async with session.post(continue_endpoint, json={"cursor": cursor}, headers=headers) as cont_response:
+                            if cont_response.status != 200:
+                                break
+                            result = await cont_response.json()
+                            all_entries.extend(result.get('entries', []))
+
+            return all_entries
+
+        return await self.execute_with_token_refresh(_list_folder)
+
     async def list_folder_recursive(self, path: str = "", max_depth: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         List all contents of a folder recursively with token refresh support.
@@ -882,38 +953,134 @@ class AsyncDropboxClient:
         ext = os.path.splitext(path.lower())[1]
         return ext in self.IMAGE_EXTENSIONS
     
+    async def get_thumbnail(self, session, file_path: str, size: str = "w256h256") -> Tuple[str, Optional[bytes]]:
+        """
+        Get a thumbnail for an image using Dropbox's /get_thumbnail_v2 API.
+
+        This returns the actual thumbnail BYTES, not a URL. For browsing UI,
+        we should use get_thumbnail_link() instead which returns a data URL.
+
+        Args:
+            session: aiohttp ClientSession to use
+            file_path: Path to the image file
+            size: Thumbnail size - options: w32h32, w64h64, w128h128, w256h256,
+                  w480h320, w640h480, w960h640, w1024h768, w2048h1536
+
+        Returns:
+            Tuple of (file_path, thumbnail_bytes or None)
+        """
+        try:
+            endpoint = "https://content.dropboxapi.com/2/files/get_thumbnail_v2"
+
+            # The API arg is passed as a header, not in body
+            api_arg = json.dumps({
+                "resource": {".tag": "path", "path": file_path},
+                "format": {".tag": "jpeg"},
+                "size": {".tag": size},
+                "mode": {".tag": "bestfit"}
+            })
+
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Dropbox-API-Arg": api_arg
+            }
+
+            async with session.post(endpoint, headers=headers) as response:
+                if response.status == 200:
+                    thumbnail_bytes = await response.read()
+                    return file_path, thumbnail_bytes
+                elif response.status == 409:
+                    # File not found or not an image
+                    logger.debug(f"Cannot get thumbnail for {file_path}: not an image or not found")
+                    return file_path, None
+                else:
+                    text = await response.text()
+                    logger.error(f"Error getting thumbnail for {file_path}: {response.status} - {text}")
+                    if response.status == 401:
+                        raise aiohttp.ClientResponseError(
+                            request_info=response.request_info,
+                            history=response.history,
+                            status=response.status,
+                            message="Unauthorized",
+                            headers=response.headers
+                        )
+                    return file_path, None
+        except aiohttp.ClientResponseError:
+            raise
+        except Exception as e:
+            logger.error(f"Exception getting thumbnail for {file_path}: {str(e)}")
+            return file_path, None
+
+    async def get_thumbnail_as_data_url(self, session, file_path: str, size: str = "w256h256") -> Tuple[str, Optional[str]]:
+        """
+        Get a thumbnail as a base64 data URL for embedding directly in <img> tags.
+
+        This is more efficient for browsing as we fetch small thumbnails once
+        and can cache them locally without needing temp links that expire.
+
+        Args:
+            session: aiohttp ClientSession to use
+            file_path: Path to the image file
+            size: Thumbnail size
+
+        Returns:
+            Tuple of (file_path, data_url or None)
+        """
+        import base64
+
+        file_path, thumbnail_bytes = await self.get_thumbnail(session, file_path, size)
+        if thumbnail_bytes:
+            b64_data = base64.b64encode(thumbnail_bytes).decode('utf-8')
+            return file_path, f"data:image/jpeg;base64,{b64_data}"
+        return file_path, None
+
     async def get_image_links_with_thumbnails(self, session, file_path: str) -> Tuple[str, Dict[str, Optional[str]]]:
         """
-        Get both thumbnail and full-res temporary links for an image.
+        Get thumbnail (as data URL) and prepare for lazy full-res fetch.
+
+        STRATEGY:
+        - Thumbnail: Fetched immediately as small data URL (cacheable, no expiry)
+        - Full-res: NOT fetched here - will be fetched on-demand when user selects image
 
         Args:
             session: aiohttp ClientSession to use
             file_path: Path to the image file
 
         Returns:
-            Tuple of (file_path, {'thumbnail': url, 'full': url})
+            Tuple of (file_path, {'thumbnail': data_url, 'full': None, 'path': file_path})
         """
         try:
-            # Get the full resolution temporary link
-            _, full_link = await self.get_temporary_link(session, file_path)
-            if not full_link:
-                return file_path, {'thumbnail': None, 'full': None}
+            # Get thumbnail as data URL (small, cacheable, no expiry issues)
+            _, thumbnail_data_url = await self.get_thumbnail_as_data_url(session, file_path, "w256h256")
 
-            # For thumbnail, append size parameter to the temporary link
-            # Dropbox supports these size params: w32h32, w64h64, w128h128, w256h256, w480h320, w640h480, w960h640, w1024h768
-            thumbnail_link = full_link
-            if '?' in full_link:
-                thumbnail_link = f"{full_link}&size=w256h256"
-            else:
-                thumbnail_link = f"{full_link}?size=w256h256"
+            if not thumbnail_data_url:
+                return file_path, {'thumbnail': None, 'full': None, 'path': file_path}
 
+            # DON'T fetch full-res here - it will be fetched on-demand
+            # This saves API calls and bandwidth
             return file_path, {
-                'thumbnail': thumbnail_link,
-                'full': full_link
+                'thumbnail': thumbnail_data_url,
+                'full': None,  # Lazy - fetched when user clicks
+                'path': file_path  # Store path for later full-res fetch
             }
         except Exception as e:
             logger.error(f"Error getting image links for {file_path}: {str(e)}")
-            return file_path, {'thumbnail': None, 'full': None}
+            return file_path, {'thumbnail': None, 'full': None, 'path': file_path}
+
+    async def get_full_res_link(self, file_path: str) -> Optional[str]:
+        """
+        Get a full-resolution temporary link for a single image.
+        Called on-demand when user selects an image.
+
+        Args:
+            file_path: Path to the image file
+
+        Returns:
+            Temporary link URL or None
+        """
+        async with aiohttp.ClientSession() as session:
+            _, link = await self.get_temporary_link(session, file_path)
+            return link
 
     async def get_temporary_link(self, session, file_path: str) -> Tuple[str, Optional[str]]:
         """

@@ -5480,9 +5480,11 @@ function initializeSortable() {
 
                 console.log("Dropbox folder data:", data);
 
-                // Clear items container
+                // Clear items container and reset styles (displayImages may have set width: 100%)
                 dropboxElements.items.innerHTML = '';
-    
+                dropboxElements.items.style.width = '';  // Reset any inline width
+                dropboxElements.items.className = 'grid grid-cols-5 gap-2';  // Reset grid to folder layout
+
                 // Handle folder list
                 const folders = data.folders || data.items || [];
                 if (folders.length > 0) {
@@ -5734,105 +5736,247 @@ function initializeSortable() {
         dropboxElements.items.classList.remove('grid'); // Remove any leftover grid class
         
         if (images.length > 0) {
-            // Show Select All button and update its text
+            // Show Select All / Clear All button
             const selectAllButton = document.getElementById('select-all-images');
             if (selectAllButton) {
                 selectAllButton.classList.remove('hidden');
-                selectAllButton.textContent = `Select All Images (${images.length})`;
-                
-                // Remove any existing event listeners and replace with new one
-                selectAllButton.replaceWith(selectAllButton.cloneNode(true));
-                
-                // Get the fresh reference and add event listener
-                document.getElementById('select-all-images').addEventListener('click', function() {
-                    // Add all currently displayed images to selection
-                    images.forEach(image => {
-                        // Only add if not already selected
-                        if (!selectedImages.some(selected => selected.url === image.url)) {
-                            selectedImages.push(image);
-                        }
-                    });
-                    
-                    // Update the image preview directly
-                    updateImagePreview();
-                    updateHiddenInputs();
-                    updateImageCount();
-                    
-                    // Show a confirmation message
-                    const notification = document.createElement('div');
-                    notification.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
-                    notification.innerHTML = `
-                        <span class="block sm:inline">${images.length} images selected</span>
-                    `;
-                    document.body.appendChild(notification);
-                    
-                    // Remove the notification after 3 seconds
-                    setTimeout(() => {
-                        notification.remove();
-                    }, 3000);
-                });
+
+                // Function to update button state based on current selections
+                // Store on window AND as a closure variable for reliability
+                const updateButtonState = function() {
+                    const btn = document.getElementById('select-all-images');
+                    if (!btn) return;
+
+                    // Check how many images from THIS folder are selected
+                    const selectedFromFolder = images.filter(img =>
+                        selectedImages.some(sel => sel.path === img.path)
+                    ).length;
+
+                    const allSelected = selectedFromFolder === images.length;
+                    const someSelected = selectedFromFolder > 0;
+
+                    if (allSelected) {
+                        btn.textContent = `Clear All (${images.length})`;
+                        btn.className = 'inline-flex items-center px-4 py-2 bg-red-50 border border-red-300 rounded-lg text-sm font-medium text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200';
+                    } else if (someSelected) {
+                        btn.textContent = `Clear Selected (${selectedFromFolder})`;
+                        btn.className = 'inline-flex items-center px-4 py-2 bg-red-50 border border-red-300 rounded-lg text-sm font-medium text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200';
+                    } else {
+                        btn.textContent = `Select All (${images.length})`;
+                        btn.className = 'inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200';
+                    }
+                };
+
+                // Store globally for individual image clicks to use
+                window.updateSelectAllButtonState = updateButtonState;
+
+                // Set initial state
+                updateButtonState();
+
+                // Click handler for the button
+                const handleSelectAllClick = async function() {
+                    const btn = document.getElementById('select-all-images');
+
+                    // Check if any images from this folder are selected
+                    const selectedFromFolder = images.filter(img =>
+                        selectedImages.some(sel => sel.path === img.path)
+                    ).length;
+
+                    if (selectedFromFolder > 0) {
+                        // CLEAR MODE: Remove all images from this folder (instant, no API calls)
+                        images.forEach(image => {
+                            const idx = selectedImages.findIndex(sel => sel.path === image.path);
+                            if (idx >= 0) {
+                                selectedImages.splice(idx, 1);
+                            }
+                        });
+
+                        // Update visuals and previews
+                        updateImagePreview();
+                        updateHiddenInputs();
+                        updateImageCount();
+                        updateButtonState();
+
+                        // Show notification
+                        const notification = document.createElement('div');
+                        notification.className = 'fixed bottom-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded z-50';
+                        notification.innerHTML = `<span class="block sm:inline">${selectedFromFolder} images cleared</span>`;
+                        document.body.appendChild(notification);
+                        setTimeout(() => notification.remove(), 2000);
+
+                    } else {
+                        // SELECT ALL MODE: Add all images instantly, fetch full-res in parallel
+                        btn.disabled = true;
+                        btn.textContent = 'Selecting...';
+
+                        // Add all images to selection immediately (with thumbnail URLs for now)
+                        const imagesToAdd = images.filter(img => !selectedImages.some(sel => sel.path === img.path));
+
+                        // Add them all at once with placeholder URLs
+                        imagesToAdd.forEach(image => {
+                            selectedImages.push({
+                                ...image,
+                                url: image.thumbnail_url || image.url,  // Temporary - will be replaced
+                                thumbnail_url: image.thumbnail_url || image.url,
+                                source: 'dropbox',
+                                needsFullRes: true  // Flag for lazy fetch later
+                            });
+                        });
+
+                        // Update UI immediately
+                        updateImagePreview();
+                        updateHiddenInputs();
+                        updateImageCount();
+                        updateButtonState();
+
+                        // Now fetch full-res URLs in parallel (background)
+                        const fetchPromises = imagesToAdd.map(async (image) => {
+                            try {
+                                const response = await fetch(`/inventory/api/dropbox/full-res-link?file_path=${encodeURIComponent(image.path)}`);
+                                const data = await response.json();
+                                if (data.status === 'success' && data.url) {
+                                    // Update the URL in selectedImages
+                                    const idx = selectedImages.findIndex(sel => sel.path === image.path);
+                                    if (idx >= 0) {
+                                        selectedImages[idx].url = data.url;
+                                        selectedImages[idx].needsFullRes = false;
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Error fetching full-res for', image.path, e);
+                            }
+                        });
+
+                        // Wait for all fetches to complete
+                        await Promise.all(fetchPromises);
+
+                        // Update hidden inputs with final URLs
+                        updateHiddenInputs();
+
+                        btn.disabled = false;
+                        updateButtonState();
+
+                        // Show notification
+                        const notification = document.createElement('div');
+                        notification.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+                        notification.innerHTML = `<span class="block sm:inline">${imagesToAdd.length} images selected</span>`;
+                        document.body.appendChild(notification);
+                        setTimeout(() => notification.remove(), 2000);
+                    }
+                };
+
+                // Remove old listener by cloning, then add new one
+                const newButton = selectAllButton.cloneNode(true);
+                selectAllButton.parentNode.replaceChild(newButton, selectAllButton);
+                newButton.addEventListener('click', handleSelectAllClick);
+
+                // Re-apply initial state to the new button
+                updateButtonState();
             }
             
             // PINTEREST STYLE - NATURAL ASPECT RATIO
             const imageGrid = document.createElement('div');
-            imageGrid.className = 'grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 w-full auto-rows-auto';
-            imageGrid.style = 'width: 100%;';
+            imageGrid.className = 'grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 w-full auto-rows-auto overflow-visible';
+            imageGrid.style.cssText = 'width: 100%; overflow: visible;';
             dropboxElements.items.appendChild(imageGrid);
             
-            // Make sure the items container uses full width
-            dropboxElements.items.style.width = '100%';
+            // Make sure the items container uses full width and allows overflow for checkmarks
+            dropboxElements.items.style.cssText = 'width: 100%; overflow: visible;';
             
             // Add images to the grid - NATURAL ASPECT RATIO
             images.forEach(image => {
-                // Check if image is already selected (for visual feedback)
-                const isSelected = selectedImages.some(selected => selected.url === image.url);
-                
                 const imageItem = document.createElement('div');
-                imageItem.className = `cursor-pointer hover:opacity-80 relative ${isSelected ? 'ring-2 ring-green-500' : ''}`;
-                imageItem.dataset.imageUrl = image.full_url || image.url;  // Store full URL for selection
-                imageItem.style = 'padding: 0; margin: 0; border: none; position: relative;';
+                imageItem.className = 'cursor-pointer dropbox-image-item';
+                imageItem.dataset.imagePath = image.path || '';
+                imageItem.style.cssText = 'position: relative;';
 
-                imageItem.innerHTML = `
-                    <img src="${image.thumbnail_url || image.url}" alt="${image.name}"
-                         style="width: 100%; height: auto; display: block;">
-                    ${isSelected ? `
-                    <div style="position: absolute; top: 4px; right: 4px;">
-                        <span style="background: green; color: white; border-radius: 50%; padding: 2px; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px;">
-                            <svg xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 16px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                        </span>
-                    </div>
-                    ` : ''}
-                `;
-                
-                // Add click handler to select image
-                imageItem.addEventListener('click', function() {
-                    toggleImageSelection(image);
-                    
-                    // Update visual selection state immediately
-                    const isNowSelected = selectedImages.some(selected => selected.url === image.url);
+                // Use thumbnail_url for display, fall back to url
+                const displayUrl = image.thumbnail_url || image.url;
+
+                // Simple, clean structure
+                const img = document.createElement('img');
+                img.src = displayUrl;
+                img.alt = image.name || 'Image';
+                img.className = 'dropbox-thumb';
+                img.style.cssText = 'width: 100%; height: auto; display: block; border-radius: 4px;';
+                img.onerror = function() {
+                    this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23eee" width="100" height="100"/><text x="50" y="50" text-anchor="middle" fill="%23999">?</text></svg>';
+                };
+                imageItem.appendChild(img);
+
+                // Function to update this item's visual state
+                function updateItemVisualState() {
+                    const isNowSelected = selectedImages.some(sel => sel.path === image.path);
+
+                    // Update border and opacity
                     if (isNowSelected) {
-                        this.classList.add('ring-2', 'ring-green-500');
-                        if (!this.querySelector('.absolute.top-2.right-2')) {
+                        img.style.outline = '3px solid #22c55e';
+                        img.style.outlineOffset = '-3px';
+                        img.style.opacity = '0.5';  // Grey-out to show it's selected
+                    } else {
+                        img.style.outline = 'none';
+                        img.style.outlineOffset = '0';
+                        img.style.opacity = '1';
+                    }
+
+                    // Update checkmark - remove old one first
+                    const oldCheck = imageItem.querySelector('.checkmark-indicator');
+                    if (oldCheck) oldCheck.remove();
+
+                    // Add checkmark if selected
+                    if (isNowSelected) {
+                        const checkmark = document.createElement('div');
+                        checkmark.className = 'checkmark-indicator';
+                        checkmark.style.cssText = 'position: absolute; top: 6px; right: 6px; z-index: 100; pointer-events: none;';
+                        checkmark.innerHTML = '<span style="background: #22c55e; color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><svg style="width: 14px; height: 14px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span>';
+                        imageItem.appendChild(checkmark);
+                    }
+                }
+
+                // Set initial state
+                updateItemVisualState();
+
+                // Click handler - update visuals immediately, then do async work
+                let isProcessing = false;
+                imageItem.addEventListener('click', async function() {
+                    // Prevent double-clicks while processing
+                    if (isProcessing) return;
+                    isProcessing = true;
+
+                    // Immediately update visual state for instant feedback
+                    const willBeSelected = !selectedImages.some(sel => sel.path === image.path);
+
+                    // Apply visual state immediately
+                    if (willBeSelected) {
+                        img.style.outline = '3px solid #22c55e';
+                        img.style.outlineOffset = '-3px';
+                        img.style.opacity = '0.5';
+                        // Add checkmark immediately
+                        if (!imageItem.querySelector('.checkmark-indicator')) {
                             const checkmark = document.createElement('div');
-                            checkmark.className = 'absolute top-2 right-2';
-                            checkmark.innerHTML = `
-                                <span class="bg-green-500 text-white rounded-full p-1 flex items-center justify-center w-6 h-6">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                    </svg>
-                                </span>
-                            `;
-                            this.appendChild(checkmark);
+                            checkmark.className = 'checkmark-indicator';
+                            checkmark.style.cssText = 'position: absolute; top: 6px; right: 6px; z-index: 100; pointer-events: none;';
+                            checkmark.innerHTML = '<span style="background: #22c55e; color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><svg style="width: 14px; height: 14px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span>';
+                            imageItem.appendChild(checkmark);
                         }
                     } else {
-                        this.classList.remove('ring-2', 'ring-green-500');
-                        const checkmark = this.querySelector('.absolute.top-2.right-2');
-                        if (checkmark) checkmark.remove();
+                        img.style.outline = 'none';
+                        img.style.outlineOffset = '0';
+                        img.style.opacity = '1';
+                        const oldCheck = imageItem.querySelector('.checkmark-indicator');
+                        if (oldCheck) oldCheck.remove();
+                    }
+
+                    // Do the async selection work (full-res fetch) and wait for it
+                    await toggleImageSelection(image);
+                    isProcessing = false;
+
+                    // Update the Select All / Clear button state
+                    if (window.updateSelectAllButtonState) {
+                        window.updateSelectAllButtonState();
                     }
                 });
-                
+
                 imageGrid.appendChild(imageItem);
             });
             
@@ -5915,32 +6059,63 @@ function initializeSortable() {
         }
     }
     
-    function toggleImageSelection(image) {
+    async function toggleImageSelection(image) {
         console.log('Toggling image selection:', image);
-        // Use full URL for selection
-        const fullUrl = image.full_url || image.url;
-        const existingIndex = selectedImages.findIndex(img => (img.full_url || img.url) === fullUrl);
+
+        // For Dropbox images, use path as the unique identifier (most reliable)
+        // For URL images, fall back to url
+        const imageId = image.path || image.url;
+        const existingIndex = selectedImages.findIndex(img => {
+            const selId = img.path || img.url;
+            return selId === imageId;
+        });
 
         if (existingIndex >= 0) {
             // Remove from selection
             selectedImages.splice(existingIndex, 1);
             console.log('Removed image, now have', selectedImages.length);
         } else {
+            // LAZY FETCH: If this is a Dropbox image and we don't have full-res, fetch it now
+            let fullUrl = image.full_url || image.url;
+
+            if (image.path && (!fullUrl || fullUrl.startsWith('data:'))) {
+                // This is a Dropbox image with only thumbnail - fetch full-res
+                console.log('Fetching full-res link for:', image.path);
+
+                try {
+                    const response = await fetch(`/inventory/api/dropbox/full-res-link?file_path=${encodeURIComponent(image.path)}`);
+                    const data = await response.json();
+
+                    if (data.status === 'success' && data.url) {
+                        fullUrl = data.url;
+                        console.log('Got full-res URL:', fullUrl);
+                    } else {
+                        console.error('Failed to get full-res link:', data.message);
+                        // Fall back to thumbnail if available
+                        fullUrl = image.thumbnail_url || image.url;
+                    }
+                } catch (error) {
+                    console.error('Error fetching full-res link:', error);
+                    fullUrl = image.thumbnail_url || image.url;
+                }
+            }
+
             // Add to selection with full URL
             selectedImages.push({
                 ...image,
-                url: fullUrl,  // Ensure URL is the full resolution
+                url: fullUrl,  // Full resolution URL for actual use
+                thumbnail_url: image.thumbnail_url || image.url,  // Keep thumbnail for preview
                 source: 'dropbox'
             });
             console.log('Added image, now have', selectedImages.length);
         }
-        
+
         // Update the main image preview
         updateImagePreview();
-        
+
         // Update hidden inputs
         updateHiddenInputs();
-        
+
         // Update image count in section header
         updateImageCount();
     }
@@ -6151,37 +6326,41 @@ function initializeSortable() {
         if (!dropboxItems || dropboxItems.classList.contains('hidden')) {
             return; // Don't update if Dropbox browser isn't visible
         }
-        
-        // Get all the image items in the Dropbox browser
-        const dropboxImages = document.querySelectorAll('#dropbox-items [data-image-url]');
-        
+
+        // Get all the image items in the Dropbox browser (using data-image-path)
+        const dropboxImages = document.querySelectorAll('#dropbox-items .dropbox-image-item[data-image-path]');
+
         dropboxImages.forEach(imageItem => {
-            const imageUrl = imageItem.dataset.imageUrl;
-            const isSelected = selectedImages.some(img => img.url === imageUrl);
-            
-            // Update the visual state
+            const imagePath = imageItem.dataset.imagePath;
+            if (!imagePath) return;
+
+            const isSelected = selectedImages.some(img => img.path === imagePath);
+            const img = imageItem.querySelector('img');
+
+            // Update border and opacity on the image
+            if (img) {
+                if (isSelected) {
+                    img.style.outline = '3px solid #22c55e';
+                    img.style.outlineOffset = '-3px';
+                    img.style.opacity = '0.5';  // Grey-out to show it's selected
+                } else {
+                    img.style.outline = 'none';
+                    img.style.outlineOffset = '0';
+                    img.style.opacity = '1';
+                }
+            }
+
+            // Update checkmark - remove old one first
+            const oldCheck = imageItem.querySelector('.checkmark-indicator');
+            if (oldCheck) oldCheck.remove();
+
+            // Add checkmark if selected
             if (isSelected) {
-                imageItem.classList.add('ring-2', 'ring-green-500');
-                
-                // Add checkmark if it doesn't exist and item is positioned relative
-                if (!imageItem.querySelector('[style*="position: absolute"]')) {
-                    const checkmark = document.createElement('div');
-                    checkmark.style = 'position: absolute; top: 4px; right: 4px;';
-                    checkmark.innerHTML = `
-                        <span style="background: green; color: white; border-radius: 50%; padding: 2px; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px;">
-                            <svg xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 16px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                        </span>
-                    `;
-                    imageItem.appendChild(checkmark);
-                }
-            } else {
-                imageItem.classList.remove('ring-2', 'ring-green-500');
-                const checkmark = imageItem.querySelector('[style*="position: absolute"]');
-                if (checkmark && checkmark.innerHTML.includes('svg')) {
-                    checkmark.remove();
-                }
+                const checkmark = document.createElement('div');
+                checkmark.className = 'checkmark-indicator';
+                checkmark.style.cssText = 'position: absolute; top: 6px; right: 6px; z-index: 100; pointer-events: none;';
+                checkmark.innerHTML = '<span style="background: #22c55e; color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><svg style="width: 14px; height: 14px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span>';
+                imageItem.appendChild(checkmark);
             }
         });
     }
@@ -8125,11 +8304,10 @@ document.addEventListener('DOMContentLoaded', function() {
         transition: all 0.2s ease;
     }
     
-    /* Dropbox Image Hover Effect */
-    #dropbox-items > div:hover {
-        transform: scale(1.05);
-        transition: transform 0.2s ease;
-        z-index: 10;
+    /* Dropbox Image Hover Effect - only on individual images, not the container */
+    #dropbox-items img:hover {
+        opacity: 0.85;
+        transition: opacity 0.2s ease;
     }
 
     /* Ensure status boxes are not greyed out by default */

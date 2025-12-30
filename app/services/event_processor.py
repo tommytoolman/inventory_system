@@ -676,9 +676,23 @@ async def _upsert_ebay_listing_from_change(
     price = change_data.get('price')
     listing_url = change_data.get('listing_url') or platform_common.listing_url
 
-    quantity_total = raw_data.get('Quantity') or raw_data.get('quantity_total')
-    quantity_available = raw_data.get('QuantityAvailable') or change_data.get('quantity_available')
-    quantity_sold = raw_data.get('SellingStatus', {}).get('QuantitySold') if isinstance(raw_data, dict) else None
+    # eBay API returns quantities as strings - convert to int
+    quantity_total_raw = raw_data.get('Quantity') or raw_data.get('quantity_total')
+    quantity_available_raw = raw_data.get('QuantityAvailable') or change_data.get('quantity_available')
+    quantity_sold_raw = raw_data.get('SellingStatus', {}).get('QuantitySold') if isinstance(raw_data, dict) else None
+
+    try:
+        quantity_total = int(quantity_total_raw) if quantity_total_raw is not None else None
+    except (ValueError, TypeError):
+        quantity_total = None
+    try:
+        quantity_available = int(quantity_available_raw) if quantity_available_raw is not None else None
+    except (ValueError, TypeError):
+        quantity_available = None
+    try:
+        quantity_sold = int(quantity_sold_raw) if quantity_sold_raw is not None else None
+    except (ValueError, TypeError):
+        quantity_sold = None
 
     picture_urls = []
     if isinstance(raw_data, dict):
@@ -1602,7 +1616,7 @@ async def reconcile_vr_listing_for_product(session: AsyncSession, product: Produ
 
                 if vr_listing:
                     vr_listing.vr_listing_id = vr_id
-                    vr_listing.vr_state = 'live'
+                    vr_listing.vr_state = 'active'
                     logger.info(f"  ✅ Updated VR listing with real ID: {vr_id}")
                 else:
                     # Create vr_listings entry if missing
@@ -1611,7 +1625,7 @@ async def reconcile_vr_listing_for_product(session: AsyncSession, product: Produ
                         vr_listing_id=vr_id,
                         price_notax=product.base_price,
                         processing_time=product.processing_time or 3,
-                        vr_state='live'
+                        vr_state='active'
                     )
                     session.add(vr_listing)
                     logger.info(f"  ✅ Created VR listing record with ID: {vr_id}")

@@ -2535,9 +2535,17 @@ async def confirm_match(
             platform1 = product1_row['platform_name']
             platform2 = product2_row['platform_name']
 
+            # Ensure IDs are integers (fix for "str cannot be interpreted as integer" error)
+            product1_dict = dict(product1_row)
+            product2_dict = dict(product2_row)
+            product1_dict['id'] = int(product1_dict['id'])
+            product1_dict['platform_common_id'] = int(product1_dict['platform_common_id'])
+            product2_dict['id'] = int(product2_dict['id'])
+            product2_dict['platform_common_id'] = int(product2_dict['platform_common_id'])
+
             match = {
-                f"{platform1}_product": dict(product1_row),
-                f"{platform2}_product": dict(product2_row),
+                f"{platform1}_product": product1_dict,
+                f"{platform2}_product": product2_dict,
                 "confidence": 100.0
             }
 

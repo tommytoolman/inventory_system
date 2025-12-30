@@ -497,10 +497,10 @@ class VRService:
                 logger.error(f"Authentication failed for restoring item {external_id}.")
                 return False
 
-            # Try to call unmark_sold AJAX endpoint (if it exists)
+            # Call restore_from_sold AJAX endpoint (confirmed from V&R JS)
             import random
             random_num = random.random()
-            url = f'https://www.vintageandrare.com/ajax/unmark_sold/{random_num}'
+            url = f'https://www.vintageandrare.com/ajax/restore_from_sold/{random_num}'
 
             ajax_headers = {
                 **client.headers,
@@ -534,12 +534,12 @@ class VRService:
             listing_result = await self.db.execute(stmt)
             listing = listing_result.scalar_one_or_none()
             if listing:
-                listing.vr_state = 'live'
+                listing.vr_state = 'active'
                 listing.inventory_quantity = 1
                 listing.in_inventory = True
                 listing.updated_at = datetime.utcnow()
                 self.db.add(listing)
-                logger.info(f"V&R listing {external_id} local state updated to live.")
+                logger.info(f"V&R listing {external_id} local state updated to active.")
 
             return True
 

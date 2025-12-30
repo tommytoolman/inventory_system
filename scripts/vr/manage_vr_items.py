@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 CLI script to manage V&R items using AJAX endpoints.
-Usage: 
-    python scripts/vr/manage_vr_items.py delete [item_ids...] 
+Usage:
+    python scripts/vr/manage_vr_items.py delete [item_ids...]
     python scripts/vr/manage_vr_items.py mark-sold [item_ids...]
+    python scripts/vr/manage_vr_items.py restore [item_id]
 
 Examples:
 
@@ -11,9 +12,12 @@ Examples:
     python scripts/vr/manage_vr_items.py delete --dry-run 122805 122806
     python scripts/vr/manage_vr_items.py delete --verify 122805 122806
 
-# Mark items as sold  
+# Mark items as sold
     python scripts/vr/manage_vr_items.py mark-sold --dry-run 122755 122754
     python scripts/vr/manage_vr_items.py mark-sold 122755 122754
+
+# Restore sold item back to active
+    python scripts/vr/manage_vr_items.py restore 57543
 
 """
 
@@ -37,7 +41,7 @@ from app.services.vintageandrare.client import VintageAndRareClient
 def main():
     """CLI entry point"""
     parser = argparse.ArgumentParser(description='Manage V&R items via AJAX')
-    parser.add_argument('action', choices=['delete', 'mark-sold', 'edit', 'debug-mark', 'test-variations'], help='Action to perform')
+    parser.add_argument('action', choices=['delete', 'mark-sold', 'restore', 'edit', 'debug-mark', 'test-variations'], help='Action to perform')
     parser.add_argument('item_ids', nargs='+', help='V&R item IDs to process')
     parser.add_argument('--username', help='V&R username (or set VR_USERNAME env var)')
     parser.add_argument('--password', help='V&R password (or set VR_PASSWORD env var)')
@@ -95,13 +99,13 @@ def main():
             sys.exit(1)
 
         # Handle debug actions (single item only)
-        if args.action in ['debug-mark', 'test-variations']:
+        if args.action in ['debug-mark', 'test-variations', 'restore']:
             if len(args.item_ids) > 1:
                 print(f"⚠️  {args.action} mode only supports one item at a time")
                 print(f"Using first item: {args.item_ids[0]}")
-            
+
             item_id = args.item_ids[0]
-            
+
             if args.action == 'debug-mark':
                 print(f"\n🔍 **DEBUG MARK-AS-SOLD FOR ITEM {item_id}**")
                 result = await client.debug_mark_as_sold(item_id)
@@ -109,14 +113,46 @@ def main():
                 print(f"Status Code: {result.get('status_code')}")
                 print(f"Response Text: '{result.get('response_text')}'")
                 print(f"Content Length: {len(result.get('response_text', ''))}")
-                
+
             elif args.action == 'test-variations':
                 print(f"\n🧪 **TESTING MARK-AS-SOLD VARIATIONS FOR ITEM {item_id}**")
                 result = await client.test_mark_as_sold_variations(item_id)
                 print(f"\n📊 **TEST RESULTS:**")
                 for i, (method, status, text) in enumerate(result.get('tests', []), 1):
                     print(f"Test {i} ({method}): HTTP {status} - '{text}'")
-            
+
+            elif args.action == 'restore':
+                print(f"\n🔄 **RESTORING ITEM {item_id} FROM SOLD**")
+                import random
+                random_num = random.random()
+                url = f'https://www.vintageandrare.com/ajax/restore_from_sold/{random_num}'
+
+                ajax_headers = {
+                    **client.headers,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'Referer': 'https://www.vintageandrare.com/account/items',
+                }
+
+                restore_data = f'product_id={item_id}'
+
+                session = client.cf_session if client.cf_session else client.session
+                response = session.post(url, data=restore_data, headers=ajax_headers)
+
+                print(f"\n📊 **RESTORE RESULTS:**")
+                print(f"Status Code: {response.status_code}")
+                print(f"Response Text: '{response.text}'")
+
+                # Parse V&R response format: "Err::message" or success
+                if response.status_code == 200:
+                    if response.text.startswith('Err::'):
+                        error_msg = response.text.split('::', 1)[1] if '::' in response.text else response.text
+                        print(f"❌ V&R Error: {error_msg}")
+                    else:
+                        print(f"✅ Item {item_id} restored successfully!")
+                else:
+                    print(f"❌ HTTP Error: {response.status_code}")
+
             return  # Exit after debug operations
         
         # ✅ ADD: Prepare update_data for edit operations

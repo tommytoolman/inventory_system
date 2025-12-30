@@ -791,7 +791,8 @@ class ProductMatcher:
                     # Determine product to keep (e.g., first one) and products to merge
                     keep_platform = platforms[0]
                     keep_product = products_in_match[keep_platform]
-                    keep_product_id = keep_product['id']
+                    # Ensure IDs are integers (defensive fix for type mismatches)
+                    keep_product_id = int(keep_product['id'])
                     products_to_merge_ids: Set[int] = set()
 
                     logger.info(f"Match {match_index+1}: Keeping {keep_platform} product "
@@ -800,7 +801,7 @@ class ProductMatcher:
                     # Identify IDs of products to be merged (excluding the kept one)
                     for merge_platform in platforms:
                         merge_product = products_in_match[merge_platform]
-                        merge_product_id = merge_product['id']
+                        merge_product_id = int(merge_product['id'])  # Ensure integer
                         if merge_product_id != keep_product_id:
                             products_to_merge_ids.add(merge_product_id)
                             logger.info(f"  -> Will merge {merge_platform} product "
@@ -813,9 +814,9 @@ class ProductMatcher:
                     # 1. Update platform_common FKs for directly matched items
                     for merge_platform in platforms:
                         merge_product = products_in_match[merge_platform]
-                        merge_product_id = merge_product['id']
+                        merge_product_id = int(merge_product['id'])  # Ensure integer
                         if merge_product_id != keep_product_id: # Only update those being merged
-                            pc_id = merge_product['platform_common_id']
+                            pc_id = int(merge_product['platform_common_id'])  # Ensure integer
                             logger.debug(f"Updating platform_common ID {pc_id} "
                                         f"to product_id {keep_product_id}")
                             update_pc_query = text("""

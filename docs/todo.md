@@ -7,7 +7,6 @@
 
 ## 🔴 High Priority (Production blockers)
 - [ ] **Sync event automation** – confirm which sync events write to `_listings` tables (persistence audit) and add gradual automation so reconciled events publish without manual nudges. Includes gradually automating the sync pipeline so sold/ended propagation runs unattended.
-- [x] **Inventorised items workflow validation** – run a live stocked-item sale test to confirm the recent fixes propagate quantity/status updates correctly across platforms, restore the DB flagging for inventorised items that was lost previously, and enforce VR-specific rules (do nothing when other platforms sell while stock >1, end the VR listing only when quantity hits 0, and mark + relist VR sales when remaining quantity >0) so sync detects sales without prematurely ending multi-quantity listings. _Completed 2025-12-27: Added Inventory Reconciliation report with smart reconciliation (only updates out-of-sync platforms), order_sale sync events for stocked items, sale email alerts for inventorised stock._
 
 ## 🟡 Medium Priority (Stability & automation)
 - [ ] **Category / platform attributes and category mapping** – _Progress 2025-12-29:_ Added UI infrastructure for spec capture: category-based auto-population (body_type, number_of_strings, handedness), "Additional Specs" section in Further Information with predefined options from `spec_fields.py` plus custom specs, all stored in `extra_attributes` JSONB and included in description template. Dynamic eBay condition validation via API also added. **Remaining:** (1) Expand `spec_fields.py` for non-guitar categories: Amps (wattage, tube/solid state, speaker config), Effects Pedals (true bypass, analog/digital), Pro Audio/Microphones (polar pattern, phantom power). (2) Map captured specs to eBay Item Specifics and Shopify tags/metafields during listing creation. (3) End-to-end category mapping audit.
@@ -46,6 +45,7 @@
 ## ✅ Completed
 - [x] **TinyMCE API Key Secure:** Removed hardcoded API key from `base.html` and moved to `TINYMCE_API_KEY` environment variable.
 - [x] **Admin Password Enforced:** Removed insecure default from `config.py` requiring `ADMIN_PASSWORD` environment variable.
+- [x] **Inventorised items workflow validation** – _Completed 2025-12-27:_ Added Inventory Reconciliation report with smart reconciliation (only updates out-of-sync platforms), order_sale sync events for stocked items, sale email alerts for inventorised stock.
 - [x] **Dropbox media integration overhaul** – _Completed 2025-12-30:_ Complete refactor using thumbnail API (~98% bandwidth savings), lazy full-res fetch, token persistence, parallel fetching, instant visual feedback, two-way selection sync, smart Select All/Clear button.
 - [x] **Platform error handling standardisation** – error handling across all platform services now graceful and consistent. _Completed 2025-12-24._
 - [x] **"Where sold" attribution & sales orders** – sale-source attribution in sales report correctly identifies platform vs OFFLINE; aligned with orders workflow. _Completed 2025-12-24._

@@ -1,5 +1,5 @@
 # Project TODO – Inventory Management System
-*Last updated: 2025-12-30*
+*Last updated: 2026-01-01*
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
@@ -10,7 +10,7 @@
 
 ## 🟡 Medium Priority (Stability & automation)
 - [ ] **Category / platform attributes and category mapping** – _Progress 2025-12-29:_ Added UI infrastructure for spec capture: category-based auto-population (body_type, number_of_strings, handedness), "Additional Specs" section in Further Information with predefined options from `spec_fields.py` plus custom specs, all stored in `extra_attributes` JSONB and included in description template. Dynamic eBay condition validation via API also added. **Remaining:** (1) Expand `spec_fields.py` for non-guitar categories: Amps (wattage, tube/solid state, speaker config), Effects Pedals (true bypass, analog/digital), Pro Audio/Microphones (polar pattern, phantom power). (2) Map captured specs to eBay Item Specifics and Shopify tags/metafields during listing creation. (3) End-to-end category mapping audit.
-- [ ] **Platform stats ingestion gaps** – Shopify/VR don't expose engagement stats via API (confirmed). For Reverb: add daily detailed refresh (like eBay metadata feed) to update `view_count`/`watch_count` - code exists in `reverb/client.py` (`get_all_listings_detailed`), needs scheduling + upsert logic. For eBay: extract `WatchCount` from `listing_data.Raw.Item` to dedicated column during metadata refresh.
+- [ ] **Platform stats ingestion gaps** – Shopify/VR don't expose engagement stats via API (confirmed). ~~For Reverb/eBay: see completed item below.~~ **Remaining:** Consider extending `listing_stats_history` to other platforms if APIs become available.
 - [ ] **Shopify archive** – create archive gallery view for historical listings AND implement auto-archive workflow (e.g., archive after 10 days of no activity).
 - [ ] **DHL API integration** – wire up the tested DHL API to the orders workflow for shipping label generation and tracking. API is tested and ready, just needs UI integration.
 
@@ -42,6 +42,7 @@
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 
 ## ✅ Completed
+- [x] **Listing Engagement Report & Stats Ingestion** – _Completed 2026-01-01:_ Added Listing Engagement Report at `/reports/listing-engagement` aggregating Reverb + eBay views/watches by product. Implemented `listing_stats_history` table with daily scheduled refresh for both platforms (`reverb_stats_daily`, `ebay_stats_daily` jobs). Report features sortable columns, platform breakdown (R:X | E:Y), 7-day change tracking, system icons for platform links. Also fixed VR relist to update `platform_common.status`.
 - [x] **TinyMCE API Key Secure:** Removed hardcoded API key from `base.html` and moved to `TINYMCE_API_KEY` environment variable.
 - [x] **Admin Password Enforced:** Removed insecure default from `config.py` requiring `ADMIN_PASSWORD` environment variable.
 - [x] **Inventorised items workflow validation** – _Completed 2025-12-27:_ Added Inventory Reconciliation report with smart reconciliation (only updates out-of-sync platforms), order_sale sync events for stocked items, sale email alerts for inventorised stock.

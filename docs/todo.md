@@ -10,7 +10,6 @@
 
 ## 🟡 Medium Priority (Stability & automation)
 - [ ] **Category / platform attributes and category mapping** – _Progress 2025-12-29:_ Added UI infrastructure for spec capture: category-based auto-population (body_type, number_of_strings, handedness), "Additional Specs" section in Further Information with predefined options from `spec_fields.py` plus custom specs, all stored in `extra_attributes` JSONB and included in description template. Dynamic eBay condition validation via API also added. **Remaining:** (1) Expand `spec_fields.py` for non-guitar categories: Amps (wattage, tube/solid state, speaker config), Effects Pedals (true bypass, analog/digital), Pro Audio/Microphones (polar pattern, phantom power). (2) Map captured specs to eBay Item Specifics and Shopify tags/metafields during listing creation. (3) End-to-end category mapping audit.
-- [ ] **Platform stats ingestion gaps** – Shopify/VR don't expose engagement stats via API (confirmed). ~~For Reverb/eBay: see completed item below.~~ **Remaining:** Consider extending `listing_stats_history` to other platforms if APIs become available.
 - [ ] **Shopify archive** – create archive gallery view for historical listings AND implement auto-archive workflow (e.g., archive after 10 days of no activity).
 - [ ] **DHL API integration** – wire up the tested DHL API to the orders workflow for shipping label generation and tracking. API is tested and ready, just needs UI integration.
 

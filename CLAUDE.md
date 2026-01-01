@@ -90,6 +90,23 @@ asyncio.run(check())
 
 ### Common Patterns
 
+#### 🔴 Async Database Sessions - CRITICAL PATTERN
+**NEVER use `Depends(get_session)` in route functions!** This codebase uses async context managers.
+
+```python
+# WRONG - Will cause 'AsyncGeneratorContextManager' has no attribute 'execute'
+async def my_route(db: AsyncSession = Depends(get_session)):
+    result = await db.execute(...)  # ERROR!
+
+# CORRECT - Use async with context manager
+async def my_route(request: Request):
+    async with get_session() as db:
+        result = await db.execute(...)  # Works!
+        # ALL code using db must be inside this block
+```
+
+**All code that uses the `db` session MUST be inside the `async with` block.** If you close the block early, subsequent code will fail.
+
 #### Extract Reverb ID from SKU
 ```python
 # SKU format is REV-{reverb_id}

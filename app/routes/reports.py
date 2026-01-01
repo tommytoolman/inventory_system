@@ -3000,3 +3000,210 @@ async def reconcile_inventory(product_id: int, request: Request):
             "target_quantity": target_quantity,
             "results": results,
         })
+
+
+@router.get("/listing-engagement", response_class=HTMLResponse)
+async def listing_engagement_report(
+    request: Request,
+    sort_by: str = Query("total_watches", description="Sort field"),
+    sort_order: str = Query("desc", description="Sort order"),
+    search: Optional[str] = Query(None, description="Search by brand, model, or SKU"),
+    min_watches: Optional[int] = Query(None, description="Minimum watch count"),
+):
+    """
+    Listing Engagement Report: Analyze views, watches, and engagement metrics
+    across platforms, aggregated by product/SKU.
+    """
+    from datetime import timedelta
+
+    # Valid sort columns
+    valid_sort_cols = ["total_watches", "total_views", "watch_change_7d", "view_change_7d", "price", "days_listed"]
+    sort_by = sort_by.lower() if sort_by.lower() in valid_sort_cols else "total_watches"
+    sort_order = "asc" if sort_order.lower() == "asc" else "desc"
+
+    async with get_session() as db:
+        now = datetime.utcnow()
+        seven_days_ago = now - timedelta(days=7)
+
+        # Query aggregates stats by product, combining Reverb and eBay data
+        stats_sql = """
+        WITH latest_stats AS (
+            SELECT DISTINCT ON (platform, platform_listing_id)
+                lsh.platform,
+                lsh.platform_listing_id,
+                lsh.product_id,
+                lsh.view_count,
+                lsh.watch_count,
+                lsh.price,
+                lsh.state,
+                lsh.recorded_at
+            FROM listing_stats_history lsh
+            WHERE lsh.recorded_at >= :cutoff_date
+            ORDER BY platform, platform_listing_id, recorded_at DESC
+        ),
+        week_ago_stats AS (
+            SELECT DISTINCT ON (platform, platform_listing_id)
+                lsh.platform,
+                lsh.platform_listing_id,
+                lsh.view_count as old_view_count,
+                lsh.watch_count as old_watch_count
+            FROM listing_stats_history lsh
+            WHERE lsh.recorded_at >= :week_ago_start
+              AND lsh.recorded_at < :week_ago_end
+            ORDER BY platform, platform_listing_id, recorded_at DESC
+        ),
+        stats_with_change AS (
+            SELECT
+                ls.platform,
+                ls.platform_listing_id,
+                ls.product_id,
+                COALESCE(ls.view_count, 0) as view_count,
+                COALESCE(ls.watch_count, 0) as watch_count,
+                ls.price,
+                COALESCE(ls.view_count, 0) - COALESCE(ws.old_view_count, 0) as view_change,
+                COALESCE(ls.watch_count, 0) - COALESCE(ws.old_watch_count, 0) as watch_change
+            FROM latest_stats ls
+            LEFT JOIN week_ago_stats ws ON ls.platform = ws.platform
+                AND ls.platform_listing_id = ws.platform_listing_id
+            WHERE ls.state IN ('live', 'Active', 'active')
+              AND ls.product_id IS NOT NULL
+        )
+        SELECT
+            p.id as product_id,
+            p.sku,
+            p.brand,
+            p.model,
+            p.primary_image,
+            p.created_at as product_created_at,
+            COALESCE(p.base_price, 0) as price,
+            EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 86400 as days_listed,
+            -- Reverb stats
+            MAX(CASE WHEN s.platform = 'reverb' THEN s.platform_listing_id END) as reverb_listing_id,
+            COALESCE(MAX(CASE WHEN s.platform = 'reverb' THEN s.view_count END), 0) as reverb_views,
+            COALESCE(MAX(CASE WHEN s.platform = 'reverb' THEN s.watch_count END), 0) as reverb_watches,
+            COALESCE(MAX(CASE WHEN s.platform = 'reverb' THEN s.view_change END), 0) as reverb_view_change,
+            COALESCE(MAX(CASE WHEN s.platform = 'reverb' THEN s.watch_change END), 0) as reverb_watch_change,
+            -- eBay stats
+            MAX(CASE WHEN s.platform = 'ebay' THEN s.platform_listing_id END) as ebay_listing_id,
+            COALESCE(MAX(CASE WHEN s.platform = 'ebay' THEN s.view_count END), 0) as ebay_views,
+            COALESCE(MAX(CASE WHEN s.platform = 'ebay' THEN s.watch_count END), 0) as ebay_watches,
+            COALESCE(MAX(CASE WHEN s.platform = 'ebay' THEN s.view_change END), 0) as ebay_view_change,
+            COALESCE(MAX(CASE WHEN s.platform = 'ebay' THEN s.watch_change END), 0) as ebay_watch_change,
+            -- Totals
+            COALESCE(SUM(s.view_count), 0) as total_views,
+            COALESCE(SUM(s.watch_count), 0) as total_watches,
+            COALESCE(SUM(s.view_change), 0) as view_change_7d,
+            COALESCE(SUM(s.watch_change), 0) as watch_change_7d
+        FROM products p
+        INNER JOIN stats_with_change s ON p.id = s.product_id
+        WHERE 1=1
+        """
+
+        params = {
+            "cutoff_date": now - timedelta(days=30),
+            "week_ago_start": seven_days_ago - timedelta(days=1),
+            "week_ago_end": seven_days_ago + timedelta(days=1),
+        }
+
+        # Add search filter
+        if search:
+            stats_sql += """ AND (
+                LOWER(p.sku) LIKE LOWER(:search)
+                OR LOWER(p.brand) LIKE LOWER(:search)
+                OR LOWER(p.model) LIKE LOWER(:search)
+            )"""
+            params["search"] = f"%{search}%"
+
+        # Group by product
+        stats_sql += " GROUP BY p.id, p.sku, p.brand, p.model, p.primary_image, p.created_at, p.base_price"
+
+        # Add minimum watches filter (on total)
+        if min_watches:
+            stats_sql += " HAVING COALESCE(SUM(s.watch_count), 0) >= :min_watches"
+            params["min_watches"] = min_watches
+
+        # Add sorting
+        sort_column_map = {
+            "total_watches": "total_watches",
+            "total_views": "total_views",
+            "watch_change_7d": "watch_change_7d",
+            "view_change_7d": "view_change_7d",
+            "price": "price",
+            "days_listed": "days_listed",
+        }
+        sort_col = sort_column_map.get(sort_by, "total_watches")
+        stats_sql += f" ORDER BY {sort_col} {sort_order.upper()} NULLS LAST"
+
+        # Execute query
+        result = await db.execute(text(stats_sql), params)
+        rows = result.fetchall()
+
+        # Process results
+        listings = []
+        total_views = 0
+        total_watches = 0
+        total_value = 0
+        reverb_count = 0
+        ebay_count = 0
+
+        for row in rows:
+            listing = {
+                "product_id": row.product_id,
+                "sku": row.sku or "Unknown",
+                "brand": row.brand or "",
+                "model": row.model or "",
+                "primary_image": row.primary_image,
+                "price": float(row.price or 0),
+                "days_listed": int(row.days_listed or 0),
+                # Reverb
+                "reverb_listing_id": row.reverb_listing_id,
+                "reverb_views": row.reverb_views or 0,
+                "reverb_watches": row.reverb_watches or 0,
+                "reverb_view_change": row.reverb_view_change or 0,
+                "reverb_watch_change": row.reverb_watch_change or 0,
+                # eBay
+                "ebay_listing_id": row.ebay_listing_id,
+                "ebay_views": row.ebay_views or 0,
+                "ebay_watches": row.ebay_watches or 0,
+                "ebay_view_change": row.ebay_view_change or 0,
+                "ebay_watch_change": row.ebay_watch_change or 0,
+                # Totals
+                "total_views": row.total_views or 0,
+                "total_watches": row.total_watches or 0,
+                "view_change_7d": row.view_change_7d or 0,
+                "watch_change_7d": row.watch_change_7d or 0,
+            }
+
+            listings.append(listing)
+
+            # Aggregate stats
+            total_views += listing["total_views"]
+            total_watches += listing["total_watches"]
+            total_value += listing["price"]
+            if listing["reverb_listing_id"]:
+                reverb_count += 1
+            if listing["ebay_listing_id"]:
+                ebay_count += 1
+
+        # Calculate summary stats
+        summary = {
+            "total_products": len(listings),
+            "total_views": total_views,
+            "total_watches": total_watches,
+            "total_value": total_value,
+            "avg_views": round(total_views / len(listings), 1) if listings else 0,
+            "avg_watches": round(total_watches / len(listings), 1) if listings else 0,
+            "avg_price": round(total_value / len(listings), 0) if listings else 0,
+            "reverb_count": reverb_count,
+            "ebay_count": ebay_count,
+        }
+
+        return templates.TemplateResponse("reports/listing_engagement.html", {
+            "request": request,
+            "listings": listings,
+            "summary": summary,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "search": search or "",
+            "min_watches": min_watches,
+        })

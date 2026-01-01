@@ -1214,6 +1214,11 @@ async def _process_status_change(
                         vr_service = VRService(session)
                         vr_success = await vr_service.restore_from_sold(vr_pc.external_id)
                         if vr_success:
+                            # Update platform_common status
+                            vr_pc.status = ListingStatus.ACTIVE.value
+                            vr_pc.sync_status = SyncStatus.SYNCED.value
+                            vr_pc.last_sync = datetime.utcnow()
+                            session.add(vr_pc)
                             result.platforms_created.append('vr')
                             logger.info(f"V&R relist successful for {product.sku}")
                         else:
@@ -1337,6 +1342,7 @@ async def _process_status_change(
                             days_since_sold=days_since_sold
                         )
                         if shopify_result.get('success'):
+                            # Note: shopify_service.relist_listing() already updates platform_common internally
                             result.platforms_created.append('shopify')
                             result.details['shopify_status_updated'] = shopify_result.get('status_updated')
                             result.details['shopify_inventory_updated'] = shopify_result.get('inventory_updated')

@@ -6,6 +6,7 @@ Handles fetching and storing engagement metrics (views, watches) from
 various platforms, with historical tracking for trend analysis.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
@@ -15,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.listing_stats_history import ListingStatsHistory
 from app.models.reverb import ReverbListing
-from app.models.platform_common import PlatformCommon
+from app.models.ebay import EbayListing
+from app.models.platform_common import PlatformCommon, ListingStatus
 from app.services.reverb.client import ReverbClient
 
 logger = logging.getLogger(__name__)
@@ -131,6 +133,152 @@ class ListingStatsService:
 
         logger.info(f"Reverb stats refresh complete: {summary}")
         return summary
+
+    async def refresh_ebay_stats(
+        self,
+        dry_run: bool = False,
+        batch_size: int = 10
+    ) -> Dict[str, Any]:
+        """
+        Fetch current stats from eBay API and store historical snapshot.
+
+        Uses the Trading API GetItem call to fetch HitCount and WatchCount
+        for all active eBay listings.
+
+        Args:
+            dry_run: If True, don't actually write to database
+            batch_size: Number of concurrent API calls
+
+        Returns:
+            Summary of the refresh operation
+        """
+        from app.services.ebay.trading import EbayTradingLegacyAPI
+        from app.models.product import Product
+
+        logger.info("Starting eBay stats refresh...")
+
+        # Get all active eBay listings with their product info
+        query = (
+            select(EbayListing, PlatformCommon, Product)
+            .join(PlatformCommon, EbayListing.platform_id == PlatformCommon.id)
+            .join(Product, PlatformCommon.product_id == Product.id)
+            .where(PlatformCommon.platform_name == 'ebay')
+            .where(PlatformCommon.status == ListingStatus.ACTIVE.value)
+        )
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        if not rows:
+            logger.info("No active eBay listings found")
+            return {"status": "success", "listings_processed": 0, "message": "No active listings"}
+
+        logger.info(f"Found {len(rows)} active eBay listings to refresh stats for")
+
+        stats_inserted = 0
+        errors = []
+        api = EbayTradingLegacyAPI(sandbox=False)
+        semaphore = asyncio.Semaphore(batch_size)
+
+        async def fetch_item_stats(listing: EbayListing, platform_common: PlatformCommon, product: Product):
+            """Fetch stats for a single listing."""
+            nonlocal stats_inserted
+            async with semaphore:
+                try:
+                    if not listing.ebay_item_id:
+                        return
+
+                    # Call GetItem to get current stats (use get_item_details which includes WatchCount)
+                    item_data = await api.get_item_details(listing.ebay_item_id)
+                    if not item_data:
+                        errors.append(f"No data returned for {listing.ebay_item_id}")
+                        return
+
+                    # Extract stats - eBay returns these as strings
+                    hit_count = self._safe_int(item_data.get('HitCount'))
+                    watch_count = self._safe_int(item_data.get('WatchCount'))
+
+                    # Extract current price
+                    price = None
+                    selling_status = item_data.get('SellingStatus', {})
+                    if isinstance(selling_status, dict):
+                        current_price = selling_status.get('CurrentPrice', {})
+                        if isinstance(current_price, dict):
+                            price = self._safe_float(current_price.get('#text'))
+                        elif current_price:
+                            price = self._safe_float(current_price)
+
+                    # Get listing state
+                    state = item_data.get('SellingStatus', {}).get('ListingStatus', 'unknown')
+                    if isinstance(state, dict):
+                        state = state.get('#text', 'unknown')
+
+                    if not dry_run:
+                        # Insert historical snapshot
+                        history_entry = ListingStatsHistory(
+                            platform="ebay",
+                            platform_listing_id=listing.ebay_item_id,
+                            product_id=product.id if product else None,
+                            view_count=hit_count,
+                            watch_count=watch_count,
+                            price=price,
+                            state=state,
+                            recorded_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                        )
+                        self.db.add(history_entry)
+                        stats_inserted += 1
+
+                except Exception as e:
+                    error_msg = f"Error fetching stats for {listing.ebay_item_id}: {e}"
+                    logger.warning(error_msg)
+                    errors.append(error_msg)
+
+        # Process all listings concurrently with rate limiting
+        tasks = [
+            fetch_item_stats(listing, platform_common, product)
+            for listing, platform_common, product in rows
+        ]
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        if not dry_run and stats_inserted > 0:
+            await self.db.commit()
+
+        summary = {
+            "status": "success",
+            "platform": "ebay",
+            "listings_fetched": len(rows),
+            "stats_snapshots_inserted": stats_inserted,
+            "errors": len(errors),
+            "dry_run": dry_run,
+        }
+
+        if errors and len(errors) <= 5:
+            summary["error_samples"] = errors
+
+        logger.info(f"eBay stats refresh complete: {summary}")
+        return summary
+
+    def _safe_float(self, value: Any) -> Optional[float]:
+        """Safely convert value to float."""
+        if value is None:
+            return None
+        try:
+            return float(str(value).replace(',', ''))
+        except (ValueError, TypeError):
+            return None
+
+    async def _get_ebay_product_id_map(self) -> Dict[str, int]:
+        """
+        Build a mapping of ebay_item_id -> product_id.
+        """
+        query = (
+            select(EbayListing.ebay_item_id, PlatformCommon.product_id)
+            .join(PlatformCommon, EbayListing.platform_id == PlatformCommon.id)
+            .where(EbayListing.ebay_item_id.isnot(None))
+        )
+        result = await self.db.execute(query)
+        rows = result.fetchall()
+
+        return {row[0]: row[1] for row in rows if row[0] and row[1]}
 
     async def _get_reverb_product_id_map(self) -> Dict[str, int]:
         """

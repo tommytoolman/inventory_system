@@ -374,6 +374,7 @@ class EbayTradingLegacyAPI:
             <DetailLevel>ReturnAll</DetailLevel>
             <IncludeItemSpecifics>true</IncludeItemSpecifics>
             <IncludeDescription>true</IncludeDescription>
+            <IncludeWatchCount>true</IncludeWatchCount>
         </GetItemRequest>"""
 
         response_dict = await self._make_request('GetItem', xml_request)

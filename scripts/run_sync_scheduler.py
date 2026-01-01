@@ -244,6 +244,37 @@ async def main():
         except Exception as e:
             logger.warning("Reverb stats refresh failed: %s", e)
 
+    async def refresh_ebay_stats(db, settings, sync_run_id):
+        """Fetch current eBay listing stats and store historical snapshot."""
+        logger.info("Refreshing eBay listing stats...")
+        activity_logger = ActivityLogger(db)
+        try:
+            stats_service = ListingStatsService(db)
+            result = await stats_service.refresh_ebay_stats(
+                dry_run=False,
+                batch_size=10
+            )
+
+            if result.get("status") == "success":
+                await activity_logger.log_activity(
+                    action="stats_refresh",
+                    entity_type="listings",
+                    entity_id="ebay",
+                    platform="ebay",
+                    details={
+                        "icon": "📊",
+                        "status": "success",
+                        "message": f"Refreshed eBay stats ({result.get('listings_fetched', 0)} listings)",
+                        "listings_fetched": result.get("listings_fetched", 0),
+                        "snapshots_inserted": result.get("stats_snapshots_inserted", 0),
+                        "errors": result.get("errors", 0),
+                    }
+                )
+                await db.commit()
+            logger.info("eBay stats refresh: %s", result)
+        except Exception as e:
+            logger.warning("eBay stats refresh failed: %s", e)
+
     jobs = [
         ScheduledJob(
             "reverb_hourly",
@@ -293,6 +324,11 @@ async def main():
             "reverb_stats_daily",
             1440,
             refresh_reverb_stats,
+        ),
+        ScheduledJob(
+            "ebay_stats_daily",
+            1440,
+            refresh_ebay_stats,
         ),
         # Orders fetch jobs - run hourly after platform syncs
         ScheduledJob(

@@ -1,8 +1,11 @@
 {
-  "enableAllProjectMcpServers": false,
   "permissions": {
     "allow": [
-      "Bash(python scripts/test_ebay_conditions.py:*)"
+      "Bash(python scripts/test_ebay_conditions.py:*)",
+      "Bash(jq:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(python:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": false
 }

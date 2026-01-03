@@ -417,7 +417,7 @@ class DashboardService:
     async def get_recent_activity(self) -> list:
         """Get recent activity logs"""
         try:
-            query = select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(5)
+            query = select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(2000)
             result = await self.db.execute(query)
             logs = result.scalars().all()
 
@@ -439,11 +439,19 @@ class DashboardService:
                 else:
                     created_at_local = log.created_at.astimezone(bst_tz)
 
+                # Get status from details
+                status = "success"
+                if log.details:
+                    status = log.details.get("status", "success")
+                if log.action in ["sync_error", "error"]:
+                    status = "error"
+
                 activity.append(
                     {
                         "icon": icon,
                         "message": message,
                         "time": created_at_local.strftime("%d/%m/%Y, %H:%M:%S"),
+                        "status": status,
                     }
                 )
 
@@ -468,6 +476,9 @@ class DashboardService:
             "sync_start": "🔄",
             "sync_error": "⚠️",
             "sale": "💰",
+            "auto_archive": "📦",
+            "orders_sync": "📦",
+            "stats_refresh": "📊",
         }
 
         return icon_map.get(log.action, "📝")

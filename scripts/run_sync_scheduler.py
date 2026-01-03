@@ -25,6 +25,7 @@ from app.services.shopify.client import ShopifyGraphQLClient
 from app.services.activity_logger import ActivityLogger
 from app.services.order_sale_processor import OrderSaleProcessor
 from app.services.listing_stats_service import ListingStatsService
+from shopify.auto_archive import run_auto_archive
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -275,6 +276,32 @@ async def main():
         except Exception as e:
             logger.warning("eBay stats refresh failed: %s", e)
 
+    async def shopify_auto_archive(db, settings, sync_run_id):
+        """Auto-archive Shopify listings for sold/ended products older than 14 days."""
+        logger.info("Running Shopify auto-archive...")
+        activity_logger = ActivityLogger(db)
+        try:
+            result = await run_auto_archive(dry_run=False, limit=None, days=14)
+
+            await activity_logger.log_activity(
+                action="auto_archive",
+                entity_type="listings",
+                entity_id="shopify",
+                platform="shopify",
+                details={
+                    "icon": "📦",
+                    "status": "success",
+                    "message": f"Auto-archived {result.get('archived', 0)} Shopify listings",
+                    "archived": result.get("archived", 0),
+                    "skipped": result.get("skipped", 0),
+                    "errors": result.get("errors", 0),
+                }
+            )
+            await db.commit()
+            logger.info("Shopify auto-archive: %s", result)
+        except Exception as e:
+            logger.warning("Shopify auto-archive failed: %s", e)
+
     jobs = [
         ScheduledJob(
             "reverb_hourly",
@@ -345,6 +372,12 @@ async def main():
             "shopify_orders_hourly",
             60,
             fetch_shopify_orders_job,
+        ),
+        # Weekly auto-archive job - 10080 minutes = 7 days
+        ScheduledJob(
+            "shopify_auto_archive_weekly",
+            10080,
+            shopify_auto_archive,
         ),
     ]
 

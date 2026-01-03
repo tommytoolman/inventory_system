@@ -1,5 +1,5 @@
 # Project TODO – Inventory Management System
-*Last updated: 2026-01-01*
+*Last updated: 2026-01-03*
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
@@ -11,14 +11,15 @@
 ## 🟡 Medium Priority (Stability & automation)
 - [ ] **Category / platform attributes and category mapping** – _Progress 2025-12-29:_ Added UI infrastructure for spec capture: category-based auto-population (body_type, number_of_strings, handedness), "Additional Specs" section in Further Information with predefined options from `spec_fields.py` plus custom specs, all stored in `extra_attributes` JSONB and included in description template. Dynamic eBay condition validation via API also added. **Remaining:** (1) Expand `spec_fields.py` for non-guitar categories: Amps (wattage, tube/solid state, speaker config), Effects Pedals (true bypass, analog/digital), Pro Audio/Microphones (polar pattern, phantom power). (2) Map captured specs to eBay Item Specifics and Shopify tags/metafields during listing creation. (3) End-to-end category mapping audit.
 - [ ] **Shopify archive** – create archive gallery view for historical listings AND implement auto-archive workflow (e.g., archive after 10 days of no activity).
-- [ ] **DHL API integration** – wire up the tested DHL API to the orders workflow for shipping label generation and tracking. API is tested and ready, just needs UI integration.
+- [ ] **Insights Dashboard (incl. NPI clustering)** – test and fine-tune the insights dashboard; includes New Product Introduction cluster view grouped by category for merch planning.
+- [ ] **DHL API integration** – _Progress 2026-01-02:_ Built `DHLPayloadBuilder` service, added shipper config settings, created shipping page UI at `/orders/{platform}/{id}/ship`, added shipping icons to orders list. **Blocked on:** DHL account password reset. **Remaining:** (1) Add shipper details to `.env`, (2) POST route for label creation, (3) Test sandbox, (4) Railway env vars. See `docs/dhl-integration.md` for full details.
 
 ## 🔵 Low Priority (Enhancements)
-- [ ] **Fix image toast message state** – ensure the success banner dismisses correctly after refresh. Confirm colour palette and that UI reverts cleanly after multiple create flows (e.g., after adding 4 images).
-- [ ] **Testing & verification rebuild** – restore integration coverage for sync flows, add regression tests for the high-risk services, and document the verification checklist.
-- [ ] **NPI clustering report** – add a New Product Introduction cluster view grouped by category for merch planning.
-- [ ] **Redundant code clean-up** – tidy up/deprecate old sync forms, placeholder routers, and other dead code paths.
-- [ ] **Review database field coverage** – audit all key tables to ensure required fields are populated across platforms and identify any lingering gaps plus run the broader table integrity/backfill sweep to patch any gaps found.
+_(No items currently)_
+
+## 🧪 Testing
+- [x] **Test suite cleanup** – _Completed 2026-01-03:_ Audited 17,356 lines of test code across 219 tests. Deleted broken/stale tests (4 files with import errors referencing deleted modules), removed 4,129-line VR local state mega-file, removed stub shipping tests. Result: **200 tests, 11,108 lines** – all collecting cleanly with 0 errors.
+- [ ] **Smoke test maintenance** – keep critical path tests (route tests, product service, core sync) up to date. Run `pytest tests/` before major deploys. No CI integration planned.
 
 ## 🟠 Documentation & knowledge base
 - [ ] Add example usage to docstrings across core services and routers.
@@ -32,6 +33,8 @@
 - [ ] Refresh `docs/project-summary.md` to reflect the current platform status and ordering of next steps.
 
 ## 🆕 New Functionality
+- [ ] **Standardise toast/notification messages** – refactor inline notifications to use global `showNotification()` from base.html; align timing and styling across all templates. See `docs/toast-notifications-audit.md` for full audit and implementation plan.
+- [ ] **Database table healthchecker** – build a report that goes beyond `/reports/listing-health` to show field population stats across all key tables (products, platform_common, platform-specific tables). Summarise NULL/populated counts per field to identify data gaps.
 - [ ] (Verify) Add bulk operations API.
 - [ ] (Verify) Implement advanced search.
 - [ ] (Verify) Add loading spinner for image uploads.
@@ -41,6 +44,7 @@
 - [ ] **Additional user access** – review authentication/authorization stack to add more user accounts with appropriate roles.
 
 ## ✅ Completed
+- [x] **Redundant code clean-up** – _Completed 2026-01-03:_ Removed ~1,100 lines of dead code including: 688-line commented `EbayTradingLegacyAPIOLD` class from `trading.py`, 120-line commented class from `category_mapping_service.py`, deleted orphaned `.old` backup files (`sync_scheduler.py.old`, `sync_scheduler.py`, `repository.py.old`).
 - [x] **Listing Engagement Report & Stats Ingestion** – _Completed 2026-01-01:_ Added Listing Engagement Report at `/reports/listing-engagement` aggregating Reverb + eBay views/watches by product. Implemented `listing_stats_history` table with daily scheduled refresh for both platforms (`reverb_stats_daily`, `ebay_stats_daily` jobs). Report features sortable columns, platform breakdown (R:X | E:Y), 7-day change tracking, system icons for platform links. Also fixed VR relist to update `platform_common.status`.
 - [x] **TinyMCE API Key Secure:** Removed hardcoded API key from `base.html` and moved to `TINYMCE_API_KEY` environment variable.
 - [x] **Admin Password Enforced:** Removed insecure default from `config.py` requiring `ADMIN_PASSWORD` environment variable.

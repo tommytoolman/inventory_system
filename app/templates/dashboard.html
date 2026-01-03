@@ -494,11 +494,32 @@
 
     <!-- Recent Activity -->
     <div class="bg-white rounded-lg shadow p-6 mb-10">
-        <h2 class="text-xl font-semibold mb-4">Recent Activity</h2>
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center space-x-4">
+                <h2 class="text-xl font-semibold">Recent Activity</h2>
+                <label class="flex items-center space-x-2 text-sm cursor-pointer">
+                    <input type="checkbox" id="showFailuresOnly" onchange="toggleFailuresFilter()"
+                           class="rounded border-gray-300 text-red-600 focus:ring-red-500">
+                    <span class="text-gray-600">Failures only</span>
+                </label>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="activityPrevBtn" onclick="changeActivityPage(-1)"
+                        class="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
+                    &larr; Prev
+                </button>
+                <span id="activityPageInfo" class="text-sm text-gray-500">Page 1</span>
+                <button id="activityNextBtn" onclick="changeActivityPage(1)"
+                        class="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                    Next &rarr;
+                </button>
+            </div>
+        </div>
         {% if recent_activity %}
-            <div class="divide-y">
+            <div class="divide-y" id="activityList">
                 {% for activity in recent_activity %}
-                <div class="py-3">
+                <div class="py-3 activity-item" data-index="{{ loop.index0 }}" data-status="{{ activity.status|default('success') }}">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center">
                             <span class="mr-2">{{ activity.icon|safe }}</span>
@@ -512,28 +533,6 @@
         {% else %}
             <p class="text-gray-500 text-center py-4">No recent activity to display</p>
         {% endif %}
-    </div>
-    
-    <!-- System Status -->
-    <div class="bg-white rounded-lg shadow p-6">
-        <h2 class="text-xl font-semibold mb-4">System Status</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <h3 class="font-medium text-gray-700 mb-2">Background Tasks</h3>
-                <div class="flex items-center">
-                    <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if system_status.background_tasks_healthy else 'bg-red-500' }} mr-2"></div>
-                    <span>{{ 'Active' if system_status.background_tasks_healthy else 'Attention Required' }}</span>
-                </div>
-            </div>
-            <div>
-                <h3 class="font-medium text-gray-700 mb-2">Last Synchronization</h3>
-                <p>{{ system_status.last_sync|default('Never') }}</p>
-            </div>
-            <div>
-                <h3 class="font-medium text-gray-700 mb-2">Total Products</h3>
-                <p>{{ system_status.total_products }}</p>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -732,12 +731,78 @@ function updateSyncButton(platform, isSyncing) {
     }
 }
 
+// Activity pagination and filtering
+const ITEMS_PER_PAGE = 10;
+let currentActivityPage = 1;
+let showFailuresOnly = false;
+
+function initActivityPagination() {
+    updateActivityDisplay();
+}
+
+function toggleFailuresFilter() {
+    showFailuresOnly = document.getElementById('showFailuresOnly').checked;
+    currentActivityPage = 1;
+    updateActivityDisplay();
+}
+
+function getVisibleItems() {
+    const allItems = document.querySelectorAll('.activity-item');
+    if (!showFailuresOnly) {
+        return Array.from(allItems);
+    }
+    return Array.from(allItems).filter(item => {
+        const status = item.getAttribute('data-status');
+        return status === 'error' || status === 'failed' || status === 'failure';
+    });
+}
+
+function changeActivityPage(delta) {
+    const visibleItems = getVisibleItems();
+    const totalPages = Math.ceil(visibleItems.length / ITEMS_PER_PAGE);
+    const newPage = currentActivityPage + delta;
+
+    if (newPage >= 1 && newPage <= totalPages) {
+        currentActivityPage = newPage;
+        updateActivityDisplay();
+    }
+}
+
+function updateActivityDisplay() {
+    const allItems = document.querySelectorAll('.activity-item');
+    const visibleItems = getVisibleItems();
+    const totalPages = Math.ceil(visibleItems.length / ITEMS_PER_PAGE) || 1;
+
+    const startIdx = (currentActivityPage - 1) * ITEMS_PER_PAGE;
+    const endIdx = startIdx + ITEMS_PER_PAGE;
+
+    // Hide all items first
+    allItems.forEach(item => item.style.display = 'none');
+
+    // Show only the items for the current page
+    visibleItems.forEach((item, idx) => {
+        item.style.display = (idx >= startIdx && idx < endIdx) ? 'block' : 'none';
+    });
+
+    // Update pagination controls
+    const pageInfo = visibleItems.length > 0
+        ? `Page ${currentActivityPage} of ${totalPages}`
+        : 'No failures';
+    document.getElementById('activityPageInfo').textContent = pageInfo;
+    document.getElementById('activityPrevBtn').disabled = currentActivityPage <= 1;
+    document.getElementById('activityNextBtn').disabled = currentActivityPage >= totalPages;
+}
+
+// Initialize pagination on page load
+document.addEventListener('DOMContentLoaded', initActivityPagination);
+
 function addToRecentActivity(icon, message, timestamp) {
-    const activityContainer = document.querySelector('.divide-y');
+    const activityContainer = document.getElementById('activityList');
     if (!activityContainer) return;
-    
+
     const activityItem = document.createElement('div');
-    activityItem.className = 'py-3';
+    activityItem.className = 'py-3 activity-item';
+    activityItem.setAttribute('data-index', '0');
     activityItem.innerHTML = `
         <div class="flex items-center justify-between">
             <div class="flex items-center">
@@ -747,12 +812,20 @@ function addToRecentActivity(icon, message, timestamp) {
             <span class="text-sm text-gray-500">${new Date(timestamp).toLocaleString()}</span>
         </div>
     `;
-    
+
+    // Update indices of existing items
+    const existingItems = activityContainer.querySelectorAll('.activity-item');
+    existingItems.forEach(item => {
+        const currentIdx = parseInt(item.getAttribute('data-index') || '0');
+        item.setAttribute('data-index', currentIdx + 1);
+    });
+
     activityContainer.insertBefore(activityItem, activityContainer.firstChild);
-    
-    while (activityContainer.children.length > 5) {
-        activityContainer.removeChild(activityContainer.lastChild);
-    }
+    totalActivityItems++;
+
+    // Reset to page 1 to show the new item
+    currentActivityPage = 1;
+    updateActivityDisplay();
 }
 
 // Sync functionality moved to navigation menu in base.html

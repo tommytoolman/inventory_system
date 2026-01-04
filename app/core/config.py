@@ -143,7 +143,6 @@ class Settings(BaseSettings):
     DRAFT_UPLOAD_DIR: str = "tmp/draft_uploads"
 
     # DHL Express settings
-
     DHL_API_KEY: str = ""
     DHL_API_SECRET: str = ""
     DHL_ACCOUNT_NUMBER: str = ""
@@ -152,6 +151,18 @@ class Settings(BaseSettings):
     DHL_PWD: str = ""
     DHL_DEV_EMAIL: str = ""
     DHL_DEV_PWD: str = ""
+
+    # DHL Shipper (sender) details
+    DHL_SHIPPER_COMPANY: str = "Rockers Guitars Ltd"
+    DHL_SHIPPER_CONTACT: str = "Justin H"
+    DHL_SHIPPER_EMAIL: str = ""
+    DHL_SHIPPER_PHONE: str = ""
+    DHL_SHIPPER_ADDRESS1: str = ""
+    DHL_SHIPPER_ADDRESS2: str = ""
+    DHL_SHIPPER_CITY: str = "ADWICK-LE-STREET"
+    DHL_SHIPPER_POSTCODE: str = ""
+    DHL_SHIPPER_VAT: str = ""  # GB VAT number (e.g. GB113249151)
+    DHL_SHIPPER_EORI: str = ""  # EORI number for customs (e.g. GB113249151000)
     
     TNT_EMAIL: str = ""
     TNT_PWD: str = ""

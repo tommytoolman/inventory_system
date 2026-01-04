@@ -467,7 +467,7 @@
         clearTimeout(searchTimer);
         searchTimer = setTimeout(function() {
             document.getElementById('filterForm').submit();
-        }, 500);
+        }, 1000);  // 1 second delay for slower typers
     }
     
     function sortBy(column) {

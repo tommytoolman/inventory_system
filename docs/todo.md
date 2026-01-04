@@ -1,5 +1,5 @@
 # Project TODO – Inventory Management System
-*Last updated: 2026-01-03*
+*Last updated: 2026-01-04*
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
@@ -10,9 +10,9 @@
 
 ## 🟡 Medium Priority (Stability & automation)
 - [ ] **Category / platform attributes and category mapping** – _Progress 2025-12-29:_ Added UI infrastructure for spec capture: category-based auto-population (body_type, number_of_strings, handedness), "Additional Specs" section in Further Information with predefined options from `spec_fields.py` plus custom specs, all stored in `extra_attributes` JSONB and included in description template. Dynamic eBay condition validation via API also added. **Remaining:** (1) Expand `spec_fields.py` for non-guitar categories: Amps (wattage, tube/solid state, speaker config), Effects Pedals (true bypass, analog/digital), Pro Audio/Microphones (polar pattern, phantom power). (2) Map captured specs to eBay Item Specifics and Shopify tags/metafields during listing creation. (3) End-to-end category mapping audit.
-- [ ] **Shopify archive** – create archive gallery view for historical listings AND implement auto-archive workflow (e.g., archive after 10 days of no activity).
+- [ ] **Shopify archive** – _Progress 2026-01-04:_ Auto-archive workflow implemented (`scripts/shopify/auto_archive.py`) - runs weekly via scheduler, archives ended items 14+ days old. Audit scripts created for discrepancy checks. **Remaining:** Create archive gallery view for historical listings.
 - [ ] **Insights Dashboard (incl. NPI clustering)** – test and fine-tune the insights dashboard; includes New Product Introduction cluster view grouped by category for merch planning.
-- [ ] **DHL API integration** – _Progress 2026-01-02:_ Built `DHLPayloadBuilder` service, added shipper config settings, created shipping page UI at `/orders/{platform}/{id}/ship`, added shipping icons to orders list. **Blocked on:** DHL account password reset. **Remaining:** (1) Add shipper details to `.env`, (2) POST route for label creation, (3) Test sandbox, (4) Railway env vars. See `docs/dhl-integration.md` for full details.
+- [ ] **DHL API integration** – _Progress 2026-01-04:_ Built `DHLPayloadBuilder` service, added shipper config settings, created shipping page UI at `/orders/{platform}/{id}/ship`, added shipping icons to orders list. POST route for label creation complete (`/orders/{platform}/{id}/ship/create`), ship_result.html template done, API credentials validated, shipper details configured, Railway env vars added. **Remaining:** (1) Confirm workflow with Adam (labels only vs full shipping?), (2) Live test with real order. See `docs/dhl-integration.md` for full details.
 
 ## 🔵 Low Priority (Enhancements)
 _(No items currently)_

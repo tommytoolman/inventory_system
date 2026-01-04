@@ -1,16 +1,21 @@
 """Orders routes - unified view of orders across all platforms."""
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Request, Query, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import text, select, func, or_, desc
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 import logging
+import json
 
 from app.database import get_session
 from app.core.templates import templates
 from app.models.ebay_order import EbayOrder
 from app.models.reverb_order import ReverbOrder
 from app.models.shopify_order import ShopifyOrder
+from app.services.shipping.payload_builder import DHLPayloadBuilder, DestinationType
+from app.services.shipping.carriers.dhl import DHLCarrier
+from fastapi.responses import Response
+import base64
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -94,7 +99,11 @@ async def orders_list(
                     'shopify' as platform,
                     so.id as order_id,
                     so.order_name as external_order_id,
-                    so.financial_status as status,
+                    CASE
+                        WHEN so.fulfillment_status = 'fulfilled' THEN 'fulfilled'
+                        WHEN so.financial_status IN ('refunded', 'voided') THEN so.financial_status
+                        ELSE so.financial_status
+                    END as status,
                     so.created_at,
                     so.total_amount,
                     COALESCE(so.total_currency, 'GBP') as currency,
@@ -325,3 +334,408 @@ async def orders_stats_api(
             "revenue": sum(s["revenue"] for s in stats.values()),
         }
     })
+
+
+@router.get("/{platform}/{order_id}/ship", response_class=HTMLResponse)
+async def ship_order(
+    request: Request,
+    platform: str,
+    order_id: int,
+):
+    """Create shipping label for an order."""
+
+    async with get_session() as db:
+        order = None
+        order_dict = {}
+
+        if platform == "ebay":
+            result = await db.execute(
+                select(EbayOrder).where(EbayOrder.id == order_id)
+            )
+            order = result.scalar_one_or_none()
+            if order:
+                order_dict = {
+                    'id': order.id,
+                    'order_id': order.order_id,
+                    'buyer_user_id': order.buyer_user_id,
+                    'shipping_name': order.shipping_name,
+                    'shipping_address': order.shipping_address,
+                    'shipping_city': order.shipping_city,
+                    'shipping_state': order.shipping_state,
+                    'shipping_postal_code': order.shipping_postal_code,
+                    'shipping_country': order.shipping_country,
+                    'total_amount': float(order.total_amount) if order.total_amount else 0,
+                    'total_currency': order.total_currency or 'GBP',
+                    'primary_sku': order.primary_sku,
+                    'tracking_number': order.tracking_number,
+                    'order_status': order.order_status,
+                }
+
+        elif platform == "reverb":
+            result = await db.execute(
+                select(ReverbOrder).where(ReverbOrder.id == order_id)
+            )
+            order = result.scalar_one_or_none()
+            if order:
+                order_dict = {
+                    'id': order.id,
+                    'order_number': order.order_number,
+                    'buyer_name': order.buyer_name,
+                    'buyer_email': order.buyer_email,
+                    'shipping_name': order.shipping_name,
+                    'shipping_address': order.shipping_address,
+                    'shipping_city': order.shipping_city,
+                    'shipping_region': order.shipping_region,
+                    'shipping_postal_code': order.shipping_postal_code,
+                    'shipping_country_code': order.shipping_country_code,
+                    'shipping_phone': order.shipping_phone,
+                    'title': order.title,
+                    'amount_product': float(order.amount_product) if order.amount_product else 0,
+                    'amount_product_currency': order.amount_product_currency or 'GBP',
+                    'total_amount': float(order.total_amount) if order.total_amount else 0,
+                    'total_currency': order.total_currency or 'GBP',
+                    'sku': order.sku,
+                    'status': order.status,
+                }
+
+        elif platform == "shopify":
+            result = await db.execute(
+                select(ShopifyOrder).where(ShopifyOrder.id == order_id)
+            )
+            order = result.scalar_one_or_none()
+            if order:
+                order_dict = {
+                    'id': order.id,
+                    'order_name': order.order_name,
+                    'shipping_name': order.shipping_name,
+                    'shipping_address': order.shipping_address,
+                    'shipping_city': order.shipping_city,
+                    'shipping_province': order.shipping_province,
+                    'shipping_postal_code': order.shipping_postal_code,
+                    'shipping_country_code': order.shipping_country_code,
+                    'total_amount': float(order.total_amount) if order.total_amount else 0,
+                    'total_currency': order.total_currency or 'GBP',
+                    'primary_sku': order.primary_sku,
+                    'primary_title': order.primary_title,
+                    'tracking_number': order.tracking_number,
+                    'financial_status': order.financial_status,
+                }
+
+    if not order:
+        return templates.TemplateResponse("orders/not_found.html", {
+            "request": request,
+            "platform": platform,
+            "order_id": order_id,
+        }, status_code=404)
+
+    # Build DHL payload preview
+    builder = DHLPayloadBuilder()
+
+    # Get country code for destination classification
+    if platform == "ebay":
+        country_code = order_dict.get('shipping_country', 'GB')
+    elif platform == "reverb":
+        country_code = order_dict.get('shipping_country_code', 'GB')
+    else:
+        country_code = order_dict.get('shipping_country_code', 'GB')
+
+    dest_type = builder.classify_destination(country_code)
+
+    # Build receiver preview
+    if platform == "ebay":
+        receiver = builder._build_receiver_from_ebay(order_dict)
+    elif platform == "reverb":
+        receiver = builder._build_receiver_from_reverb(order_dict)
+    else:
+        # For Shopify, use similar logic to eBay
+        receiver = builder._build_receiver_from_ebay(order_dict)
+
+    # Get shipper preview
+    shipper = builder._build_shipper_details()
+
+    return templates.TemplateResponse("orders/ship.html", {
+        "request": request,
+        "order": order_dict,
+        "platform": platform,
+        "dest_type": dest_type.value,
+        "dest_type_label": {
+            'uk': 'UK Domestic',
+            'eu': 'EU',
+            'row': 'International (Rest of World)'
+        }.get(dest_type.value, dest_type.value),
+        "receiver": receiver,
+        "shipper": shipper,
+        "product_code": "N" if dest_type == DestinationType.UK_DOMESTIC else "P",
+        "needs_customs": dest_type != DestinationType.UK_DOMESTIC,
+    })
+
+
+@router.post("/{platform}/{order_id}/ship/create")
+async def create_shipping_label(
+    request: Request,
+    platform: str,
+    order_id: int,
+    weight: float = Form(5.0),
+    length: int = Form(120),
+    width: int = Form(50),
+    height: int = Form(15),
+    description: str = Form("Musical Instrument"),
+    declared_value: float = Form(None),
+    currency: str = Form("GBP"),
+    hs_code: str = Form("9202900030"),
+    request_pickup: bool = Form(False),
+    test_mode: bool = Form(True),
+):
+    """Create a DHL shipping label for an order."""
+
+    async with get_session() as db:
+        order = None
+        order_dict = {}
+
+        # Fetch order based on platform
+        if platform == "ebay":
+            result = await db.execute(
+                select(EbayOrder).where(EbayOrder.id == order_id)
+            )
+            order = result.scalar_one_or_none()
+            if order:
+                order_dict = {
+                    'id': order.id,
+                    'order_id': order.order_id,
+                    'buyer_user_id': order.buyer_user_id,
+                    'shipping_name': order.shipping_name,
+                    'shipping_address': order.shipping_address,
+                    'shipping_city': order.shipping_city,
+                    'shipping_state': order.shipping_state,
+                    'shipping_postal_code': order.shipping_postal_code,
+                    'shipping_country': order.shipping_country,
+                    'total_amount': float(order.total_amount) if order.total_amount else 0,
+                    'total_currency': order.total_currency or 'GBP',
+                    'primary_sku': order.primary_sku,
+                }
+
+        elif platform == "reverb":
+            result = await db.execute(
+                select(ReverbOrder).where(ReverbOrder.id == order_id)
+            )
+            order = result.scalar_one_or_none()
+            if order:
+                order_dict = {
+                    'id': order.id,
+                    'order_number': order.order_number,
+                    'buyer_name': order.buyer_name,
+                    'buyer_email': order.buyer_email,
+                    'shipping_name': order.shipping_name,
+                    'shipping_address': order.shipping_address,
+                    'shipping_city': order.shipping_city,
+                    'shipping_region': order.shipping_region,
+                    'shipping_postal_code': order.shipping_postal_code,
+                    'shipping_country_code': order.shipping_country_code,
+                    'shipping_phone': order.shipping_phone,
+                    'title': order.title,
+                    'amount_product': float(order.amount_product) if order.amount_product else 0,
+                    'amount_product_currency': order.amount_product_currency or 'GBP',
+                    'total_amount': float(order.total_amount) if order.total_amount else 0,
+                    'total_currency': order.total_currency or 'GBP',
+                    'sku': order.sku,
+                }
+
+        elif platform == "shopify":
+            result = await db.execute(
+                select(ShopifyOrder).where(ShopifyOrder.id == order_id)
+            )
+            order = result.scalar_one_or_none()
+            if order:
+                order_dict = {
+                    'id': order.id,
+                    'order_name': order.order_name,
+                    'shipping_name': order.shipping_name,
+                    'shipping_address': order.shipping_address,
+                    'shipping_city': order.shipping_city,
+                    'shipping_province': order.shipping_province,
+                    'shipping_postal_code': order.shipping_postal_code,
+                    'shipping_country_code': order.shipping_country_code,
+                    'total_amount': float(order.total_amount) if order.total_amount else 0,
+                    'total_currency': order.total_currency or 'GBP',
+                    'primary_sku': order.primary_sku,
+                    'primary_title': order.primary_title,
+                }
+
+    if not order:
+        return templates.TemplateResponse("orders/ship_result.html", {
+            "request": request,
+            "success": False,
+            "error": f"Order not found: {platform}/{order_id}",
+            "platform": platform,
+            "order_id": order_id,
+        }, status_code=404)
+
+    # Build the DHL payload
+    builder = DHLPayloadBuilder()
+
+    # Use declared_value from form or fall back to order amount
+    if declared_value is None:
+        declared_value = order_dict.get('amount_product') or order_dict.get('total_amount') or 0
+
+    # Build payload based on platform
+    if platform == "reverb":
+        # Add custom values from form to order dict for payload building
+        order_dict['title'] = description  # Use form description
+        order_dict['amount_product'] = declared_value
+        order_dict['amount_product_currency'] = currency
+
+        payload = builder.build_from_reverb_order(
+            order=order_dict,
+            weight_kg=weight,
+            length_cm=length,
+            width_cm=width,
+            height_cm=height,
+            request_pickup=request_pickup,
+        )
+    else:
+        # eBay and Shopify use similar logic
+        order_dict['total_amount'] = declared_value
+        order_dict['total_currency'] = currency
+
+        payload = builder.build_from_ebay_order(
+            order=order_dict,
+            weight_kg=weight,
+            length_cm=length,
+            width_cm=width,
+            height_cm=height,
+            request_pickup=request_pickup,
+        )
+
+    # Update HS code if customs required
+    if payload.get("content", {}).get("isCustomsDeclarable"):
+        export_dec = payload.get("content", {}).get("exportDeclaration", {})
+        if export_dec and export_dec.get("lineItems"):
+            export_dec["lineItems"][0]["commodityCodes"] = [
+                {"typeCode": "outbound", "value": hs_code}
+            ]
+
+    # Validate payload before sending
+    validation_errors = builder.validate_payload(payload)
+    if validation_errors:
+        return templates.TemplateResponse("orders/ship_result.html", {
+            "request": request,
+            "success": False,
+            "error": "Validation errors: " + "; ".join(validation_errors),
+            "platform": platform,
+            "order_id": order_id,
+            "order": order_dict,
+        })
+
+    # Create DHL carrier and call API
+    dhl = DHLCarrier()
+
+    # Override test mode based on form input
+    if test_mode:
+        dhl.base_url = "https://express.api.dhl.com/mydhlapi/test"
+    else:
+        dhl.base_url = "https://express.api.dhl.com/mydhlapi"
+
+    logger.info(f"Creating DHL shipment for {platform}/{order_id} (test_mode={test_mode})")
+    logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
+
+    result = await dhl.create_shipment(payload)
+
+    if result.get("status") == "error":
+        error_details = result.get("details", "Unknown error")
+        # Try to parse DHL error response
+        try:
+            error_json = json.loads(error_details) if isinstance(error_details, str) else error_details
+            if isinstance(error_json, dict):
+                error_msg = error_json.get("detail") or error_json.get("message") or str(error_json)
+            else:
+                error_msg = str(error_details)
+        except (json.JSONDecodeError, TypeError):
+            error_msg = str(error_details)
+
+        return templates.TemplateResponse("orders/ship_result.html", {
+            "request": request,
+            "success": False,
+            "error": f"DHL API Error: {error_msg}",
+            "platform": platform,
+            "order_id": order_id,
+            "order": order_dict,
+            "test_mode": test_mode,
+        })
+
+    # Success! Extract tracking number and documents
+    tracking_number = result.get("shipmentTrackingNumber")
+    documents = result.get("documents", [])
+
+    # Update order with tracking number
+    if tracking_number and not test_mode:
+        async with get_session() as db:
+            if platform == "ebay":
+                await db.execute(
+                    text("UPDATE ebay_orders SET tracking_number = :tn WHERE id = :id"),
+                    {"tn": tracking_number, "id": order_id}
+                )
+            elif platform == "reverb":
+                await db.execute(
+                    text("UPDATE reverb_orders SET tracking_number = :tn WHERE id = :id"),
+                    {"tn": tracking_number, "id": order_id}
+                )
+            elif platform == "shopify":
+                await db.execute(
+                    text("UPDATE shopify_orders SET tracking_number = :tn WHERE id = :id"),
+                    {"tn": tracking_number, "id": order_id}
+                )
+            await db.commit()
+            logger.info(f"Updated {platform} order {order_id} with tracking number {tracking_number}")
+
+    # Extract label PDF if available
+    label_pdf = None
+    waybill_pdf = None
+    invoice_pdf = None
+
+    for doc in documents:
+        doc_type = doc.get("typeCode")
+        content = doc.get("content")
+        if content:
+            if doc_type == "label":
+                label_pdf = content
+            elif doc_type == "waybillDoc":
+                waybill_pdf = content
+            elif doc_type == "invoice":
+                invoice_pdf = content
+
+    return templates.TemplateResponse("orders/ship_result.html", {
+        "request": request,
+        "success": True,
+        "tracking_number": tracking_number,
+        "platform": platform,
+        "order_id": order_id,
+        "order": order_dict,
+        "test_mode": test_mode,
+        "label_pdf": label_pdf,
+        "waybill_pdf": waybill_pdf,
+        "invoice_pdf": invoice_pdf,
+        "estimated_delivery": result.get("estimatedDeliveryDate", {}).get("estimatedDeliveryDate"),
+    })
+
+
+@router.get("/{platform}/{order_id}/ship/label/{doc_type}")
+async def get_shipping_label(
+    platform: str,
+    order_id: int,
+    doc_type: str,
+    content: str = Query(..., description="Base64 encoded PDF content"),
+):
+    """Serve a shipping label/document as PDF download."""
+    try:
+        pdf_bytes = base64.b64decode(content)
+        filename = f"dhl_{doc_type}_{platform}_{order_id}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error decoding PDF: {e}")
+        return JSONResponse({"error": "Invalid PDF content"}, status_code=400)

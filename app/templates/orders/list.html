@@ -114,12 +114,6 @@
                         </a>
                     </th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        <a href="{{ base_url }}&sort_by=sku&sort_order={{ 'desc' if sort_by == 'sku' and sort_order == 'asc' else 'asc' }}"
-                           class="hover:text-blue-600 {% if sort_by == 'sku' %}text-blue-600 font-bold{% endif %}">
-                            SKU{% if sort_by == 'sku' %} {{ '▲' if sort_order == 'asc' else '▼' }}{% endif %}
-                        </a>
-                    </th>
                     <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         <a href="{{ base_url }}&sort_by=total_amount&sort_order={{ 'desc' if sort_by == 'total_amount' and sort_order == 'asc' else 'asc' }}"
                            class="hover:text-blue-600 {% if sort_by == 'total_amount' %}text-blue-600 font-bold{% endif %}">
@@ -186,15 +180,12 @@
                         {% endif %}
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-900">
-                        <div class="max-w-48 truncate" title="{{ order.title or '' }}">
-                            {{ order.title[:50] if order.title else 'N/A' }}{% if order.title and order.title|length > 50 %}...{% endif %}
+                        <div class="max-w-xs truncate" title="{{ order.title or '' }}">
+                            {{ order.title[:70] if order.title else 'N/A' }}{% if order.title and order.title|length > 70 %}...{% endif %}
                         </div>
                         {% if order.quantity and order.quantity > 1 %}
                         <div class="text-xs text-gray-500">Qty: {{ order.quantity }}</div>
                         {% endif %}
-                    </td>
-                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 font-mono">
-                        {{ order.sku or 'N/A' }}
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-right font-medium text-gray-900">
                         {% if order.total_amount %}
@@ -204,22 +195,56 @@
                         {% endif %}
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap text-center">
+                        <!-- Shipping Icon - Color coded by status -->
+                        {% set status_lower = (order.status or '')|lower %}
+                        {# Grey: cancelled, refunded, voided, pending #}
+                        {% set is_cancelled = 'cancel' in status_lower or 'refund' in status_lower or 'void' in status_lower %}
+                        {# Green: shipped, completed, fulfilled, received, or has tracking #}
+                        {% set is_shipped = 'shipped' in status_lower or 'completed' in status_lower or 'fulfilled' in status_lower or 'received' in status_lower or order.tracking_number %}
+                        {# Amber: paid, active - ready to ship #}
+                        {% set is_ready = 'paid' in status_lower or 'active' in status_lower %}
+
+                        {% if is_cancelled %}
+                        <span class="inline-flex items-center text-gray-300 cursor-not-allowed" title="Cancelled/Refunded">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+                            </svg>
+                        </span>
+                        {% elif is_shipped %}
+                        <span class="inline-flex items-center text-green-500" title="Shipped">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+                            </svg>
+                        </span>
+                        {% else %}
+                        <a href="/orders/{{ order.platform }}/{{ order.order_id }}/ship"
+                           class="inline-flex items-center text-amber-500 hover:text-amber-700" title="Create shipping label">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+                            </svg>
+                        </a>
+                        {% endif %}
+                        <span class="mx-1 text-gray-300">|</span>
                         <a href="/orders/{{ order.platform }}/{{ order.order_id }}"
                            class="text-blue-600 hover:text-blue-800 text-sm">
                             View
                         </a>
-                        {% if order.product_id %}
                         <span class="mx-1 text-gray-300">|</span>
+                        {% if order.product_id %}
                         <a href="/inventory/product/{{ order.product_id }}"
                            class="text-green-600 hover:text-green-800 text-sm">
                             Product
                         </a>
+                        {% else %}
+                        <span class="text-gray-400 line-through text-sm cursor-not-allowed" title="No linked product (deposit/payment)">
+                            Product
+                        </span>
                         {% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">
                         No orders found for the selected filters.
                     </td>
                 </tr>

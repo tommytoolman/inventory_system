@@ -2852,6 +2852,9 @@ async def reconcile_inventory(product_id: int, request: Request):
     except (ValueError, TypeError):
         return JSONResponse({"status": "error", "message": "Invalid quantity"}, status_code=400)
 
+    from app.core.config import get_settings
+    settings = get_settings()
+
     async with get_session() as db:
         product = await db.get(Product, product_id)
         if not product:
@@ -2888,7 +2891,7 @@ async def reconcile_inventory(product_id: int, request: Request):
                         if listing.inventory_quantity != target_quantity:
                             # Need to update Reverb
                             from app.services.reverb_service import ReverbService
-                            reverb_service = ReverbService(db)
+                            reverb_service = ReverbService(db, settings)
                             success = await reverb_service.update_listing_quantity(
                                 listing.reverb_listing_id, target_quantity
                             )
@@ -2911,7 +2914,7 @@ async def reconcile_inventory(product_id: int, request: Request):
                         if listing.quantity_available != target_quantity:
                             # Need to update eBay
                             from app.services.ebay_service import EbayService
-                            ebay_service = EbayService(db)
+                            ebay_service = EbayService(db, settings)
                             success = await ebay_service.update_listing_quantity(
                                 listing.ebay_item_id, target_quantity
                             )

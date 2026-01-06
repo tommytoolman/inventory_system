@@ -1662,8 +1662,8 @@ class SyncService:
         if ebay_link and ebay_link.external_id:
             try:
                 ebay_service = self.platform_services.get("ebay")
-                if ebay_service and hasattr(ebay_service, 'update_quantity'):
-                    await ebay_service.update_quantity(ebay_link.external_id, new_quantity)
+                if ebay_service and hasattr(ebay_service, 'update_listing_quantity'):
+                    await ebay_service.update_listing_quantity(ebay_link.external_id, new_quantity)
                     propagation_results.append(f"eBay: qty updated to {new_quantity}")
                     logger.info(f"Updated eBay quantity to {new_quantity} for item {ebay_link.external_id}")
 
@@ -1696,8 +1696,9 @@ class SyncService:
         if shopify_link and shopify_link.external_id:
             try:
                 shopify_service = self.platform_services.get("shopify")
-                if shopify_service and hasattr(shopify_service, 'update_inventory'):
-                    await shopify_service.update_inventory(shopify_link.external_id, new_quantity)
+                if shopify_service and hasattr(shopify_service, 'apply_product_update'):
+                    # Use apply_product_update with quantity field change
+                    await shopify_service.apply_product_update(product, shopify_link, {"quantity"})
                     propagation_results.append(f"Shopify: inventory updated to {new_quantity}")
                     logger.info(f"Updated Shopify inventory to {new_quantity} for product {shopify_link.external_id}")
 

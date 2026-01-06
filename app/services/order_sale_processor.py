@@ -10,7 +10,7 @@ The sale_processed flag prevents double-counting when orders are re-synced.
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,9 @@ from app.models.platform_common import PlatformCommon, ListingStatus
 from app.models.reverb_order import ReverbOrder
 from app.models.ebay_order import EbayOrder
 from app.models.shopify_order import ShopifyOrder
+
+if TYPE_CHECKING:
+    from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +55,36 @@ class OrderSaleProcessor:
     For non-stocked items: Just acknowledges the order (platform sync handles status).
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, settings: Optional["Settings"] = None):
         self.db = db
+        self.settings = settings
+        # Lazy-loaded services
+        self._ebay_service = None
+        self._reverb_service = None
+        self._shopify_service = None
+
+    def _get_ebay_service(self):
+        """Lazy load EbayService."""
+        if self._ebay_service is None and self.settings:
+            from app.services.ebay_service import EbayService
+            self._ebay_service = EbayService(self.db, self.settings)
+        return self._ebay_service
+
+    def _get_reverb_service(self):
+        """Lazy load ReverbService."""
+        if self._reverb_service is None and self.settings:
+            from app.services.reverb_service import ReverbService
+            self._reverb_service = ReverbService(self.db, self.settings)
+        return self._reverb_service
+
+    def _get_shopify_service(self):
+        """Lazy load ShopifyService."""
+        if self._shopify_service is None and self.settings:
+            from app.services.shopify.client import ShopifyGraphQLClient
+            from app.services.shopify_service import ShopifyService
+            client = ShopifyGraphQLClient()
+            self._shopify_service = ShopifyService(self.db, client)
+        return self._shopify_service
 
     def _is_sale_order(self, platform: str, order) -> bool:
         """
@@ -88,8 +119,8 @@ class OrderSaleProcessor:
         """
         Propagate quantity changes to other platforms.
 
-        For stocked items, we sync the new quantity.
-        If quantity reaches 0, we also need to end listings.
+        For stocked items, we sync the new quantity via API calls.
+        If quantity reaches 0, we also end listings.
 
         Returns list of actions taken.
         """
@@ -105,30 +136,99 @@ class OrderSaleProcessor:
         )
         other_listings = result.scalars().all()
 
-        if product.quantity == 0:
-            # Need to end listings on other platforms
-            for listing in other_listings:
-                action = f"End listing on {listing.platform_name} (qty=0)"
+        for listing in other_listings:
+            platform = listing.platform_name
+            new_qty = product.quantity
+
+            if dry_run:
+                action = f"[DRY RUN] Would sync qty={new_qty} to {platform}"
                 actions.append(action)
-                if not dry_run:
+                continue
+
+            try:
+                if platform == "ebay" and listing.external_id:
+                    ebay_service = self._get_ebay_service()
+                    if ebay_service:
+                        # Get eBay listing for SKU
+                        from app.models.ebay import EbayListing
+                        ebay_result = await self.db.execute(
+                            select(EbayListing).where(EbayListing.platform_id == listing.id)
+                        )
+                        ebay_listing = ebay_result.scalar_one_or_none()
+                        sku = ebay_listing.sku if ebay_listing else None
+
+                        success = await ebay_service.update_listing_quantity(
+                            listing.external_id, new_qty, sku=sku
+                        )
+                        if success:
+                            actions.append(f"eBay: qty updated to {new_qty}")
+                            logger.info(f"Updated eBay qty to {new_qty} for {listing.external_id}")
+                            # Update local ebay_listings
+                            if ebay_listing:
+                                ebay_listing.quantity_available = new_qty
+                                self.db.add(ebay_listing)
+                        else:
+                            actions.append(f"eBay: qty update failed")
+                            logger.warning(f"Failed to update eBay qty for {listing.external_id}")
+                    else:
+                        actions.append("eBay: service unavailable (no settings)")
+
+                elif platform == "reverb" and listing.external_id:
+                    reverb_service = self._get_reverb_service()
+                    if reverb_service:
+                        success = await reverb_service.update_listing_quantity(
+                            listing.external_id, new_qty
+                        )
+                        if success:
+                            actions.append(f"Reverb: qty updated to {new_qty}")
+                            logger.info(f"Updated Reverb qty to {new_qty} for {listing.external_id}")
+                            # Update local reverb_listings
+                            from app.models.reverb import ReverbListing
+                            reverb_result = await self.db.execute(
+                                select(ReverbListing).where(ReverbListing.platform_id == listing.id)
+                            )
+                            reverb_listing = reverb_result.scalar_one_or_none()
+                            if reverb_listing:
+                                reverb_listing.inventory_quantity = new_qty
+                                self.db.add(reverb_listing)
+                        else:
+                            actions.append(f"Reverb: qty update failed")
+                            logger.warning(f"Failed to update Reverb qty for {listing.external_id}")
+                    else:
+                        actions.append("Reverb: service unavailable (no settings)")
+
+                elif platform == "shopify" and listing.external_id:
+                    shopify_service = self._get_shopify_service()
+                    if shopify_service:
+                        # For Shopify, use apply_product_update with quantity change
+                        try:
+                            await shopify_service.apply_product_update(product, listing, {"quantity"})
+                            actions.append(f"Shopify: qty updated to {new_qty}")
+                            logger.info(f"Updated Shopify qty to {new_qty} for {listing.external_id}")
+                        except Exception as e:
+                            actions.append(f"Shopify: qty update failed - {str(e)[:50]}")
+                            logger.warning(f"Failed to update Shopify qty: {e}")
+                    else:
+                        actions.append("Shopify: service unavailable (no settings)")
+
+                elif platform == "vr":
+                    # VR doesn't support multi-qty, only end if qty=0
+                    if new_qty == 0:
+                        listing.status = ListingStatus.ENDED.value
+                        self.db.add(listing)
+                        actions.append("VR: listing ended (qty=0)")
+                        logger.info(f"Ended VR listing for product {product.id}")
+                    else:
+                        actions.append(f"VR: no qty update (VR is single-qty)")
+
+                # If quantity is 0, also mark listing as ended
+                if new_qty == 0 and platform != "vr":
                     listing.status = ListingStatus.ENDED.value
                     self.db.add(listing)
-                    logger.info(
-                        "Ended listing for product %s on %s due to zero quantity",
-                        product.id,
-                        listing.platform_name,
-                    )
-        else:
-            # Just log that quantity changed - actual API sync happens via scheduled jobs
-            for listing in other_listings:
-                action = f"Queue quantity sync to {listing.platform_name} (qty={product.quantity})"
-                actions.append(action)
-                logger.info(
-                    "Product %s quantity changed to %s, will sync to %s",
-                    product.id,
-                    product.quantity,
-                    listing.platform_name,
-                )
+
+            except Exception as e:
+                actions.append(f"{platform}: error - {str(e)[:50]}")
+                logger.error(f"Error propagating qty to {platform}: {e}", exc_info=True)
 
         return actions
 

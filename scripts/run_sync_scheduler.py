@@ -93,8 +93,8 @@ async def main():
                 summary = await upsert_reverb_orders(db, orders)
                 logger.info("Reverb orders upsert: %s", summary)
 
-                # Process orders for inventory management
-                processor = OrderSaleProcessor(db)
+                # Process orders for inventory management (pass settings for API propagation)
+                processor = OrderSaleProcessor(db, settings)
                 sale_summary = await processor.process_unprocessed_orders("reverb", dry_run=False)
                 logger.info("Reverb sale processing: %s", sale_summary)
 
@@ -148,8 +148,8 @@ async def main():
                 summary = await upsert_ebay_orders(db, orders)
                 logger.info("eBay orders upsert: %s", summary)
 
-                # Process orders for inventory management
-                processor = OrderSaleProcessor(db)
+                # Process orders for inventory management (pass settings for API propagation)
+                processor = OrderSaleProcessor(db, settings)
                 sale_summary = await processor.process_unprocessed_orders("ebay", dry_run=False)
                 logger.info("eBay sale processing: %s", sale_summary)
 
@@ -187,8 +187,8 @@ async def main():
                 summary = await upsert_shopify_orders(db, orders)
                 logger.info("Shopify orders upsert: %s", summary)
 
-                # Process orders for inventory management
-                processor = OrderSaleProcessor(db)
+                # Process orders for inventory management (pass settings for API propagation)
+                processor = OrderSaleProcessor(db, settings)
                 sale_summary = await processor.process_unprocessed_orders("shopify", dry_run=False)
                 logger.info("Shopify sale processing: %s", sale_summary)
 

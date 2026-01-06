@@ -5206,6 +5206,8 @@ async def update_product(
         "serial_number": product.serial_number,
         "handedness": product.handedness,
         "manufacturing_country": product.manufacturing_country,
+        "artist_owned": product.artist_owned,
+        "artist_names": list(product.artist_names) if product.artist_names else [],
         "extra_attributes": json.loads(json.dumps(product.extra_attributes or {})),
     }
     

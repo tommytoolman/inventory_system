@@ -48,6 +48,13 @@ class ShopifyService:
     COUNTRY_OF_ORIGIN_KEY = "country_of_origin"
     COUNTRY_METAFIELD_TYPE = "single_line_text_field"
 
+    # Artist metafield constants
+    ARTIST_NAMESPACE = "extra_info"
+    ARTIST_OWNED_KEY = "artist_owned"
+    ARTIST_NAMES_KEY = "artist_names"
+    ARTIST_OWNED_METAFIELD_TYPE = "single_line_text_field"
+    ARTIST_NAMES_METAFIELD_TYPE = "single_line_text_field"
+
 
     # =========================================================================
     # 1. INITIALIZATION & HELPERS
@@ -292,6 +299,46 @@ class ShopifyService:
         country_code = self._country_code(product.manufacturing_country)
         if country_code:
             self._update_inventory_item_country(product, product_gid, country_code)
+
+    def _sync_artist_info(self, product: Product, product_gid: str) -> None:
+        """Sync artist_owned and artist_names to Shopify product metafields."""
+        metafields_to_set = []
+
+        # Artist Owned metafield - only set if True
+        if product.artist_owned:
+            metafields_to_set.append({
+                "ownerId": product_gid,
+                "namespace": self.ARTIST_NAMESPACE,
+                "key": self.ARTIST_OWNED_KEY,
+                "type": self.ARTIST_OWNED_METAFIELD_TYPE,
+                "value": "True",
+            })
+
+        # Artist Names metafield - only set if there are names
+        if product.artist_names and len(product.artist_names) > 0:
+            # Join names with comma for display
+            names_value = ", ".join(product.artist_names)
+            metafields_to_set.append({
+                "ownerId": product_gid,
+                "namespace": self.ARTIST_NAMESPACE,
+                "key": self.ARTIST_NAMES_KEY,
+                "type": self.ARTIST_NAMES_METAFIELD_TYPE,
+                "value": names_value,
+            })
+
+        if not metafields_to_set:
+            return
+
+        try:
+            result = self.client.set_metafields(metafields_to_set)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify artist metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced artist info to Shopify for %s: owned=%s, names=%s",
+                           product.sku, product.artist_owned, product.artist_names)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify artist metafields for %s: %s", product.sku, exc)
 
     def _extract_variant_nodes(self, listing: ShopifyListing) -> List[Dict[str, Any]]:
         variants = []
@@ -665,10 +712,24 @@ class ShopifyService:
                     exc,
                 )
 
+        # Sync artist info if artist_owned or artist_names changed
+        artist_updated = False
+        if "artist_owned" in changed_fields or "artist_names" in changed_fields:
+            try:
+                self._sync_artist_info(product, product_gid)
+                artist_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify artist data on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
         return {
-            "status": "updated" if pushed or inventory_updated else "no_changes",
+            "status": "updated" if pushed or inventory_updated or artist_updated else "no_changes",
             "inventory": inventory_updated,
             "product": pushed,
+            "artist": artist_updated,
         }
 
     def _calculate_changes(self, api_items: Dict, db_items: Dict) -> Dict[str, List]:
@@ -1328,6 +1389,13 @@ class ShopifyService:
                 self._sync_country_of_origin(product, product_gid)
             except Exception as exc:
                 logger.warning("Failed to sync Shopify country data for %s: %s", product.sku, exc)
+
+            # Sync artist info if present
+            try:
+                if product.artist_owned or (product.artist_names and len(product.artist_names) > 0):
+                    self._sync_artist_info(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify artist data for %s: %s", product.sku, exc)
 
             # Step 3: Update the variant with price, SKU, and inventory
             variant_gid = None  # Initialize for use in shipping profile assignment

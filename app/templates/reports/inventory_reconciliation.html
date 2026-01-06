@@ -331,27 +331,14 @@ async function reconcileQuantity(productId, buttonEl) {
         const result = await response.json();
 
         if (result.status === 'success') {
-            // Update the row to show synced state
-            input.dataset.original = newQty;
-            const row = buttonEl.closest('tr');
-            row.classList.remove('bg-amber-50');
-            row.dataset.synced = 'true';
-
-            // Update platform qty displays
-            const cells = row.querySelectorAll('td');
-            // RIFF qty (index 1)
-            cells[1].querySelector('span').textContent = newQty;
-
             buttonEl.innerHTML = 'Done!';
             buttonEl.classList.remove('bg-blue-600', 'hover:bg-blue-700');
             buttonEl.classList.add('bg-green-600');
 
+            // Reload the page after a brief delay to show updated data
             setTimeout(() => {
-                buttonEl.innerHTML = 'Reconcile';
-                buttonEl.classList.remove('bg-green-600');
-                buttonEl.classList.add('bg-blue-600', 'hover:bg-blue-700');
-                buttonEl.disabled = false;
-            }, 2000);
+                window.location.reload();
+            }, 1000);
         } else {
             alert(`Error: ${result.message}`);
             buttonEl.innerHTML = 'Reconcile';

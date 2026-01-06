@@ -80,10 +80,8 @@ class OrderSaleProcessor:
     def _get_shopify_service(self):
         """Lazy load ShopifyService."""
         if self._shopify_service is None and self.settings:
-            from app.services.shopify.client import ShopifyGraphQLClient
             from app.services.shopify_service import ShopifyService
-            client = ShopifyGraphQLClient()
-            self._shopify_service = ShopifyService(self.db, client)
+            self._shopify_service = ShopifyService(self.db, self.settings)
         return self._shopify_service
 
     def _is_sale_order(self, platform: str, order) -> bool:
@@ -176,24 +174,20 @@ class OrderSaleProcessor:
                 elif platform == "reverb" and listing.external_id:
                     reverb_service = self._get_reverb_service()
                     if reverb_service:
-                        success = await reverb_service.update_listing_quantity(
-                            listing.external_id, new_qty
-                        )
-                        if success:
-                            actions.append(f"Reverb: qty updated to {new_qty}")
-                            logger.info(f"Updated Reverb qty to {new_qty} for {listing.external_id}")
-                            # Update local reverb_listings
-                            from app.models.reverb import ReverbListing
-                            reverb_result = await self.db.execute(
-                                select(ReverbListing).where(ReverbListing.platform_id == listing.id)
+                        try:
+                            # Use apply_product_update for Reverb quantity updates
+                            result = await reverb_service.apply_product_update(
+                                product, listing, {"quantity"}
                             )
-                            reverb_listing = reverb_result.scalar_one_or_none()
-                            if reverb_listing:
-                                reverb_listing.inventory_quantity = new_qty
-                                self.db.add(reverb_listing)
-                        else:
-                            actions.append(f"Reverb: qty update failed")
-                            logger.warning(f"Failed to update Reverb qty for {listing.external_id}")
+                            if result.get("status") != "error":
+                                actions.append(f"Reverb: qty updated to {new_qty}")
+                                logger.info(f"Updated Reverb qty to {new_qty} for {listing.external_id}")
+                            else:
+                                actions.append(f"Reverb: qty update failed - {result.get('message', 'unknown')[:30]}")
+                                logger.warning(f"Failed to update Reverb qty for {listing.external_id}: {result}")
+                        except Exception as e:
+                            actions.append(f"Reverb: qty update error - {str(e)[:30]}")
+                            logger.error(f"Error updating Reverb qty: {e}", exc_info=True)
                     else:
                         actions.append("Reverb: service unavailable (no settings)")
 

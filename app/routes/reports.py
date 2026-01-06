@@ -2889,18 +2889,22 @@ async def reconcile_inventory(product_id: int, request: Request):
                     listing = listing_result.scalar_one_or_none()
                     if listing:
                         if listing.inventory_quantity != target_quantity:
-                            # Need to update Reverb
+                            # Need to update Reverb - use apply_product_update with quantity change
                             from app.services.reverb_service import ReverbService
                             reverb_service = ReverbService(db, settings)
-                            success = await reverb_service.update_listing_quantity(
-                                listing.reverb_listing_id, target_quantity
-                            )
-                            if success:
-                                listing.inventory_quantity = target_quantity
-                                listing.last_synced_at = datetime.utcnow()
-                                results["reverb"] = f"updated to {target_quantity}"
-                            else:
-                                results["reverb"] = "update failed"
+                            # Temporarily set product quantity for the update
+                            original_qty = product.quantity
+                            product.quantity = target_quantity
+                            try:
+                                result = await reverb_service.apply_product_update(product, link, {"quantity"})
+                                if result.get("status") != "error":
+                                    listing.inventory_quantity = target_quantity
+                                    listing.last_synced_at = datetime.utcnow()
+                                    results["reverb"] = f"updated to {target_quantity}"
+                                else:
+                                    results["reverb"] = f"update failed: {result.get('message', 'unknown')}"
+                            finally:
+                                product.quantity = original_qty
                         else:
                             results["reverb"] = "already correct"
 

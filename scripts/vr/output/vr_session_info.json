@@ -1,0 +1,21 @@
+{
+  "harvested_at": "2025-11-26T22:22:55.531234",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+  "cookies_count": 12,
+  "cookie_names": [
+    "__utmb",
+    "_ga",
+    "__utmz",
+    "__utmc",
+    "__utma",
+    "__utmt",
+    "vr_currency",
+    "cookie_consent_level",
+    "_ga_9VCSSY2PJY",
+    "_fbp",
+    "cf_clearance",
+    "PHPSESSID"
+  ],
+  "cf_clearance_present": true,
+  "phpsessid_present": true
+}

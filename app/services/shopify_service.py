@@ -48,12 +48,19 @@ class ShopifyService:
     COUNTRY_OF_ORIGIN_KEY = "country_of_origin"
     COUNTRY_METAFIELD_TYPE = "single_line_text_field"
 
-    # Artist metafield constants
-    ARTIST_NAMESPACE = "extra_info"
+    # Artist metafield constants - must match existing Shopify definitions
+    ARTIST_OWNED_NAMESPACE = "guitar_specs"
     ARTIST_OWNED_KEY = "artist_owned"
+    ARTIST_OWNED_METAFIELD_TYPE = "boolean"
+
+    ARTIST_NAMES_NAMESPACE = "custom"
     ARTIST_NAMES_KEY = "artist_names"
-    ARTIST_OWNED_METAFIELD_TYPE = "single_line_text_field"
-    ARTIST_NAMES_METAFIELD_TYPE = "single_line_text_field"
+    ARTIST_NAMES_METAFIELD_TYPE = "multi_line_text_field"
+
+    # Handedness metafield constants
+    HANDEDNESS_NAMESPACE = "custom"
+    HANDEDNESS_KEY = "handedness"
+    HANDEDNESS_METAFIELD_TYPE = "single_line_text_field"
 
 
     # =========================================================================
@@ -241,6 +248,11 @@ class ShopifyService:
         except Exception as exc:
             logger.warning("Error ensuring Shopify country metafield definition: %s", exc)
 
+    # Note: Artist metafield definitions already exist in Shopify:
+    # - guitar_specs.artist_owned (boolean) - MetafieldDefinition/325576327508
+    # - custom.artist_names (multi_line_text_field) - MetafieldDefinition/331345756500
+    # No need to create them programmatically.
+
     def _resolve_inventory_item_gids(self, product_gid: str) -> List[str]:
         try:
             snapshot = self.client.get_product_snapshot_by_id(product_gid, num_variants=5, num_images=0, num_metafields=0)
@@ -304,23 +316,23 @@ class ShopifyService:
         """Sync artist_owned and artist_names to Shopify product metafields."""
         metafields_to_set = []
 
-        # Artist Owned metafield - only set if True
+        # Artist Owned metafield (boolean type, lowercase "true")
         if product.artist_owned:
             metafields_to_set.append({
                 "ownerId": product_gid,
-                "namespace": self.ARTIST_NAMESPACE,
+                "namespace": self.ARTIST_OWNED_NAMESPACE,
                 "key": self.ARTIST_OWNED_KEY,
                 "type": self.ARTIST_OWNED_METAFIELD_TYPE,
-                "value": "True",
+                "value": "true",  # lowercase for boolean type
             })
 
-        # Artist Names metafield - only set if there are names
+        # Artist Names metafield (multi_line_text_field type)
         if product.artist_names and len(product.artist_names) > 0:
-            # Join names with comma for display
-            names_value = ", ".join(product.artist_names)
+            # Join names with newlines for multi_line_text_field
+            names_value = "\n".join(product.artist_names)
             metafields_to_set.append({
                 "ownerId": product_gid,
-                "namespace": self.ARTIST_NAMESPACE,
+                "namespace": self.ARTIST_NAMES_NAMESPACE,
                 "key": self.ARTIST_NAMES_KEY,
                 "type": self.ARTIST_NAMES_METAFIELD_TYPE,
                 "value": names_value,
@@ -339,6 +351,56 @@ class ShopifyService:
                            product.sku, product.artist_owned, product.artist_names)
         except Exception as exc:
             logger.warning("Failed to sync Shopify artist metafields for %s: %s", product.sku, exc)
+
+    def _sync_handedness(self, product: Product, product_gid: str) -> None:
+        """Sync handedness to Shopify product metafield and tags."""
+        if not product.handedness:
+            return
+
+        handedness_value = 'Left' if product.handedness.name == 'LEFT' else 'Right'
+
+        # Set the metafield
+        metafields = [{
+            "ownerId": product_gid,
+            "namespace": self.HANDEDNESS_NAMESPACE,
+            "key": self.HANDEDNESS_KEY,
+            "type": self.HANDEDNESS_METAFIELD_TYPE,
+            "value": handedness_value,
+        }]
+
+        try:
+            result = self.client.set_metafields(metafields)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify handedness metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced handedness metafield to Shopify for %s: %s", product.sku, handedness_value)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify handedness metafield for %s: %s", product.sku, exc)
+
+        # Add Left-Handed tag if applicable
+        if product.handedness.name == 'LEFT':
+            try:
+                # Get current tags
+                query = """
+                query getProduct($id: ID!) {
+                  product(id: $id) {
+                    tags
+                  }
+                }
+                """
+                data = self.client.execute(query, {'id': product_gid})
+                current_tags = data.get('product', {}).get('tags', [])
+
+                if 'Left-Handed' not in current_tags:
+                    new_tags = current_tags + ['Left-Handed']
+                    self.client.update_product({
+                        'id': product_gid,
+                        'tags': new_tags
+                    })
+                    logger.info("Added Left-Handed tag to Shopify for %s", product.sku)
+            except Exception as exc:
+                logger.warning("Failed to add Left-Handed tag for %s: %s", product.sku, exc)
 
     def _extract_variant_nodes(self, listing: ShopifyListing) -> List[Dict[str, Any]]:
         variants = []
@@ -725,11 +787,25 @@ class ShopifyService:
                     exc,
                 )
 
+        # Sync handedness if changed
+        handedness_updated = False
+        if "handedness" in changed_fields:
+            try:
+                self._sync_handedness(product, product_gid)
+                handedness_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify handedness on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
         return {
-            "status": "updated" if pushed or inventory_updated or artist_updated else "no_changes",
+            "status": "updated" if pushed or inventory_updated or artist_updated or handedness_updated else "no_changes",
             "inventory": inventory_updated,
             "product": pushed,
             "artist": artist_updated,
+            "handedness": handedness_updated,
         }
 
     def _calculate_changes(self, api_items: Dict, db_items: Dict) -> Dict[str, List]:
@@ -1396,6 +1472,13 @@ class ShopifyService:
                     self._sync_artist_info(product, product_gid)
             except Exception as exc:
                 logger.warning("Failed to sync Shopify artist data for %s: %s", product.sku, exc)
+
+            # Sync handedness if set
+            try:
+                if product.handedness:
+                    self._sync_handedness(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify handedness for %s: %s", product.sku, exc)
 
             # Step 3: Update the variant with price, SKU, and inventory
             variant_gid = None  # Initialize for use in shipping profile assignment

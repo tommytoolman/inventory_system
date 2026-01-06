@@ -17,6 +17,8 @@ from .condition_mapping import PlatformConditionMapping
 from .job import Job
 from .vr_job import VRJob, VRJobStatus
 from .listing_stats_history import ListingStatsHistory
+from .reverb_historical import ReverbHistoricalListing
+from .category_stats import CategoryVelocityStats, InventoryHealthSnapshot
 
 # from .product_merges import ProductMerge # We don't currently have a model for this.
 # from .user import User  # Want to add this before we go live 
@@ -49,6 +51,9 @@ __all__ = [
     'VRJob',
     'VRJobStatus',
     'ListingStatsHistory',
+    'ReverbHistoricalListing',
+    'CategoryVelocityStats',
+    'InventoryHealthSnapshot',
     # 'User',
 ]
 from .ebay_order import EbayOrder

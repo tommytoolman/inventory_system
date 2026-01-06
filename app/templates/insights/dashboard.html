@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Inventory Insights - RIFF{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Inventory Insights</h1>
+        <p class="text-gray-600">Velocity benchmarks, category analysis, and inventory health metrics</p>
+    </div>
+
+    <!-- Quick Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <!-- Historical Stats -->
+        <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-blue-100 rounded-lg p-3">
+                    <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Historical Listings</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ "{:,}".format(data.quick_stats.historical.total_listings) }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-green-100 rounded-lg p-3">
+                    <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Sell-Through Rate</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ data.quick_stats.historical.overall_sell_through }}%</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-amber-100 rounded-lg p-3">
+                    <svg class="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Avg Days to Sell</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ data.quick_stats.historical.avg_days_to_sell or 'N/A' }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-purple-100 rounded-lg p-3">
+                    <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Current Inventory</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ "{:,}".format(data.quick_stats.current.total_items) }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Benchmarks Section -->
+    <div class="bg-white rounded-lg shadow mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold text-gray-900">Category Velocity Benchmarks</h2>
+                <a href="/insights/category-benchmarks" class="text-blue-600 hover:text-blue-800 text-sm">View All</a>
+            </div>
+            <p class="text-sm text-gray-500 mt-1">Based on {{ "{:,}".format(data.quick_stats.historical.total_listings) }} historical listings</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Listed</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sold</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sell-Through</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Median Days</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Sale Price</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Views</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for cat in data.category_benchmarks[:10] %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ cat.category }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ "{:,}".format(cat.total_listed) }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ "{:,}".format(cat.total_sold) }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                            <span class="{% if cat.sell_through_rate >= 40 %}text-green-600{% elif cat.sell_through_rate >= 25 %}text-amber-600{% else %}text-red-600{% endif %} font-medium">
+                                {{ cat.sell_through_rate }}%
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ cat.median_days_to_sell or 'N/A' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                            {% if cat.avg_sale_price %}£{{ "{:,.0f}".format(cat.avg_sale_price) }}{% else %}N/A{% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ cat.avg_views }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Two Column Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Inventory Age Distribution -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">Inventory Age Distribution</h2>
+                <p class="text-sm text-gray-500 mt-1">Current active inventory by age bracket</p>
+            </div>
+            <div class="p-6">
+                {% if data.inventory_health and not data.inventory_health.error %}
+                <div class="space-y-4">
+                    {% set age_data = [
+                        ('0-30 days', data.inventory_health.age_distribution.counts['0-30d'], 'bg-green-500'),
+                        ('30-90 days', data.inventory_health.age_distribution.counts['30-90d'], 'bg-blue-500'),
+                        ('90-180 days', data.inventory_health.age_distribution.counts['90-180d'], 'bg-amber-500'),
+                        ('180-365 days', data.inventory_health.age_distribution.counts['180-365d'], 'bg-orange-500'),
+                        ('365+ days', data.inventory_health.age_distribution.counts['365+'], 'bg-red-500')
+                    ] %}
+                    {% set total = data.inventory_health.total_items %}
+                    {% for label, count, color in age_data %}
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-gray-600">{{ label }}</span>
+                            <span class="font-medium">{{ count }} items ({{ ((count / total) * 100) | round(1) if total else 0 }}%)</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="{{ color }} h-2 rounded-full" style="width: {{ ((count / total) * 100) if total else 0 }}%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-6 pt-4 border-t border-gray-200 grid grid-cols-2 gap-4 text-center">
+                    <div>
+                        <p class="text-2xl font-bold text-gray-900">{{ data.inventory_health.avg_age_days }}</p>
+                        <p class="text-sm text-gray-500">Average Age (days)</p>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-gray-900">{{ data.inventory_health.median_age_days }}</p>
+                        <p class="text-sm text-gray-500">Median Age (days)</p>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-gray-500">No inventory data available</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Platform Coverage -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">Platform Coverage</h2>
+                <p class="text-sm text-gray-500 mt-1">Number of platforms per listing</p>
+            </div>
+            <div class="p-6">
+                {% if data.inventory_health and not data.inventory_health.error %}
+                <div class="space-y-4">
+                    {% set platform_data = [
+                        ('1 Platform', data.inventory_health.platform_coverage.single, 'bg-red-500'),
+                        ('2 Platforms', data.inventory_health.platform_coverage.two, 'bg-amber-500'),
+                        ('3+ Platforms', data.inventory_health.platform_coverage.three_plus, 'bg-green-500')
+                    ] %}
+                    {% set total = data.inventory_health.total_items %}
+                    {% for label, count, color in platform_data %}
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-gray-600">{{ label }}</span>
+                            <span class="font-medium">{{ count }} items ({{ ((count / total) * 100) | round(1) if total else 0 }}%)</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="{{ color }} h-2 rounded-full" style="width: {{ ((count / total) * 100) if total else 0 }}%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-6 pt-4 border-t border-gray-200">
+                    <p class="text-sm text-gray-600">
+                        <span class="font-medium text-gray-900">Recommendation:</span>
+                        {% if data.inventory_health.platform_coverage.single > data.inventory_health.total_items * 0.2 %}
+                        {{ data.inventory_health.platform_coverage.single }} items are only on 1 platform. Consider cross-listing for better exposure.
+                        {% else %}
+                        Good platform coverage! Most items are listed on multiple platforms.
+                        {% endif %}
+                    </p>
+                </div>
+                {% else %}
+                <p class="text-gray-500">No inventory data available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Aged Inventory Section -->
+    <div class="bg-white rounded-lg shadow mt-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold text-gray-900">Aged Inventory Requiring Attention</h2>
+                <a href="/insights/aged-inventory" class="text-blue-600 hover:text-blue-800 text-sm">View All</a>
+            </div>
+            <p class="text-sm text-gray-500 mt-1">Items listed 90+ days with recommendations</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Platforms</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Views</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issues</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for item in data.aged_inventory[:10] %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4">
+                            <a href="/inventory/{{ item.id }}" class="text-blue-600 hover:text-blue-800">
+                                <div class="text-sm font-medium text-gray-900 max-w-xs truncate">{{ item.title }}</div>
+                            </a>
+                            <div class="text-xs text-gray-500">{{ item.category }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">£{{ "{:,.0f}".format(item.price) }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                            <span class="{% if item.age_days > 365 %}text-red-600{% elif item.age_days > 180 %}text-orange-600{% else %}text-amber-600{% endif %} font-medium">
+                                {{ item.age_days }}d
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if item.platform_count >= 3 %}bg-green-100 text-green-800{% elif item.platform_count == 2 %}bg-amber-100 text-amber-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ item.platform_count }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ item.views }}</td>
+                        <td class="px-6 py-4">
+                            {% if item.issues %}
+                            <ul class="text-xs text-red-600 space-y-1">
+                                {% for issue in item.issues[:2] %}
+                                <li>{{ issue }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <span class="text-xs text-gray-400">No issues detected</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">No aged inventory found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-6 text-center text-sm text-gray-500">
+        Generated {{ data.generated_at[:19] if data.generated_at else 'N/A' }} | Based on historical Reverb data
+    </div>
+</div>
+{% endblock %}

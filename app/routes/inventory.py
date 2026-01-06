@@ -3333,7 +3333,7 @@ async def add_product(
         artist_names_raw = form_data.get("artist_names") or ""
         artist_names_list = [
             name.strip()
-            for name in re.split(r"[,\\n]", artist_names_raw)
+            for name in re.split(r"[,\n]", artist_names_raw)
             if name and name.strip()
         ]
 
@@ -5255,7 +5255,7 @@ async def update_product(
     if artist_names_raw:
         parsed_names = [
             name.strip()
-            for name in re.split(r"[,\\n]", artist_names_raw)
+            for name in re.split(r"[,\n]", artist_names_raw)
             if name.strip()
         ]
         product.artist_names = parsed_names

@@ -4,8 +4,15 @@
       "Bash(python scripts/test_ebay_conditions.py:*)",
       "Bash(jq:*)",
       "Bash(source venv/bin/activate)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebFetch(domain:www.reverb-api.com)",
+      "Bash(git push:*)",
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)"
     ]
   },
-  "enableAllProjectMcpServers": false
+  "enableAllProjectMcpServers": false,
+  "outputStyle": "default"
 }

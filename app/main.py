@@ -23,7 +23,7 @@ from app.core.security import get_current_username
 
 from app import models
 
-from app.routes import shipping, dashboard, reports, health, orders  # matching is now in reports
+from app.routes import shipping, dashboard, reports, health, orders, insights  # matching is now in reports
 from app.routes.platforms.ebay import router as ebay_router
 from app.routes.platforms.reverb import router as reverb_router
 from app.routes.platforms.vr import router as vr_router
@@ -142,6 +142,7 @@ app.include_router(sync_all_router, dependencies=[require_auth()])
 app.include_router(webhook_router)  # Webhooks need to be accessible without auth
 app.include_router(websocket_router.router)  # WebSockets handle auth differently
 app.include_router(reports.router, prefix="/reports", tags=["reports"], dependencies=[require_auth()])
+app.include_router(insights.router, tags=["insights"], dependencies=[require_auth()])
 app.include_router(orders.router, prefix="/orders", tags=["orders"], dependencies=[require_auth()])
 app.include_router(shipping.router, dependencies=[require_auth()])
 # app.include_router(matching.router, prefix="/matching", tags=["matching"], dependencies=[require_auth()])  # Moved to reports

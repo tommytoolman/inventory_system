@@ -1,5 +1,5 @@
 # Project TODO – Inventory Management System
-*Last updated: 2026-01-04*
+*Last updated: 2026-01-06*
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
@@ -13,6 +13,8 @@
 - [ ] **Shopify archive** – _Progress 2026-01-04:_ Auto-archive workflow implemented (`scripts/shopify/auto_archive.py`) - runs weekly via scheduler, archives ended items 14+ days old. Audit scripts created for discrepancy checks. **Remaining:** Create archive gallery view for historical listings.
 - [ ] **Insights Dashboard (incl. NPI clustering)** – test and fine-tune the insights dashboard; includes New Product Introduction cluster view grouped by category for merch planning.
 - [ ] **DHL API integration** – _Progress 2026-01-04:_ Built `DHLPayloadBuilder` service, added shipper config settings, created shipping page UI at `/orders/{platform}/{id}/ship`, added shipping icons to orders list. POST route for label creation complete (`/orders/{platform}/{id}/ship/create`), ship_result.html template done, API credentials validated, shipper details configured, Railway env vars added. **Remaining:** (1) Confirm workflow with Adam (labels only vs full shipping?), (2) Live test with real order. See `docs/dhl-integration.md` for full details.
+- [ ] **User sync recovery tools** – Empower users to diagnose and fix sync issues without tech support. Enhance sync reporting to show what happened (and didn't happen), with actionable intervention options. **Needed:** (1) Expanded sync events report with filtering by status/platform/date, (2) "Retry failed" and "Force resync" buttons per event, (3) Bulk reconciliation actions, (4) Clear visibility into pending vs stuck vs completed events.
+- [ ] **Admin settings UI** – User-accessible settings page to reduce dependency on tech support. Balance empowerment with safety - expose configurable options without giving "keys to the kingdom". **Safe to expose:** (1) Product categories (add/edit/reorder), (2) UI preferences (search debounce, items per page, default views), (3) Notification recipients, (4) Default values (processing time, archive threshold days). **With confirmation:** (5) Sync schedule adjustments, (6) Platform enable/disable toggles. **Keep locked:** API credentials, database settings, core business logic. Store in database `settings` table with audit trail.
 
 ## 🔵 Low Priority (Enhancements)
 _(No items currently)_
@@ -20,6 +22,9 @@ _(No items currently)_
 ## 🧪 Testing
 - [x] **Test suite cleanup** – _Completed 2026-01-03:_ Audited 17,356 lines of test code across 219 tests. Deleted broken/stale tests (4 files with import errors referencing deleted modules), removed 4,129-line VR local state mega-file, removed stub shipping tests. Result: **200 tests, 11,108 lines** – all collecting cleanly with 0 errors.
 - [ ] **Smoke test maintenance** – keep critical path tests (route tests, product service, core sync) up to date. Run `pytest tests/` before major deploys. No CI integration planned.
+
+## 🚀 Future: Multi-Tenant SaaS
+- [ ] **Multi-tenant roadmap** – See `docs/multi-tenant-roadmap.md` for full analysis of path from single-tenant to SaaS product. Key phases: (A) Complete single-tenant polish, (B) Multi-tenant foundation (schema-per-tenant, auth, tenant context), (C) Onboarding & self-service (OAuth flows, import wizard, billing), (D) Beta launch.
 
 ## 🟠 Documentation & knowledge base
 - [ ] Add example usage to docstrings across core services and routers.
@@ -48,7 +53,7 @@ _(No items currently)_
 - [x] **Listing Engagement Report & Stats Ingestion** – _Completed 2026-01-01:_ Added Listing Engagement Report at `/reports/listing-engagement` aggregating Reverb + eBay views/watches by product. Implemented `listing_stats_history` table with daily scheduled refresh for both platforms (`reverb_stats_daily`, `ebay_stats_daily` jobs). Report features sortable columns, platform breakdown (R:X | E:Y), 7-day change tracking, system icons for platform links. Also fixed VR relist to update `platform_common.status`.
 - [x] **TinyMCE API Key Secure:** Removed hardcoded API key from `base.html` and moved to `TINYMCE_API_KEY` environment variable.
 - [x] **Admin Password Enforced:** Removed insecure default from `config.py` requiring `ADMIN_PASSWORD` environment variable.
-- [x] **Inventorised items workflow validation** – _Completed 2025-12-27:_ Added Inventory Reconciliation report with smart reconciliation (only updates out-of-sync platforms), order_sale sync events for stocked items, sale email alerts for inventorised stock.
+- [x] **Inventorised items workflow validation** – _Completed 2025-12-27, enhanced 2026-01-06:_ Added Inventory Reconciliation report with smart reconciliation (only updates out-of-sync platforms), order_sale sync events for stocked items, sale email alerts for inventorised stock. **2026-01-06:** Fixed `OrderSaleProcessor` to actually call platform APIs when propagating quantity changes (was only logging). Fixed method names for Reverb/Shopify to use `apply_product_update()`. Fixed reconciliation report to pass settings to services. Added page reload after successful reconciliation.
 - [x] **Dropbox media integration overhaul** – _Completed 2025-12-30:_ Complete refactor using thumbnail API (~98% bandwidth savings), lazy full-res fetch, token persistence, parallel fetching, instant visual feedback, two-way selection sync, smart Select All/Clear button.
 - [x] **Platform error handling standardisation** – error handling across all platform services now graceful and consistent. _Completed 2025-12-24._
 - [x] **"Where sold" attribution & sales orders** – sale-source attribution in sales report correctly identifies platform vs OFFLINE; aligned with orders workflow. _Completed 2025-12-24._

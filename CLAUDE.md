@@ -143,6 +143,13 @@ The sync flow is typically:
 3. Sync to other platforms (eBay, Shopify, VR)
 4. Track sync status in sync_events table
 
+## Key Documentation
+
+- **`docs/todo.md`** - Current development priorities and completed work
+- **`docs/multi-tenant-roadmap.md`** - Future SaaS product roadmap (multi-customer architecture, onboarding, pricing)
+- **`docs/dhl-integration.md`** - DHL shipping label integration details
+- **`docs/api/`** - Architecture, models, and platform integration docs
+
 ## Common Issues & Solutions
 
 1. **VR Download Hanging**: Clean temp files in /tmp before download

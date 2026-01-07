@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 SALE_STATUSES = {
     "reverb": {
         # Reverb order statuses that indicate a confirmed sale
-        "statuses": {"shipped", "received", "payment_pending"},  # payment_pending = buyer paid
+        # "paid" = buyer has paid, waiting to ship; "shipped"/"received" = already dispatched
+        "statuses": {"paid", "shipped", "received"},
         "status_field": "status",
     },
     "ebay": {

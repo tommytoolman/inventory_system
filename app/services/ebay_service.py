@@ -1602,9 +1602,17 @@ class EbayService:
         }
 
     async def _batch_mark_removed(self, items: List[Dict], sync_run_id: uuid.UUID, pending_events: set) -> Tuple[int, int]:
-        """SYNC PHASE: Only log removal events if no pending event already exists."""
+        """
+        SYNC PHASE: Only log removal events after verifying item is truly gone.
+
+        The eBay bulk listing API can sometimes return incomplete data (API glitch),
+        causing items to appear "missing" when they're actually still live. To prevent
+        false removal events, we verify each item with a GetItem API call before
+        creating the sync_event.
+        """
         removed_count, events_logged = 0, 0
-        
+        verified_count, false_positive_count = 0, 0
+
         # Prepare only new, non-pending removal events
         events_to_log = []
         for item in items:
@@ -1612,28 +1620,64 @@ class EbayService:
                 external_id = item['external_id']
 
                 # Check if a 'removed_listing' event is already pending for this item
-                if (external_id, 'removed_listing') not in pending_events:
-                    events_to_log.append({
-                        'sync_run_id': sync_run_id,
-                        'platform_name': 'ebay',
-                        'product_id': item['product_id'],
-                        'platform_common_id': item['platform_common_id'],
-                        'external_id': external_id,
-                        'change_type': 'removed_listing',
-                        'change_data': {
-                            'sku': item['sku'],
-                            'item_id': external_id,
-                            'reason': 'not_found_in_api'
-                        },
-                        'status': 'pending'
-                    })
-                else:
+                if (external_id, 'removed_listing') in pending_events:
                     logger.info(f"Skipping duplicate pending 'removed_listing' event for eBay item {external_id}")
+                    continue
 
-                # Increment count of items identified for removal, even if event logging is skipped
+                # VERIFICATION: Call GetItem to confirm the listing is actually gone
+                # This guards against eBay bulk API glitches returning incomplete data
+                logger.info(f"Verifying removal of eBay item {external_id} with GetItem call...")
+                try:
+                    get_item_result = await self.trading_api.get_item(external_id)
+
+                    # Check if item was found and is still active
+                    if get_item_result and get_item_result.get('Item'):
+                        item_data = get_item_result['Item']
+                        listing_status = item_data.get('SellingStatus', {}).get('ListingStatus', '')
+
+                        if listing_status == 'Active':
+                            # Item is still live - this was a false positive from the bulk API
+                            false_positive_count += 1
+                            logger.warning(
+                                f"FALSE POSITIVE: eBay item {external_id} ({item.get('sku')}) "
+                                f"not in bulk API results but GetItem shows it's still Active. Skipping removal."
+                            )
+                            continue
+                        else:
+                            # Item exists but is not active (ended, sold, etc.)
+                            logger.info(f"eBay item {external_id} exists but status is '{listing_status}' - proceeding with removal event")
+                    else:
+                        # GetItem returned no item - confirmed not found
+                        logger.info(f"eBay item {external_id} confirmed not found via GetItem")
+
+                except Exception as verify_error:
+                    # If GetItem fails, log but still proceed with removal
+                    # (Could be a genuine 404 or network error)
+                    logger.warning(f"GetItem verification failed for {external_id}: {verify_error}. Proceeding with removal.")
+
+                verified_count += 1
+                events_to_log.append({
+                    'sync_run_id': sync_run_id,
+                    'platform_name': 'ebay',
+                    'product_id': item['product_id'],
+                    'platform_common_id': item['platform_common_id'],
+                    'external_id': external_id,
+                    'change_type': 'removed_listing',
+                    'change_data': {
+                        'sku': item['sku'],
+                        'item_id': external_id,
+                        'reason': 'not_found_in_api'
+                    },
+                    'status': 'pending'
+                })
+
+                # Increment count of items identified for removal
                 removed_count += 1
             except Exception as e:
                 logger.error(f"Failed to prepare removal event for eBay item {item.get('external_id', 'Unknown')}: {e}", exc_info=True)
+
+        if false_positive_count > 0:
+            logger.warning(f"Detected {false_positive_count} false positive removals (items still Active on eBay)")
         
         # Bulk insert only the truly new events
         if events_to_log:

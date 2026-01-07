@@ -489,7 +489,16 @@ class EbayService:
         if country_name:
             item_specifics["Country of Origin"] = country_name
             item_specifics["Country/Region of Manufacture"] = country_name
-        
+
+        # Add finish/colour if available
+        if product.finish:
+            item_specifics["Body Colour"] = product.finish
+
+        # Add handedness if available
+        if product.handedness:
+            handedness_value = "Left Handed" if product.handedness.name == "LEFT" else "Right Handed"
+            item_specifics["Handedness"] = handedness_value
+
         # Category-specific ItemSpecifics
         if category_id == "38072":  # Guitar Amplifiers
             # Amplifier Type is required - read from extra_attributes first
@@ -2400,7 +2409,7 @@ class EbayService:
         title = product.title if "title" in changed_fields else None
         description = product.description if "description" in changed_fields else None
         item_specifics = None
-        if {"model", "manufacturing_country"} & changed_fields:
+        if {"model", "manufacturing_country", "finish", "handedness"} & changed_fields:
             category_id = None
             if listing and listing.ebay_category_id:
                 category_id = listing.ebay_category_id

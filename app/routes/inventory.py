@@ -5209,6 +5209,9 @@ async def update_product(
         "artist_owned": product.artist_owned,
         "artist_names": list(product.artist_names) if product.artist_names else [],
         "extra_attributes": json.loads(json.dumps(product.extra_attributes or {})),
+        "condition": product.condition,
+        "year": product.year,
+        "finish": product.finish,
     }
     
     # Update product fields with validation

@@ -490,14 +490,25 @@ class EbayService:
             item_specifics["Country of Origin"] = country_name
             item_specifics["Country/Region of Manufacture"] = country_name
 
-        # Add finish/colour if available
+        # Add finish/colour if available - set both Body Colour and Color for consistency
         if product.finish:
             item_specifics["Body Colour"] = product.finish
+            item_specifics["Color"] = product.finish
 
         # Add handedness if available
         if product.handedness:
             handedness_value = "Left Handed" if product.handedness.name == "LEFT" else "Right Handed"
             item_specifics["Handedness"] = handedness_value
+
+        # Add artist owned if true
+        if product.artist_owned:
+            item_specifics["Artist Owned"] = "Yes"
+
+        # Add artist names if available
+        if product.artist_names and len(product.artist_names) > 0:
+            # Join artist names with comma, truncate to 65 chars for eBay
+            artist_names_str = ", ".join(product.artist_names)
+            item_specifics["Artist Names"] = self._truncate_item_specific(artist_names_str, 65)
 
         # Category-specific ItemSpecifics
         if category_id == "38072":  # Guitar Amplifiers
@@ -2453,7 +2464,7 @@ class EbayService:
         title = product.title if "title" in changed_fields else None
         description = product.description if "description" in changed_fields else None
         item_specifics = None
-        if {"model", "manufacturing_country", "finish", "handedness"} & changed_fields:
+        if {"model", "manufacturing_country", "finish", "handedness", "artist_owned", "artist_names"} & changed_fields:
             category_id = None
             if listing and listing.ebay_category_id:
                 category_id = listing.ebay_category_id

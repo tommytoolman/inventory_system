@@ -62,6 +62,21 @@ class ShopifyService:
     HANDEDNESS_KEY = "handedness"
     HANDEDNESS_METAFIELD_TYPE = "single_line_text_field"
 
+    # Colour / Finish metafield constants - matches Shopify admin custom.colour_finish
+    COLOUR_FINISH_NAMESPACE = "custom"
+    COLOUR_FINISH_KEY = "colour_finish"
+    COLOUR_FINISH_METAFIELD_TYPE = "single_line_text_field"
+
+    # Year metafield constants
+    YEAR_NAMESPACE = "custom"
+    YEAR_KEY = "year"
+    YEAR_METAFIELD_TYPE = "single_line_text_field"
+
+    # Condition metafield constants
+    CONDITION_NAMESPACE = "custom"
+    CONDITION_KEY = "condition"
+    CONDITION_METAFIELD_TYPE = "single_line_text_field"
+
 
     # =========================================================================
     # 1. INITIALIZATION & HELPERS
@@ -312,19 +327,29 @@ class ShopifyService:
         if country_code:
             self._update_inventory_item_country(product, product_gid, country_code)
 
-    def _sync_artist_info(self, product: Product, product_gid: str) -> None:
-        """Sync artist_owned and artist_names to Shopify product metafields."""
-        metafields_to_set = []
+    def _sync_artist_info(self, product: Product, product_gid: str, clear_if_empty: bool = False) -> None:
+        """Sync artist_owned and artist_names to Shopify product metafields.
 
-        # Artist Owned metafield (boolean type, lowercase "true")
+        Args:
+            product: The product to sync
+            product_gid: Shopify product GID
+            clear_if_empty: If True, delete metafields when values are cleared
+        """
+        metafields_to_set = []
+        metafields_to_delete = []
+
+        # Artist Owned metafield (boolean type)
         if product.artist_owned:
             metafields_to_set.append({
                 "ownerId": product_gid,
                 "namespace": self.ARTIST_OWNED_NAMESPACE,
                 "key": self.ARTIST_OWNED_KEY,
                 "type": self.ARTIST_OWNED_METAFIELD_TYPE,
-                "value": "true",  # lowercase for boolean type
+                "value": "true",
             })
+        elif clear_if_empty:
+            # Delete the metafield when artist_owned is unchecked
+            metafields_to_delete.append((self.ARTIST_OWNED_NAMESPACE, self.ARTIST_OWNED_KEY))
 
         # Artist Names metafield (multi_line_text_field type)
         if product.artist_names and len(product.artist_names) > 0:
@@ -337,20 +362,35 @@ class ShopifyService:
                 "type": self.ARTIST_NAMES_METAFIELD_TYPE,
                 "value": names_value,
             })
+        elif clear_if_empty:
+            # Delete the metafield when artist_names is cleared
+            metafields_to_delete.append((self.ARTIST_NAMES_NAMESPACE, self.ARTIST_NAMES_KEY))
 
-        if not metafields_to_set:
-            return
+        # Set any metafields that have values
+        if metafields_to_set:
+            try:
+                result = self.client.set_metafields(metafields_to_set)
+                errors = result.get("userErrors", []) if result else []
+                if errors:
+                    logger.warning("Shopify artist metafieldsSet returned errors for %s: %s", product.sku, errors)
+                else:
+                    logger.info("Synced artist info to Shopify for %s: owned=%s, names=%s",
+                               product.sku, product.artist_owned, product.artist_names)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify artist metafields for %s: %s", product.sku, exc)
 
-        try:
-            result = self.client.set_metafields(metafields_to_set)
-            errors = result.get("userErrors", []) if result else []
-            if errors:
-                logger.warning("Shopify artist metafieldsSet returned errors for %s: %s", product.sku, errors)
-            else:
-                logger.info("Synced artist info to Shopify for %s: owned=%s, names=%s",
-                           product.sku, product.artist_owned, product.artist_names)
-        except Exception as exc:
-            logger.warning("Failed to sync Shopify artist metafields for %s: %s", product.sku, exc)
+        # Delete any metafields that should be cleared
+        for namespace, key in metafields_to_delete:
+            try:
+                result = self.client.delete_metafield_by_key(product_gid, namespace, key)
+                if result.get("deleted"):
+                    logger.info("Deleted Shopify metafield %s.%s for %s", namespace, key, product.sku)
+                elif result.get("reason") == "not_found":
+                    logger.debug("Metafield %s.%s not found for %s - already cleared", namespace, key, product.sku)
+                else:
+                    logger.warning("Failed to delete metafield %s.%s for %s: %s", namespace, key, product.sku, result)
+            except Exception as exc:
+                logger.warning("Error deleting Shopify metafield %s.%s for %s: %s", namespace, key, product.sku, exc)
 
     def _sync_handedness(self, product: Product, product_gid: str) -> None:
         """Sync handedness to Shopify product metafield and tags."""
@@ -401,6 +441,143 @@ class ShopifyService:
                     logger.info("Added Left-Handed tag to Shopify for %s", product.sku)
             except Exception as exc:
                 logger.warning("Failed to add Left-Handed tag for %s: %s", product.sku, exc)
+
+    def _sync_colour_finish(self, product: Product, product_gid: str) -> None:
+        """Sync finish to Shopify Colour / Finish metafield."""
+        if not product.finish:
+            return
+
+        metafields = [{
+            "ownerId": product_gid,
+            "namespace": self.COLOUR_FINISH_NAMESPACE,
+            "key": self.COLOUR_FINISH_KEY,
+            "type": self.COLOUR_FINISH_METAFIELD_TYPE,
+            "value": product.finish,
+        }]
+
+        try:
+            result = self.client.set_metafields(metafields)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify colour_finish metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced colour_finish metafield to Shopify for %s: %s", product.sku, product.finish)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify colour_finish metafield for %s: %s", product.sku, exc)
+
+    def _sync_year(self, product: Product, product_gid: str) -> None:
+        """Sync year to Shopify custom metafield."""
+        if not product.year:
+            return
+
+        metafields = [{
+            "ownerId": product_gid,
+            "namespace": self.YEAR_NAMESPACE,
+            "key": self.YEAR_KEY,
+            "type": self.YEAR_METAFIELD_TYPE,
+            "value": str(product.year),
+        }]
+
+        try:
+            result = self.client.set_metafields(metafields)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify year metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced year metafield to Shopify for %s: %s", product.sku, product.year)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify year metafield for %s: %s", product.sku, exc)
+
+    def _format_condition_for_display(self, condition: str) -> str:
+        """Format condition value for Shopify display.
+
+        Converts internal values like 'verygood' to 'Very Good'.
+        Other single-word conditions become title case.
+        """
+        if not condition:
+            return ""
+
+        condition_lower = condition.lower().strip()
+
+        # Special case: verygood -> Very Good
+        if condition_lower == "verygood":
+            return "Very Good"
+
+        # Single word conditions: title case
+        return condition.strip().title()
+
+    def _sync_condition(self, product: Product, product_gid: str) -> None:
+        """Sync condition to Shopify custom metafield."""
+        if not product.condition:
+            return
+
+        formatted_condition = self._format_condition_for_display(product.condition)
+
+        metafields = [{
+            "ownerId": product_gid,
+            "namespace": self.CONDITION_NAMESPACE,
+            "key": self.CONDITION_KEY,
+            "type": self.CONDITION_METAFIELD_TYPE,
+            "value": formatted_condition,
+        }]
+
+        try:
+            result = self.client.set_metafields(metafields)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify condition metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced condition metafield to Shopify for %s: %s", product.sku, formatted_condition)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify condition metafield for %s: %s", product.sku, exc)
+
+    def _sync_product_tags(self, product: Product, product_gid: str) -> None:
+        """Sync year, finish, and condition as tags to Shopify."""
+        tags_to_add = []
+
+        # Add year as tag (e.g., "1965")
+        if product.year:
+            tags_to_add.append(str(product.year))
+
+        # Add finish as tag (e.g., "Sunburst")
+        if product.finish:
+            tags_to_add.append(product.finish)
+
+        # Add condition as tag (e.g., "Excellent")
+        if product.condition:
+            tags_to_add.append(product.condition)
+
+        if not tags_to_add:
+            return
+
+        try:
+            # Get current tags
+            query = """
+            query getProduct($id: ID!) {
+              product(id: $id) {
+                tags
+              }
+            }
+            """
+            data = self.client.execute(query, {'id': product_gid})
+            current_tags = data.get('product', {}).get('tags', [])
+
+            # Add new tags that don't already exist
+            new_tags = list(current_tags)
+            added = []
+            for tag in tags_to_add:
+                if tag not in current_tags:
+                    new_tags.append(tag)
+                    added.append(tag)
+
+            if added:
+                self.client.update_product({
+                    'id': product_gid,
+                    'tags': new_tags
+                })
+                logger.info("Added tags to Shopify for %s: %s", product.sku, added)
+        except Exception as exc:
+            logger.warning("Failed to sync product tags for %s: %s", product.sku, exc)
 
     def _extract_variant_nodes(self, listing: ShopifyListing) -> List[Dict[str, Any]]:
         variants = []
@@ -778,7 +955,8 @@ class ShopifyService:
         artist_updated = False
         if "artist_owned" in changed_fields or "artist_names" in changed_fields:
             try:
-                self._sync_artist_info(product, product_gid)
+                # clear_if_empty=True to remove values when unticked/cleared
+                self._sync_artist_info(product, product_gid, clear_if_empty=True)
                 artist_updated = True
             except Exception as exc:
                 logger.warning(
@@ -800,12 +978,69 @@ class ShopifyService:
                     exc,
                 )
 
+        # Sync finish (colour/finish) if changed
+        finish_updated = False
+        if "finish" in changed_fields:
+            try:
+                self._sync_colour_finish(product, product_gid)
+                finish_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify colour_finish on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync year if changed
+        year_updated = False
+        if "year" in changed_fields:
+            try:
+                self._sync_year(product, product_gid)
+                year_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify year on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync condition if changed
+        condition_updated = False
+        if "condition" in changed_fields:
+            try:
+                self._sync_condition(product, product_gid)
+                condition_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify condition on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync tags if year, finish, or condition changed
+        tags_updated = False
+        if {"year", "finish", "condition"} & changed_fields:
+            try:
+                self._sync_product_tags(product, product_gid)
+                tags_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify tags on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        any_updated = pushed or inventory_updated or artist_updated or handedness_updated or finish_updated or year_updated or condition_updated or tags_updated
         return {
-            "status": "updated" if pushed or inventory_updated or artist_updated or handedness_updated else "no_changes",
+            "status": "updated" if any_updated else "no_changes",
             "inventory": inventory_updated,
             "product": pushed,
             "artist": artist_updated,
             "handedness": handedness_updated,
+            "finish": finish_updated,
+            "year": year_updated,
+            "condition": condition_updated,
+            "tags": tags_updated,
         }
 
     def _calculate_changes(self, api_items: Dict, db_items: Dict) -> Dict[str, List]:
@@ -1479,6 +1714,33 @@ class ShopifyService:
                     self._sync_handedness(product, product_gid)
             except Exception as exc:
                 logger.warning("Failed to sync Shopify handedness for %s: %s", product.sku, exc)
+
+            # Sync finish (colour/finish) if set
+            try:
+                if product.finish:
+                    self._sync_colour_finish(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify colour_finish for %s: %s", product.sku, exc)
+
+            # Sync year if set
+            try:
+                if product.year:
+                    self._sync_year(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify year for %s: %s", product.sku, exc)
+
+            # Sync condition if set
+            try:
+                if product.condition:
+                    self._sync_condition(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify condition for %s: %s", product.sku, exc)
+
+            # Sync tags for year, finish, condition
+            try:
+                self._sync_product_tags(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify product tags for %s: %s", product.sku, exc)
 
             # Step 3: Update the variant with price, SKU, and inventory
             variant_gid = None  # Initialize for use in shipping profile assignment

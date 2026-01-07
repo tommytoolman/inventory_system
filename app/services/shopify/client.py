@@ -687,6 +687,68 @@ class ShopifyGraphQLClient:
         data = self._make_request(mutation, variables, estimated_cost=10)
         return data.get("metafieldsSet", {}) if data else {}
 
+    def delete_metafield_by_key(self, owner_id: str, namespace: str, key: str) -> Dict[str, Any]:
+        """Delete a metafield by looking it up by namespace/key and then deleting it.
+
+        Args:
+            owner_id: The GID of the owner (e.g., product GID)
+            namespace: The metafield namespace
+            key: The metafield key
+
+        Returns:
+            The deletion result or empty dict if not found/failed
+        """
+        # First, query to get the metafield ID
+        query = """
+        query getMetafield($ownerId: ID!, $namespace: String!, $key: String!) {
+          product(id: $ownerId) {
+            metafield(namespace: $namespace, key: $key) {
+              id
+            }
+          }
+        }
+        """
+        variables = {"ownerId": owner_id, "namespace": namespace, "key": key}
+
+        try:
+            data = self._make_request(query, variables, estimated_cost=5)
+            if not data or not data.get("product") or not data["product"].get("metafield"):
+                logger.debug("Metafield %s.%s not found on %s - nothing to delete", namespace, key, owner_id)
+                return {"deleted": False, "reason": "not_found"}
+
+            metafield_id = data["product"]["metafield"]["id"]
+
+            # Delete using metafieldsDelete (plural) - the correct mutation for API 2024-10+
+            delete_mutation = """
+            mutation metafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+              metafieldsDelete(metafields: $metafields) {
+                deletedMetafields { key namespace ownerId }
+                userErrors { field message }
+              }
+            }
+            """
+            delete_vars = {"metafields": [{"ownerId": owner_id, "namespace": namespace, "key": key}]}
+            delete_data = self._make_request(delete_mutation, delete_vars, estimated_cost=5)
+
+            if delete_data and delete_data.get("metafieldsDelete"):
+                result = delete_data["metafieldsDelete"]
+                if result.get("userErrors") and len(result["userErrors"]) > 0:
+                    logger.warning("Metafield delete errors for %s.%s: %s", namespace, key, result["userErrors"])
+                    return {"deleted": False, "errors": result["userErrors"]}
+                deleted_list = result.get("deletedMetafields", [])
+                if deleted_list:
+                    logger.info("Deleted metafield %s.%s from %s", namespace, key, owner_id)
+                    return {"deleted": True, "deletedMetafields": deleted_list}
+                else:
+                    logger.debug("Metafield %s.%s not found for deletion", namespace, key)
+                    return {"deleted": False, "reason": "not_found"}
+
+            return {"deleted": False, "reason": "unknown"}
+
+        except Exception as exc:
+            logger.warning("Failed to delete metafield %s.%s: %s", namespace, key, exc)
+            return {"deleted": False, "error": str(exc)}
+
     def update_inventory_item(self, item_gid: str, *, country_code: Optional[str] = None,
                               harmonized_code: Optional[str] = None,
                               province_code: Optional[str] = None) -> Dict[str, Any]:

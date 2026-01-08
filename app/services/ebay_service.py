@@ -1662,9 +1662,13 @@ class EbayService:
                         logger.info(f"eBay item {external_id} confirmed not found via GetItem")
 
                 except Exception as verify_error:
-                    # If GetItem fails, log but still proceed with removal
-                    # (Could be a genuine 404 or network error)
-                    logger.warning(f"GetItem verification failed for {external_id}: {verify_error}. Proceeding with removal.")
+                    # If GetItem fails, SKIP the removal to be safe
+                    # Better to leave an ended listing unprocessed than create false removal events
+                    logger.warning(
+                        f"GetItem verification failed for {external_id}: {verify_error}. "
+                        f"SKIPPING removal to avoid false positive."
+                    )
+                    continue
 
                 verified_count += 1
                 events_to_log.append({

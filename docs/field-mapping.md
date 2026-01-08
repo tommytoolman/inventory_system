@@ -12,7 +12,7 @@ This document describes how product fields in RIFF sync to Shopify and eBay.
 | `description` | `descriptionHtml` | Item description |
 | `base_price` | Variant price | StartPrice |
 | `quantity` | Inventory level | Quantity |
-| `finish` | `custom.colour_finish` metafield + tag | Body Colour + Color item specifics |
+| `finish` | `custom.colour_finish` metafield + tag | Body Colour + Colour item specifics |
 | `year` | `custom.year` metafield + tag | Year item specific |
 | `condition` | `custom.condition` metafield + tag (formatted) | ConditionID (separate system) |
 | `handedness` | `custom.handedness` metafield + "Left-Handed" tag | Handedness item specific |
@@ -55,7 +55,7 @@ When artist_owned is unchecked or artist_names cleared, the metafields are **del
 |-------|-------|
 | Year | From `year` (as string) |
 | Body Colour | From `finish` |
-| Color | From `finish` (duplicate for eBay compatibility) |
+| Colour | From `finish` (duplicate for eBay UK compatibility) |
 | Handedness | "Left Handed" or "Right Handed" |
 | Country of Origin | From `manufacturing_country` |
 | Country/Region of Manufacture | From `manufacturing_country` (duplicate) |

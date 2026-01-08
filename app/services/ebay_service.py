@@ -490,10 +490,10 @@ class EbayService:
             item_specifics["Country of Origin"] = country_name
             item_specifics["Country/Region of Manufacture"] = country_name
 
-        # Add finish/colour if available - set both Body Colour and Color for consistency
+        # Add finish/colour if available - set both for eBay UK consistency
         if product.finish:
             item_specifics["Body Colour"] = product.finish
-            item_specifics["Color"] = product.finish
+            item_specifics["Colour"] = product.finish
 
         # Add handedness if available
         if product.handedness:

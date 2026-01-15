@@ -72,14 +72,52 @@
                         class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                         Match Products
                     </a> -->
-                    <a href="/reports"
-                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                        Reports
-                    </a>
                     <a href="/insights"
                         class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                         Insights
                     </a>
+                    <div class="relative inline-block text-left" id="reportsDropdown">
+                        <a href="/reports"
+                                class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Reports
+                            <svg class="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </a>
+
+                        <div id="reportsMenu"
+                             class="origin-top-left absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50"
+                             role="menu"
+                             aria-orientation="vertical">
+                            <div class="py-1" role="none">
+                                <a href="/reports/sync-events"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Sync Events
+                                </a>
+                                <a href="/reports/inventory-reconciliation"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Inventory Reconciliation
+                                </a>
+                                <a href="/reports/non-performing-inventory"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Non-Performing Inventory
+                                </a>
+                                <a href="/reports/listing-engagement"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Listing Engagement
+                                </a>
+                                <a href="/reports/platform-coverage"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Platform Coverage
+                                </a>
+                                <div class="border-t border-gray-100 my-1"></div>
+                                <a href="/reports"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-500 hover:bg-gray-100">
+                                    View All Reports →
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                     <div class="relative inline-block text-left" id="syncDropdown">
                         <button type="button"
                                 class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
@@ -129,22 +167,15 @@
                         </div>
                     </div>
                     <div class="relative inline-block text-left" id="platformDropdown">
-                        <button type="button" 
+                        <button type="button"
                                 class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                                 onclick="togglePlatformMenu(event)"
                                 aria-haspopup="true"
                                 aria-expanded="false"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" 
-                                class="mr-2">
-                                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
-                                <path d="M3 7v9a2 2 0 0 0 2 2h16v-4"></path>
-                                <path d="M3 7v9a2 2 0 0 0 2 2h16v-4"></path>
-                            </svg>
                             Platforms
-                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            <svg class="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
                             </svg>
                         </button>
                     
@@ -174,15 +205,20 @@
                                     <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" style="margin-right: 8px;">
                                     Vintage & Rare
                                 </a>
-                                <a href="https://londonvintageguitars.myshopify.com/" target="_blank"
+                                <a href="https://www.denmarkstreetguitars.co.uk/" target="_blank"
                                 class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                     <img src="https://www.google.com/s2/favicons?sz=16&domain=londonvintageguitars.myshopify.com" style="margin-right: 8px;">
-                                    London Vintage Guitars
+                                     <img src="https://icons.duckduckgo.com/ip3/denmarkstreetguitars.co.uk.ico" style="margin-right: 8px; width: 16px; height: 16px;">
+                                    Hanks
                                 </a>
                                 <a href="https://admin.shopify.com/store/londonvintageguitars?ui_locales=en-GB" target="_blank"
                                 class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                      <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" style="margin-right: 8px;">
-                                    Shopify
+                                    Shopify Admin
+                                </a>
+                                <a href="https://railway.com/project/acc36520-166b-4569-8718-3cf1a9920bad" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                     <img src="https://www.google.com/s2/favicons?sz=16&domain=railway.app" style="margin-right: 8px;">
+                                    Railway
                                 </a>
                                 <a href="https://crazylister.com/application/user/dashboard" target="_blank"
                                 class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
@@ -271,6 +307,132 @@
             }
 
             document.addEventListener('click', closeMenu);
+        }
+
+        // Sync dropdown hover-to-open with 0.45s delay
+        let syncHoverTimer = null;
+        let syncCloseTimer = null;
+        const syncDropdown = document.getElementById('syncDropdown');
+        const syncMenu = document.getElementById('syncMenu');
+
+        if (syncDropdown && syncMenu) {
+            syncDropdown.addEventListener('mouseenter', function() {
+                if (syncCloseTimer) {
+                    clearTimeout(syncCloseTimer);
+                    syncCloseTimer = null;
+                }
+                syncHoverTimer = setTimeout(function() {
+                    syncMenu.classList.remove('hidden');
+                }, 450);
+            });
+
+            syncDropdown.addEventListener('mouseleave', function() {
+                if (syncHoverTimer) {
+                    clearTimeout(syncHoverTimer);
+                    syncHoverTimer = null;
+                }
+                syncCloseTimer = setTimeout(function() {
+                    syncMenu.classList.add('hidden');
+                }, 150);
+            });
+
+            syncMenu.addEventListener('mouseenter', function() {
+                if (syncCloseTimer) {
+                    clearTimeout(syncCloseTimer);
+                    syncCloseTimer = null;
+                }
+            });
+
+            syncMenu.addEventListener('mouseleave', function() {
+                syncCloseTimer = setTimeout(function() {
+                    syncMenu.classList.add('hidden');
+                }, 150);
+            });
+        }
+
+        // Platforms dropdown hover-to-open with 0.45s delay
+        let platformHoverTimer = null;
+        let platformCloseTimer = null;
+        const platformDropdown = document.getElementById('platformDropdown');
+        const platformMenu = document.getElementById('platformMenu');
+
+        if (platformDropdown && platformMenu) {
+            platformDropdown.addEventListener('mouseenter', function() {
+                if (platformCloseTimer) {
+                    clearTimeout(platformCloseTimer);
+                    platformCloseTimer = null;
+                }
+                platformHoverTimer = setTimeout(function() {
+                    platformMenu.classList.remove('hidden');
+                }, 450);
+            });
+
+            platformDropdown.addEventListener('mouseleave', function() {
+                if (platformHoverTimer) {
+                    clearTimeout(platformHoverTimer);
+                    platformHoverTimer = null;
+                }
+                platformCloseTimer = setTimeout(function() {
+                    platformMenu.classList.add('hidden');
+                }, 150);
+            });
+
+            platformMenu.addEventListener('mouseenter', function() {
+                if (platformCloseTimer) {
+                    clearTimeout(platformCloseTimer);
+                    platformCloseTimer = null;
+                }
+            });
+
+            platformMenu.addEventListener('mouseleave', function() {
+                platformCloseTimer = setTimeout(function() {
+                    platformMenu.classList.add('hidden');
+                }, 150);
+            });
+        }
+
+        // Reports dropdown hover-to-open with 0.45s delay
+        let reportsHoverTimer = null;
+        let reportsCloseTimer = null;
+        const reportsDropdown = document.getElementById('reportsDropdown');
+        const reportsMenu = document.getElementById('reportsMenu');
+
+        if (reportsDropdown && reportsMenu) {
+            reportsDropdown.addEventListener('mouseenter', function() {
+                // Cancel any pending close
+                if (reportsCloseTimer) {
+                    clearTimeout(reportsCloseTimer);
+                    reportsCloseTimer = null;
+                }
+                reportsHoverTimer = setTimeout(function() {
+                    reportsMenu.classList.remove('hidden');
+                }, 450);
+            });
+
+            reportsDropdown.addEventListener('mouseleave', function() {
+                if (reportsHoverTimer) {
+                    clearTimeout(reportsHoverTimer);
+                    reportsHoverTimer = null;
+                }
+                // Delay close to allow moving to menu
+                reportsCloseTimer = setTimeout(function() {
+                    reportsMenu.classList.add('hidden');
+                }, 150);
+            });
+
+            // Keep menu open when hovering over it
+            reportsMenu.addEventListener('mouseenter', function() {
+                if (reportsCloseTimer) {
+                    clearTimeout(reportsCloseTimer);
+                    reportsCloseTimer = null;
+                }
+            });
+
+            reportsMenu.addEventListener('mouseleave', function() {
+                reportsCloseTimer = setTimeout(function() {
+                    reportsMenu.classList.add('hidden');
+                }, 150);
+            });
         }
 
         // Sync functions

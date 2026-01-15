@@ -8,10 +8,6 @@
     </div>
     {% endif %}
     
-    <!-- Header -->
-    <div class="text-center mb-10">
-        <p class="text-gray-600">Centralized inventory management &amp; item creation across multiple platforms</p>
-    </div>
     
     <!-- Temporary Debug Section -->
     <!-- {% if debug_platform_counts %}
@@ -22,510 +18,428 @@
     {% endif %} -->
 
     <!-- Platform Status Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         
         <!-- Shopify Card -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-lg font-semibold">Shopify</h2>
-                <div class="flex items-center space-x-2">
-                    <span class="text-sm {{ 'text-green-600' if shopify_connected else 'text-red-600' }}">
-                        {{ 'Connected' if shopify_connected else 'Disconnected' }}
-                    </span>
-                    <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if shopify_connected else 'bg-red-500' }}"></div>
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-green-500">
+            <div class="flex items-center justify-between mb-3 border-b pb-2">
+                <div class="flex items-center">
+                    <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2 w-4 h-4">
+                    <h2 class="text-lg font-semibold">Shopify</h2>
                 </div>
+                <div class="w-3 h-3 rounded-full {% if shopify_sync_status == 'error' %}bg-red-500{% elif shopify_sync_status == 'stale' %}bg-amber-500{% else %}bg-green-500{% endif %}"
+                     title="{% if shopify_sync_status == 'error' %}Last sync failed{% elif shopify_sync_status == 'stale' %}Sync overdue{% else %}Synced OK{% endif %}"></div>
             </div>
 
-            <!-- Divider line -->
-            <div class="border-b border-gray-200 mb-4"></div>
-            
-            <!-- Active Count - Bold -->
-            <div class="mb-4">
+            <!-- Active Count -->
+            <div class="mb-3">
                 <span class="text-2xl font-bold">{{ shopify_count|default(0) }}</span>
-                <span class="text-gray-500 text-sm">active</span>
+                <span class="text-gray-500 text-sm ml-1">active</span>
             </div>
-            
-            <!-- Other Counts - Small -->
-            <div class="space-y-1 mb-4">
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Sold:</span>
-                    <span class="font-medium text-gray-700">{{ shopify_sold_count|default(0) }}</span>
-                </div>
-                
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Ended:</span>
-                    <span class="font-medium text-gray-700">{{ shopify_ended_count|default(0) }}</span>
-                </div>
 
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Archived:</span>
-                    <span class="font-medium text-gray-700">{{ shopify_archived_count|default(0) }}</span>
+            <!-- Other Counts - Compact Grid -->
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Sold</span>
+                    <span class="font-medium">{{ shopify_sold_count|default(0) }}</span>
                 </div>
-                
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Draft:</span>
-                    <span class="font-medium text-gray-700">{{ shopify_draft_count|default(0) }}</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Ended</span>
+                    <span class="font-medium">{{ shopify_ended_count|default(0) }}</span>
                 </div>
-                
-                {% if shopify_other_count and shopify_other_count > 0 %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Other:</span>
-                    <span class="font-medium text-gray-700">{{ shopify_other_count }}</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Archived</span>
+                    <span class="font-medium">{{ shopify_archived_count|default(0) }}</span>
                 </div>
-                {% endif %}
-                
-                <!-- Total -->
-                <div class="flex justify-between text-xs pt-1 border-t border-gray-200">
-                    <span class="text-gray-600 font-medium">Total:</span>
-                    <span class="font-medium text-gray-800">{{ shopify_total|default(0) }}</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Draft</span>
+                    <span class="font-medium">{{ shopify_draft_count|default(0) }}</span>
                 </div>
             </div>
-            
-            <!-- Progress Bar -->
-            <div class="mb-4">
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    {% set total = shopify_total|default(1) %}
-                    {% if total > 0 %}
-                        {% set live_pct = ((shopify_count|default(0)) * 100 / total)|round(1) %}
-                        {% set sold_pct = ((shopify_sold_count|default(0)) * 100 / total)|round(1) %}
-                        {% set ended_pct = ((shopify_ended_count|default(0)) * 100 / total)|round(1) %}
-                        {% set archived_pct = ((shopify_archived_count|default(0)) * 100 / total)|round(1) %}
-                        {% set draft_pct = ((shopify_draft_count|default(0)) * 100 / total)|round(1) %}
-                        <div class="h-2 rounded-full flex">
-                            {% if live_pct > 0 %}<div class="bg-green-500 rounded-l-full" style="width: {{ live_pct }}%"></div>{% endif %}
-                            {% if sold_pct > 0 %}<div class="bg-blue-500" style="width: {{ sold_pct }}%"></div>{% endif %}
-                            {% if ended_pct > 0 %}<div class="bg-red-500" style="width: {{ ended_pct }}%"></div>{% endif %}
-                            {% if archived_pct > 0 %}<div class="bg-purple-500" style="width: {{ archived_pct }}%"></div>{% endif %}
-                            {% if draft_pct > 0 %}<div class="bg-yellow-500 rounded-r-full" style="width: {{ draft_pct }}%"></div>{% endif %}
-                        </div>
+
+            <!-- Last Sync -->
+            <div class="text-xs text-gray-400 border-t pt-2">
+                {% if shopify_last_sync %}
+                    {% if shopify_last_sync is not none and shopify_last_sync is not string %}
+                    Synced: {{ shopify_last_sync.strftime("%d/%m %H:%M") }}
+                    {% else %}
+                    Synced: {{ shopify_last_sync }}
                     {% endif %}
-                </div>
-            </div>
-            
-            <div class="flex justify-between text-sm">
-                <a href="/inventory?platform=shopify&status=active" class="text-blue-600 hover:text-blue-800">View Active →</a>
-                <a href="/inventory?platform=shopify&status=archived" class="text-blue-600 hover:text-blue-800">Archived →</a>
-                <a href="/inventory?platform=shopify" class="text-blue-600 hover:text-blue-800">View All →</a>
+                {% else %}
+                Never synced
+                {% endif %}
             </div>
         </div>
 
         
         <!-- Reverb Card -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-lg font-semibold">Reverb</h3>
-                <div class="flex items-center space-x-2">
-                    <span class="text-sm {{ 'text-green-600' if reverb_connected else 'text-red-600' }}">
-                        {{ 'Connected' if reverb_connected else 'Disconnected' }}
-                    </span>
-                    <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if reverb_connected else 'bg-red-500' }}"></div>
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-orange-500">
+            <div class="flex items-center justify-between mb-3 border-b pb-2">
+                <div class="flex items-center">
+                    <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2 w-4 h-4">
+                    <h2 class="text-lg font-semibold">Reverb</h2>
                 </div>
+                <div class="w-3 h-3 rounded-full {% if reverb_sync_status == 'error' %}bg-red-500{% elif reverb_sync_status == 'stale' %}bg-amber-500{% else %}bg-green-500{% endif %}"
+                     title="{% if reverb_sync_status == 'error' %}Last sync failed{% elif reverb_sync_status == 'stale' %}Sync overdue{% else %}Synced OK{% endif %}"></div>
             </div>
 
-            <!-- Divider line -->
-            <div class="border-b border-gray-200 mb-4"></div>
-            
-            <!-- Active (Live) Count - Bold -->
-            <div class="mb-4">
+            <!-- Active Count -->
+            <div class="mb-3">
                 <span class="text-2xl font-bold">{{ reverb_count|default(0) }}</span>
-                <span class="text-gray-500 text-sm">active</span>
+                <span class="text-gray-500 text-sm ml-1">active</span>
             </div>
-            
-            <!-- Other Counts - Small -->
-            <div class="space-y-1 mb-4">
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Sold:</span>
-                    <span class="font-medium text-gray-700">{{ reverb_sold_count|default(0) }}</span>
-                </div>
-                
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Ended:</span>
-                    <span class="font-medium text-gray-700">{{ reverb_ended_count|default(0) }}</span>
-                </div>
 
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Archived:</span>
-                    <span class="font-medium text-gray-700">{{ reverb_archived_count|default(0) }}</span>
+            <!-- Other Counts - Compact Grid -->
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Sold</span>
+                    <span class="font-medium">{{ reverb_sold_count|default(0) }}</span>
                 </div>
-                
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Draft:</span>
-                    <span class="font-medium text-gray-700">{{ reverb_draft_count|default(0) }}</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Ended</span>
+                    <span class="font-medium">{{ reverb_ended_count|default(0) }}</span>
                 </div>
-                
-                {% if reverb_other_count and reverb_other_count > 0 %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Other:</span>
-                    <span class="font-medium text-gray-700">{{ reverb_other_count }}</span>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Archived</span>
+                    <span class="font-medium">{{ reverb_archived_count|default(0) }}</span>
                 </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Draft</span>
+                    <span class="font-medium">{{ reverb_draft_count|default(0) }}</span>
+                </div>
+            </div>
+
+            <!-- Last Sync -->
+            <div class="text-xs text-gray-400 border-t pt-2">
+                {% if reverb_last_sync %}
+                Synced: {{ reverb_last_sync.strftime("%d/%m %H:%M") }}
+                {% else %}
+                Never synced
                 {% endif %}
-                
-                <!-- Total -->
-                <div class="flex justify-between text-xs pt-1 border-t border-gray-200">
-                    <span class="text-gray-600 font-medium">Total:</span>
-                    <span class="font-medium text-gray-800">{{ reverb_total|default(0) }}</span>
-                </div>
-            </div>
-            
-            <!-- Progress Bar - FIXED FOR CSS ERRORS -->
-            <div class="mb-4">
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    {% if reverb_total and reverb_total > 0 %}
-                        {% set live_pct = ((reverb_count|default(0)) * 100 / reverb_total)|round(1) %}
-                        {% set sold_pct = ((reverb_sold_count|default(0)) * 100 / reverb_total)|round(1) %}
-                        {% set ended_pct = ((reverb_ended_count|default(0)) * 100 / reverb_total)|round(1) %}
-                        {% set archived_pct = ((reverb_archived_count|default(0)) * 100 / reverb_total)|round(1) %}
-                        {% set draft_pct = ((reverb_draft_count|default(0)) * 100 / reverb_total)|round(1) %}
-                        <div class="h-2 rounded-full flex">
-                            {% if live_pct > 0 %}
-                            <div class="bg-green-500 rounded-l-full" style="width: {{ live_pct ~ '%' }}"></div>
-                            {% endif %}
-                            {% if sold_pct > 0 %}
-                            <div class="bg-blue-500" style="width: {{ sold_pct ~ '%' }}"></div>
-                            {% endif %}
-                            {% if ended_pct > 0 %}
-                            <div class="bg-red-500" style="width: {{ ended_pct ~ '%' }}"></div>
-                            {% endif %}
-                            {% if archived_pct > 0 %}
-                            <div class="bg-purple-500" style="width: {{ archived_pct ~ '%' }}"></div>
-                            {% endif %}
-                            {% if draft_pct > 0 %}
-                            <div class="bg-yellow-500 rounded-r-full" style="width: {{ draft_pct ~ '%' }}"></div>
-                            {% endif %}
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="flex justify-between">
-                <a href="/inventory?platform=reverb&status=active" class="text-blue-600 hover:text-blue-800 text-sm">View Active →</a>
-                <a href="/inventory?platform=reverb" class="text-blue-600 hover:text-blue-800 text-sm">View All →</a>
             </div>
         </div>
 
         
         <!-- V&R Card -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-lg font-semibold">Vintage & Rare</h2>
-                <div class="flex items-center space-x-2">
-                    <span class="text-sm {{ 'text-green-600' if vr_connected else 'text-red-600' }}">
-                        {{ 'Connected' if vr_connected else 'Disconnected' }}
-                    </span>
-                    <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if vr_connected else 'bg-red-500' }}"></div>
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-gray-500">
+            <div class="flex items-center justify-between mb-3 border-b pb-2">
+                <div class="flex items-center">
+                    <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2 w-4 h-4">
+                    <h2 class="text-lg font-semibold">V&R</h2>
                 </div>
+                <div class="w-3 h-3 rounded-full {% if vr_sync_status == 'error' %}bg-red-500{% elif vr_sync_status == 'stale' %}bg-amber-500{% else %}bg-green-500{% endif %}"
+                     title="{% if vr_sync_status == 'error' %}Last sync failed{% elif vr_sync_status == 'stale' %}Sync overdue{% else %}Synced OK{% endif %}"></div>
             </div>
 
-            <!-- Divider line -->
-            <div class="border-b border-gray-200 mb-4"></div>
-            
-            <!-- Active Count - Bold -->
-            <div class="mb-4">
+            <!-- Active Count -->
+            <div class="mb-3">
                 <span class="text-2xl font-bold">{{ vr_count|default(0) }}</span>
-                <span class="text-gray-500 text-sm">active</span>
+                <span class="text-gray-500 text-sm ml-1">active</span>
             </div>
-            
-            <!-- Other Counts - Small -->
-            <div class="space-y-1 mb-4">
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Sold:</span>
-                    <span class="font-medium text-gray-700">{{ vr_sold_count|default(0) }}</span>
-                </div>
-                
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Ended:</span>
-                    <span class="font-medium text-gray-700">{{ vr_ended_count|default(0) }}</span>
-                </div>
 
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Archived:</span>
-                    <span class="font-medium text-gray-700">{{ vr_archived_count|default(0) }}</span>
+            <!-- Other Counts - Compact Grid -->
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Sold</span>
+                    <span class="font-medium">{{ vr_sold_count|default(0) }}</span>
                 </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Ended</span>
+                    <span class="font-medium">{{ vr_ended_count|default(0) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Archived</span>
+                    <span class="font-medium">{{ vr_archived_count|default(0) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Draft</span>
+                    <span class="font-medium">{{ vr_draft_count|default(0) }}</span>
+                </div>
+            </div>
 
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Draft:</span>
-                    <span class="font-medium text-gray-700">{{ vr_draft_count|default(0) }}</span>
-                </div>
-
-                {% if vr_other_count and vr_other_count > 0 %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Other:</span>
-                    <span class="font-medium text-gray-700">{{ vr_other_count }}</span>
-                </div>
+            <!-- Last Sync -->
+            <div class="text-xs text-gray-400 border-t pt-2">
+                {% if vr_last_sync %}
+                Synced: {{ vr_last_sync.strftime("%d/%m %H:%M") }}
+                {% else %}
+                Never synced
                 {% endif %}
-                
-                <!-- Total -->
-                <div class="flex justify-between text-xs pt-1 border-t border-gray-200">
-                    <span class="text-gray-600 font-medium">Total:</span>
-                    <span class="font-medium text-gray-800">{{ vr_total|default(0) }}</span>
-                </div>
-            </div>
-            
-            <!-- Progress Bar -->
-            <div class="mb-4">
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    {% if vr_total and vr_total > 0 %}
-                        {% set vr_live_pct = ((vr_count|default(0)) * 100 / vr_total)|round(1) %}
-                        {% set vr_sold_pct = ((vr_sold_count|default(0)) * 100 / vr_total)|round(1) %}
-                        {% set vr_ended_pct = ((vr_ended_count|default(0)) * 100 / vr_total)|round(1) %}
-                        {% set vr_archived_pct = ((vr_archived_count|default(0)) * 100 / vr_total)|round(1) %}
-                        {% set vr_draft_pct = ((vr_draft_count|default(0)) * 100 / vr_total)|round(1) %}
-                        <div class="h-2 rounded-full flex">
-                            {% if vr_live_pct > 0 %}
-                            <div class="bg-green-500 rounded-l-full" style="width: {{ vr_live_pct }}%"></div>
-                            {% endif %}
-                            {% if vr_sold_pct > 0 %}
-                            <div class="bg-blue-500" style="width: {{ vr_sold_pct }}%"></div>
-                            {% endif %}
-                            {% if vr_ended_pct > 0 %}
-                            <div class="bg-red-500" style="width: {{ vr_ended_pct }}%"></div>
-                            {% endif %}
-                            {% if vr_archived_pct > 0 %}
-                            <div class="bg-purple-500" style="width: {{ vr_archived_pct }}%"></div>
-                            {% endif %}
-                            {% if vr_draft_pct > 0 %}
-                            <div class="bg-yellow-500" style="width: {{ vr_draft_pct }}%"></div>
-                            {% endif %}
-                            <div class="flex-1"></div>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="flex justify-between text-sm">
-                <a href="/inventory?platform=vr&status=active" class="text-blue-600 hover:text-blue-800">View Active →</a>
-                <a href="/inventory?platform=vr&status=archived" class="text-blue-600 hover:text-blue-800">Archived →</a>
-                <a href="/inventory?platform=vr" class="text-blue-600 hover:text-blue-800">View All →</a>
             </div>
         </div>
         
 
         <!-- eBay Card -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-lg font-semibold">eBay</h2>
-                <div class="flex items-center space-x-2">
-                    <span class="text-sm {{ 'text-green-600' if ebay_connected else 'text-red-600' }}">
-                        {{ 'Connected' if ebay_connected else 'Disconnected' }}
-                    </span>
-                    <div class="w-3 h-3 rounded-full {{ 'bg-green-500' if ebay_connected else 'bg-red-500' }}"></div>
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-blue-500">
+            <div class="flex items-center justify-between mb-3 border-b pb-2">
+                <div class="flex items-center">
+                    <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2 w-4 h-4">
+                    <h2 class="text-lg font-semibold">eBay</h2>
                 </div>
+                <div class="w-3 h-3 rounded-full {% if ebay_sync_status == 'error' %}bg-red-500{% elif ebay_sync_status == 'stale' %}bg-amber-500{% else %}bg-green-500{% endif %}"
+                     title="{% if ebay_sync_status == 'error' %}Last sync failed{% elif ebay_sync_status == 'stale' %}Sync overdue{% else %}Synced OK{% endif %}"></div>
             </div>
 
-            <!-- Divider line -->
-            <div class="border-b border-gray-200 mb-4"></div>
-            
-            <!-- Active Count - Bold -->
-            <div class="mb-4">
+            <!-- Active Count -->
+            <div class="mb-3">
                 <span class="text-2xl font-bold">{{ ebay_count|default(0) }}</span>
-                <span class="text-gray-500 text-sm">active</span>
+                <span class="text-gray-500 text-sm ml-1">active</span>
             </div>
-            
-            <!-- Other Counts - Small -->
-            <div class="space-y-1 mb-4">
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Sold:</span>
-                    <span class="font-medium text-gray-700">{{ ebay_sold_count|default(0) }}</span>
-                </div>
-                
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Ended:</span>
-                    <span class="font-medium text-gray-700">{{ ebay_ended_count|default(0) }}</span>
-                </div>
-                
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Archived:</span>
-                    <span class="font-medium text-gray-700">{{ ebay_archived_count|default(0) }}</span>
-                </div>
 
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Draft:</span>
-                    <span class="font-medium text-gray-700">{{ ebay_draft_count|default(0) }}</span>
+            <!-- Other Counts - Compact Grid -->
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Sold</span>
+                    <span class="font-medium">{{ ebay_sold_count|default(0) }}</span>
                 </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Ended</span>
+                    <span class="font-medium">{{ ebay_ended_count|default(0) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Archived</span>
+                    <span class="font-medium">{{ ebay_archived_count|default(0) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Draft</span>
+                    <span class="font-medium">{{ ebay_draft_count|default(0) }}</span>
+                </div>
+            </div>
 
-                {% if ebay_other_count and ebay_other_count > 0 %}
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-600">Other:</span>
-                    <span class="font-medium text-gray-700">{{ ebay_other_count }}</span>
-                </div>
+            <!-- Last Sync -->
+            <div class="text-xs text-gray-400 border-t pt-2">
+                {% if ebay_last_sync %}
+                Synced: {{ ebay_last_sync.strftime("%d/%m %H:%M") }}
+                {% else %}
+                Never synced
                 {% endif %}
-                
-                <!-- Total -->
-                <div class="flex justify-between text-xs pt-1 border-t border-gray-200">
-                    <span class="text-gray-600 font-medium">Total:</span>
-                    <span class="font-medium text-gray-800">{{ ebay_total|default(0) }}</span>
-                </div>
-            </div>
-            
-            <!-- Progress Bar -->
-            <div class="mb-4">
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    {% set total = ebay_total|default(1) %}
-                    {% if total > 0 %}
-                        {% set live_pct = ((ebay_count|default(0)) * 100 / total)|round(1) %}
-                        {% set sold_pct = ((ebay_sold_count|default(0)) * 100 / total)|round(1) %}
-                        {% set ended_pct = ((ebay_ended_count|default(0)) * 100 / total)|round(1) %}
-                        {% set archived_pct = ((ebay_archived_count|default(0)) * 100 / total)|round(1) %}
-                        {% set draft_pct = ((ebay_draft_count|default(0)) * 100 / total)|round(1) %}
-                        <div class="h-2 rounded-full flex">
-                            {% if live_pct > 0 %}<div class="bg-green-500 rounded-l-full" style="width: {{ live_pct }}%"></div>{% endif %}
-                            {% if sold_pct > 0 %}<div class="bg-blue-500" style="width: {{ sold_pct }}%"></div>{% endif %}
-                            {% if ended_pct > 0 %}<div class="bg-red-500" style="width: {{ ended_pct }}%"></div>{% endif %}
-                            {% if archived_pct > 0 %}<div class="bg-purple-500" style="width: {{ archived_pct }}%"></div>{% endif %}
-                            {% if draft_pct > 0 %}<div class="bg-yellow-500" style="width: {{ draft_pct }}%"></div>{% endif %}
-                            <div class="flex-1"></div>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="flex justify-between text-sm">
-                <a href="/inventory?platform=ebay&status=active" class="text-blue-600 hover:text-blue-800">View Active →</a>
-                <a href="/inventory?platform=ebay&status=archived" class="text-blue-600 hover:text-blue-800">Archived →</a>
-                <a href="/inventory?platform=ebay" class="text-blue-600 hover:text-blue-800">View All →</a>
             </div>
         </div>
 
 
     </div>
-    
-    <!-- Quick Actions -->
-    <!-- <div class="mb-10">
-        <h2 class="text-xl font-semibold mb-4">Quick Actions</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <a href="/inventory/add" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-3 px-4 text-center">Add New Product</a>
-            <a href="/inventory" class="bg-gray-200 hover:bg-gray-300 rounded-lg py-3 px-4 text-center">View All Products</a>
-            <a href="/inventory/sync/ebay" class="bg-gray-200 hover:bg-gray-300 rounded-lg py-3 px-4 text-center">Sync eBay</a>
-            <a href="/matching" class="bg-green-600 hover:bg-green-700 text-white rounded-lg py-3 px-4 text-center">Product Matcher</a>
+
+    <!-- Latest Products & Recent Orders - Side by Side -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+    <!-- Latest Products -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4 border-b pb-2">
+            <h2 class="text-lg font-semibold">Latest Products</h2>
+            <a href="/inventory" class="text-blue-600 hover:text-blue-800 text-sm">View All →</a>
         </div>
-    </div> -->
 
-    <!-- Sync Section -->
-    <div class="mb-10">
-        <h2 class="text-xl font-semibold mb-4">Inventory Sync Status</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Shopify Sync Card -->
-            <div class="bg-gray-50 rounded-lg shadow p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center">
-                        <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2">
-                        <h4 class="font-medium">Shopify</h4>
+        {% if latest_products %}
+        <div class="divide-y divide-gray-200" id="latestProductsList">
+            {% for product in latest_products %}
+            <div class="py-2 hover:bg-gray-50 border-l border-l-gray-200 pl-2">
+                <div class="flex items-center space-x-3">
+                    {% if product.image %}
+                    <img src="{{ product.image }}" alt="" class="w-10 h-10 object-cover rounded ring-1 ring-gray-200 hover:scale-105 transition-transform">
+                    {% else %}
+                    <div class="w-10 h-10 bg-gray-200 rounded ring-1 ring-gray-200 flex items-center justify-center">
+                        <span class="text-gray-400 text-xs">No img</span>
                     </div>
-                    <span id="shopify-sync-status" class="text-sm text-gray-500">
-                        IDLE
-                    </span>
-                </div>
-                <p class="text-sm text-gray-600" id="shopify-last-sync-display">
-                    {% if shopify_last_sync %}
-                        Last sync:
-                        {% if shopify_last_sync is not none and shopify_last_sync is not string %}
-                            {{ shopify_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                        {% else %}
-                            {{ shopify_last_sync }}
+                    {% endif %}
+                    <div class="flex-1 min-w-0">
+                        <a href="/inventory/product/{{ product.id }}" class="text-sm font-medium text-blue-600 hover:text-blue-800 truncate block" title="{{ product.full_title }}">
+                            {{ product.title }}
+                        </a>
+                        <span class="text-xs text-gray-500">{{ product.created_at }}</span>
+                    </div>
+                    <div class="flex flex-col items-end flex-shrink-0 ml-2">
+                        {% if product.status == 'sold' %}
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 border border-red-300">Sold</span>
+                        {% elif product.status == 'draft' %}
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300">Draft</span>
+                        {% elif product.status == 'archived' %}
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-700 border border-purple-300">Archived</span>
+                        {% elif product.status == 'deleted' %}
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-900 border border-blue-300">Deleted</span>
+                        {% elif product.status == 'active' %}
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-800 border border-green-200">Active</span>
                         {% endif %}
-                    {% else %}
-                        Never synced
-                    {% endif %}
-                </p>
-            </div>
-
-            <!-- Reverb Sync Card -->
-            <div class="bg-gray-50 rounded-lg shadow p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center">
-                        <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2">
-                        <h4 class="font-medium">Reverb</h4>
+                        {% if product.price %}
+                        <span class="text-sm font-medium text-gray-800 mt-1">£{{ "{:,.0f}".format(product.price) }}</span>
+                        {% endif %}
                     </div>
-                    <span id="reverb-sync-status" class="text-sm text-gray-500">
-                        IDLE
-                    </span>
                 </div>
-                <p class="text-sm text-gray-600" id="reverb-last-sync-display">
-                    {% if reverb_last_sync %}
-                        Last sync: {{ reverb_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                    {% else %}
-                        Never synced
-                    {% endif %}
-                </p>
             </div>
-
-            <!-- V&R Sync Card -->
-            <div class="bg-gray-50 rounded-lg shadow p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center">
-                        <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2">
-                        <h4 class="font-medium">Vintage & Rare</h4>
-                    </div>
-                    <span id="vr-sync-status" class="text-sm text-gray-500">
-                        IDLE
-                    </span>
-                </div>
-                <p class="text-sm text-gray-600" id="vr-last-sync-display">
-                    {% if vr_last_sync %}
-                        Last sync: {{ vr_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                    {% else %}
-                        Never synced
-                    {% endif %}
-                </p>
-            </div>
-
-            <!-- eBay Sync Card -->
-            <div class="bg-gray-50 rounded-lg shadow p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center">
-                        <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2">
-                        <h4 class="font-medium">eBay</h4>
-                    </div>
-                    <span id="ebay-sync-status" class="text-sm text-gray-500">
-                        IDLE
-                    </span>
-                </div>
-                <p class="text-sm text-gray-600" id="ebay-last-sync-display">
-                    {% if ebay_last_sync %}
-                        Last sync: {{ ebay_last_sync.strftime("%d/%m/%Y, %H:%M:%S") }}
-                    {% else %}
-                        Never synced
-                    {% endif %}
-                </p>
-            </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <div class="text-center py-6 text-gray-500">
+            <p class="text-sm">No products yet</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Recent Orders -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4 border-b pb-2">
+            <h2 class="text-lg font-semibold">Recent Orders</h2>
+            <a href="/orders" class="text-blue-600 hover:text-blue-800 text-sm">View All →</a>
+        </div>
+
+        {% if recent_orders %}
+        <div class="divide-y divide-gray-200" id="recentOrdersList">
+            {% for order in recent_orders %}
+            <div class="py-2 hover:bg-gray-50 border-l border-l-gray-200 pl-2">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2 min-w-0 flex-1">
+                        {% if order.platform == 'reverb' %}
+                        <img src="https://www.google.com/s2/favicons?sz=32&domain=reverb.com" class="w-5 h-5 flex-shrink-0">
+                        {% elif order.platform == 'ebay' %}
+                        <img src="https://www.google.com/s2/favicons?sz=32&domain=ebay.com" class="w-5 h-5 flex-shrink-0">
+                        {% elif order.platform == 'shopify' %}
+                        <img src="https://www.google.com/s2/favicons?sz=32&domain=shopify.com" class="w-5 h-5 flex-shrink-0">
+                        {% endif %}
+                        <span class="text-xs text-gray-500 flex-shrink-0">#{{ order.order_id }} @ {{ order.created_at }}</span>
+                    </div>
+                    {% set status_lower = (order.status or '')|lower %}
+                    {% if 'complete' in status_lower or 'paid' in status_lower %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300 flex-shrink-0 ml-2">{{ order.status|title }}</span>
+                    {% elif 'cancel' in status_lower %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-800 border border-red-300 flex-shrink-0 ml-2">{{ order.status|title }}</span>
+                    {% elif 'shipped' in status_lower or 'fulfilled' in status_lower or 'received' in status_lower %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300 flex-shrink-0 ml-2">{{ order.status|title }}</span>
+                    {% elif 'refund' in status_lower %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300 flex-shrink-0 ml-2">{{ order.status|title }}</span>
+                    {% elif 'pending' in status_lower or 'active' in status_lower %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300 flex-shrink-0 ml-2">{{ order.status|title }}</span>
+                    {% else %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-800 border border-gray-300 flex-shrink-0 ml-2">{{ (order.status or 'Unknown')|title }}</span>
+                    {% endif %}
+                </div>
+                <div class="flex items-center justify-between mt-1">
+                    <span class="text-sm text-gray-800 truncate" title="{{ order.full_title }}">{{ order.title }}</span>
+                    {% if order.total %}
+                    <span class="text-sm font-medium text-gray-800 flex-shrink-0 ml-2">£{{ "{:,.0f}".format(order.total) }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-6 text-gray-500">
+            <p class="text-sm">No orders yet</p>
+        </div>
+        {% endif %}
+    </div>
+
+    </div> <!-- End products/orders grid -->
+
+    <!-- Pending Sync Events & Recent Activity - Side by Side -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+
+    <!-- Pending Sync Events -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4 border-b pb-2">
+            <div class="flex items-center space-x-2">
+                <h2 class="text-lg font-semibold">Pending Sync</h2>
+                {% if total_pending_sync > 0 %}
+                <span id="pendingSyncCount" class="bg-amber-100 text-amber-800 text-xs font-medium px-2 py-0.5 rounded">
+                    {{ total_pending_sync }}
+                </span>
+                {% else %}
+                <span id="pendingSyncCount" class="bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded">
+                    0
+                </span>
+                {% endif %}
+            </div>
+            <a href="/reports/sync-events" class="text-blue-600 hover:text-blue-800 text-sm">View All →</a>
+        </div>
+
+        {% if pending_sync_events %}
+        <div class="divide-y divide-gray-200 max-h-96 overflow-y-auto" id="pendingSyncList">
+            {% for event in pending_sync_events[:15] %}
+            <div class="py-2 hover:bg-gray-50 animate-pulse">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        {% if event.platform == 'reverb' %}
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="w-4 h-4">
+                        {% elif event.platform == 'ebay' %}
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="w-4 h-4">
+                        {% elif event.platform == 'shopify' %}
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="w-4 h-4">
+                        {% elif event.platform == 'vr' %}
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="w-4 h-4">
+                        {% endif %}
+                        {% if event.change_type == 'status' %}
+                        <span class="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-800">status</span>
+                        {% elif event.change_type == 'order_sale' %}
+                        <span class="px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-800">sale</span>
+                        {% elif event.change_type == 'removed_listing' %}
+                        <span class="px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-800">removed</span>
+                        {% elif event.change_type == 'new_listing' %}
+                        <span class="px-1.5 py-0.5 text-xs rounded bg-purple-100 text-purple-800">new</span>
+                        {% else %}
+                        <span class="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-800">{{ event.change_type }}</span>
+                        {% endif %}
+                    </div>
+                    <span class="text-xs text-gray-400">{{ event.detected_at }}</span>
+                </div>
+                <div class="mt-1 text-sm">
+                    {% if event.product_id %}
+                    <a href="/inventory/product/{{ event.product_id }}" class="text-blue-600 hover:text-blue-800">
+                        {{ event.sku or event.external_id }}
+                    </a>
+                    <span class="text-gray-500 text-xs ml-1">{{ event.change_desc }}</span>
+                    {% else %}
+                    <span class="text-gray-600">{{ event.external_id }}</span>
+                    <span class="text-gray-500 text-xs ml-1">{{ event.change_desc }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% if total_pending_sync > 15 %}
+        <div class="mt-3 pt-2 border-t text-center text-sm text-gray-500">
+            Showing 15 of {{ total_pending_sync }}. <a href="/reports/sync-events" class="text-blue-600 hover:text-blue-800">View all →</a>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="text-center py-8 text-gray-500">
+            <svg class="mx-auto h-12 w-12 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p class="mt-2">No pending sync events</p>
+            <p class="text-xs text-gray-400">All platform changes have been processed</p>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Recent Activity -->
-    <div class="bg-white rounded-lg shadow p-6 mb-10">
-        <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center space-x-4">
-                <h2 class="text-xl font-semibold">Recent Activity</h2>
-                <label class="flex items-center space-x-2 text-sm cursor-pointer">
-                    <input type="checkbox" id="showFailuresOnly" onchange="toggleFailuresFilter()"
-                           class="rounded border-gray-300 text-red-600 focus:ring-red-500">
-                    <span class="text-gray-600">Failures only</span>
-                </label>
-            </div>
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4 border-b pb-2">
+            <h2 class="text-lg font-semibold">Recent Activity</h2>
             <div class="flex items-center space-x-2">
+                <label class="flex items-center space-x-1 text-xs cursor-pointer">
+                    <input type="checkbox" id="showFailuresOnly" onchange="toggleFailuresFilter()"
+                           class="rounded border-gray-300 text-red-600 focus:ring-red-500 w-3 h-3">
+                    <span class="text-gray-500">Failures</span>
+                </label>
                 <button id="activityPrevBtn" onclick="changeActivityPage(-1)"
-                        class="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="px-1.5 py-0.5 text-xs bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled>
-                    &larr; Prev
+                    ←
                 </button>
-                <span id="activityPageInfo" class="text-sm text-gray-500">Page 1</span>
+                <span id="activityPageInfo" class="text-xs text-gray-500">1</span>
                 <button id="activityNextBtn" onclick="changeActivityPage(1)"
-                        class="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed">
-                    Next &rarr;
+                        class="px-1.5 py-0.5 text-xs bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                    →
                 </button>
             </div>
         </div>
         {% if recent_activity %}
-            <div class="divide-y" id="activityList">
+            <div class="divide-y max-h-96 overflow-y-auto" id="activityList">
                 {% for activity in recent_activity %}
-                <div class="py-3 activity-item" data-index="{{ loop.index0 }}" data-status="{{ activity.status|default('success') }}">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center">
-                            <span class="mr-2">{{ activity.icon|safe }}</span>
-                            <span>{{ activity.message }}</span>
+                <div class="py-2 activity-item" data-index="{{ loop.index0 }}" data-status="{{ activity.status|default('success') }}">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start text-sm max-w-[65%]">
+                            <span class="mr-2 flex-shrink-0">{{ activity.icon|safe }}</span>
+                            <span class="break-words">{{ activity.message }}</span>
                         </div>
-                        <span class="text-sm text-gray-500">{{ activity.time }}</span>
+                        <span class="text-xs text-gray-400 whitespace-nowrap ml-2">{{ activity.time }}</span>
                     </div>
                 </div>
                 {% endfor %}
@@ -534,6 +448,8 @@
             <p class="text-gray-500 text-center py-4">No recent activity to display</p>
         {% endif %}
     </div>
+
+    </div> <!-- End side-by-side grid -->
 </div>
 
 <script>
@@ -878,6 +794,253 @@ function convertAllSyncTimes() {
 document.addEventListener('DOMContentLoaded', function() {
     initWebSocket();
     convertAllSyncTimes();
+    initAutoRefresh();
 });
+
+// Auto-refresh for dynamic sections
+const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
+let refreshTimer = null;
+let isTabVisible = true;
+
+function initAutoRefresh() {
+    // Track tab visibility
+    document.addEventListener('visibilitychange', function() {
+        isTabVisible = !document.hidden;
+        if (isTabVisible && !refreshTimer) {
+            // Tab became visible, restart timer
+            startRefreshTimer();
+        } else if (!isTabVisible && refreshTimer) {
+            // Tab hidden, pause timer
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+    });
+
+    // Start the refresh timer
+    startRefreshTimer();
+}
+
+function startRefreshTimer() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(refreshDashboardSections, REFRESH_INTERVAL);
+}
+
+async function refreshDashboardSections() {
+    if (!isTabVisible) return;
+
+    console.log('Auto-refreshing dashboard sections...');
+
+    try {
+        // Fetch all sections in parallel
+        const [productsRes, ordersRes, syncRes] = await Promise.all([
+            fetch('/api/dashboard/latest-products'),
+            fetch('/api/dashboard/recent-orders'),
+            fetch('/api/dashboard/pending-sync')
+        ]);
+
+        const [productsData, ordersData, syncData] = await Promise.all([
+            productsRes.json(),
+            ordersRes.json(),
+            syncRes.json()
+        ]);
+
+        // Update sections with fade effect
+        updateLatestProducts(productsData.products);
+        updateRecentOrders(ordersData.orders);
+        updatePendingSync(syncData);
+
+    } catch (error) {
+        console.error('Error refreshing dashboard:', error);
+    }
+}
+
+function updateLatestProducts(products) {
+    const container = document.getElementById('latestProductsList');
+    if (!container || !products) return;
+
+    container.style.opacity = '0.5';
+    setTimeout(() => {
+        let html = '';
+        for (const product of products) {
+            const statusBadge = getProductStatusBadge(product.status);
+            html += `
+                <div class="py-2 hover:bg-gray-50 border-l border-l-gray-200 pl-2">
+                    <div class="flex items-center space-x-3">
+                        ${product.image
+                            ? `<img src="${product.image}" alt="" class="w-10 h-10 object-cover rounded ring-1 ring-gray-200 hover:scale-105 transition-transform">`
+                            : `<div class="w-10 h-10 bg-gray-200 rounded ring-1 ring-gray-200 flex items-center justify-center"><span class="text-gray-400 text-xs">No img</span></div>`
+                        }
+                        <div class="flex-1 min-w-0">
+                            <a href="/inventory/product/${product.id}" class="text-sm font-medium text-blue-600 hover:text-blue-800 truncate block" title="${product.full_title}">
+                                ${product.title}
+                            </a>
+                            <span class="text-xs text-gray-500">${product.created_at}</span>
+                        </div>
+                        <div class="flex flex-col items-end flex-shrink-0 ml-2">
+                            ${statusBadge}
+                            ${product.price ? `<span class="text-sm font-medium text-gray-800 mt-1">£${product.price.toLocaleString()}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        container.innerHTML = html || '<div class="text-center py-6 text-gray-500"><p class="text-sm">No products yet</p></div>';
+        container.style.opacity = '1';
+    }, 150);
+}
+
+function getProductStatusBadge(status) {
+    const badges = {
+        'sold': '<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 border border-red-300">Sold</span>',
+        'draft': '<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300">Draft</span>',
+        'archived': '<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-700 border border-purple-300">Archived</span>',
+        'deleted': '<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-900 border border-blue-300">Deleted</span>',
+        'active': '<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-800 border border-green-200">Active</span>'
+    };
+    return badges[status] || '';
+}
+
+function updateRecentOrders(orders) {
+    const container = document.getElementById('recentOrdersList');
+    if (!container || !orders) return;
+
+    container.style.opacity = '0.5';
+    setTimeout(() => {
+        let html = '';
+        for (const order of orders) {
+            const platformIcon = getPlatformIcon(order.platform);
+            const statusBadge = getOrderStatusBadge(order.status);
+            html += `
+                <div class="py-2 hover:bg-gray-50 border-l border-l-gray-200 pl-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2 min-w-0 flex-1">
+                            ${platformIcon}
+                            <span class="text-xs text-gray-500 flex-shrink-0">#${order.order_id} @ ${order.created_at}</span>
+                        </div>
+                        ${statusBadge}
+                    </div>
+                    <div class="flex items-center justify-between mt-1">
+                        <span class="text-sm text-gray-800 truncate" title="${order.full_title}">${order.title}</span>
+                        ${order.total ? `<span class="text-sm font-medium text-gray-800 flex-shrink-0 ml-2">£${order.total.toLocaleString()}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        container.innerHTML = html || '<div class="text-center py-6 text-gray-500"><p class="text-sm">No orders yet</p></div>';
+        container.style.opacity = '1';
+    }, 150);
+}
+
+function getPlatformIcon(platform) {
+    const icons = {
+        'reverb': '<img src="https://www.google.com/s2/favicons?sz=32&domain=reverb.com" class="w-5 h-5 flex-shrink-0">',
+        'ebay': '<img src="https://www.google.com/s2/favicons?sz=32&domain=ebay.com" class="w-5 h-5 flex-shrink-0">',
+        'shopify': '<img src="https://www.google.com/s2/favicons?sz=32&domain=shopify.com" class="w-5 h-5 flex-shrink-0">'
+    };
+    return icons[platform] || '';
+}
+
+function getOrderStatusBadge(status) {
+    if (!status) return '<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-800 border border-gray-300 flex-shrink-0 ml-2">Unknown</span>';
+
+    const statusLower = status.toLowerCase();
+    const titleStatus = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+
+    if (statusLower.includes('complete') || statusLower.includes('paid')) {
+        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300 flex-shrink-0 ml-2">${titleStatus}</span>`;
+    } else if (statusLower.includes('cancel')) {
+        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-800 border border-red-300 flex-shrink-0 ml-2">${titleStatus}</span>`;
+    } else if (statusLower.includes('shipped') || statusLower.includes('fulfilled') || statusLower.includes('received')) {
+        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300 flex-shrink-0 ml-2">${titleStatus}</span>`;
+    } else if (statusLower.includes('refund') || statusLower.includes('pending') || statusLower.includes('active')) {
+        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300 flex-shrink-0 ml-2">${titleStatus}</span>`;
+    }
+    return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-800 border border-gray-300 flex-shrink-0 ml-2">${titleStatus}</span>`;
+}
+
+function updatePendingSync(data) {
+    const container = document.getElementById('pendingSyncList');
+    const countBadge = document.getElementById('pendingSyncCount');
+    if (!container) return;
+
+    // Update count badge
+    if (countBadge) {
+        countBadge.textContent = data.total_pending;
+        countBadge.className = data.total_pending > 0
+            ? 'bg-amber-100 text-amber-800 text-xs font-medium px-2 py-0.5 rounded'
+            : 'bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded';
+    }
+
+    container.style.opacity = '0.5';
+    setTimeout(() => {
+        if (!data.events || data.events.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-8 text-gray-500">
+                    <svg class="mx-auto h-12 w-12 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p class="mt-2">No pending sync events</p>
+                    <p class="text-xs text-gray-400">All platform changes have been processed</p>
+                </div>
+            `;
+        } else {
+            let html = '';
+            const events = data.events.slice(0, 15);
+            for (const event of events) {
+                const platformIcon = getSyncPlatformIcon(event.platform);
+                const typeBadge = getSyncTypeBadge(event.change_type);
+                html += `
+                    <div class="py-2 hover:bg-gray-50 animate-pulse">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                ${platformIcon}
+                                ${typeBadge}
+                            </div>
+                            <span class="text-xs text-gray-400">${event.detected_at}</span>
+                        </div>
+                        <div class="mt-1 text-sm">
+                            ${event.product_id
+                                ? `<a href="/inventory/product/${event.product_id}" class="text-blue-600 hover:text-blue-800">${event.sku || event.external_id}</a>`
+                                : `<span class="text-gray-600">${event.external_id}</span>`
+                            }
+                            <span class="text-gray-500 text-xs ml-1">${event.change_desc}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+
+            // Add overflow message if needed
+            if (data.total_pending > 15) {
+                container.innerHTML += `
+                    <div class="mt-3 pt-2 border-t text-center text-sm text-gray-500">
+                        Showing 15 of ${data.total_pending}. <a href="/reports/sync-events" class="text-blue-600 hover:text-blue-800">View all →</a>
+                    </div>
+                `;
+            }
+        }
+        container.style.opacity = '1';
+    }, 150);
+}
+
+function getSyncPlatformIcon(platform) {
+    const icons = {
+        'reverb': '<img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="w-4 h-4">',
+        'ebay': '<img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="w-4 h-4">',
+        'shopify': '<img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="w-4 h-4">',
+        'vr': '<img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="w-4 h-4">'
+    };
+    return icons[platform] || '';
+}
+
+function getSyncTypeBadge(changeType) {
+    const badges = {
+        'status': '<span class="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-800">status</span>',
+        'order_sale': '<span class="px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-800">sale</span>',
+        'removed_listing': '<span class="px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-800">removed</span>',
+        'new_listing': '<span class="px-1.5 py-0.5 text-xs rounded bg-purple-100 text-purple-800">new</span>'
+    };
+    return badges[changeType] || `<span class="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-800">${changeType}</span>`;
+}
 </script>
 {% endblock %}

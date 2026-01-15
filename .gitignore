@@ -54,4 +54,4 @@ scripts/reverb/output/
 # Logs
 logs/
 railway_status.json
-.vscode/
+.vscode/.claude/settings.local.json

@@ -1,5 +1,5 @@
 # Project TODO – Inventory Management System
-*Last updated: 2026-01-07*
+*Last updated: 2026-01-10*
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
@@ -9,7 +9,7 @@
 - [ ] **Sync event automation** – confirm which sync events write to `_listings` tables (persistence audit) and add gradual automation so reconciled events publish without manual nudges. Includes gradually automating the sync pipeline so sold/ended propagation runs unattended.
 
 ## 🟡 Medium Priority (Stability & automation)
-- [ ] **Category / platform attributes and category mapping** – _Progress 2026-01-07:_ Field sync now implemented for key attributes. See `docs/field-mapping.md` for complete mapping table. **Shopify:** finish→colour_finish, year, condition (formatted), handedness, artist_owned/names metafields with proper deletion support. **eBay:** year, finish→Body Colour+Color, handedness, artist_owned/names, manufacturing_country as item specifics. **Remaining:** (1) Expand `spec_fields.py` for non-guitar categories (Amps, Effects Pedals, Pro Audio). (2) End-to-end category mapping audit.
+- [ ] **Category / platform attributes and category mapping** – _Progress 2026-01-10:_ Comprehensive category-specific item specifics now implemented in `app/services/ebay/spec_fields.py`. Covers 30 eBay categories including guitars, bass, amps, synths, effects pedals. Auto-populates required fields (Type, Amplifier Type, etc.) via guessing from title/category. Shopify sync added for `extra_attributes` → metafields. **Status: NEEDS TESTING** - See `docs/category-item-specifics-testing.md` for test plan. Test by editing a bass/amp and syncing to eBay, then verify Item Specifics on the listing.
 - [ ] **Shopify archive** – _Progress 2026-01-04:_ Auto-archive workflow implemented (`scripts/shopify/auto_archive.py`) - runs weekly via scheduler, archives ended items 14+ days old. Audit scripts created for discrepancy checks. **Remaining:** Create archive gallery view for historical listings.
 - [ ] **Insights Dashboard (incl. NPI clustering)** – test and fine-tune the insights dashboard; includes New Product Introduction cluster view grouped by category for merch planning.
 - [ ] **DHL API integration** – _Progress 2026-01-04:_ Built `DHLPayloadBuilder` service, added shipper config settings, created shipping page UI at `/orders/{platform}/{id}/ship`, added shipping icons to orders list. POST route for label creation complete (`/orders/{platform}/{id}/ship/create`), ship_result.html template done, API credentials validated, shipper details configured, Railway env vars added. **Remaining:** (1) Confirm workflow with Adam (labels only vs full shipping?), (2) Live test with real order. See `docs/dhl-integration.md` for full details.

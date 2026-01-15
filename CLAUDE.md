@@ -5,6 +5,13 @@
 ## 🚫 NO CO-AUTHOR CREDITS IN COMMITS
 Do NOT add co-author credits, "Generated with Claude Code" footers, or any AI attribution to git commits. Keep commit messages clean and professional.
 
+## 🛑 ALWAYS ASK BEFORE PUSHING TO PRODUCTION
+**NEVER run `git push` without explicit user confirmation.**
+- Commits are fine to make locally after changes
+- But ALWAYS ask "Ready to push to production?" and wait for confirmation before pushing
+- This prevents untested code from reaching Railway/production
+- User must explicitly say "yes", "push it", "go ahead" or similar before you push
+
 ## 🚫 NEVER USE CONDA - CRITICAL
 **NEVER EVER install packages using conda. DO NOT suggest conda commands. DO NOT use conda environments.**
 - Always use the project's virtual environment: `source venv/bin/activate`

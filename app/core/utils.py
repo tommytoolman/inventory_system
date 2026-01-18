@@ -240,3 +240,65 @@ def get_vr_optimized_images(primary_image: Optional[str], additional_images: Lis
     vr_primary = ImageTransformer.get_primary_image_for_platform(primary_image, 'vr')
     vr_additional = ImageTransformer.transform_images_for_platform(additional_images, 'vr')
     return vr_primary, vr_additional
+
+
+# ============================================================================
+# Stale Listing Refresh Helpers (Flow 3 - Paid Feature)
+# ============================================================================
+
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+
+def is_listing_stale(
+    reverb_published_at: Optional[datetime],
+    created_at: Optional[datetime] = None,
+    threshold_months: int = 12
+) -> bool:
+    """
+    Check if a listing qualifies as "stale" based on age.
+
+    Uses reverb_published_at as primary date source, falls back to created_at.
+
+    Args:
+        reverb_published_at: When the Reverb listing was published
+        created_at: Fallback date (product or platform_common created_at)
+        threshold_months: Number of months after which a listing is considered stale
+
+    Returns:
+        bool: True if listing is stale and qualifies for refresh
+    """
+    # Use reverb_published_at if available, otherwise fall back to created_at
+    listing_date = reverb_published_at or created_at
+
+    if not listing_date:
+        return False  # No date to compare, can't determine staleness
+
+    # Calculate the cutoff date
+    cutoff_date = datetime.utcnow() - relativedelta(months=threshold_months)
+
+    return listing_date < cutoff_date
+
+
+def get_listing_age_months(
+    reverb_published_at: Optional[datetime],
+    created_at: Optional[datetime] = None
+) -> Optional[int]:
+    """
+    Get the age of a listing in months.
+
+    Args:
+        reverb_published_at: When the Reverb listing was published
+        created_at: Fallback date
+
+    Returns:
+        Optional[int]: Age in months, or None if no date available
+    """
+    listing_date = reverb_published_at or created_at
+
+    if not listing_date:
+        return None
+
+    now = datetime.utcnow()
+    diff = relativedelta(now, listing_date)
+
+    return diff.years * 12 + diff.months

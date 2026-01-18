@@ -1894,6 +1894,29 @@ async def product_detail(
         if product.status and product.status.value.upper() == 'SOLD':
             sale_info = await get_sale_info(db, product_id)
 
+        # Stale listing check for Flow 3 (Paid Feature)
+        from app.core.utils import is_listing_stale, get_listing_age_months
+        from app.core.config import get_settings
+        stale_settings = get_settings()
+
+        reverb_published_at = None
+        if reverb_listing:
+            # Get reverb_listings to check published date
+            reverb_listing_query = select(ReverbListing).where(
+                ReverbListing.platform_id == reverb_listing.id
+            )
+            reverb_listing_result = await db.execute(reverb_listing_query)
+            reverb_listing_row = reverb_listing_result.scalar_one_or_none()
+            if reverb_listing_row:
+                reverb_published_at = reverb_listing_row.reverb_published_at
+
+        listing_is_stale = is_listing_stale(
+            reverb_published_at,
+            product.created_at,
+            stale_settings.STALE_LISTING_THRESHOLD_MONTHS
+        )
+        listing_age_months = get_listing_age_months(reverb_published_at, product.created_at)
+
         context = {
             "request": request,
             "product": product,
@@ -1903,6 +1926,9 @@ async def product_detail(
             "next_product": next_product,
             "reverb_listing_id": reverb_listing_id,
             "sale_info": sale_info,
+            "listing_is_stale": listing_is_stale,
+            "listing_age_months": listing_age_months,
+            "stale_threshold_months": stale_settings.STALE_LISTING_THRESHOLD_MONTHS,
         }
 
         response = templates.TemplateResponse("inventory/detail.html", context)
@@ -2382,6 +2408,378 @@ async def relist_product(
     return JSONResponse({
         "status": "success",
         "message": f"Successfully relisted on {len(successful)} platform(s)",
+        "message_type": "success",
+        "platform_results": platform_results,
+    })
+
+
+@router.post("/product/{product_id}/refresh", response_class=JSONResponse)
+async def refresh_stale_listing(
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """
+    Flow 3: Stale Listing Refresh (Paid Feature).
+
+    Ends old listings on Reverb, eBay, V&R and creates new ones.
+    Shopify is EXCLUDED (kept for SEO).
+
+    This is different from relist (Flow 1/2) because:
+    - Old listings are ENDED/DELETED, not just republished
+    - NEW listing IDs are generated on all platforms
+    - Old platform_common records are orphaned with status=REFRESHED
+    - Fresh timestamps give better platform visibility
+
+    Returns:
+        JSON with status and per-platform results
+    """
+    from app.services.ebay_service import EbayService
+    from app.services.vr_service import VRService
+    from app.services.reverb_service import ReverbService
+    from app.core.utils import is_listing_stale, get_listing_age_months
+
+    logger.info(f"Stale refresh request for product {product_id}")
+
+    # Get product with platform listings and reverb_listings for age check
+    stmt = (
+        select(Product)
+        .where(Product.id == product_id)
+        .options(
+            selectinload(Product.platform_listings),
+        )
+    )
+    result = await db.execute(stmt)
+    product = result.scalar_one_or_none()
+
+    if not product:
+        return JSONResponse(
+            {"status": "error", "message": "Product not found."},
+            status_code=404,
+        )
+
+    # Build a map of platform_common records
+    platform_commons: Dict[str, PlatformCommon] = {}
+    for pc in product.platform_listings:
+        platform_commons[pc.platform_name] = pc
+
+    if not platform_commons:
+        return JSONResponse(
+            {"status": "error", "message": "No platform listings found for this product."},
+            status_code=400,
+        )
+
+    # Get reverb_published_at for staleness check
+    reverb_published_at = None
+    if 'reverb' in platform_commons:
+        reverb_pc = platform_commons['reverb']
+        reverb_listing_stmt = select(ReverbListing).where(
+            ReverbListing.platform_id == reverb_pc.id
+        )
+        reverb_listing_result = await db.execute(reverb_listing_stmt)
+        reverb_listing = reverb_listing_result.scalar_one_or_none()
+        if reverb_listing:
+            reverb_published_at = reverb_listing.reverb_published_at
+
+    # Check if listing qualifies as stale
+    threshold = settings.STALE_LISTING_THRESHOLD_MONTHS
+    if not is_listing_stale(reverb_published_at, product.created_at, threshold):
+        age_months = get_listing_age_months(reverb_published_at, product.created_at)
+        return JSONResponse({
+            "status": "error",
+            "message": f"Listing is only {age_months or 0} months old. Must be >{threshold} months for refresh.",
+            "message_type": "warning",
+        }, status_code=400)
+
+    platform_results: List[Dict[str, Any]] = []
+    now_utc = datetime.utcnow()
+
+    # --- Refresh on Reverb (End old → Create new) ---
+    if 'reverb' in platform_commons:
+        reverb_pc = platform_commons['reverb']
+        if reverb_pc.external_id:
+            try:
+                reverb_service = ReverbService(db, settings)
+                old_reverb_id = reverb_pc.external_id
+
+                # Step 1: End the old listing
+                reverb_listing_stmt = select(ReverbListing).where(
+                    ReverbListing.platform_id == reverb_pc.id
+                )
+                reverb_listing_result = await db.execute(reverb_listing_stmt)
+                reverb_listing_record = reverb_listing_result.scalar_one_or_none()
+
+                if reverb_listing_record:
+                    await reverb_service.end_listing(reverb_listing_record.id, reason="not_sold")
+                    logger.info(f"Ended old Reverb listing {old_reverb_id}")
+
+                # Step 2: Orphan old platform_common (set product_id=NULL, status=REFRESHED)
+                reverb_pc.product_id = None
+                reverb_pc.status = ListingStatus.REFRESHED.value
+                reverb_pc.sync_status = SyncStatus.SYNCED.value
+                reverb_pc.updated_at = now_utc
+
+                # Also update platform_specific_data with refresh info
+                old_sku = product.sku
+                psd = reverb_pc.platform_specific_data or {}
+                psd['_refresh_info'] = {
+                    'refreshed_at': now_utc.isoformat(),
+                    'original_product_id': product.id,
+                    'original_sku': old_sku,
+                    'reason': 'stale_listing_refresh'
+                }
+                reverb_pc.platform_specific_data = psd
+                db.add(reverb_pc)
+
+                # Step 2b: Update product SKU with refresh suffix (Reverb requires unique SKUs)
+                sku_match = re.match(r'^(.+?)(-R(\d+))?$', old_sku or '')
+                if sku_match:
+                    base_sku = sku_match.group(1)
+                    existing_num = int(sku_match.group(3)) if sku_match.group(3) else 0
+                    new_sku = f"{base_sku}-R{existing_num + 1}"
+                else:
+                    new_sku = f"{old_sku}-R1"
+
+                product.sku = new_sku
+                db.add(product)
+                await db.flush()
+                logger.info(f"Updated product SKU from {old_sku} to {new_sku} for Reverb refresh")
+
+                # Step 3: Create new Reverb listing
+                create_result = await reverb_service.create_listing_from_product(
+                    product_id=product.id,
+                    publish=True
+                )
+
+                if create_result.get('status') == 'success':
+                    new_reverb_id = create_result.get('reverb_listing_id')
+                    platform_results.append({
+                        "platform": "reverb",
+                        "success": True,
+                        "message": f"Refreshed: {old_reverb_id} → {new_reverb_id}",
+                        "old_id": old_reverb_id,
+                        "new_id": new_reverb_id,
+                    })
+                    logger.info(f"Reverb refresh successful: {old_reverb_id} → {new_reverb_id}")
+                else:
+                    platform_results.append({
+                        "platform": "reverb",
+                        "success": False,
+                        "message": f"Ended old listing but failed to create new: {create_result.get('error', 'Unknown')}",
+                    })
+            except Exception as e:
+                platform_results.append({
+                    "platform": "reverb",
+                    "success": False,
+                    "message": f"Reverb error: {str(e)}",
+                })
+                logger.error(f"Reverb refresh failed for {product.sku}: {e}")
+        else:
+            logger.info(f"Reverb listing has no external_id for {product.sku}, skipping")
+
+    # --- Refresh on eBay (End old → Create new) ---
+    if 'ebay' in platform_commons:
+        ebay_pc = platform_commons['ebay']
+        if ebay_pc.external_id:
+            try:
+                ebay_service = EbayService(db, settings)
+                old_item_id = ebay_pc.external_id
+
+                # Step 1: End the old listing
+                await ebay_service.mark_item_as_sold(old_item_id)
+                logger.info(f"Ended old eBay listing {old_item_id}")
+
+                # Step 2: Orphan old ebay_listings row
+                old_listing_stmt = select(EbayListing).where(
+                    EbayListing.ebay_item_id == old_item_id
+                )
+                old_listing_result = await db.execute(old_listing_stmt)
+                old_ebay_listing = old_listing_result.scalar_one_or_none()
+
+                if old_ebay_listing:
+                    old_ebay_listing.platform_id = None
+                    old_ebay_listing.listing_status = 'ENDED'
+                    old_ebay_listing.updated_at = now_utc
+                    listing_data = old_ebay_listing.listing_data or {}
+                    listing_data['_refresh_info'] = {
+                        'reason': 'stale_listing_refresh',
+                        'refreshed_at': now_utc.isoformat(),
+                        'original_product_sku': product.sku,
+                        'original_product_id': product.id
+                    }
+                    old_ebay_listing.listing_data = listing_data
+                    db.add(old_ebay_listing)
+
+                # Step 3: Orphan old platform_common
+                ebay_pc.product_id = None
+                ebay_pc.status = ListingStatus.REFRESHED.value
+                ebay_pc.sync_status = SyncStatus.SYNCED.value
+                ebay_pc.updated_at = now_utc
+                psd = ebay_pc.platform_specific_data or {}
+                psd['_refresh_info'] = {
+                    'refreshed_at': now_utc.isoformat(),
+                    'original_product_id': product.id,
+                    'original_sku': product.sku,
+                    'reason': 'stale_listing_refresh'
+                }
+                ebay_pc.platform_specific_data = psd
+                db.add(ebay_pc)
+
+                # Step 4: Create new eBay listing
+                create_result = await ebay_service.create_listing_from_product(
+                    product=product,
+                    use_shipping_profile=True
+                )
+
+                if create_result.get('status') == 'success':
+                    new_item_id = create_result.get('ebay_item_id')
+                    platform_results.append({
+                        "platform": "ebay",
+                        "success": True,
+                        "message": f"Refreshed: {old_item_id} → {new_item_id}",
+                        "old_id": old_item_id,
+                        "new_id": new_item_id,
+                    })
+                    logger.info(f"eBay refresh successful: {old_item_id} → {new_item_id}")
+                else:
+                    platform_results.append({
+                        "platform": "ebay",
+                        "success": False,
+                        "message": f"Ended old listing but failed to create new: {create_result.get('error', 'Unknown')}",
+                    })
+            except Exception as e:
+                platform_results.append({
+                    "platform": "ebay",
+                    "success": False,
+                    "message": f"eBay error: {str(e)}",
+                })
+                logger.error(f"eBay refresh failed for {product.sku}: {e}")
+        else:
+            logger.info(f"eBay listing has no external_id for {product.sku}, skipping")
+
+    # --- Refresh on V&R (Mark sold → Create new) ---
+    if 'vr' in platform_commons:
+        vr_pc = platform_commons['vr']
+        if vr_pc.external_id:
+            try:
+                vr_service = VRService(db)
+                old_vr_id = vr_pc.external_id
+
+                # Step 1: Mark the old listing as sold (V&R doesn't have true delete)
+                await vr_service.mark_item_as_sold(old_vr_id)
+                logger.info(f"Marked old V&R listing {old_vr_id} as sold")
+
+                # Step 2: Orphan old vr_listings row
+                old_vr_listing_stmt = select(VRListing).where(
+                    VRListing.vr_listing_id == old_vr_id
+                )
+                old_vr_listing_result = await db.execute(old_vr_listing_stmt)
+                old_vr_listing = old_vr_listing_result.scalar_one_or_none()
+
+                if old_vr_listing:
+                    old_vr_listing.platform_id = None
+                    old_vr_listing.vr_state = 'ended'
+                    old_vr_listing.updated_at = now_utc
+                    extended = old_vr_listing.extended_attributes or {}
+                    extended['_refresh_info'] = {
+                        'reason': 'stale_listing_refresh',
+                        'refreshed_at': now_utc.isoformat(),
+                        'original_product_sku': product.sku,
+                        'original_product_id': product.id
+                    }
+                    old_vr_listing.extended_attributes = extended
+                    db.add(old_vr_listing)
+
+                # Step 3: Orphan old platform_common
+                vr_pc.product_id = None
+                vr_pc.status = ListingStatus.REFRESHED.value
+                vr_pc.sync_status = SyncStatus.SYNCED.value
+                vr_pc.updated_at = now_utc
+                psd = vr_pc.platform_specific_data or {}
+                psd['_refresh_info'] = {
+                    'refreshed_at': now_utc.isoformat(),
+                    'original_product_id': product.id,
+                    'original_sku': product.sku,
+                    'reason': 'stale_listing_refresh'
+                }
+                vr_pc.platform_specific_data = psd
+                db.add(vr_pc)
+
+                # Step 4: Create new V&R listing
+                create_result = await vr_service.create_listing_from_product(
+                    product=product
+                )
+
+                if create_result.get('status') == 'success':
+                    new_vr_id = create_result.get('vr_listing_id')
+                    platform_results.append({
+                        "platform": "vr",
+                        "success": True,
+                        "message": f"Refreshed: {old_vr_id} → {new_vr_id}",
+                        "old_id": old_vr_id,
+                        "new_id": new_vr_id,
+                    })
+                    logger.info(f"V&R refresh successful: {old_vr_id} → {new_vr_id}")
+                else:
+                    platform_results.append({
+                        "platform": "vr",
+                        "success": False,
+                        "message": f"Ended old listing but failed to create new: {create_result.get('error', 'Unknown')}",
+                    })
+            except Exception as e:
+                platform_results.append({
+                    "platform": "vr",
+                    "success": False,
+                    "message": f"V&R error: {str(e)}",
+                })
+                logger.error(f"V&R refresh failed for {product.sku}: {e}")
+        else:
+            logger.info(f"V&R listing has no external_id for {product.sku}, skipping")
+
+    # Shopify is EXCLUDED from refresh (SEO preservation)
+    if 'shopify' in platform_commons:
+        platform_results.append({
+            "platform": "shopify",
+            "success": True,
+            "message": "Shopify kept unchanged (SEO preservation)",
+            "skipped": True,
+        })
+
+    # Commit all changes
+    await db.commit()
+
+    # Summarize results
+    successful = [r for r in platform_results if r.get('success') and not r.get('skipped')]
+    failed = [r for r in platform_results if not r.get('success')]
+    skipped = [r for r in platform_results if r.get('skipped')]
+
+    if not platform_results:
+        return JSONResponse({
+            "status": "warning",
+            "message": "No platforms available for refresh (no external IDs)",
+            "message_type": "warning",
+            "platform_results": [],
+        })
+
+    if failed and not successful:
+        return JSONResponse({
+            "status": "error",
+            "message": "Refresh failed on all platforms",
+            "message_type": "error",
+            "platform_results": platform_results,
+        }, status_code=500)
+
+    if failed:
+        return JSONResponse({
+            "status": "partial",
+            "message": f"Refreshed {len(successful)} platform(s), failed on {len(failed)}, skipped {len(skipped)}",
+            "message_type": "warning",
+            "platform_results": platform_results,
+        })
+
+    return JSONResponse({
+        "status": "success",
+        "message": f"Successfully refreshed {len(successful)} platform(s), skipped {len(skipped)} (Shopify SEO)",
         "message_type": "success",
         "platform_results": platform_results,
     })

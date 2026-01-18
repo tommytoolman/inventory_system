@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     VR_PRICE_MARKUP_PERCENT: float = 5.0        # V&R: +5% over base
     REVERB_PRICE_MARKUP_PERCENT: float = 5.0    # Reverb: +5% over base
 
+    # Stale Listing Refresh (Flow 3 - Paid Feature)
+    # Listings older than this threshold qualify for refresh
+    STALE_LISTING_THRESHOLD_MONTHS: int = 12
+
     # Reverb API
     REVERB_API_KEY: str = ""
     REVERB_WEBSITE: str = ""

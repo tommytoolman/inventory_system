@@ -14,49 +14,49 @@
         </div>
     </div>
     
-    <div class="bg-white rounded-lg shadow p-6 mb-6">
-        <form method="GET" id="filter-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Platform</label>
-                <select name="platform" class="w-full p-3 border border-gray-300 rounded-md">
-                    <option value="">All Platforms{% if platform_counts %} ({{ platform_counts.values() | sum }}){% endif %}</option>
-                    {% for p in platforms %}
-                    <option value="{{ p }}" {% if p == platform_filter %}selected{% endif %}>
-                        {{ p.title() }}{% if platform_counts.get(p) %} ({{ platform_counts.get(p) }}){% endif %}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Change Type</label>
-                <select name="change_type" class="w-full p-3 border border-gray-300 rounded-md">
-                    <option value="">All Change Types{% if change_type_counts %} ({{ change_type_counts.values() | sum }}){% endif %}</option>
-                    {% for type in change_types %}
-                    <option value="{{ type }}" {% if type == change_type_filter %}selected{% endif %}>
-                        {{ type.replace('_', ' ').title() }}{% if change_type_counts.get(type) %} ({{ change_type_counts.get(type) }}){% endif %}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select name="status" class="w-full p-3 border border-gray-300 rounded-md">
-                    <option value="">All Statuses{% if status_counts %} ({{ status_counts.values() | sum }}){% endif %}</option>
-                    <option value="pending" {% if "pending" == status_filter %}selected{% endif %}>
-                        Pending{% if status_counts.get('pending') %} ({{ status_counts.get('pending') }}){% endif %}
-                    </option>
-                    <option value="processed" {% if "processed" == status_filter %}selected{% endif %}>
-                        Processed{% if status_counts.get('processed') %} ({{ status_counts.get('processed') }}){% endif %}
-                    </option>
-                    <option value="partial" {% if "partial" == status_filter %}selected{% endif %}>
-                        Partial{% if status_counts.get('partial') %} ({{ status_counts.get('partial') }}){% endif %}
-                    </option>
-                    <option value="error" {% if "error" == status_filter %}selected{% endif %}>
-                        Error{% if status_counts.get('error') %} ({{ status_counts.get('error') }}){% endif %}
-                    </option>
-                </select>
-            </div>
-            </form>
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <form method="GET" id="filter-form" class="flex flex-wrap items-center gap-8">
+            <select name="platform" class="w-56 p-2 border border-gray-300 rounded-md text-sm">
+                <option value="">All Platforms{% if platform_counts %} ({{ platform_counts.values() | sum }}){% endif %}</option>
+                {% for p in platforms %}
+                <option value="{{ p }}" {% if p == platform_filter %}selected{% endif %}>
+                    {{ p.title() }}{% if platform_counts.get(p) %} ({{ platform_counts.get(p) }}){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            <select name="change_type" class="w-60 p-2 border border-gray-300 rounded-md text-sm">
+                <option value="">All Change Types{% if change_type_counts %} ({{ change_type_counts.values() | sum }}){% endif %}</option>
+                {% for type in change_types %}
+                <option value="{{ type }}" {% if type == change_type_filter %}selected{% endif %}>
+                    {{ type.replace('_', ' ').title() }}{% if change_type_counts.get(type) %} ({{ change_type_counts.get(type) }}){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            <select name="status" class="w-52 p-2 border border-gray-300 rounded-md text-sm">
+                <option value="">All Statuses{% if status_counts %} ({{ status_counts.values() | sum }}){% endif %}</option>
+                <option value="pending" {% if "pending" == status_filter %}selected{% endif %}>
+                    Pending{% if status_counts.get('pending') %} ({{ status_counts.get('pending') }}){% endif %}
+                </option>
+                <option value="processed" {% if "processed" == status_filter %}selected{% endif %}>
+                    Processed{% if status_counts.get('processed') %} ({{ status_counts.get('processed') }}){% endif %}
+                </option>
+                <option value="partial" {% if "partial" == status_filter %}selected{% endif %}>
+                    Partial{% if status_counts.get('partial') %} ({{ status_counts.get('partial') }}){% endif %}
+                </option>
+                <option value="error" {% if "error" == status_filter %}selected{% endif %}>
+                    Error{% if status_counts.get('error') %} ({{ status_counts.get('error') }}){% endif %}
+                </option>
+            </select>
+            <div class="flex-grow"></div>
+            <button type="button"
+                    onclick="clearPendingEvents()"
+                    class="inline-flex items-center px-3 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 transition-colors">
+                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Clear Pending
+            </button>
+        </form>
     </div>
 
     <div class="bg-white rounded-lg shadow p-6">
@@ -651,5 +651,47 @@
     window.matchSyncEvent = matchSyncEvent;
     window.manualMatchSyncEvent = manualMatchSyncEvent;
     window.deleteSyncEvent = deleteSyncEvent;
+
+    // Clear all pending sync events
+    async function clearPendingEvents() {
+        const pendingCount = {{ status_counts.get('pending', 0) }};
+
+        if (pendingCount === 0) {
+            alert('No pending events to clear.');
+            return;
+        }
+
+        const confirmed = confirm(
+            `Are you sure you want to clear ALL ${pendingCount} pending sync event(s)?\n\n` +
+            `This action cannot be undone. Events will be permanently deleted.\n\n` +
+            `Use this if you have stale events from API sync issues that need clearing.`
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/reports/sync-events/clear-pending', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                alert(result.message);
+                window.location.reload();
+            } else {
+                alert(result.message || 'Failed to clear pending events.');
+            }
+        } catch (error) {
+            alert(`Error clearing pending events: ${error.message}`);
+        }
+    }
+
+    window.clearPendingEvents = clearPendingEvents;
 </script>
 {% endblock %}

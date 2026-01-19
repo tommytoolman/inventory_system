@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select, func, or_
 from sqlalchemy.orm import selectinload
@@ -1095,6 +1095,40 @@ async def sync_events_report(
         "platforms": available_platforms,
         "change_types": available_change_types
     })
+
+
+@router.delete("/sync-events/clear-pending", response_class=JSONResponse)
+async def clear_pending_sync_events(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    Delete all pending sync events from the database.
+    Used to clear stale events from API sync issues.
+    """
+    async with get_session() as db:
+        # Count before delete for feedback
+        count_query = text("SELECT COUNT(*) FROM sync_events WHERE status = 'pending'")
+        count_result = await db.execute(count_query)
+        pending_count = count_result.scalar()
+
+        if pending_count == 0:
+            return JSONResponse({
+                "status": "info",
+                "message": "No pending events to clear.",
+                "deleted_count": 0
+            })
+
+        # Delete all pending events
+        delete_query = text("DELETE FROM sync_events WHERE status = 'pending'")
+        await db.execute(delete_query)
+        await db.commit()
+
+        return JSONResponse({
+            "status": "success",
+            "message": f"Cleared {pending_count} pending sync event(s).",
+            "deleted_count": pending_count
+        })
 
 
 @router.get("/platform-coverage", response_class=HTMLResponse)

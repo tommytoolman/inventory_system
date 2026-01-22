@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     # Stale Listing Refresh (Flow 3 - Paid Feature)
     # Listings older than this threshold qualify for refresh
-    STALE_LISTING_THRESHOLD_MONTHS: int = 12
+    STALE_LISTING_THRESHOLD_MONTHS: int = 3
 
     # Reverb API
     REVERB_API_KEY: str = ""

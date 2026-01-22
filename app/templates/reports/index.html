@@ -5,313 +5,209 @@
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <!-- Header -->
-    <div class="mb-8">
+    <div class="mb-6">
         <h1 class="text-3xl font-bold text-gray-900 mb-2">Reports Dashboard</h1>
         <p class="text-gray-600">Analyze inventory discrepancies and stock value across platforms</p>
     </div>
-    
-    <!-- Report Categories -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+    <!-- Report Categories - 2 Column Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
 
         <!-- Platform Coverage Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-yellow-100 rounded-lg mr-3">
+        <a href="/reports/platform-coverage" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-yellow-100 rounded-lg group-hover:scale-110 group-hover:bg-yellow-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Platform Coverage</h3>
-                    <p class="text-sm text-gray-500">Products missing from certain platforms</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-yellow-700 transition-colors">Platform Coverage</h3>
+                    <p class="text-sm text-gray-500 mt-1">Identify products missing from Reverb, eBay, Shopify, or VR. Quickly spot gaps in your multi-platform presence.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Find products listed on some platforms but missing from others.
-                Identify opportunities to maximize sales reach.
-            </p>
-            <a href="/reports/platform-coverage"
-                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Listing Health Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-green-100 rounded-lg mr-3">
+        <a href="/reports/listing-health" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-green-100 rounded-lg group-hover:scale-110 group-hover:bg-green-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7 20h10a2 2 0 002-2V6a2 2 0 00-2-2H7a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Listing Health</h3>
-                    <p class="text-sm text-gray-500">Traffic-light view across products and platforms</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-green-700 transition-colors">Listing Health</h3>
+                    <p class="text-sm text-gray-500 mt-1">Traffic-light overview of all products. See active, draft, ended, and problem listings at a glance across platforms.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                See at a glance which products are missing metadata, images, or platform listings.
-                Drill into any row to review warnings and resolve issues quickly.
-            </p>
-            <a href="/reports/listing-health"
-               class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- CrazyLister Coverage Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-purple-100 rounded-lg mr-3">
+        <a href="/reports/crazylister-coverage" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-purple-100 rounded-lg group-hover:scale-110 group-hover:bg-purple-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M12 6V4m0 2a4 4 0 014 4v1a4 4 0 004 4m-8-9a4 4 0 00-4 4v1a4 4 0 01-4 4m0 0v5h6v-5m-6 0h6m8 0v5h-6v-5m6 0h-6" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a4 4 0 014 4v1a4 4 0 004 4m-8-9a4 4 0 00-4 4v1a4 4 0 01-4 4m0 0v5h6v-5m-6 0h6m8 0v5h-6v-5m6 0h-6" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">CrazyLister Coverage</h3>
-                    <p class="text-sm text-gray-500">Identify eBay listings missing the template</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-purple-700 transition-colors">CrazyLister Coverage</h3>
+                    <p class="text-sm text-gray-500 mt-1">Find eBay listings without the CrazyLister template applied. Ensure consistent branding across all eBay items.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                See which eBay listings have the CrazyLister branding, highlight gaps,
-                and jump directly into the product or the live listing to resolve issues quickly.
-            </p>
-            <a href="/reports/crazylister-coverage"
-               class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Sales & Ended Listings Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-indigo-100 rounded-lg mr-3">
+        <a href="/reports/sales" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-indigo-100 rounded-lg group-hover:scale-110 group-hover:bg-indigo-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Sales & Ended Listings</h3>
-                    <p class="text-sm text-gray-500">Track sold items and determine sale platforms</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors">Sales & Ended Listings</h3>
+                    <p class="text-sm text-gray-500 mt-1">Track completed sales and ended listings. See which platform each item sold on and manage sold inventory.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Comprehensive view of all sales with intelligent platform detection.
-                See where items sold versus being removed offline.
-            </p>
-            <a href="/reports/sales"
-                class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Non-Performing Inventory Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-orange-100 rounded-lg mr-3">
+        <a href="/reports/non-performing-inventory" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-orange-100 rounded-lg group-hover:scale-110 group-hover:bg-orange-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Non-Performing Inventory</h3>
-                    <p class="text-sm text-gray-500">Slow-moving stock analysis and optimization</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-orange-700 transition-colors">Non-Performing Inventory</h3>
+                    <p class="text-sm text-gray-500 mt-1">Identify slow-moving stock by age. Prioritize repricing or promotion for items sitting too long.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Identify inventory that's been on the market for 3+ months with detailed engagement metrics.
-                Optimize pricing and unlock tied-up capital.
-            </p>
-            <a href="/reports/non-performing-inventory"
-               class="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Listing Engagement Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-pink-100 rounded-lg mr-3">
+        <a href="/reports/listing-engagement" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-pink-100 rounded-lg group-hover:scale-110 group-hover:bg-pink-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Listing Engagement</h3>
-                    <p class="text-sm text-gray-500">Views, watches, and trend analysis</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-pink-700 transition-colors">Listing Engagement</h3>
+                    <p class="text-sm text-gray-500 mt-1">View counts, watchers, and engagement trends from Reverb. Identify hot items and optimize underperformers.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Analyze engagement metrics across Reverb and eBay. Track trending items, watch-to-view ratios,
-                and identify hot listings or stale inventory.
-            </p>
-            <a href="/reports/listing-engagement"
-               class="inline-flex items-center px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
-        <!-- Sync Event Log Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-purple-100 rounded-lg mr-3">
+        <!-- Sync Events Log Report -->
+        <a href="/reports/sync-events" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-purple-100 rounded-lg group-hover:scale-110 group-hover:bg-purple-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Sync Events Log</h3>
-                    <p class="text-sm text-gray-500">Interim log of all detected sync issues</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-purple-700 transition-colors">Sync Events Log</h3>
+                    <p class="text-sm text-gray-500 mt-1">Monitor detected sync issues, price changes, and inventory events. Review pending actions and clear resolved items.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Review a detailed feed of all detected changes, errors, and new listings before they are fully processed.
-            </p>
-            <a href="/reports/sync-events"
-                class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Archive Status Sync Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-purple-100 rounded-lg mr-3">
+        <a href="/reports/archive-status-sync" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-purple-100 rounded-lg group-hover:scale-110 group-hover:bg-purple-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Archive Status Sync</h3>
-                    <p class="text-sm text-gray-500">Sync ARCHIVED status from Shopify to product</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-purple-700 transition-colors">Archive Manager</h3>
+                    <p class="text-sm text-gray-500 mt-1">Sync ARCHIVED status from Shopify to product level. Manage Shopify-only items that need archive status updates.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Find Shopify-only items that are ARCHIVED on Shopify but still ACTIVE at product level.
-                Used for sold gallery items that exist only on Shopify.
-            </p>
-            <a href="/reports/archive-status-sync"
-                class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Status Mismatches Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-red-100 rounded-lg mr-3">
+        <a href="/reports/status-mismatches" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-red-100 rounded-lg group-hover:scale-110 group-hover:bg-red-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Status Mismatches</h3>
-                    <p class="text-sm text-gray-500">Products with different statuses across platforms</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-red-700 transition-colors">Status Mismatches</h3>
+                    <p class="text-sm text-gray-500 mt-1">Find products with conflicting statuses across platforms. Active on one, ended on another? Fix inconsistencies here.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Identify products that are active on one platform but sold/ended on another.
-                Critical for preventing overselling and maintaining accurate inventory.
-            </p>
-            <a href="/reports/status-mismatches"
-                class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Price Inconsistencies Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-blue-100 rounded-lg mr-3">
+        <a href="/reports/price-inconsistencies" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-blue-100 rounded-lg group-hover:scale-110 group-hover:bg-blue-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Price Inconsistencies</h3>
-                    <p class="text-sm text-gray-500">Products with different prices across platforms</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">Price Inconsistencies</h3>
+                    <p class="text-sm text-gray-500 mt-1">Spot pricing discrepancies across Reverb, eBay, and Shopify. Ensure consistent pricing strategy platform-wide.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Detect products with significant price differences between platforms.
-                Ensure consistent pricing strategy.
-            </p>
-            <a href="/reports/price-inconsistencies"
-                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Sync Statistics Report -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-green-100 rounded-lg mr-3">
+        <a href="/reports/sync-stats" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-green-100 rounded-lg group-hover:scale-110 group-hover:bg-green-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Sync Statistics</h3>
-                    <p class="text-sm text-gray-500">Platform synchronization performance metrics</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-green-700 transition-colors">Sync Statistics</h3>
+                    <p class="text-sm text-gray-500 mt-1">Platform sync performance metrics and success rates. Monitor health of automated sync processes.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                View comprehensive sync statistics including events processed, sales detected,
-                and error rates. Track sync health over time.
-            </p>
-            <a href="/reports/sync-stats"
-                class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
         <!-- Product Matching Interface -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-teal-100 rounded-lg mr-3">
+        <a href="/reports/matching" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-teal-100 rounded-lg group-hover:scale-110 group-hover:bg-teal-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Product Matching</h3>
-                    <p class="text-sm text-gray-500">Manual cross-platform product matching</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-teal-700 transition-colors">Product Matching</h3>
+                    <p class="text-sm text-gray-500 mt-1">Manually link products across platforms. Match unlinked Reverb, eBay, Shopify, and VR listings to unified products.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                Manually match products across different platforms to ensure accurate inventory tracking.
-                Side-by-side comparison with filtering and search capabilities.
-            </p>
-            <a href="/reports/matching"
-                class="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors">
-                Open Matcher →
-            </a>
-        </div>
+        </a>
 
         <!-- Inventory Reconciliation -->
-        <div class="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-amber-100 rounded-lg mr-3">
+        <a href="/reports/inventory-reconciliation" class="group bg-white rounded-lg shadow p-5 hover:shadow-lg transition-all">
+            <div class="flex items-start gap-4">
+                <div class="p-3 bg-amber-100 rounded-lg group-hover:scale-110 group-hover:bg-amber-200 transition-all flex-shrink-0">
                     <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-lg font-semibold">Inventory Reconciliation</h3>
-                    <p class="text-sm text-gray-500">Sync stocked item quantities across platforms</p>
+                <div class="flex-grow">
+                    <h3 class="font-semibold text-gray-900 group-hover:text-amber-700 transition-colors">Inventory Reconciliation</h3>
+                    <p class="text-sm text-gray-500 mt-1">Reconcile quantity mismatches across platforms. Ensure stock levels are consistent everywhere.</p>
                 </div>
             </div>
-            <p class="text-gray-600 mb-4">
-                View all inventoried items with quantities from RIFF, Reverb, eBay, Shopify, and V&R.
-                Reconcile discrepancies and sync quantities across all platforms.
-            </p>
-            <a href="/reports/inventory-reconciliation"
-                class="inline-flex items-center px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
-                View Report →
-            </a>
-        </div>
+        </a>
 
     </div>
 </div>

@@ -99,12 +99,12 @@
             
             <!-- Status Filter -->
             <select name="status" class="p-2 border rounded w-48" onchange="this.form.submit()">
-                <option value="" {% if not selected_status %}selected{% endif %}>All Status</option>
-                <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
-                <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Draft</option>
-                <option value="sold" {% if selected_status == 'sold' %}selected{% endif %}>Sold</option>
-                <option value="archived" {% if selected_status == 'archived' %}selected{% endif %}>Archived</option>
-                <option value="deleted" {% if selected_status == 'deleted' %}selected{% endif %}>Deleted</option>
+                <option value="" {% if not selected_status %}selected{% endif %}>All Status ({{ status_counts.values()|sum if status_counts else 0 }})</option>
+                <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active ({{ status_counts.get('active', 0) }})</option>
+                <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Draft ({{ status_counts.get('draft', 0) }})</option>
+                <option value="sold" {% if selected_status == 'sold' %}selected{% endif %}>Sold ({{ status_counts.get('sold', 0) }})</option>
+                <option value="archived" {% if selected_status == 'archived' %}selected{% endif %}>Archived ({{ status_counts.get('archived', 0) }})</option>
+                <option value="deleted" {% if selected_status == 'deleted' %}selected{% endif %}>Deleted ({{ status_counts.get('deleted', 0) }})</option>
             </select>
             
             <!-- Show Entries Dropdown -->

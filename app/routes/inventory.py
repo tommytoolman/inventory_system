@@ -1555,6 +1555,15 @@ async def list_products(
         brands_query = brands_query.order_by(Product.brand)
     brands_result = await db.execute(brands_query)
     brands_with_counts = [(b[0], b[1]) for b in brands_result.all() if b[0]]
+
+    # Build status counts query
+    status_counts_query = (
+        select(Product.status, func.count(Product.id).label("count"))
+        .filter(Product.status.isnot(None))
+        .group_by(Product.status)
+    )
+    status_counts_result = await db.execute(status_counts_query)
+    status_counts = {s[0].lower(): s[1] for s in status_counts_result.all() if s[0]}
     
     # Calculate pagination info
     if per_page != 'all' and per_page > 0:
@@ -1602,6 +1611,7 @@ async def list_products(
             "selected_brand": brand,
             "selected_platform": platform,    # NEW: Pass to template
             "selected_status": selected_status_value,
+            "status_counts": status_counts,
             "status_query_value": status_query_value,
             "search": search,
             "has_prev": page > 1,

@@ -206,11 +206,16 @@ async def _resolve_platform_common(
     if not sku:
         return {"platform_listing_id": None, "product_id": None}
 
-    # Try to find by SKU in platform_common
+    # Import Product model for the join
+    from app.models.product import Product
+
+    # Try to find by SKU - join platform_common to products since SKU is on products table
     result = await db.execute(
-        select(PlatformCommon).where(
+        select(PlatformCommon)
+        .join(Product, PlatformCommon.product_id == Product.id)
+        .where(
             PlatformCommon.platform_name == "shopify",
-            PlatformCommon.sku == sku,
+            Product.sku == sku,
         )
     )
     pc = result.scalar_one_or_none()

@@ -241,18 +241,18 @@ async def status_mismatches_report(
         LEFT JOIN shopify_listings sl_a ON (:platform_a = 'shopify' AND pc_a.id = sl_a.platform_id)
         LEFT JOIN shopify_listings sl_b ON (:platform_b = 'shopify' AND pc_b.id = sl_b.platform_id)
         
-        -- Status mappings
+        -- Status mappings (case-insensitive)
         LEFT JOIN platform_status_mappings psm_a ON psm_a.platform_name = :platform_a AND (
-            (:platform_a = 'reverb' AND psm_a.platform_status = rl_a.reverb_state) OR
-            (:platform_a = 'vr' AND psm_a.platform_status = vl_a.vr_state) OR
-            (:platform_a = 'ebay' AND psm_a.platform_status = el_a.listing_status) OR
-            (:platform_a = 'shopify' AND psm_a.platform_status = sl_a.status)
+            (:platform_a = 'reverb' AND psm_a.platform_status = LOWER(rl_a.reverb_state)) OR
+            (:platform_a = 'vr' AND psm_a.platform_status = LOWER(vl_a.vr_state)) OR
+            (:platform_a = 'ebay' AND psm_a.platform_status = LOWER(el_a.listing_status)) OR
+            (:platform_a = 'shopify' AND psm_a.platform_status = LOWER(sl_a.status))
         )
         LEFT JOIN platform_status_mappings psm_b ON psm_b.platform_name = :platform_b AND (
-            (:platform_b = 'reverb' AND psm_b.platform_status = rl_b.reverb_state) OR
-            (:platform_b = 'vr' AND psm_b.platform_status = vl_b.vr_state) OR
-            (:platform_b = 'ebay' AND psm_b.platform_status = el_b.listing_status) OR
-            (:platform_b = 'shopify' AND psm_b.platform_status = sl_b.status)
+            (:platform_b = 'reverb' AND psm_b.platform_status = LOWER(rl_b.reverb_state)) OR
+            (:platform_b = 'vr' AND psm_b.platform_status = LOWER(vl_b.vr_state)) OR
+            (:platform_b = 'ebay' AND psm_b.platform_status = LOWER(el_b.listing_status)) OR
+            (:platform_b = 'shopify' AND psm_b.platform_status = LOWER(sl_b.status))
         )
         
         -- ONLY show real mapped status mismatches

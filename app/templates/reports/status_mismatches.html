@@ -5,206 +5,212 @@
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <!-- Header -->
-    <div class="mb-8">
+    <div class="mb-6">
         <div class="flex items-center justify-between">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900 mb-2">Status Mismatches Report</h1>
+                <h1 class="text-3xl font-bold text-gray-900 mb-1">Status Mismatches</h1>
                 <p class="text-gray-600">Products with different statuses across platforms</p>
             </div>
             <a href="/reports" class="text-blue-600 hover:text-blue-800">← Back to Reports</a>
         </div>
     </div>
-    
-    <!-- Platform Selector -->
-    <div class="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 class="text-lg font-semibold mb-4">Compare Platforms</h3>
-        <form method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+    <!-- Platform Selector - Compact -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <form method="GET" id="filterForm" class="flex flex-wrap gap-4 items-end">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Platform A</label>
-                <select name="platform_a" class="w-full p-3 border border-gray-300 rounded-md">
-                    <option value="">Select Platform A</option>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Platform A</label>
+                <select name="platform_a" id="platformA" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     {% for platform in platforms %}
                     <option value="{{ platform }}" {% if platform == platform_a %}selected{% endif %}>
-                        {{ platform.title() }}
+                        {% if platform == 'vr' %}Vintage & Rare{% else %}{{ platform.title() }}{% endif %}
                     </option>
                     {% endfor %}
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Platform B</label>
-                <select name="platform_b" class="w-full p-3 border border-gray-300 rounded-md">
-                    <option value="">Select Platform B</option>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Platform B</label>
+                <select name="platform_b" id="platformB" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     {% for platform in platforms %}
                     <option value="{{ platform }}" {% if platform == platform_b %}selected{% endif %}>
-                        {{ platform.title() }}
+                        {% if platform == 'vr' %}Vintage & Rare{% else %}{{ platform.title() }}{% endif %}
                     </option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="flex items-end">
-                <button type="submit" class="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700">
-                    Compare Platforms
-                </button>
-            </div>
-        </form>
-    </div>
-    
-    <!-- DEBUG: Show Raw Status Data -->
-    {% if detailed_mismatches and platform_a and platform_b %}
-    <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold">
-                Debug: Raw Status Data for {{ platform_a.title() }} vs {{ platform_b.title() }}
-            </h3>
-            <div class="text-sm text-gray-600">
-                <span class="font-semibold text-blue-600">{{ detailed_mismatches|length }}</span> products found
+            {% if detailed_mismatches %}
+            <div class="ml-auto text-sm text-gray-600">
+                <span class="font-semibold text-blue-600">{{ detailed_mismatches|length }}</span> mismatches
                 | Total Value: <span class="font-semibold text-blue-600">£{{ "{:,.0f}".format(total_value) }}</span>
             </div>
-        </div>
-        
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Results Table -->
+    {% if detailed_mismatches and platform_a and platform_b %}
+    <div class="bg-white rounded-lg shadow">
         <div class="overflow-x-auto">
             <table class="w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ platform_a.title() }} Status (Raw → Mapped)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ platform_b.title() }} Status (Raw → Mapped)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status Match?</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            {% if platform_a == 'vr' %}Vintage & Rare{% else %}{{ platform_a.title() }}{% endif %}
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            {% if platform_b == 'vr' %}Vintage & Rare{% else %}{{ platform_b.title() }}{% endif %}
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issue</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                     {% for item in detailed_mismatches %}
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4">
+                        <td class="px-4 py-3">
                             <div class="flex items-center">
                                 {% if item.primary_image %}
-                                <img src="{{ item.primary_image }}" alt="Product" class="w-10 h-10 rounded-lg object-cover mr-3">
+                                <img src="{{ item.primary_image }}" alt="Product" class="w-10 h-10 rounded object-cover mr-3">
                                 {% else %}
-                                <div class="w-10 h-10 bg-gray-200 rounded-lg mr-3"></div>
+                                <div class="w-10 h-10 bg-gray-200 rounded mr-3"></div>
                                 {% endif %}
                                 <div>
                                     <div class="text-sm font-medium text-gray-900">{{ item.brand }} {{ item.model }}</div>
-                                    <div class="text-sm text-gray-500">{{ item.sku }}</div>
+                                    <div class="text-xs text-gray-500">{{ item.sku }}</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-6 py-4 text-xs">
-                            <div class="space-y-1">
-                                <div>
-                                    <span class="text-gray-600">Raw:</span> 
-                                    <strong class="{% if item.raw_status_a %}text-gray-900{% else %}text-red-600{% endif %}">
-                                        {{ item.raw_status_a or 'NULL' }}
-                                    </strong>
-                                </div>
-                                <div>
-                                    <span class="text-gray-600">Mapped:</span> 
-                                    <strong class="{% if item.central_status_a %}text-gray-900{% else %}text-red-600{% endif %}">
-                                        {{ item.central_status_a or 'NULL' }}
-                                    </strong>
-                                </div>
-                            </div>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                {% if item.central_status_a == 'ACTIVE' %}bg-green-100 text-green-800
+                                {% elif item.central_status_a == 'ENDED' %}bg-gray-100 text-gray-800
+                                {% elif item.central_status_a == 'DRAFT' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ item.raw_status_a or 'Unknown' }}
+                            </span>
                         </td>
-                        <td class="px-6 py-4 text-xs">
-                            <div class="space-y-1">
-                                <div>
-                                    <span class="text-gray-600">Raw:</span> 
-                                    <strong class="{% if item.raw_status_b %}text-gray-900{% else %}text-red-600{% endif %}">
-                                        {{ item.raw_status_b or 'NULL' }}
-                                    </strong>
-                                </div>
-                                <div>
-                                    <span class="text-gray-600">Mapped:</span> 
-                                    <strong class="{% if item.central_status_b %}text-gray-900{% else %}text-red-600{% endif %}">
-                                        {{ item.central_status_b or 'NULL' }}
-                                    </strong>
-                                </div>
-                            </div>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                {% if item.central_status_b == 'ACTIVE' %}bg-green-100 text-green-800
+                                {% elif item.central_status_b == 'ENDED' %}bg-gray-100 text-gray-800
+                                {% elif item.central_status_b == 'DRAFT' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ item.raw_status_b or 'Unknown' }}
+                            </span>
                         </td>
-                        <td class="px-6 py-4 text-sm">
-                            {% if item.central_status_a and item.central_status_b %}
-                                {% if item.central_status_a == item.central_status_b %}
-                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                        ✓ MATCH
-                                    </span>
-                                {% else %}
-                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                        ✗ MISMATCH
-                                    </span>
-                                    <div class="text-xs text-gray-500 mt-1">
-                                        {{ item.central_status_a }} ≠ {{ item.central_status_b }}
-                                    </div>
-                                {% endif %}
+                        <td class="px-4 py-3 text-xs text-gray-600">
+                            {% if item.central_status_a == 'ACTIVE' and item.central_status_b == 'ENDED' %}
+                                Still active on {% if platform_a == 'vr' %}V&R{% else %}{{ platform_a.title() }}{% endif %}
+                            {% elif item.central_status_a == 'ENDED' and item.central_status_b == 'ACTIVE' %}
+                                Still active on {% if platform_b == 'vr' %}V&R{% else %}{{ platform_b.title() }}{% endif %}
+                            {% elif item.central_status_a == 'DRAFT' or item.central_status_b == 'DRAFT' %}
+                                Draft vs Published
                             {% else %}
-                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                    ! MAPPING ISSUE
-                                </span>
+                                {{ item.central_status_a }} ≠ {{ item.central_status_b }}
                             {% endif %}
                         </td>
-                        <td class="px-6 py-4 text-sm font-semibold">
-                            {% if item.price %}
-                                <span class="{% if item.price > 100000 %}text-red-600{% else %}text-gray-900{% endif %}">
-                                    £{{ "{:,.0f}".format(item.price) }}
-                                </span>
-                            {% else %}
-                                <span class="text-gray-400">No price</span>
-                            {% endif %}
+                        <td class="px-4 py-3 text-sm font-medium">
+                            {% if item.price %}£{{ "{:,.0f}".format(item.price) }}{% else %}<span class="text-gray-400">-</span>{% endif %}
                         </td>
-                        <td class="px-6 py-4 text-sm">
-                            <a href="/inventory/product/{{ item.id }}" 
-                               class="text-blue-600 hover:text-blue-800">View Product →</a>
+                        <td class="px-4 py-3">
+                            <a href="/inventory/product/{{ item.id }}" class="text-blue-600 hover:text-blue-800 text-sm">View →</a>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        
-        <!-- Debug Summary -->
-        <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-            <h4 class="text-sm font-semibold text-gray-700 mb-2">Debug Summary:</h4>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-600">
-                <div>
-                    <strong>Products with NULL Raw Status:</strong>
-                    <div>{{ detailed_mismatches | selectattr('raw_status_a', 'none') | list | length + detailed_mismatches | selectattr('raw_status_b', 'none') | list | length }}</div>
-                </div>
-                <div>
-                    <strong>Products with NULL Mapped Status:</strong>
-                    <div>{{ detailed_mismatches | selectattr('central_status_a', 'none') | list | length + detailed_mismatches | selectattr('central_status_b', 'none') | list | length }}</div>
-                </div>
-                <div>
-                    <strong>Total Products Shown:</strong>
-                    <div>{{ detailed_mismatches | list | length }}</div>
-                </div>
-            </div>
-        </div>
     </div>
     {% endif %}
-    
+
     {% if not detailed_mismatches and platform_a and platform_b %}
     <div class="bg-white rounded-lg shadow p-6">
         <div class="text-center py-8">
-            <svg class="mx-auto h-12 w-12 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <h3 class="mt-2 text-lg font-medium text-gray-900">No Products Found</h3>
-            <p class="mt-1 text-gray-500">No products found for comparison between {{ platform_a.title() }} and {{ platform_b.title() }}.</p>
-            <p class="mt-1 text-sm text-gray-400">This could indicate a data issue or no shared products between these platforms.</p>
+            <h3 class="mt-2 text-lg font-medium text-gray-900">No Mismatches Found</h3>
+            <p class="mt-1 text-gray-500">
+                {% if platform_a == 'vr' %}Vintage & Rare{% else %}{{ platform_a.title() }}{% endif %} and
+                {% if platform_b == 'vr' %}Vintage & Rare{% else %}{{ platform_b.title() }}{% endif %}
+                are in sync.
+            </p>
         </div>
     </div>
     {% endif %}
-    
+
     {% if not platform_a or not platform_b %}
     <div class="bg-white rounded-lg shadow p-6">
         <div class="text-center py-8">
             <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
             </svg>
             <h3 class="mt-2 text-lg font-medium text-gray-900">Select Platforms to Compare</h3>
-            <p class="mt-1 text-gray-500">Choose two platforms above to see status mismatches and debug information.</p>
+            <p class="mt-1 text-gray-500">Choose two different platforms above to see status mismatches.</p>
         </div>
     </div>
     {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const platformA = document.getElementById('platformA');
+    const platformB = document.getElementById('platformB');
+    const form = document.getElementById('filterForm');
+    let debounceTimer;
+
+    // Function to update Platform B options based on Platform A selection
+    function updatePlatformBOptions() {
+        const selectedA = platformA.value;
+        const currentB = platformB.value;
+
+        // Enable all options first
+        Array.from(platformB.options).forEach(option => {
+            option.disabled = false;
+            option.style.display = '';
+        });
+
+        // Disable the option that matches Platform A
+        Array.from(platformB.options).forEach(option => {
+            if (option.value === selectedA) {
+                option.disabled = true;
+                option.style.display = 'none';
+            }
+        });
+
+        // If current Platform B selection is now disabled, select first available
+        if (currentB === selectedA) {
+            for (let option of platformB.options) {
+                if (option.value !== selectedA) {
+                    platformB.value = option.value;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Function to submit form with debounce
+    function submitWithDebounce() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function() {
+            form.submit();
+        }, 1000);
+    }
+
+    // Event listeners
+    platformA.addEventListener('change', function() {
+        updatePlatformBOptions();
+        submitWithDebounce();
+    });
+
+    platformB.addEventListener('change', function() {
+        submitWithDebounce();
+    });
+
+    // Initialize on page load
+    updatePlatformBOptions();
+});
+</script>
 {% endblock %}

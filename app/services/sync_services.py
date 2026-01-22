@@ -2385,6 +2385,7 @@ class ChangeDetector:
                     JOIN products p ON pc.product_id = p.id
                     LEFT JOIN ebay_listings el ON pc.external_id = el.ebay_item_id
                     WHERE pc.platform_name = 'ebay'
+                    AND pc.status NOT IN ('deleted', 'removed')
                 """)
             elif platform == "reverb":
                 query = text("""
@@ -2395,6 +2396,7 @@ class ChangeDetector:
                     JOIN products p ON pc.product_id = p.id
                     LEFT JOIN reverb_listings rl ON CONCAT('REV-', pc.external_id) = rl.reverb_listing_id
                     WHERE pc.platform_name = 'reverb'
+                    AND pc.status NOT IN ('deleted', 'removed')
                 """)
             elif platform == "shopify":
                 query = text("""
@@ -2405,6 +2407,7 @@ class ChangeDetector:
                     JOIN products p ON pc.product_id = p.id
                     LEFT JOIN shopify_listings sl ON pc.id = sl.platform_id
                     WHERE pc.platform_name = 'shopify'
+                    AND pc.status NOT IN ('deleted', 'removed')
                 """)
             elif platform == "vr":
                 query = text("""
@@ -2415,6 +2418,7 @@ class ChangeDetector:
                     JOIN products p ON pc.product_id = p.id
                     LEFT JOIN vr_listings vl ON pc.external_id = vl.vr_listing_id
                     WHERE pc.platform_name = 'vr'
+                    AND pc.status NOT IN ('deleted', 'removed')
                 """)
             
             result = await self.db.execute(query)

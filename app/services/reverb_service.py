@@ -2044,7 +2044,7 @@ class ReverbService:
             FROM platform_common pc
             LEFT JOIN products p ON p.id = pc.product_id
             WHERE pc.platform_name = 'reverb'
-              AND pc.status != 'refreshed'
+              AND pc.status NOT IN ('refreshed', 'deleted', 'removed')
         """)
         result = await self.db.execute(query)
         return [row._asdict() for row in result.fetchall()]
@@ -2917,7 +2917,9 @@ class ReverbService:
                 rl.reverb_state
             FROM platform_common pc
             LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id
-            WHERE pc.platform_name = 'reverb' AND pc.external_id IS NOT NULL
+            WHERE pc.platform_name = 'reverb'
+              AND pc.external_id IS NOT NULL
+              AND pc.status NOT IN ('deleted', 'removed')
         """)
         result = await self.db.execute(query)
         return {str(row.external_id): row._asdict() for row in result.fetchall()}

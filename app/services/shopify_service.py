@@ -2045,7 +2045,7 @@ class ShopifyService:
             LEFT JOIN products p ON p.id = pc.product_id
             LEFT JOIN shopify_listings sl ON pc.id = sl.platform_id
             WHERE pc.platform_name = 'shopify'
-              AND pc.status != 'refreshed'
+              AND pc.status NOT IN ('refreshed', 'deleted', 'removed')
         """)
         result = await self.db.execute(query)
         rows = [row._asdict() for row in result.fetchall()]

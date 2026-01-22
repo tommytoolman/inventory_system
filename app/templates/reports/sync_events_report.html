@@ -46,6 +46,12 @@
                 <option value="error" {% if "error" == status_filter %}selected{% endif %}>
                     Error{% if status_counts.get('error') %} ({{ status_counts.get('error') }}){% endif %}
                 </option>
+                <option value="skipped" {% if "skipped" == status_filter %}selected{% endif %}>
+                    Skipped{% if status_counts.get('skipped') %} ({{ status_counts.get('skipped') }}){% endif %}
+                </option>
+                <option value="dismissed" {% if "dismissed" == status_filter %}selected{% endif %}>
+                    Dismissed{% if status_counts.get('dismissed') %} ({{ status_counts.get('dismissed') }}){% endif %}
+                </option>
             </select>
             <div class="flex-grow"></div>
             <button type="button"

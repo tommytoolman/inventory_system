@@ -1131,6 +1131,147 @@ async def clear_pending_sync_events(
         })
 
 
+@router.get("/archive-status-sync", response_class=HTMLResponse)
+async def archive_status_sync_report(request: Request):
+    """
+    Archive Status Sync Report: Find products that should be ARCHIVED at product level.
+
+    Criteria:
+    - Shopify listing exists AND status = ARCHIVED
+    - Product status = ACTIVE (mismatch)
+    - No active listings on other platforms (Reverb, eBay, V&R)
+
+    Products with status = SOLD are excluded (we don't downgrade SOLD to ARCHIVED).
+    """
+    async with get_session() as db:
+        # Find mismatched products: Shopify ARCHIVED but Product ACTIVE, not on other platforms
+        query = text("""
+            SELECT
+                p.id as product_id,
+                p.sku,
+                p.brand,
+                p.model,
+                p.status as product_status,
+                p.primary_image,
+                p.created_at,
+                sl.shopify_product_id,
+                sl.status as shopify_status,
+                sl.updated_at as shopify_updated_at,
+                pc_shopify.external_id as shopify_external_id
+            FROM products p
+            INNER JOIN platform_common pc_shopify
+                ON pc_shopify.product_id = p.id
+                AND pc_shopify.platform_name = 'shopify'
+            INNER JOIN shopify_listings sl
+                ON sl.platform_id = pc_shopify.id
+            WHERE UPPER(sl.status) = 'ARCHIVED'
+              AND p.status = 'ACTIVE'
+              AND NOT EXISTS (
+                  SELECT 1 FROM platform_common pc2
+                  WHERE pc2.product_id = p.id
+                  AND pc2.platform_name IN ('reverb', 'ebay', 'vr')
+                  AND UPPER(pc2.status) IN ('ACTIVE', 'LIVE')
+              )
+            ORDER BY sl.updated_at DESC
+            LIMIT 500;
+        """)
+
+        result = await db.execute(query)
+        mismatched_products = [dict(row._mapping) for row in result.fetchall()]
+
+        # Get count of already correct (SOLD products with ARCHIVED Shopify - these are fine)
+        sold_archived_query = text("""
+            SELECT COUNT(*) as count
+            FROM products p
+            INNER JOIN platform_common pc_shopify
+                ON pc_shopify.product_id = p.id
+                AND pc_shopify.platform_name = 'shopify'
+            INNER JOIN shopify_listings sl
+                ON sl.platform_id = pc_shopify.id
+            WHERE UPPER(sl.status) = 'ARCHIVED'
+              AND p.status = 'SOLD'
+        """)
+        sold_result = await db.execute(sold_archived_query)
+        sold_archived_count = sold_result.scalar()
+
+    return templates.TemplateResponse("reports/archive_status_sync.html", {
+        "request": request,
+        "products": mismatched_products,
+        "mismatch_count": len(mismatched_products),
+        "sold_archived_count": sold_archived_count,
+    })
+
+
+@router.post("/archive-status-sync/archive/{product_id}", response_class=JSONResponse)
+async def archive_single_product(product_id: int):
+    """Archive a single product (set status to ARCHIVED)."""
+    async with get_session() as db:
+        # Verify product exists and is ACTIVE
+        product = await db.get(Product, product_id)
+        if not product:
+            return JSONResponse({"status": "error", "message": "Product not found"}, status_code=404)
+
+        if product.status == ProductStatus.SOLD:
+            return JSONResponse({"status": "error", "message": "Cannot archive SOLD products"}, status_code=400)
+
+        if product.status == ProductStatus.ARCHIVED:
+            return JSONResponse({"status": "info", "message": "Product already archived"})
+
+        # Update to ARCHIVED
+        product.status = ProductStatus.ARCHIVED
+        await db.commit()
+
+        return JSONResponse({
+            "status": "success",
+            "message": f"Product {product.sku} archived successfully"
+        })
+
+
+@router.post("/archive-status-sync/archive-all", response_class=JSONResponse)
+async def archive_all_mismatched():
+    """Archive all mismatched products (ACTIVE with Shopify ARCHIVED, not on other platforms)."""
+    async with get_session() as db:
+        # Get all mismatched product IDs
+        query = text("""
+            SELECT p.id
+            FROM products p
+            INNER JOIN platform_common pc_shopify
+                ON pc_shopify.product_id = p.id
+                AND pc_shopify.platform_name = 'shopify'
+            INNER JOIN shopify_listings sl
+                ON sl.platform_id = pc_shopify.id
+            WHERE UPPER(sl.status) = 'ARCHIVED'
+              AND p.status = 'ACTIVE'
+              AND NOT EXISTS (
+                  SELECT 1 FROM platform_common pc2
+                  WHERE pc2.product_id = p.id
+                  AND pc2.platform_name IN ('reverb', 'ebay', 'vr')
+                  AND UPPER(pc2.status) IN ('ACTIVE', 'LIVE')
+              )
+        """)
+
+        result = await db.execute(query)
+        product_ids = [row[0] for row in result.fetchall()]
+
+        if not product_ids:
+            return JSONResponse({"status": "info", "message": "No products to archive", "archived_count": 0})
+
+        # Update all to ARCHIVED
+        update_query = text("""
+            UPDATE products
+            SET status = 'ARCHIVED', updated_at = NOW()
+            WHERE id = ANY(:ids)
+        """)
+        await db.execute(update_query, {"ids": product_ids})
+        await db.commit()
+
+        return JSONResponse({
+            "status": "success",
+            "message": f"Archived {len(product_ids)} product(s)",
+            "archived_count": len(product_ids)
+        })
+
+
 @router.get("/platform-coverage", response_class=HTMLResponse)
 async def platform_coverage_report(
     request: Request,

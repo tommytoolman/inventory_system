@@ -1089,11 +1089,15 @@ class EbayService:
     # 4. BATCH PROCESSING / EVENT LOGGING (Called by differential sync)
     # =========================================================================
     async def _fetch_pending_events(self) -> set:
-        """Fetches all pending sync events for eBay for quick lookups."""
+        """Fetches all sync events for eBay (pending, skipped, etc.) for quick lookups.
+
+        This prevents duplicate events from being created for items that have already
+        been seen and skipped/processed.
+        """
         query = text("""
-            SELECT external_id, change_type 
+            SELECT external_id, change_type
             FROM sync_events
-            WHERE platform_name = 'ebay' AND status = 'pending'
+            WHERE platform_name = 'ebay'
         """)
         result = await self.db.execute(query)
         # Return a set of tuples for very fast checking, e.g., {('12345', 'status'), ('67890', 'price')}
@@ -1229,7 +1233,11 @@ class EbayService:
 
                 is_stocked_item = bool(db_data.get('product_is_stocked'))
 
-                if is_stocked_item and api_quantity_available is not None and db_quantity_available is not None and api_quantity_available != db_quantity_available:
+                # Skip quantity change detection for ended/sold listings
+                api_status = str(api_data.get('status', '')).lower()
+                is_active_listing = api_status not in ('ended', 'sold')
+
+                if is_stocked_item and is_active_listing and api_quantity_available is not None and db_quantity_available is not None and api_quantity_available != db_quantity_available:
                     if (external_id, 'quantity_change') not in pending_events:
                         events_to_log.append({
                             'sync_run_id': sync_run_id,

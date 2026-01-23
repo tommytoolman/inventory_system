@@ -1415,6 +1415,16 @@ async def process_sync_event(
             if action == 'delete':
                 return await _apply_manual_delete(db, event)
 
+            if action == 'skip':
+                # Mark event as skipped without any further processing
+                event.status = 'skipped'
+                event.processed_at = datetime.utcnow()
+                await db.commit()
+                return {
+                    "status": "success",
+                    "message": f"Event {event_id} marked as skipped"
+                }
+
             if action == 'match':
                 product = await _resolve_product_identifier(db, product_identifier)
                 if not product:
@@ -3067,19 +3077,15 @@ async def reconcile_inventory(product_id: int, request: Request):
                             # Need to update Reverb - use apply_product_update with quantity change
                             from app.services.reverb_service import ReverbService
                             reverb_service = ReverbService(db, settings)
-                            # Temporarily set product quantity for the update
-                            original_qty = product.quantity
+                            # Ensure product quantity is set to target for the update
                             product.quantity = target_quantity
-                            try:
-                                result = await reverb_service.apply_product_update(product, link, {"quantity"})
-                                if result.get("status") != "error":
-                                    listing.inventory_quantity = target_quantity
-                                    listing.last_synced_at = datetime.utcnow()
-                                    results["reverb"] = f"updated to {target_quantity}"
-                                else:
-                                    results["reverb"] = f"update failed: {result.get('message', 'unknown')}"
-                            finally:
-                                product.quantity = original_qty
+                            result = await reverb_service.apply_product_update(product, link, {"quantity"})
+                            if result.get("status") != "error":
+                                listing.inventory_quantity = target_quantity
+                                listing.last_synced_at = datetime.utcnow()
+                                results["reverb"] = f"updated to {target_quantity}"
+                            else:
+                                results["reverb"] = f"update failed: {result.get('message', 'unknown')}"
                         else:
                             results["reverb"] = "already correct"
 
@@ -3130,6 +3136,8 @@ async def reconcile_inventory(product_id: int, request: Request):
                             # Need to update Shopify
                             from app.services.shopify_service import ShopifyService
                             shopify_service = ShopifyService(db, shopify_client)
+                            # Ensure product quantity is set to target for the update
+                            product.quantity = target_quantity
                             # Use apply_product_update which handles inventory
                             await shopify_service.apply_product_update(product, link, {"quantity"})
                             results["shopify"] = f"updated to {target_quantity}"

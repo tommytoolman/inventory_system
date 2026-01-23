@@ -1103,10 +1103,24 @@ class ShopifyService:
     async def _batch_create_products(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
         """Log rogue listings to sync_events only - no database records created."""
         created_count, events_logged = 0, 0
-        
-        # Prepare all events first
+
+        # Get existing sync events for these external_ids (any status - pending, skipped, etc.)
+        external_ids = [item['external_id'] for item in items]
+        existing_events_query = select(SyncEvent.external_id).where(
+            SyncEvent.platform_name == 'shopify',
+            SyncEvent.change_type == 'new_listing',
+            SyncEvent.external_id.in_(external_ids)
+        )
+        existing_result = await self.db.execute(existing_events_query)
+        existing_external_ids = {row[0] for row in existing_result.fetchall()}
+
+        # Prepare all events first, skipping those that already have an event
         events_to_create = []
         for item in items:
+            # Skip if there's already any sync event for this listing (pending, skipped, processed, etc.)
+            if item['external_id'] in existing_external_ids:
+                logger.debug(f"Skipping Shopify product {item['external_id']} - sync event already exists")
+                continue
             try:
                 logger.warning(
                     f"Rogue SKU Detected: Shopify product {item['external_id']} ('{item.get('title')}') "

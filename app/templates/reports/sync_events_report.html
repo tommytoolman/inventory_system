@@ -449,10 +449,10 @@
                                             <span>Manual Match</span>
                                         </button>
                                         <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors"
-                                                title="Mark this listing as deleted"
-                                                onclick="deleteSyncEvent({{ event.id }}, this)"
+                                                title="Skip this event (mark as skipped)"
+                                                onclick="skipSyncEvent({{ event.id }}, this)"
                                                 data-event-id="{{ event.id }}">
-                                            <span>Delete Listing</span>
+                                            <span>Skip</span>
                                         </button>
                                     {% else %}
                                         <button class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
@@ -653,10 +653,15 @@
         await processSyncEvent(eventId, 'Delete Listing', { action: 'delete' }, buttonEl);
     }
 
+    async function skipSyncEvent(eventId, buttonEl) {
+        await processSyncEvent(eventId, 'Skip', { action: 'skip' }, buttonEl);
+    }
+
     window.processSyncEvent = processSyncEvent;
     window.matchSyncEvent = matchSyncEvent;
     window.manualMatchSyncEvent = manualMatchSyncEvent;
     window.deleteSyncEvent = deleteSyncEvent;
+    window.skipSyncEvent = skipSyncEvent;
 
     // Clear all pending sync events
     async function clearPendingEvents() {

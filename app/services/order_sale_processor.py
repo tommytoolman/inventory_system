@@ -227,6 +227,89 @@ class OrderSaleProcessor:
 
         return actions
 
+    async def _update_source_platform_local_db(
+        self,
+        product: Product,
+        source_platform: str,
+        dry_run: bool = False,
+    ) -> List[str]:
+        """
+        Update the source platform's local DB with the new quantity.
+
+        The _propagate_quantity_to_platforms() method excludes the source platform,
+        but we still need to update the local DB for the source platform.
+
+        Returns list of actions taken.
+        """
+        actions = []
+
+        # Get the source platform listing for this product
+        result = await self.db.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product.id,
+                PlatformCommon.platform_name == source_platform,
+            )
+        )
+        source_listing = result.scalar_one_or_none()
+
+        if not source_listing:
+            return actions
+
+        new_qty = product.quantity
+
+        if dry_run:
+            action = f"[DRY RUN] Would update {source_platform} local DB qty to {new_qty}"
+            actions.append(action)
+            return actions
+
+        try:
+            if source_platform == "reverb":
+                from app.models.reverb import ReverbListing
+                rev_result = await self.db.execute(
+                    select(ReverbListing).where(ReverbListing.platform_id == source_listing.id)
+                )
+                rev_listing = rev_result.scalar_one_or_none()
+                if rev_listing and rev_listing.inventory_quantity != new_qty:
+                    rev_listing.inventory_quantity = new_qty
+                    self.db.add(rev_listing)
+                    actions.append(f"Reverb: local DB qty updated to {new_qty}")
+                    logger.info(f"Updated Reverb local DB qty to {new_qty} for listing {source_listing.external_id}")
+
+            elif source_platform == "ebay":
+                from app.models.ebay import EbayListing
+                ebay_result = await self.db.execute(
+                    select(EbayListing).where(EbayListing.platform_id == source_listing.id)
+                )
+                ebay_listing = ebay_result.scalar_one_or_none()
+                if ebay_listing and ebay_listing.quantity_available != new_qty:
+                    ebay_listing.quantity_available = new_qty
+                    self.db.add(ebay_listing)
+                    actions.append(f"eBay: local DB qty updated to {new_qty}")
+                    logger.info(f"Updated eBay local DB qty to {new_qty} for listing {source_listing.external_id}")
+
+            elif source_platform == "shopify":
+                from app.models.shopify import ShopifyListing
+                shopify_result = await self.db.execute(
+                    select(ShopifyListing).where(ShopifyListing.platform_id == source_listing.id)
+                )
+                shopify_listing = shopify_result.scalar_one_or_none()
+                if shopify_listing:
+                    # Shopify stores quantity in extended_attributes JSONB
+                    if shopify_listing.extended_attributes is None:
+                        shopify_listing.extended_attributes = {}
+                    current_qty = shopify_listing.extended_attributes.get("totalInventory")
+                    if current_qty != new_qty:
+                        shopify_listing.extended_attributes["totalInventory"] = new_qty
+                        self.db.add(shopify_listing)
+                        actions.append(f"Shopify: local DB qty updated to {new_qty}")
+                        logger.info(f"Updated Shopify local DB qty to {new_qty} for listing {source_listing.external_id}")
+
+        except Exception as e:
+            actions.append(f"{source_platform}: local DB update error - {str(e)[:50]}")
+            logger.error(f"Error updating {source_platform} local DB qty: {e}", exc_info=True)
+
+        return actions
+
     async def process_order(
         self,
         order: Union[ReverbOrder, EbayOrder, ShopifyOrder],
@@ -331,6 +414,12 @@ class OrderSaleProcessor:
                     product, platform, dry_run
                 )
                 result["actions"].extend(propagate_actions)
+
+                # Also update source platform's local DB
+                source_db_actions = await self._update_source_platform_local_db(
+                    product, platform, dry_run
+                )
+                result["actions"].extend(source_db_actions)
             else:
                 result["notes"] = (
                     f"Insufficient quantity: have {product.quantity}, "

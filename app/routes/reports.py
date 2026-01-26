@@ -3135,7 +3135,7 @@ async def reconcile_inventory(product_id: int, request: Request):
                         if actual_shopify_qty is not None and actual_shopify_qty != target_quantity:
                             # Need to update Shopify
                             from app.services.shopify_service import ShopifyService
-                            shopify_service = ShopifyService(db, shopify_client)
+                            shopify_service = ShopifyService(db)
                             # Ensure product quantity is set to target for the update
                             product.quantity = target_quantity
                             # Use apply_product_update which handles inventory

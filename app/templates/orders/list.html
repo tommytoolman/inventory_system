@@ -5,26 +5,31 @@
     <h1 class="text-2xl font-bold mb-6">Orders</h1>
 
     <!-- Summary Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
         <div class="bg-white rounded-lg shadow p-4">
-            <h3 class="text-sm font-medium text-gray-500">Total Orders</h3>
-            <p class="text-2xl font-bold text-gray-900">{{ total_count }}</p>
-            <p class="text-sm text-gray-500">Last {{ days }} days</p>
+            <h3 class="text-xs font-medium text-gray-500">Total Orders</h3>
+            <p class="text-xl font-bold text-gray-900">{{ total_count }}</p>
+            <p class="text-xs text-gray-500">Last {{ days }} days</p>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
-            <h3 class="text-sm font-medium text-gray-500">Total Revenue</h3>
-            <p class="text-2xl font-bold text-green-600">&pound;{{ "{:,.2f}".format(total_revenue) }}</p>
-            <p class="text-sm text-gray-500">Last {{ days }} days</p>
-        </div>
-        <div class="bg-white rounded-lg shadow p-4">
-            <h3 class="text-sm font-medium text-gray-500">eBay</h3>
-            <p class="text-xl font-bold text-blue-600">{{ platform_stats.get('ebay', {}).get('count', 0) }} orders</p>
-            <p class="text-sm text-gray-500">&pound;{{ "{:,.2f}".format(platform_stats.get('ebay', {}).get('revenue', 0)) }}</p>
+            <h3 class="text-xs font-medium text-gray-500">Total Revenue</h3>
+            <p class="text-xl font-bold text-green-600">&pound;{{ "{:,.0f}".format(total_revenue) }}</p>
+            <p class="text-xs text-gray-500">Last {{ days }} days</p>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
             <h3 class="text-sm font-medium text-gray-500">Reverb</h3>
             <p class="text-xl font-bold text-orange-600">{{ platform_stats.get('reverb', {}).get('count', 0) }} orders</p>
-            <p class="text-sm text-gray-500">&pound;{{ "{:,.2f}".format(platform_stats.get('reverb', {}).get('revenue', 0)) }}</p>
+            <p class="text-sm text-gray-500">&pound;{{ "{:,.0f}".format(platform_stats.get('reverb', {}).get('revenue', 0)) }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <h3 class="text-sm font-medium text-gray-500">eBay</h3>
+            <p class="text-xl font-bold text-blue-600">{{ platform_stats.get('ebay', {}).get('count', 0) }} orders</p>
+            <p class="text-sm text-gray-500">&pound;{{ "{:,.0f}".format(platform_stats.get('ebay', {}).get('revenue', 0)) }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <h3 class="text-sm font-medium text-gray-500">Shopify</h3>
+            <p class="text-xl font-bold text-green-600">{{ platform_stats.get('shopify', {}).get('count', 0) }} orders</p>
+            <p class="text-sm text-gray-500">&pound;{{ "{:,.0f}".format(platform_stats.get('shopify', {}).get('revenue', 0)) }}</p>
         </div>
     </div>
 

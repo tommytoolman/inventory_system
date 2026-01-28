@@ -148,16 +148,15 @@ class OrderSaleProcessor:
                 if platform == "ebay" and listing.external_id:
                     ebay_service = self._get_ebay_service()
                     if ebay_service:
-                        # Get eBay listing for SKU
+                        # Get eBay listing to update local DB later
                         from app.models.ebay import EbayListing
                         ebay_result = await self.db.execute(
                             select(EbayListing).where(EbayListing.platform_id == listing.id)
                         )
                         ebay_listing = ebay_result.scalar_one_or_none()
-                        sku = ebay_listing.sku if ebay_listing else None
 
                         success = await ebay_service.update_listing_quantity(
-                            listing.external_id, new_qty, sku=sku
+                            listing.external_id, new_qty, sku=product.sku
                         )
                         if success:
                             actions.append(f"eBay: qty updated to {new_qty}")

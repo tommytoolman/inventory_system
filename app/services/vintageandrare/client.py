@@ -938,11 +938,30 @@ class VintageAndRareClient:
             # Use curl_cffi session if available (better Cloudflare bypass)
             active_session = self.cf_session if self.cf_session else self.session
             session_type = "curl_cffi" if self.cf_session else "requests"
+
+            # IMPORTANT: V&R now requires visiting the export page first (Jan 2026)
+            # This sets the proper referer and validates the session
+            export_page_url = f"{self.BASE_URL}/instruments/export_inventory"
+            logger.info(f"Visiting export page first: {export_page_url}")
+            print(f"Visiting export page: {export_page_url}")
+            page_response = active_session.get(
+                export_page_url,
+                headers=self.headers,
+                allow_redirects=True,
+                timeout=30
+            )
+            if page_response.status_code != 200:
+                logger.warning(f"Export page returned {page_response.status_code}, continuing anyway...")
+
+            # Now download the CSV with the correct Referer header
+            download_headers = self.headers.copy()
+            download_headers["Referer"] = export_page_url  # Must come from export page
+
             print(f"Requesting inventory CSV from {self.EXPORT_URL} using {session_type}")
             print(f"Timeout set to {INVENTORY_TIMEOUT} seconds")
             response = active_session.get(
                 self.EXPORT_URL,
-                headers=self.headers,
+                headers=download_headers,
                 allow_redirects=True,
                 stream=True,
                 timeout=INVENTORY_TIMEOUT

@@ -13,7 +13,7 @@ RIFF is a multi-platform inventory management system built for music gear retail
 
 ## Complete Tech Stack
 
-### Backend Framework
+### Core Framework
 - **FastAPI 0.115.8** - Modern async Python web framework
   - Auto-generated OpenAPI docs
   - Native async/await support
@@ -21,11 +21,13 @@ RIFF is a multi-platform inventory management system built for music gear retail
 - **Uvicorn 0.34.0** - ASGI server
 - **Python 3.12** - Language runtime
 
-### Database Layer
-- **PostgreSQL** - Primary database (production hosted on Railway)
-- **SQLAlchemy 2.0.37** - ORM with async support
+### Database
+- **PostgreSQL** - Primary RDBMS (production hosted on Railway)
+
+### ORM & Migrations (Libraries)
+- **SQLAlchemy 2.0.37** - Async ORM library
+- **Alembic 1.14.1** - Database migration tool
 - **asyncpg 0.30.0** - Async PostgreSQL driver
-- **Alembic 1.14.1** - Database migrations
 - **psycopg2-binary 2.9.9** - Sync PostgreSQL driver (for migrations/scripts)
 
 ### Frontend

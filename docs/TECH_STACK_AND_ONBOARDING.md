@@ -29,10 +29,24 @@ RIFF is a multi-platform inventory management system built for music gear retail
 - **psycopg2-binary 2.9.9** - Sync PostgreSQL driver (for migrations/scripts)
 
 ### Frontend
-- **Jinja2 3.1.4** - Server-side templating
-- **TailwindCSS** - Utility-first CSS (via CDN)
-- **Vanilla JavaScript** - No framework, progressive enhancement
-- **HTMX patterns** - For dynamic updates without SPA complexity
+- **Jinja2 3.1.4** - Server-side HTML templating
+- **TailwindCSS** - Utility classes via CDN (no separate .css files)
+- **Vanilla JavaScript** - Single file (`inventory.js`), class-based, ~500 lines
+- **Inline CSS** - Custom styles in `<style>` blocks, no preprocessors
+
+### Other Languages
+- **SQL** - PostgreSQL queries, migrations, views (`scripts/sql/*.sql`)
+- **Bash** - Setup/deployment scripts (`scripts/**/*.sh`)
+- **XML** - eBay Trading API responses (parsed via xmltodict)
+- **JSON** - API payloads, JSONB database columns
+- **CSV** - Import/export (pandas)
+- **INI** - Alembic config
+- **ENV** - Secrets/config (60+ variables)
+- **Markdown** - Documentation
+
+**Intentionally NOT used:**
+- ❌ TypeScript, React/Vue/Angular, CSS preprocessors, Webpack/Vite
+- ❌ Keeps codebase simple, no build step, easy onboarding
 
 ### Platform Integrations
 

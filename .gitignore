@@ -55,3 +55,6 @@ scripts/reverb/output/
 logs/
 railway_status.json
 .vscode/.claude/settings.local.json
+
+# Onboarding PDF contains sensitive information
+docs/RIFF_Developer_Onboarding.pdf

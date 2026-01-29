@@ -404,11 +404,18 @@
                                 
                                 {% if event.status == 'pending' and event.change_type == 'status_change' %}
                                     {% if event.change_data and event.change_data.new in ['sold', 'ended'] %}
-                                    <button class="px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors" 
+                                    <button class="px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
                                             title="Remove from all platforms"
                                             onclick="processSyncEvent({{ event.id }}, 'Remove / End', {}, this)"
                                             data-event-id="{{ event.id }}">
                                         <span>Remove / End</span>
+                                    </button>
+                                    {% elif event.change_data and event.change_data.new in ['live', 'active'] and event.change_data.old in ['sold', 'ended'] %}
+                                    <button class="px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                                            title="End this listing on {{ event.platform_name.upper() if event.platform_name != 'vr' else 'V&R' }}"
+                                            onclick="processSyncEvent({{ event.id }}, 'End on Platform', { action: 'end_on_platform' }, this)"
+                                            data-event-id="{{ event.id }}">
+                                        <span>End on {{ event.platform_name.upper() if event.platform_name != 'vr' else 'V&R' }}</span>
                                     </button>
                                     {% elif event.change_data and event.change_data.new in ['live', 'active'] %}
                                     <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"

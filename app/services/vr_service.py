@@ -59,18 +59,20 @@ class VRService:
         return mapping["status"] if mapping else row[0]
 
     async def _remove_vr_association(self, platform_common_id: Optional[int]) -> None:
-        """Remove local VR platform linkage (platform_common + vr_listing)."""
+        """Remove local VR platform linkage (vr_listing only, keep platform_common for sync history)."""
         if not platform_common_id:
             return
 
+        # Delete the VR-specific listing data
         await self.db.execute(
             text("DELETE FROM vr_listings WHERE platform_id = :pid"),
             {"pid": platform_common_id}
         )
-        await self.db.execute(
-            text("DELETE FROM platform_common WHERE id = :pid"),
-            {"pid": platform_common_id}
-        )
+
+        # NOTE: We DON'T delete platform_common because:
+        # 1. It's referenced by sync_events (foreign key constraint)
+        # 2. We need it for sync history
+        # 3. The listing is just no longer on V&R, but may still exist on other platforms
         
 
     # =========================================================================

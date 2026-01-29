@@ -2352,15 +2352,33 @@ class EbayService:
         logger.info(f"Received request to update eBay listing {external_id} to price £{new_price:.2f}.")
         try:
             response = await self.trading_api.revise_listing_price(external_id, new_price)
-            
+
             if response and response.get("Ack") in ["Success", "Warning"]:
                 logger.info(f"Successfully sent price update for eBay listing {external_id}.")
                 return True
-            
+
             logger.error(f"API call to update price for eBay listing {external_id} failed. Response: {response}")
             return False
         except Exception as e:
             logger.error(f"Exception while updating price for eBay listing {external_id}: {e}", exc_info=True)
+            return False
+
+    async def end_listing(self, external_id: str, reason_code: str = "NotAvailable") -> bool:
+        """Outbound action to end a listing on eBay."""
+        logger.info(f"Received request to end eBay listing {external_id} with reason '{reason_code}'.")
+        try:
+            response = await self.trading_api.end_listing(external_id, reason_code)
+
+            if response and response.get("Ack") in ["Success", "Warning"]:
+                logger.info(f"Successfully ended eBay listing {external_id}.")
+                # Update local database
+                await self._mark_local_ebay_listing_ended(external_id)
+                return True
+
+            logger.error(f"API call to end eBay listing {external_id} failed. Response: {response}")
+            return False
+        except Exception as e:
+            logger.error(f"Exception while ending eBay listing {external_id}: {e}", exc_info=True)
             return False
 
     async def update_listing_quantity(

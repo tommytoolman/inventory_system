@@ -1449,6 +1449,10 @@ async def process_sync_event(
                 # Flow 1: Reverb relisted, propagate to other platforms
                 return await _relist_from_reverb(db, event)
 
+            if action == 'end_on_platform':
+                # End a listing on a specific platform when it should have been ended but wasn't
+                return await _end_on_platform(db, event)
+
             # Route based on event type
             if event.change_type == 'new_listing':
                 # Use the EventProcessor class EXACTLY like the CLI script
@@ -1684,6 +1688,158 @@ async def _relist_from_reverb(db: AsyncSession, event: SyncEvent) -> Dict[str, A
                 "errors": result.errors,
                 "platforms_failed": result.platforms_failed
             }
+        }
+
+
+async def _end_on_platform(db: AsyncSession, event: SyncEvent) -> Dict[str, Any]:
+    """
+    End a listing on a specific platform when the platform shows it as active
+    but it should have been ended (typically when the platform was unreachable
+    during the original end operation).
+
+    Example: Item was ended on RIFF while V&R was down. V&R still shows active.
+    This function ends it on the specific platform to match RIFF's state.
+    """
+    platform_name = (event.platform_name or '').lower()
+
+    if event.change_type != 'status_change':
+        return {
+            "status": "error",
+            "message": "End on platform is only available for status change events"
+        }
+
+    change_data = event.change_data or {}
+    old_status = str(change_data.get('old') or '').lower()
+    new_status = str(change_data.get('new') or '').lower()
+
+    # Verify this is an ended→active transition
+    if old_status not in {'sold', 'ended'} or new_status not in {'live', 'active'}:
+        return {
+            "status": "error",
+            "message": f"Invalid status transition for ending: '{old_status}' → '{new_status}'"
+        }
+
+    if not event.external_id:
+        return {
+            "status": "error",
+            "message": "Cannot end listing - no external_id found"
+        }
+
+    # Route to the appropriate platform service
+    try:
+        if platform_name == 'vr':
+            from app.services.vr_service import VRService
+            vr_service = VRService(db)
+            success = await vr_service.mark_item_as_sold(event.external_id)
+
+            if success:
+                # Mark event as processed
+                now_utc = datetime.utcnow()
+                event.status = 'processed'
+                event.processed_at = now_utc
+                notes_msg = f"Ended on V&R via Sync Events UI"
+                event.notes = f"{event.notes}\n{notes_msg}" if event.notes else notes_msg
+                db.add(event)
+                await db.commit()
+
+                return {
+                    "status": "success",
+                    "message": f"Listing {event.external_id} successfully ended on V&R"
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to end listing {event.external_id} on V&R"
+                }
+
+        elif platform_name == 'ebay':
+            from app.services.ebay_service import EbayService
+            from app.core.config import get_settings
+            settings = get_settings()
+            ebay_service = EbayService(db, settings)
+            success = await ebay_service.end_listing(event.external_id)
+
+            if success:
+                now_utc = datetime.utcnow()
+                event.status = 'processed'
+                event.processed_at = now_utc
+                notes_msg = f"Ended on eBay via Sync Events UI"
+                event.notes = f"{event.notes}\n{notes_msg}" if event.notes else notes_msg
+                db.add(event)
+                await db.commit()
+
+                return {
+                    "status": "success",
+                    "message": f"Listing {event.external_id} successfully ended on eBay"
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to end listing {event.external_id} on eBay"
+                }
+
+        elif platform_name == 'reverb':
+            from app.services.reverb_service import ReverbService
+            from app.core.config import get_settings
+            settings = get_settings()
+            reverb_service = ReverbService(db, settings.REVERB_API_KEY)
+            success = await reverb_service.end_listing(int(event.external_id))
+
+            if success:
+                now_utc = datetime.utcnow()
+                event.status = 'processed'
+                event.processed_at = now_utc
+                notes_msg = f"Ended on Reverb via Sync Events UI"
+                event.notes = f"{event.notes}\n{notes_msg}" if event.notes else notes_msg
+                db.add(event)
+                await db.commit()
+
+                return {
+                    "status": "success",
+                    "message": f"Listing {event.external_id} successfully ended on Reverb"
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to end listing {event.external_id} on Reverb"
+                }
+
+        elif platform_name == 'shopify':
+            from app.services.shopify_service import ShopifyService
+            from app.core.config import get_settings
+            settings = get_settings()
+            shopify_service = ShopifyService(db, settings)
+            success = await shopify_service.mark_item_as_sold(event.external_id)
+
+            if success:
+                now_utc = datetime.utcnow()
+                event.status = 'processed'
+                event.processed_at = now_utc
+                notes_msg = f"Ended on Shopify via Sync Events UI"
+                event.notes = f"{event.notes}\n{notes_msg}" if event.notes else notes_msg
+                db.add(event)
+                await db.commit()
+
+                return {
+                    "status": "success",
+                    "message": f"Listing {event.external_id} successfully ended on Shopify"
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to end listing {event.external_id} on Shopify"
+                }
+        else:
+            return {
+                "status": "error",
+                "message": f"Platform '{platform_name}' is not supported for ending listings"
+            }
+
+    except Exception as e:
+        logger.error(f"Error ending listing on {platform_name}: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "message": f"Exception while ending listing: {str(e)}"
         }
 
 

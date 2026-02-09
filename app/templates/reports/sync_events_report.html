@@ -411,7 +411,13 @@
                                         <span>Remove / End</span>
                                     </button>
                                     {% elif event.change_data and event.change_data.new in ['live', 'active'] and event.change_data.old in ['sold', 'ended'] %}
-                                    <button class="px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                                    <button class="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                                            title="Relist on all platforms (eBay, Shopify, V&R)"
+                                            onclick="processSyncEvent({{ event.id }}, 'Relist on All Platforms', { action: 'relist' }, this)"
+                                            data-event-id="{{ event.id }}">
+                                        <span>Relist</span>
+                                    </button>
+                                    <button class="px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors mt-1"
                                             title="End this listing on {{ event.platform_name.upper() if event.platform_name != 'vr' else 'V&R' }}"
                                             onclick="processSyncEvent({{ event.id }}, 'End on Platform', { action: 'end_on_platform' }, this)"
                                             data-event-id="{{ event.id }}">

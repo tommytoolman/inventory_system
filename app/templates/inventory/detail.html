@@ -354,7 +354,7 @@
                 <div class="border rounded p-4 bg-white">
                     <div class="flex items-end justify-between mb-4 pb-3 border-b border-gray-300">
                         <h2 class="text-lg font-semibold leading-none pb-0">Images</h2>
-                        {% if reverb_listing_id %}
+                        {% if has_image_platforms %}
                             <button id="refresh-images-btn"
                                     type="button"
                                     data-refresh-url="{{ url_for('refresh_product_images', product_id=product.id) }}"

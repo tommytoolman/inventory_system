@@ -1899,6 +1899,12 @@ async def product_detail(
         if reverb_listing and reverb_listing.external_id:
             reverb_listing_id = reverb_listing.external_id
 
+        has_image_platforms = bool(
+            common_listings_map.get("REVERB")
+            or common_listings_map.get("SHOPIFY")
+            or common_listings_map.get("EBAY")
+        )
+
         # Get sale info for sold products
         sale_info = None
         if product.status and product.status.value.upper() == 'SOLD':
@@ -1935,6 +1941,7 @@ async def product_detail(
             "prev_product": prev_product,
             "next_product": next_product,
             "reverb_listing_id": reverb_listing_id,
+            "has_image_platforms": has_image_platforms,
             "sale_info": sale_info,
             "listing_is_stale": listing_is_stale,
             "listing_age_months": listing_age_months,
@@ -3184,6 +3191,7 @@ async def handle_create_platform_listing_from_detail(
                     product=product,
                     reverb_api_data=enriched_data,
                     use_shipping_profile=True,  # Always use Business Policies
+                    price_override=Decimal(str(ebay_price)),
                     **policies
                 )
                 

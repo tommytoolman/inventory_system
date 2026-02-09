@@ -91,7 +91,76 @@ async def refresh_canonical_gallery(
     platform_common = result.scalar_one_or_none()
 
     if not platform_common or not platform_common.external_id:
-        logger.warning("Product %s has no Reverb listing; skipping canonical refresh", product.id)
+        logger.warning("Product %s has no Reverb listing; trying Shopify fallback", product.id)
+
+        # Shopify fallback: fetch images from Shopify when no Reverb listing exists
+        try:
+            shopify_stmt = (
+                select(PlatformCommon)
+                .options(selectinload(PlatformCommon.shopify_listing))
+                .where(
+                    PlatformCommon.product_id == product.id,
+                    PlatformCommon.platform_name == "shopify",
+                )
+            )
+            shopify_result = await session.execute(shopify_stmt)
+            shopify_common = shopify_result.scalar_one_or_none()
+
+            if shopify_common:
+                listing: Optional[ShopifyListing] = shopify_common.shopify_listing
+                if not listing:
+                    listing_result = await session.execute(
+                        select(ShopifyListing).where(ShopifyListing.platform_id == shopify_common.id)
+                    )
+                    listing = listing_result.scalar_one_or_none()
+
+                product_gid = None
+                if listing:
+                    product_gid = listing.shopify_product_id or listing.handle
+                if not product_gid:
+                    pdata = shopify_common.platform_specific_data or {}
+                    candidate = pdata.get("id") if isinstance(pdata, dict) else None
+                    if candidate and str(candidate).startswith("gid://"):
+                        product_gid = candidate
+
+                if product_gid:
+                    shopify_service = ShopifyService(session, settings)
+                    snapshot = shopify_service.client.get_product_snapshot_by_id(
+                        product_gid, num_images=50, num_variants=1, num_metafields=0,
+                    )
+                    if snapshot:
+                        image_edges = (snapshot.get("images") or {}).get("edges") or []
+                        shopify_urls: List[str] = [
+                            edge["node"]["url"]
+                            for edge in image_edges
+                            if isinstance(edge, dict)
+                            and edge.get("node")
+                            and edge["node"].get("url")
+                        ]
+
+                        if shopify_urls:
+                            new_primary = shopify_urls[0]
+                            new_additional = shopify_urls[1:] if len(shopify_urls) > 1 else []
+
+                            if new_primary != product.primary_image or new_additional != (product.additional_images or []):
+                                product.primary_image = new_primary
+                                product.additional_images = new_additional
+                                await session.commit()
+                                await session.refresh(product)
+
+                                new_gallery = [new_primary] + new_additional
+                                logger.info(
+                                    "Shopify fallback updated gallery for product %s: %s images",
+                                    product.id, len(new_gallery),
+                                )
+                                return new_gallery, True
+
+                            logger.info("Shopify fallback: gallery already matches for product %s", product.id)
+                            return gallery, False
+
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Shopify fallback failed for product %s: %s", product.id, exc)
+
         return gallery, False
 
     expected = len(gallery) or None

@@ -1,199 +1,232 @@
 {% extends "base.html" %}
 
-{% block title %}Price Inconsistencies - RIFF{% endblock %}
+{% block title %}Price Markup Report - RIFF{% endblock %}
+
+{# ── Helper: build a sort-toggle URL preserving current filters ── #}
+{% macro sort_url(col) %}
+{%- set new_order = 'asc' if sort_by == col and sort_order == 'desc' else 'desc' -%}
+?threshold={{ threshold }}&status_filter={{ status_filter }}&platform_filter={{ platform_filter }}&sort_by={{ col }}&sort_order={{ new_order }}
+{%- endmacro %}
+
+{% macro sort_arrow(col) %}
+{%- if sort_by == col -%}
+    {%- if sort_order == 'desc' -%}
+        <svg class="inline w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    {%- else -%}
+        <svg class="inline w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+    {%- endif -%}
+{%- endif -%}
+{% endmacro %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="container mx-auto px-4 py-6">
     <!-- Header -->
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">Price Inconsistencies</h1>
-        <p class="text-gray-600">Detect products with significant price differences between platforms</p>
+    <div class="mb-4">
+        <h1 class="text-2xl font-bold text-gray-900">Price Markup Report</h1>
     </div>
 
-    <!-- Filters -->
-    <div class="bg-white rounded-lg shadow p-4 mb-6">
-        <form method="get" class="flex flex-wrap gap-4 items-end">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Threshold (%)</label>
+    <!-- Filter bar + stats -->
+    <div class="bg-white rounded-lg shadow p-3 mb-5">
+        <form id="filterForm" method="get" class="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {# ── Filters ── #}
+            <div class="flex items-center gap-1">
+                <label class="text-xs text-gray-500">Markup &ge;</label>
                 <input type="number" name="threshold" value="{{ threshold }}" min="0" max="100" step="0.1"
-                       class="w-24 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                       class="auto-submit w-16 text-sm rounded border-gray-300 py-1 px-2">
+                <span class="text-xs text-gray-500">%</span>
             </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select name="status_filter" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <option value="ALL" {% if status_filter == "ALL" %}selected{% endif %}>All Statuses</option>
-                    <option value="ACTIVE" {% if status_filter == "ACTIVE" %}selected{% endif %}>Active</option>
-                    <option value="SOLD" {% if status_filter == "SOLD" %}selected{% endif %}>Sold</option>
-                    <option value="INACTIVE" {% if status_filter == "INACTIVE" %}selected{% endif %}>Inactive</option>
-                </select>
+
+            <select name="status_filter" class="auto-submit text-sm rounded border-gray-300 py-1 px-2">
+                <option value="ALL" {% if status_filter == "ALL" %}selected{% endif %}>All statuses</option>
+                <option value="ACTIVE" {% if status_filter == "ACTIVE" %}selected{% endif %}>Active</option>
+                <option value="SOLD" {% if status_filter == "SOLD" %}selected{% endif %}>Sold</option>
+                <option value="INACTIVE" {% if status_filter == "INACTIVE" %}selected{% endif %}>Inactive</option>
+            </select>
+
+            <select name="platform_filter" class="auto-submit text-sm rounded border-gray-300 py-1 px-2">
+                <option value="all" {% if platform_filter == "all" %}selected{% endif %}>Any platform</option>
+                <option value="ebay" {% if platform_filter == "ebay" %}selected{% endif %}>eBay only</option>
+                <option value="vr" {% if platform_filter == "vr" %}selected{% endif %}>VR only</option>
+                <option value="reverb" {% if platform_filter == "reverb" %}selected{% endif %}>Reverb only</option>
+            </select>
+
+            {# hidden fields so header-click sort survives filter submits #}
+            <input type="hidden" name="sort_by" value="{{ sort_by }}">
+            <input type="hidden" name="sort_order" value="{{ sort_order }}">
+
+            {# ── Stats (right-aligned) ── #}
+            <div class="ml-auto flex items-center gap-4 text-xs text-gray-500 whitespace-nowrap">
+                <span><strong class="text-gray-800">{{ "{:,}".format(summary_stats.total_products or 0) }}</strong> checked</span>
+                <span><strong class="text-red-600">{{ "{:,}".format(summary_stats.products_below_threshold or 0) }}</strong> flagged</span>
             </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
-                <select name="sort_by" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <option value="max_diff" {% if sort_by == "max_diff" %}selected{% endif %}>Price Difference %</option>
-                    <option value="sku" {% if sort_by == "sku" %}selected{% endif %}>SKU</option>
-                    <option value="brand" {% if sort_by == "brand" %}selected{% endif %}>Brand</option>
-                    <option value="model" {% if sort_by == "model" %}selected{% endif %}>Model</option>
-                    <option value="base_price" {% if sort_by == "base_price" %}selected{% endif %}>Base Price</option>
-                    <option value="platforms" {% if sort_by == "platforms" %}selected{% endif %}>Platform Count</option>
-                </select>
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Order</label>
-                <select name="sort_order" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <option value="desc" {% if sort_order == "desc" %}selected{% endif %}>Highest First</option>
-                    <option value="asc" {% if sort_order == "asc" %}selected{% endif %}>Lowest First</option>
-                </select>
-            </div>
-            
-            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                Update
-            </button>
         </form>
     </div>
 
-    <!-- Summary Statistics -->
-    <div class="bg-white rounded-lg shadow mb-6">
-        <div class="px-6 py-4 border-b">
-            <h2 class="text-xl font-semibold">Summary</h2>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 p-6">
-            <div class="text-center">
-                <div class="text-3xl font-bold text-gray-900">{{ "{:,}".format(summary_stats.total_products or 0) }}</div>
-                <div class="text-sm text-gray-500">Total Products</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl font-bold text-red-600">{{ "{:,}".format(summary_stats.products_above_threshold or 0) }}</div>
-                <div class="text-sm text-gray-500">Above {{ threshold }}% Threshold</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl font-bold text-orange-600">{{ "{:.1f}%".format(summary_stats.avg_price_diff_pct or 0) }}</div>
-                <div class="text-sm text-gray-500">Avg Difference</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl font-bold text-red-700">{{ "{:.1f}%".format(summary_stats.max_price_diff_pct or 0) }}</div>
-                <div class="text-sm text-gray-500">Max Difference</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl font-bold text-blue-600">£{{ "{:,.0f}".format(summary_stats.total_price_variance or 0) }}</div>
-                <div class="text-sm text-gray-500">Total Variance</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Price Inconsistencies Table -->
+    <!-- Table -->
     <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b flex justify-between items-center">
-            <h2 class="text-xl font-semibold">Price Inconsistencies</h2>
-            <div class="flex space-x-2">
-                <button onclick="exportToCSV()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Export CSV
-                </button>
-            </div>
-        </div>
         <div class="overflow-x-auto">
             <table class="min-w-full">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Base Price</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Platform Prices</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Price Range</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Difference</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="min-width:180px;max-width:260px">
+                            <a href="{{ sort_url('brand') }}" class="hover:text-gray-800">Product{{ sort_arrow('brand') }}</a>
+                        </th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <a href="{{ sort_url('base_price') }}" class="hover:text-gray-800">Base{{ sort_arrow('base_price') }}</a>
+                        </th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Shopify</th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reverb</th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">VR</th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">eBay</th>
+                        <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for item in inconsistencies %}
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4">
-                            <div class="flex items-center">
+                    <tr class="hover:bg-gray-50" id="row-{{ item.id }}">
+                        {# ── Product ── #}
+                        <td class="px-4 py-2" style="max-width:260px">
+                            <a href="/inventory/product/{{ item.id }}" class="flex items-center group">
                                 {% if item.primary_image %}
-                                <img class="h-12 w-12 rounded object-cover mr-3" 
-                                     src="{{ item.primary_image }}" 
-                                     alt="{{ item.brand }} {{ item.model }}">
+                                <img class="h-9 w-9 rounded object-cover mr-2 flex-shrink-0"
+                                     src="{{ item.primary_image }}"
+                                     alt="{{ item.brand }} {{ item.model }}"
+                                     loading="lazy">
                                 {% endif %}
-                                <div>
-                                    <div class="text-sm font-medium text-gray-900">
+                                <div class="min-w-0">
+                                    <div class="text-sm font-medium text-gray-900 group-hover:text-blue-600 truncate">
                                         {{ item.brand }} {{ item.model }}
-                                        {% if item.year %}<span class="text-gray-500">({{ item.year }})</span>{% endif %}
+                                        {% if item.year %}<span class="text-gray-400">({{ item.year }})</span>{% endif %}
                                     </div>
-                                    <div class="text-sm text-gray-500">{{ item.sku }}</div>
+                                    <div class="text-xs text-gray-400">{{ item.sku }}</div>
                                 </div>
+                            </a>
+                        </td>
+
+                        {# ── Base Price ── #}
+                        <td class="px-3 py-2 text-center">
+                            <div class="text-sm font-semibold text-gray-900">&pound;{{ "{:,.0f}".format(item.base_price) }}</div>
+                        </td>
+
+                        {# ── Platform columns: Shopify, Reverb, VR, eBay ── #}
+                        {% for pname in ['shopify', 'reverb', 'vr', 'ebay'] %}
+                        <td class="px-3 py-2 text-center" data-platform="{{ pname }}" data-product="{{ item.id }}">
+                            {% set matches = item.platform_details | selectattr('platform', 'equalto', pname) | list %}
+                            {% if matches %}
+                                {% set d = matches[0] %}
+                                <div class="text-sm text-gray-900 price-display">&pound;{{ "{:,.0f}".format(d.price) }}</div>
+                                {% if pname == 'shopify' %}
+                                    <div class="text-xs text-gray-400 markup-display">&ndash;</div>
+                                {% else %}
+                                    <div class="text-xs font-medium markup-display
+                                        {% if d.markup_pct is not none and d.markup_pct < 0 %}text-red-700
+                                        {% elif d.markup_pct is not none and d.markup_pct < threshold %}text-red-500
+                                        {% else %}text-green-600{% endif %}">
+                                        {% if d.markup_pct is not none %}{{ "{:+.1f}%".format(d.markup_pct) }}{% else %}?{% endif %}
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-gray-300">&ndash;</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+
+                        {# ── Actions ── #}
+                        <td class="px-2 py-2 text-right whitespace-nowrap">
+                            <div class="flex items-center gap-1.5 justify-end">
+                                <button onclick="checkPrice({{ item.id }}, {{ item.base_price }}, this)"
+                                        class="check-btn px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">
+                                    Check
+                                </button>
+                                <span class="inline-flex items-center gap-1 ml-1" title="Fix underpriced platforms">
+                                    {# ── Reverb icon ── #}
+                                    {% set reverb_matches = item.platform_details | selectattr('platform', 'equalto', 'reverb') | list %}
+                                    {% set reverb_needs_fix = reverb_matches and reverb_matches[0].markup_pct is not none and reverb_matches[0].markup_pct < threshold %}
+                                    {% if reverb_needs_fix %}
+                                    <button onclick="openFixModal('reverb', {{ item.id }}, {{ item.base_price }}, {{ item.suggested_reverb_price }}, {{ reverb_matches[0].price }})"
+                                            class="p-0.5 rounded hover:bg-orange-100 focus:outline-none focus:ring-1 focus:ring-orange-300 transition-colors" title="Fix Reverb price">
+                                        <img src="https://www.google.com/s2/favicons?sz=32&domain=reverb.com" class="w-6 h-6" alt="Reverb">
+                                    </button>
+                                    {% else %}
+                                    <span class="p-0.5 opacity-20"><img src="https://www.google.com/s2/favicons?sz=32&domain=reverb.com" class="w-6 h-6 grayscale" alt="Reverb"></span>
+                                    {% endif %}
+                                    {# ── VR icon ── #}
+                                    {% set vr_matches = item.platform_details | selectattr('platform', 'equalto', 'vr') | list %}
+                                    {% set vr_needs_fix = vr_matches and vr_matches[0].markup_pct is not none and vr_matches[0].markup_pct < threshold %}
+                                    {% if vr_needs_fix %}
+                                    <button onclick="openFixModal('vr', {{ item.id }}, {{ item.base_price }}, {{ item.suggested_vr_price }}, {{ vr_matches[0].price }})"
+                                            class="p-0.5 rounded hover:bg-orange-100 focus:outline-none focus:ring-1 focus:ring-orange-300 transition-colors" title="Fix V&R price">
+                                        <img src="https://www.google.com/s2/favicons?sz=32&domain=vintageandrare.com" class="w-6 h-6" alt="V&R">
+                                    </button>
+                                    {% else %}
+                                    <span class="p-0.5 opacity-20"><img src="https://www.google.com/s2/favicons?sz=32&domain=vintageandrare.com" class="w-6 h-6 grayscale" alt="V&R"></span>
+                                    {% endif %}
+                                    {# ── eBay icon ── #}
+                                    {% set ebay_matches = item.platform_details | selectattr('platform', 'equalto', 'ebay') | list %}
+                                    {% set ebay_needs_fix = ebay_matches and ebay_matches[0].markup_pct is not none and ebay_matches[0].markup_pct < threshold %}
+                                    {% if ebay_needs_fix %}
+                                    <button onclick="openFixModal('ebay', {{ item.id }}, {{ item.base_price }}, {{ item.suggested_ebay_price }}, {{ ebay_matches[0].price }})"
+                                            class="p-0.5 rounded hover:bg-orange-100 focus:outline-none focus:ring-1 focus:ring-orange-300 transition-colors" title="Fix eBay price">
+                                        <img src="https://www.google.com/s2/favicons?sz=32&domain=ebay.com" class="w-6 h-6" alt="eBay">
+                                    </button>
+                                    {% else %}
+                                    <span class="p-0.5 opacity-20"><img src="https://www.google.com/s2/favicons?sz=32&domain=ebay.com" class="w-6 h-6 grayscale" alt="eBay"></span>
+                                    {% endif %}
+                                </span>
                             </div>
-                        </td>
-                        <td class="px-6 py-4 text-center">
-                            <div class="text-sm font-semibold text-gray-900">£{{ "{:,.0f}".format(item.base_price) }}</div>
-                        </td>
-                        <td class="px-6 py-4">
-                            <div class="flex flex-wrap gap-2 justify-center">
-                                {% for detail in item.platform_details %}
-                                <div class="inline-flex items-center px-2 py-1 rounded text-xs 
-                                           {% if detail.price == item.max_price %}bg-red-100 text-red-800
-                                           {% elif detail.price == item.min_price %}bg-green-100 text-green-800
-                                           {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                    <span class="font-semibold">{{ detail.platform|upper }}:</span>
-                                    <span class="ml-1">£{{ "{:,.0f}".format(detail.price) }}</span>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 text-center">
-                            <div class="text-sm">
-                                <span class="text-green-600">£{{ "{:,.0f}".format(item.min_price) }}</span>
-                                <span class="text-gray-500 mx-1">-</span>
-                                <span class="text-red-600">£{{ "{:,.0f}".format(item.max_price) }}</span>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 text-center">
-                            <div>
-                                <div class="text-lg font-bold {% if item.max_price_diff_pct > 20 %}text-red-600{% elif item.max_price_diff_pct > 10 %}text-orange-600{% else %}text-yellow-600{% endif %}">
-                                    {{ "{:.1f}%".format(item.max_price_diff_pct) }}
-                                </div>
-                                <div class="text-sm text-gray-500">£{{ "{:,.0f}".format(item.price_diff) }}</div>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 text-center">
-                            <button onclick="openPriceModal('{{ item.sku }}', {{ item.platform_details|tojson|safe }})" 
-                                    class="text-blue-600 hover:text-blue-900 text-sm font-medium">
-                                Adjust Prices
-                            </button>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
-            
+
             {% if not inconsistencies %}
             <div class="text-center py-8 text-gray-500">
-                No price inconsistencies found above {{ threshold }}% threshold
+                {% if platform_filter != 'all' %}
+                    No {{ platform_filter|upper }} listings found below {{ threshold }}% markup
+                {% else %}
+                    All platform prices have at least {{ threshold }}% markup over base price
+                {% endif %}
             </div>
             {% endif %}
         </div>
     </div>
 </div>
 
-<!-- Price Adjustment Modal -->
-<div id="priceModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div class="mt-3">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Adjust Platform Prices</h3>
-            <p class="text-sm text-gray-500 mb-4">SKU: <span id="modalSku"></span></p>
-            <div id="priceInputs" class="space-y-3">
-                <!-- Price inputs will be inserted here -->
+<!-- Fix Price Modal -->
+<div id="fixPriceModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-50 transition-opacity" onclick="closeFixModal()"></div>
+        <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-5">
+            <h3 class="text-sm font-semibold text-gray-900 mb-3">Fix <span id="modalPlatformLabel"></span> Price</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between text-xs text-gray-500">
+                    <span>Base price</span>
+                    <span id="modalBasePrice" class="font-medium text-gray-800"></span>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500">
+                    <span>Current <span id="modalPlatformCurrent"></span> price</span>
+                    <span id="modalCurrentPrice" class="font-medium text-red-600"></span>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500">
+                    <span>Suggested <span id="modalMarkupInfo"></span></span>
+                    <span id="modalSuggestedPrice" class="font-medium text-green-600"></span>
+                </div>
+                <hr class="border-gray-200">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">New price (&pound;)</label>
+                    <input type="number" id="modalNewPrice" min="1" step="1"
+                           class="w-full text-sm rounded border-gray-300 py-1.5 px-3 focus:ring-blue-500 focus:border-blue-500">
+                </div>
             </div>
-            <div class="mt-6 flex justify-end space-x-3">
-                <button onclick="closeModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
+            <div class="mt-4 flex items-center justify-end gap-2">
+                <button onclick="closeFixModal()"
+                        class="px-3 py-1.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200">
                     Cancel
                 </button>
-                <button onclick="savePrices()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                    Save Changes
+                <button id="modalSubmitBtn" onclick="submitFixPrice()"
+                        class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    Edit Price
                 </button>
             </div>
         </div>
@@ -201,48 +234,167 @@
 </div>
 
 <script>
-function exportToCSV() {
-    // TODO: Implement CSV export for price inconsistencies
-    alert('CSV export coming soon!');
-}
-
-function openPriceModal(sku, platformDetails) {
-    document.getElementById('modalSku').textContent = sku;
-    const container = document.getElementById('priceInputs');
-    container.innerHTML = '';
-    
-    platformDetails.forEach(detail => {
-        const div = document.createElement('div');
-        div.innerHTML = `
-            <label class="block text-sm font-medium text-gray-700">${detail.platform.toUpperCase()}</label>
-            <input type="number" 
-                   id="price_${detail.platform}" 
-                   value="${detail.price}" 
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-        `;
-        container.appendChild(div);
+// Auto-submit form when any filter changes
+document.querySelectorAll('.auto-submit').forEach(function(el) {
+    el.addEventListener('change', function() {
+        document.getElementById('filterForm').submit();
     });
-    
-    document.getElementById('priceModal').classList.remove('hidden');
-}
+});
 
-function closeModal() {
-    document.getElementById('priceModal').classList.add('hidden');
-}
+// ── Spinner SVG ──
+var spinnerSVG = '<svg class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
 
-function savePrices() {
-    // TODO: Implement price update API call
-    alert('Price update functionality coming soon!');
-    closeModal();
-}
+// ── Check Price ──
+async function checkPrice(productId, basePrice, btn) {
+    var origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = spinnerSVG;
+    btn.classList.remove('bg-blue-100', 'text-blue-700', 'hover:bg-blue-200');
+    btn.classList.add('bg-gray-100', 'text-gray-400');
 
-// Close modal when clicking outside
-window.onclick = function(event) {
-    const modal = document.getElementById('priceModal');
-    if (event.target == modal) {
-        closeModal();
+    try {
+        var resp = await fetch('/reports/check-price/' + productId, { method: 'POST' });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var data = await resp.json();
+        var platforms = data.platforms || {};
+        var threshold = parseFloat(document.querySelector('input[name="threshold"]').value) || 5;
+        var anyChanged = false;
+
+        ['shopify', 'reverb', 'vr', 'ebay'].forEach(function(pname) {
+            var cell = document.querySelector('td[data-platform="' + pname + '"][data-product="' + productId + '"]');
+            if (!cell) return;
+            var info = platforms[pname];
+            if (!info) return;
+
+            var livePrice = info.live_price;
+            if (livePrice === null || livePrice === undefined) return;
+
+            var priceEl = cell.querySelector('.price-display');
+            var markupEl = cell.querySelector('.markup-display');
+            if (!priceEl) return;
+
+            priceEl.textContent = '\u00A3' + Math.round(livePrice).toLocaleString();
+
+            if (pname !== 'shopify' && basePrice > 0 && markupEl) {
+                var markupPct = ((livePrice - basePrice) / basePrice * 100);
+                var sign = markupPct >= 0 ? '+' : '';
+                markupEl.textContent = sign + markupPct.toFixed(1) + '%';
+                markupEl.className = 'text-xs font-medium markup-display';
+                if (markupPct < 0) {
+                    markupEl.classList.add('text-red-700');
+                } else if (markupPct < threshold) {
+                    markupEl.classList.add('text-red-500');
+                } else {
+                    markupEl.classList.add('text-green-600');
+                }
+            }
+
+            if (info.changed) anyChanged = true;
+        });
+
+        btn.classList.remove('bg-gray-100', 'text-gray-400');
+        if (anyChanged) {
+            btn.innerHTML = 'Updated';
+            btn.classList.add('bg-green-100', 'text-green-700');
+        } else {
+            btn.innerHTML = 'OK';
+            btn.classList.add('bg-green-100', 'text-green-700');
+        }
+        setTimeout(function() {
+            btn.disabled = false;
+            btn.innerHTML = origHTML;
+            btn.classList.remove('bg-green-100', 'text-green-700');
+            btn.classList.add('bg-blue-100', 'text-blue-700', 'hover:bg-blue-200');
+        }, 3000);
+
+    } catch (err) {
+        btn.classList.remove('bg-gray-100', 'text-gray-400');
+        btn.classList.add('bg-red-100', 'text-red-700');
+        btn.innerHTML = 'Error';
+        btn.disabled = false;
+        setTimeout(function() {
+            btn.innerHTML = origHTML;
+            btn.classList.remove('bg-red-100', 'text-red-700');
+            btn.classList.add('bg-blue-100', 'text-blue-700', 'hover:bg-blue-200');
+        }, 3000);
     }
 }
-</script>
 
+// ── Fix Price Modal ──
+var fixState = {};
+var platformLabels = { ebay: 'eBay', reverb: 'Reverb', vr: 'V&R' };
+var markupLabels = { ebay: '(+10%, rounded)', reverb: '(+5%)', vr: '(+5%)' };
+
+function openFixModal(platform, productId, basePrice, suggestedPrice, currentPrice) {
+    fixState = { platform: platform, productId: productId, basePrice: basePrice };
+    document.getElementById('modalPlatformLabel').textContent = platformLabels[platform] || platform;
+    document.getElementById('modalPlatformCurrent').textContent = platformLabels[platform] || platform;
+    document.getElementById('modalMarkupInfo').textContent = markupLabels[platform] || '';
+    document.getElementById('modalBasePrice').textContent = '\u00A3' + Math.round(basePrice).toLocaleString();
+    document.getElementById('modalCurrentPrice').textContent = '\u00A3' + Math.round(currentPrice).toLocaleString();
+    document.getElementById('modalSuggestedPrice').textContent = '\u00A3' + Math.round(suggestedPrice).toLocaleString();
+    document.getElementById('modalNewPrice').value = Math.round(suggestedPrice);
+    document.getElementById('fixPriceModal').classList.remove('hidden');
+    document.getElementById('modalNewPrice').focus();
+    document.getElementById('modalNewPrice').select();
+}
+
+function closeFixModal() {
+    document.getElementById('fixPriceModal').classList.add('hidden');
+}
+
+async function submitFixPrice() {
+    var newPrice = parseFloat(document.getElementById('modalNewPrice').value);
+    if (!newPrice || newPrice <= 0) return;
+
+    var btn = document.getElementById('modalSubmitBtn');
+    var origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="animate-spin h-3.5 w-3.5 inline mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Updating...';
+
+    var url = '/reports/fix-' + fixState.platform + '-price/' + fixState.productId;
+
+    try {
+        var resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_price: newPrice })
+        });
+        var data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Request failed');
+
+        // Show success then reload page
+        btn.innerHTML = 'Done!';
+        btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        btn.classList.add('bg-green-600');
+        setTimeout(function() {
+            window.location.reload();
+        }, 1000);
+
+    } catch (err) {
+        btn.innerHTML = err.message || 'Error';
+        btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        btn.classList.add('bg-red-600');
+        setTimeout(function() {
+            btn.disabled = false;
+            btn.innerHTML = origHTML;
+            btn.classList.remove('bg-red-600');
+            btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        }, 3000);
+    }
+}
+
+// Close modal on Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeFixModal();
+});
+
+// Submit modal on Enter
+document.getElementById('modalNewPrice').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        submitFixPrice();
+    }
+});
+</script>
 {% endblock %}

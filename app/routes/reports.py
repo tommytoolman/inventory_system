@@ -2387,43 +2387,66 @@ async def export_sales_pdf(
 @router.get("/price-inconsistencies", response_class=HTMLResponse)
 async def price_inconsistencies_report(
     request: Request,
-    threshold: float = Query(10.0, description="Price difference threshold percentage"),
+    threshold: float = Query(5.0, description="Minimum expected markup percentage above base price"),
     status_filter: Optional[str] = Query("ACTIVE", description="Filter by product status"),
+    platform_filter: Optional[str] = Query("all", description="Filter to a specific underpriced platform"),
     sort_by: Optional[str] = Query("max_diff", description="Sort by column"),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc/desc)")
 ):
     """
-    Price Inconsistencies Report: Detect products with significant price differences across platforms.
+    Price Markup Report: Flag products where platform prices lack expected
+    markup over base price.  Shopify is excluded from flagging since its
+    configured markup is 0 % (base price = Shopify price).
     """
+    VALID_PLATFORM_FILTERS = {"all", "ebay", "vr", "reverb"}
+    if platform_filter not in VALID_PLATFORM_FILTERS:
+        platform_filter = "all"
+
     async with get_session() as db:
         # Build WHERE clause for status filter
         status_clause = ""
-        params = {"threshold": threshold}
-        
+        params: Dict = {"threshold": threshold}
+
         if status_filter and status_filter != "ALL":
             status_clause = "WHERE p.status = :status_filter"
             params["status_filter"] = status_filter
         elif status_filter != "ALL":
-            # Default to ACTIVE if no filter specified
             status_clause = "WHERE p.status = 'ACTIVE'"
-        
+
+        # Build the HAVING predicate for the platform filter
+        if platform_filter != "all":
+            having_predicate = (
+                "COUNT(CASE WHEN platform_name = :pf"
+                " AND markup_pct < :threshold THEN 1 END) > 0"
+            )
+            params["pf"] = platform_filter
+        else:
+            having_predicate = (
+                "COUNT(CASE WHEN platform_name != 'shopify'"
+                " AND markup_pct < :threshold THEN 1 END) > 0"
+            )
+
         # Map sort columns
         sort_column_map = {
-            "sku": "p.sku",
-            "brand": "p.brand",
-            "model": "p.model",
-            "base_price": "p.base_price",
-            "max_diff": "max_price_diff_pct",
+            "sku": "sku",
+            "brand": "brand",
+            "model": "model",
+            "base_price": "base_price",
+            "max_diff": "min_markup_pct",
             "platforms": "platform_count"
         }
-        
-        sort_col = sort_column_map.get(sort_by, "max_price_diff_pct")
-        sort_dir = "DESC" if sort_order == "desc" else "ASC"
-        
-        # Query to find price inconsistencies
+
+        sort_col = sort_column_map.get(sort_by, "min_markup_pct")
+        # For markup column "worst first" (desc in the UI) means lowest markup → ASC
+        if sort_col == "min_markup_pct":
+            sort_dir = "ASC NULLS LAST" if sort_order == "desc" else "DESC NULLS LAST"
+        else:
+            sort_dir = "DESC" if sort_order == "desc" else "ASC"
+
+        # ── Main query ──────────────────────────────────────────────
         query = text(f"""
             WITH platform_prices AS (
-                SELECT 
+                SELECT
                     p.id,
                     p.sku,
                     p.brand,
@@ -2434,129 +2457,446 @@ async def price_inconsistencies_report(
                     p.status,
                     pc.platform_name,
                     pc.status as platform_status,
-                    CASE 
-                        WHEN pc.platform_name = 'reverb' THEN 
-                            COALESCE((rl.extended_attributes->>'price')::float, rl.list_price, p.base_price)
-                        WHEN pc.platform_name = 'ebay' THEN 
-                            COALESCE(el.price, p.base_price)
-                        WHEN pc.platform_name = 'shopify' THEN 
-                            COALESCE((sl.extended_attributes->>'price')::float, p.base_price)
-                        WHEN pc.platform_name = 'vr' THEN 
-                            COALESCE(vl.price_notax, p.base_price)
-                        ELSE p.base_price
+                    CASE
+                        WHEN pc.platform_name = 'reverb' THEN
+                            COALESCE((rl.extended_attributes->'price'->>'amount')::float, rl.list_price)
+                        WHEN pc.platform_name = 'ebay' THEN
+                            el.price
+                        WHEN pc.platform_name = 'shopify' THEN
+                            sl.price
+                        WHEN pc.platform_name = 'vr' THEN
+                            vl.price_notax
                     END as platform_price
                 FROM products p
                 JOIN platform_common pc ON p.id = pc.product_id
                 LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id AND pc.platform_name = 'reverb'
-                LEFT JOIN ebay_listings el ON pc.id = el.platform_id AND pc.platform_name = 'ebay'
+                LEFT JOIN ebay_listings el   ON pc.id = el.platform_id AND pc.platform_name = 'ebay'
                 LEFT JOIN shopify_listings sl ON pc.id = sl.platform_id AND pc.platform_name = 'shopify'
-                LEFT JOIN vr_listings vl ON pc.id = vl.platform_id AND pc.platform_name = 'vr'
+                LEFT JOIN vr_listings vl     ON pc.id = vl.platform_id AND pc.platform_name = 'vr'
                 {status_clause}
-                {"AND" if status_clause else "WHERE"} pc.status IN ('ACTIVE', 'DRAFT')
+                {"AND" if status_clause else "WHERE"} LOWER(pc.status) IN ('active', 'draft')
+                AND p.base_price > 0
             ),
-            price_analysis AS (
-                SELECT 
-                    id,
-                    sku,
-                    brand,
-                    model,
-                    year,
-                    base_price,
-                    primary_image,
-                    status,
-                    COUNT(DISTINCT platform_name) as platform_count,
-                    MIN(platform_price) as min_price,
-                    MAX(platform_price) as max_price,
-                    AVG(platform_price) as avg_price,
-                    MAX(platform_price) - MIN(platform_price) as price_diff,
-                    CASE 
-                        WHEN MIN(platform_price) > 0 THEN 
-                            ((MAX(platform_price) - MIN(platform_price)) / MIN(platform_price) * 100)
-                        ELSE 0
-                    END as max_price_diff_pct,
+            markup_calc AS (
+                SELECT *,
+                    ROUND(((platform_price - base_price) / base_price * 100)::numeric, 1) as markup_pct
+                FROM platform_prices
+                WHERE platform_price IS NOT NULL
+            ),
+            product_summary AS (
+                SELECT
+                    id, sku, brand, model, year, base_price, primary_image, status,
+                    COUNT(*) as platform_count,
+                    MIN(CASE WHEN platform_name != 'shopify' THEN markup_pct END) as min_markup_pct,
+                    COUNT(CASE WHEN platform_name != 'shopify'
+                               AND markup_pct < :threshold THEN 1 END) as underpriced_count,
                     ARRAY_AGG(
                         json_build_object(
                             'platform', platform_name,
-                            'price', platform_price,
-                            'status', platform_status
-                        ) ORDER BY platform_price DESC
+                            'price',    platform_price,
+                            'markup_pct', markup_pct,
+                            'status',   platform_status
+                        ) ORDER BY
+                            CASE WHEN platform_name = 'shopify' THEN 1 ELSE 0 END,
+                            markup_pct ASC NULLS LAST
                     ) as platform_details
-                FROM platform_prices
+                FROM markup_calc
                 GROUP BY id, sku, brand, model, year, base_price, primary_image, status
-                HAVING COUNT(DISTINCT platform_name) > 1
-                AND MAX(platform_price) > MIN(platform_price)
+                HAVING {having_predicate}
             )
-            SELECT * FROM price_analysis
-            WHERE max_price_diff_pct >= :threshold
+            SELECT * FROM product_summary
             ORDER BY {sort_col} {sort_dir}
             LIMIT 500
         """)
-        
+
         result = await db.execute(query, params)
         inconsistencies = [dict(row._mapping) for row in result.fetchall()]
-        
-        # Get summary statistics
+
+        # Attach suggested platform prices to each row
+        from app.services.pricing import calculate_ebay_price, calculate_reverb_price, calculate_vr_price
+        for item in inconsistencies:
+            item["suggested_ebay_price"] = calculate_ebay_price(item["base_price"])
+            item["suggested_reverb_price"] = calculate_reverb_price(item["base_price"])
+            item["suggested_vr_price"] = calculate_vr_price(item["base_price"])
+
+        # ── Summary statistics ──────────────────────────────────────
         summary_query = text(f"""
             WITH platform_prices AS (
-                SELECT 
+                SELECT
                     p.id,
+                    p.base_price,
                     pc.platform_name,
-                    CASE 
-                        WHEN pc.platform_name = 'reverb' THEN 
-                            COALESCE((rl.extended_attributes->>'price')::float, rl.list_price, p.base_price)
-                        WHEN pc.platform_name = 'ebay' THEN 
-                            COALESCE(el.price, p.base_price)
-                        WHEN pc.platform_name = 'shopify' THEN 
-                            COALESCE((sl.extended_attributes->>'price')::float, p.base_price)
-                        WHEN pc.platform_name = 'vr' THEN 
-                            COALESCE(vl.price_notax, p.base_price)
-                        ELSE p.base_price
+                    CASE
+                        WHEN pc.platform_name = 'reverb' THEN
+                            COALESCE((rl.extended_attributes->'price'->>'amount')::float, rl.list_price)
+                        WHEN pc.platform_name = 'ebay' THEN
+                            el.price
+                        WHEN pc.platform_name = 'shopify' THEN
+                            sl.price
+                        WHEN pc.platform_name = 'vr' THEN
+                            vl.price_notax
                     END as platform_price
                 FROM products p
                 JOIN platform_common pc ON p.id = pc.product_id
                 LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id AND pc.platform_name = 'reverb'
-                LEFT JOIN ebay_listings el ON pc.id = el.platform_id AND pc.platform_name = 'ebay'
+                LEFT JOIN ebay_listings el   ON pc.id = el.platform_id AND pc.platform_name = 'ebay'
                 LEFT JOIN shopify_listings sl ON pc.id = sl.platform_id AND pc.platform_name = 'shopify'
-                LEFT JOIN vr_listings vl ON pc.id = vl.platform_id AND pc.platform_name = 'vr'
+                LEFT JOIN vr_listings vl     ON pc.id = vl.platform_id AND pc.platform_name = 'vr'
                 {status_clause}
-                {"AND" if status_clause else "WHERE"} pc.status IN ('ACTIVE', 'DRAFT')
+                {"AND" if status_clause else "WHERE"} LOWER(pc.status) IN ('active', 'draft')
+                AND p.base_price > 0
             ),
-            price_stats AS (
-                SELECT 
-                    id,
-                    COUNT(DISTINCT platform_name) as platform_count,
-                    MAX(platform_price) - MIN(platform_price) as price_diff,
-                    CASE 
-                        WHEN MIN(platform_price) > 0 THEN 
-                            ((MAX(platform_price) - MIN(platform_price)) / MIN(platform_price) * 100)
-                        ELSE 0
-                    END as price_diff_pct
+            markup_calc AS (
+                SELECT *,
+                    ROUND(((platform_price - base_price) / base_price * 100)::numeric, 1) as markup_pct
                 FROM platform_prices
+                WHERE platform_price IS NOT NULL
+                AND platform_name != 'shopify'
+            ),
+            per_product AS (
+                SELECT
+                    id,
+                    MIN(markup_pct) as min_markup_pct,
+                    AVG(markup_pct) as avg_markup_pct,
+                    COUNT(CASE WHEN markup_pct < :threshold THEN 1 END) as low_count
+                FROM markup_calc
                 GROUP BY id
-                HAVING COUNT(DISTINCT platform_name) > 1
-                AND MAX(platform_price) > MIN(platform_price)
             )
-            SELECT 
-                COUNT(DISTINCT id) as total_products,
-                COUNT(DISTINCT CASE WHEN price_diff_pct >= :threshold THEN id END) as products_above_threshold,
-                AVG(price_diff_pct) as avg_price_diff_pct,
-                MAX(price_diff_pct) as max_price_diff_pct,
-                SUM(price_diff) as total_price_variance
-            FROM price_stats
+            SELECT
+                COUNT(*)                                                as total_products,
+                COUNT(CASE WHEN low_count > 0 THEN 1 END)              as products_below_threshold,
+                ROUND(AVG(avg_markup_pct)::numeric, 1)                  as avg_markup_pct,
+                MIN(min_markup_pct)                                     as min_markup_pct,
+                SUM(CASE WHEN low_count > 0 THEN low_count ELSE 0 END) as total_underpriced_listings
+            FROM per_product
         """)
-        
+
         summary_result = await db.execute(summary_query, params)
         summary_stats = dict(summary_result.fetchone()._mapping)
-        
+
         return templates.TemplateResponse("reports/price_inconsistencies.html", {
             "request": request,
             "inconsistencies": inconsistencies,
             "summary_stats": summary_stats,
             "threshold": threshold,
             "status_filter": status_filter,
+            "platform_filter": platform_filter,
             "sort_by": sort_by,
             "sort_order": sort_order
         })
+
+
+@router.post("/check-price/{product_id}", response_class=JSONResponse)
+async def check_live_prices(request: Request, product_id: int):
+    """
+    Fetch live prices from Reverb, eBay and Shopify APIs for a given product.
+    Compare with stored DB prices and update if different.
+    Returns JSON with per-platform results.
+    """
+    settings = get_settings()
+    results = {}
+
+    async with get_session() as db:
+        # Load all platform listings for this product
+        stmt = (
+            select(PlatformCommon)
+            .options(
+                selectinload(PlatformCommon.reverb_listing),
+                selectinload(PlatformCommon.ebay_listing),
+                selectinload(PlatformCommon.shopify_listing),
+                selectinload(PlatformCommon.vr_listing),
+            )
+            .where(PlatformCommon.product_id == product_id)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        listings_by_platform = {pc.platform_name: pc for pc in rows}
+
+        # ── Reverb ──
+        pc = listings_by_platform.get("reverb")
+        if pc and pc.reverb_listing:
+            rl = pc.reverb_listing
+            listing_id = rl.reverb_listing_id or pc.external_id
+            if listing_id:
+                try:
+                    from app.services.reverb.client import ReverbClient
+                    reverb_client = ReverbClient(api_key=settings.REVERB_API_KEY)
+                    data = await reverb_client.get_listing(listing_id)
+                    listing_data = data.get("listing", data)
+                    live_price = float(listing_data.get("price", {}).get("amount", 0))
+                    stored = rl.list_price or 0
+                    # Also check extended_attributes
+                    if not stored and rl.extended_attributes:
+                        try:
+                            stored = float(rl.extended_attributes.get("price", {}).get("amount", 0))
+                        except (TypeError, ValueError):
+                            pass
+                    changed = abs(live_price - (stored or 0)) > 0.01
+                    results["reverb"] = {
+                        "live_price": live_price,
+                        "stored_price": round(stored or 0, 2),
+                        "changed": changed,
+                    }
+                    if changed and live_price > 0:
+                        rl.list_price = live_price
+                        # Also update extended_attributes price
+                        if rl.extended_attributes and isinstance(rl.extended_attributes, dict):
+                            ea = dict(rl.extended_attributes)
+                            if "price" in ea and isinstance(ea["price"], dict):
+                                ea["price"]["amount"] = str(live_price)
+                                rl.extended_attributes = ea
+                except Exception as exc:
+                    logger.warning("Reverb price check failed for product %s: %s", product_id, exc)
+                    results["reverb"] = {"error": str(exc)}
+
+        # ── eBay ──
+        pc = listings_by_platform.get("ebay")
+        if pc and pc.ebay_listing:
+            el = pc.ebay_listing
+            item_id = el.ebay_item_id or pc.external_id
+            if item_id:
+                try:
+                    from app.services.ebay.trading import EbayTradingLegacyAPI
+                    ebay_api = EbayTradingLegacyAPI(sandbox=False)
+                    item = await ebay_api.get_item_details(item_id)
+                    price_info = item.get("SellingStatus", {}).get("CurrentPrice", {})
+                    live_price = float(price_info.get("#text", 0))
+                    stored = el.price or 0
+                    changed = abs(live_price - stored) > 0.01
+                    results["ebay"] = {
+                        "live_price": live_price,
+                        "stored_price": round(stored, 2),
+                        "changed": changed,
+                    }
+                    if changed and live_price > 0:
+                        el.price = live_price
+                except Exception as exc:
+                    logger.warning("eBay price check failed for product %s: %s", product_id, exc)
+                    results["ebay"] = {"error": str(exc)}
+
+        # ── Shopify ──
+        pc = listings_by_platform.get("shopify")
+        if pc and pc.shopify_listing:
+            sl = pc.shopify_listing
+            product_gid = sl.shopify_product_id
+            if product_gid:
+                try:
+                    from app.services.shopify_service import ShopifyService
+                    shopify_service = ShopifyService(db, settings)
+                    snapshot = shopify_service.client.get_product_snapshot_by_id(
+                        product_gid, num_variants=1, num_images=0, num_metafields=0
+                    )
+                    if not snapshot:
+                        raise ValueError("No snapshot returned from Shopify")
+                    variants = snapshot.get("variants", {}).get("edges", [])
+                    live_price = float(variants[0]["node"]["price"]) if variants else 0
+                    stored = sl.price or 0
+                    changed = abs(live_price - stored) > 0.01
+                    results["shopify"] = {
+                        "live_price": live_price,
+                        "stored_price": round(stored, 2),
+                        "changed": changed,
+                    }
+                    if changed and live_price > 0:
+                        sl.price = live_price
+                except Exception as exc:
+                    logger.warning("Shopify price check failed for product %s: %s", product_id, exc)
+                    results["shopify"] = {"error": str(exc)}
+
+        # ── VR (no live API - just return stored) ──
+        pc = listings_by_platform.get("vr")
+        if pc and pc.vr_listing:
+            vl = pc.vr_listing
+            results["vr"] = {
+                "live_price": None,
+                "stored_price": round(vl.price_notax or 0, 2),
+                "changed": False,
+                "note": "No live API",
+            }
+
+        await db.commit()
+
+    return JSONResponse({"product_id": product_id, "platforms": results})
+
+
+@router.post("/fix-ebay-price/{product_id}", response_class=JSONResponse)
+async def fix_ebay_price(request: Request, product_id: int):
+    """
+    Revise the eBay listing price for a product.
+    Expects JSON body: {"new_price": 2199}
+    Updates the live eBay listing and local DB record.
+    """
+    body = await request.json()
+    new_price = float(body.get("new_price", 0))
+    if new_price <= 0:
+        return JSONResponse({"error": "Invalid price"}, status_code=400)
+
+    async with get_session() as db:
+        stmt = (
+            select(PlatformCommon)
+            .options(selectinload(PlatformCommon.ebay_listing))
+            .where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "ebay",
+            )
+        )
+        pc = (await db.execute(stmt)).scalar_one_or_none()
+        if not pc or not pc.ebay_listing:
+            return JSONResponse({"error": "No eBay listing found"}, status_code=404)
+
+        el = pc.ebay_listing
+        item_id = el.ebay_item_id or pc.external_id
+        if not item_id:
+            return JSONResponse({"error": "No eBay item ID"}, status_code=404)
+
+        try:
+            from app.services.ebay.trading import EbayTradingLegacyAPI
+            ebay_api = EbayTradingLegacyAPI(sandbox=False)
+            result = await ebay_api.revise_listing_price(item_id, new_price)
+            ack = result.get("Ack", "")
+            if ack not in ("Success", "Warning"):
+                errors = result.get("Errors", {})
+                msg = errors.get("LongMessage", errors.get("ShortMessage", "Unknown error"))
+                return JSONResponse({"error": f"eBay API: {msg}"}, status_code=502)
+
+            # Update local DB
+            old_price = el.price
+            el.price = new_price
+            await db.commit()
+
+            logger.info(
+                "Fixed eBay price for product %s (item %s): £%.0f -> £%.0f",
+                product_id, item_id, old_price or 0, new_price,
+            )
+            return JSONResponse({
+                "success": True,
+                "old_price": round(old_price or 0, 2),
+                "new_price": new_price,
+            })
+
+        except Exception as exc:
+            logger.error("Failed to fix eBay price for product %s: %s", product_id, exc)
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@router.post("/fix-reverb-price/{product_id}", response_class=JSONResponse)
+async def fix_reverb_price(request: Request, product_id: int):
+    """
+    Revise the Reverb listing price for a product.
+    Expects JSON body: {"new_price": 2099}
+    Updates the live Reverb listing and local DB record.
+    """
+    body = await request.json()
+    new_price = float(body.get("new_price", 0))
+    if new_price <= 0:
+        return JSONResponse({"error": "Invalid price"}, status_code=400)
+
+    settings = get_settings()
+
+    async with get_session() as db:
+        stmt = (
+            select(PlatformCommon)
+            .options(selectinload(PlatformCommon.reverb_listing))
+            .where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "reverb",
+            )
+        )
+        pc = (await db.execute(stmt)).scalar_one_or_none()
+        if not pc or not pc.reverb_listing:
+            return JSONResponse({"error": "No Reverb listing found"}, status_code=404)
+
+        rl = pc.reverb_listing
+        listing_id = rl.reverb_listing_id or pc.external_id
+        if not listing_id:
+            return JSONResponse({"error": "No Reverb listing ID"}, status_code=404)
+
+        try:
+            from app.services.reverb_service import ReverbService
+            reverb_service = ReverbService(db, settings)
+            success = await reverb_service.update_listing_price(listing_id, new_price)
+            if not success:
+                return JSONResponse({"error": "Reverb API call failed"}, status_code=502)
+
+            # Update local DB
+            old_price = rl.list_price
+            rl.list_price = new_price
+            if rl.extended_attributes and isinstance(rl.extended_attributes, dict):
+                ea = dict(rl.extended_attributes)
+                if "price" in ea and isinstance(ea["price"], dict):
+                    ea["price"]["amount"] = str(new_price)
+                    rl.extended_attributes = ea
+            await db.commit()
+
+            logger.info(
+                "Fixed Reverb price for product %s (listing %s): £%.0f -> £%.0f",
+                product_id, listing_id, old_price or 0, new_price,
+            )
+            return JSONResponse({
+                "success": True,
+                "old_price": round(old_price or 0, 2),
+                "new_price": new_price,
+            })
+
+        except Exception as exc:
+            logger.error("Failed to fix Reverb price for product %s: %s", product_id, exc)
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@router.post("/fix-vr-price/{product_id}", response_class=JSONResponse)
+async def fix_vr_price(request: Request, product_id: int):
+    """
+    Revise the V&R listing price for a product.
+    Expects JSON body: {"new_price": 2099}
+    Updates the live V&R listing and local DB record.
+    """
+    body = await request.json()
+    new_price = float(body.get("new_price", 0))
+    if new_price <= 0:
+        return JSONResponse({"error": "Invalid price"}, status_code=400)
+
+    async with get_session() as db:
+        stmt = (
+            select(PlatformCommon)
+            .options(selectinload(PlatformCommon.vr_listing))
+            .where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "vr",
+            )
+        )
+        pc = (await db.execute(stmt)).scalar_one_or_none()
+        if not pc or not pc.vr_listing:
+            return JSONResponse({"error": "No V&R listing found"}, status_code=404)
+
+        vl = pc.vr_listing
+        item_id = vl.vr_listing_id or pc.external_id
+        if not item_id:
+            return JSONResponse({"error": "No V&R listing ID"}, status_code=404)
+
+        try:
+            from app.services.vr_service import VRService
+            vr_service = VRService(db)
+            success = await vr_service.update_listing_price(item_id, new_price)
+            if not success:
+                return JSONResponse({"error": "V&R update failed"}, status_code=502)
+
+            # Update local DB
+            old_price = vl.price_notax
+            vl.price_notax = new_price
+            await db.commit()
+
+            logger.info(
+                "Fixed V&R price for product %s (item %s): £%.0f -> £%.0f",
+                product_id, item_id, old_price or 0, new_price,
+            )
+            return JSONResponse({
+                "success": True,
+                "old_price": round(old_price or 0, 2),
+                "new_price": new_price,
+            })
+
+        except Exception as exc:
+            logger.error("Failed to fix V&R price for product %s: %s", product_id, exc)
+            return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 @router.get("/matching", response_class=HTMLResponse)

@@ -1917,17 +1917,19 @@ class EbayService:
             if product.primary_image:
                 # Transform to MAX_RES like Shopify and VR
                 max_res_url = ImageTransformer.transform_reverb_url(product.primary_image, ImageQuality.MAX_RES)
-                if max_res_url:  # Only add non-None URLs
+                if max_res_url and max_res_url not in pictures:
                     pictures.append(max_res_url)
                     logger.info(f"  Transformed primary image to MAX_RES")
-            
+
             # Add additional images if they exist
             if product.additional_images and isinstance(product.additional_images, list):
+                added = 0
                 for img_url in product.additional_images:
                     max_res_url = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
-                    if max_res_url:  # Only add non-None URLs
+                    if max_res_url and max_res_url not in pictures:
                         pictures.append(max_res_url)
-                logger.info(f"  Transformed {len(product.additional_images)} additional images to MAX_RES")
+                        added += 1
+                logger.info(f"  Transformed {added} additional images to MAX_RES ({len(product.additional_images) - added} duplicates skipped)")
             
             logger.info(f"  Total MAX_RES images available: {len(pictures)}")
             

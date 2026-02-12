@@ -2459,7 +2459,7 @@ async def price_inconsistencies_report(
                     pc.status as platform_status,
                     CASE
                         WHEN pc.platform_name = 'reverb' THEN
-                            COALESCE((rl.extended_attributes->'price'->>'amount')::float, rl.list_price)
+                            rl.list_price
                         WHEN pc.platform_name = 'ebay' THEN
                             el.price
                         WHEN pc.platform_name = 'shopify' THEN
@@ -2528,7 +2528,7 @@ async def price_inconsistencies_report(
                     pc.platform_name,
                     CASE
                         WHEN pc.platform_name = 'reverb' THEN
-                            COALESCE((rl.extended_attributes->'price'->>'amount')::float, rl.list_price)
+                            rl.list_price
                         WHEN pc.platform_name = 'ebay' THEN
                             el.price
                         WHEN pc.platform_name = 'shopify' THEN
@@ -2648,7 +2648,7 @@ async def price_inconsistencies_csv(
                     pc.platform_name,
                     CASE
                         WHEN pc.platform_name = 'reverb' THEN
-                            COALESCE((rl.extended_attributes->'price'->>'amount')::float, rl.list_price)
+                            rl.list_price
                         WHEN pc.platform_name = 'ebay' THEN el.price
                         WHEN pc.platform_name = 'shopify' THEN sl.price
                         WHEN pc.platform_name = 'vr' THEN vl.price_notax

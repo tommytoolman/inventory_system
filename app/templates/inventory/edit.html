@@ -529,9 +529,81 @@ function setupTinyMCE() {
     }
 }
 
+// Platform pricing markups from settings (passed from backend)
+const EBAY_MARKUP_PERCENT = {{ ebay_markup_percent | default(10) }};
+const VR_MARKUP_PERCENT = {{ vr_markup_percent | default(5) }};
+const REVERB_MARKUP_PERCENT = {{ reverb_markup_percent | default(5) }};
+const SHOPIFY_MARKUP_PERCENT = {{ shopify_markup_percent | default(0) }};
+
+function roundToSensiblePrice(target) {
+    if (target <= 0) return 0;
+    target = Math.ceil(target);
+    const endings = [49, 99, 499, 999];
+    const candidates = [];
+    for (const ending of endings) {
+        if (ending < 100) {
+            const base = Math.floor(target / 100) * 100;
+            let candidate = base + ending;
+            if (candidate < target) candidate += 100;
+            candidates.push(candidate);
+        } else {
+            const base = Math.floor(target / 1000) * 1000;
+            let candidate = base + ending;
+            if (candidate < target) candidate += 1000;
+            candidates.push(candidate);
+        }
+    }
+    const valid = candidates.filter(c => c >= target);
+    return valid.length > 0 ? Math.min(...valid) : Math.max(...candidates);
+}
+
+function recalculatePlatformPrices(basePrice) {
+    if (!basePrice || isNaN(basePrice) || basePrice <= 0) return;
+
+    const ebayPrice = roundToSensiblePrice(basePrice * (1 + EBAY_MARKUP_PERCENT / 100));
+    const reverbPrice = Math.round(basePrice * (1 + REVERB_MARKUP_PERCENT / 100));
+    const vrPrice = Math.round(basePrice * (1 + VR_MARKUP_PERCENT / 100));
+    const shopifyPrice = Math.round(basePrice * (1 + SHOPIFY_MARKUP_PERCENT / 100));
+
+    const fields = [
+        ['ebay_price_display', 'ebay_price', ebayPrice],
+        ['reverb_price_display', 'reverb_price', reverbPrice],
+        ['vr_price_display', 'vr_price', vrPrice],
+        ['shopify_price_display', null, shopifyPrice],
+    ];
+    fields.forEach(([displayId, hiddenId, price]) => {
+        const display = document.getElementById(displayId);
+        if (display) display.value = price;
+        if (hiddenId) {
+            const hidden = document.getElementById(hiddenId);
+            if (hidden) hidden.value = price;
+        }
+    });
+}
+
+function setupBasePriceWatcher() {
+    const basePriceInput = document.getElementById('base_price');
+    if (!basePriceInput) return;
+
+    let debounceTimer = null;
+
+    basePriceInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            recalculatePlatformPrices(parseFloat(basePriceInput.value));
+        }, 2000);
+    });
+
+    basePriceInput.addEventListener('blur', () => {
+        clearTimeout(debounceTimer);
+        recalculatePlatformPrices(parseFloat(basePriceInput.value));
+    });
+}
+
 setupCardToggles();
 setupTitleGenerator();
 setupPlatformPriceMirrors();
+setupBasePriceWatcher();
 setupHandednessLock();
 setupTinyMCE();
 </script>

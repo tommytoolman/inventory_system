@@ -1025,7 +1025,7 @@ class VRService:
     ) -> Dict[str, Any]:
         """Push text-based edits for a VR listing using the HTTP helper."""
 
-        relevant = {"title", "model", "description", "brand", "base_price"}
+        relevant = {"title", "model", "description", "brand"}
         if not (changed_fields & relevant):
             return {"status": "no_changes"}
 
@@ -1041,10 +1041,6 @@ class VRService:
             updates["description"] = product_data.get("description") or ""
         if "brand" in changed_fields:
             updates["brand"] = product_data.get("brand") or ""
-        if "base_price" in changed_fields:
-            price_value = product_data.get("base_price")
-            if price_value is not None:
-                updates["price"] = f"{float(price_value):.2f}"
 
         if not updates:
             return {"status": "no_changes"}

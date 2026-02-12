@@ -1963,7 +1963,9 @@ class SyncService:
                     results[platform_name] = response
 
         if "base_price" in changed_fields or overrides:
-            default_price = float(product.base_price or 0)
+            from app.services.pricing import calculate_platform_price
+
+            base_price_value = float(product.base_price or 0)
             for link in non_vr_links:
                 if not link.external_id:
                     continue
@@ -1972,7 +1974,10 @@ class SyncService:
                     continue
                 try:
                     platform_key = (link.platform_name or "").lower()
-                    desired_price = overrides.get(platform_key, default_price)
+                    desired_price = overrides.get(
+                        platform_key,
+                        calculate_platform_price(platform_key, base_price_value),
+                    )
                     success = await service.update_listing_price(link.external_id, desired_price)
                 except Exception as exc:
                     logger.error(
@@ -2028,7 +2033,10 @@ class SyncService:
                     results[status_key] = "failed"
 
         if vr_links and ("base_price" in changed_fields or "vr" in overrides):
-            desired_price = overrides.get("vr", float(product.base_price or 0))
+            desired_price = overrides.get(
+                "vr",
+                calculate_platform_price("vr", float(product.base_price or 0)),
+            )
             service = self.platform_services.get("vr")
             if service and hasattr(service, "update_listing_price"):
                 async def _run_vr_price_update(external_id: str, target_price: float) -> None:
@@ -2089,7 +2097,7 @@ class SyncService:
                         results["vr_error"] = str(exc)
 
         # Schedule VR detail updates in the background
-        vr_fields = {"title", "model", "description", "brand", "base_price"}
+        vr_fields = {"title", "model", "description", "brand"}
         if vr_links and (changed_fields & vr_fields):
             snapshot = self._snapshot_product(product)
             for link in vr_links:

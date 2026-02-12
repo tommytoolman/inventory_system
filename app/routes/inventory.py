@@ -5669,6 +5669,10 @@ async def edit_product_form(
             "shipping_profiles": shipping_profiles,
             "body_type_options": SPEC_FIELD_MAP.get("body_type", {}).get("options", []),
             "tinymce_api_key": settings.TINYMCE_API_KEY,
+            "ebay_markup_percent": settings.EBAY_PRICE_MARKUP_PERCENT,
+            "vr_markup_percent": settings.VR_PRICE_MARKUP_PERCENT,
+            "reverb_markup_percent": settings.REVERB_PRICE_MARKUP_PERCENT,
+            "shopify_markup_percent": settings.SHOPIFY_PRICE_MARKUP_PERCENT,
         }
     )
 

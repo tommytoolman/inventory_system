@@ -54,10 +54,16 @@
             <input type="hidden" name="sort_by" value="{{ sort_by }}">
             <input type="hidden" name="sort_order" value="{{ sort_order }}">
 
-            {# ── Stats (right-aligned) ── #}
+            {# ── Stats + Export (right-aligned) ── #}
             <div class="ml-auto flex items-center gap-4 text-xs text-gray-500 whitespace-nowrap">
                 <span><strong class="text-gray-800">{{ "{:,}".format(summary_stats.total_products or 0) }}</strong> checked</span>
                 <span><strong class="text-red-600">{{ "{:,}".format(summary_stats.products_below_threshold or 0) }}</strong> flagged</span>
+                <a id="exportCsvLink"
+                   href="/reports/price-inconsistencies/export-csv?threshold={{ threshold }}&status_filter={{ status_filter }}&platform_filter={{ platform_filter }}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
+                   class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 font-medium">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Export CSV
+                </a>
             </div>
         </form>
     </div>

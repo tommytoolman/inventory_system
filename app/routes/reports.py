@@ -2586,6 +2586,156 @@ async def price_inconsistencies_report(
         })
 
 
+@router.get("/price-inconsistencies/export-csv")
+async def price_inconsistencies_csv(
+    request: Request,
+    threshold: float = Query(5.0),
+    status_filter: Optional[str] = Query("ACTIVE"),
+    platform_filter: Optional[str] = Query("all"),
+    sort_by: Optional[str] = Query("max_diff"),
+    sort_order: Optional[str] = Query("desc"),
+):
+    """Export the current price inconsistencies view as CSV."""
+    from fastapi.responses import StreamingResponse
+    from app.services.pricing import calculate_ebay_price, calculate_reverb_price, calculate_vr_price
+    import csv
+    import io
+
+    VALID_PLATFORM_FILTERS = {"all", "ebay", "vr", "reverb"}
+    if platform_filter not in VALID_PLATFORM_FILTERS:
+        platform_filter = "all"
+
+    async with get_session() as db:
+        status_clause = ""
+        params: Dict = {"threshold": threshold}
+
+        if status_filter and status_filter != "ALL":
+            status_clause = "WHERE p.status = :status_filter"
+            params["status_filter"] = status_filter
+        elif status_filter != "ALL":
+            status_clause = "WHERE p.status = 'ACTIVE'"
+
+        if platform_filter != "all":
+            having_predicate = (
+                "COUNT(CASE WHEN platform_name = :pf"
+                " AND markup_pct < :threshold THEN 1 END) > 0"
+            )
+            params["pf"] = platform_filter
+        else:
+            having_predicate = (
+                "COUNT(CASE WHEN platform_name != 'shopify'"
+                " AND markup_pct < :threshold THEN 1 END) > 0"
+            )
+
+        sort_column_map = {
+            "sku": "sku",
+            "brand": "brand",
+            "model": "model",
+            "base_price": "base_price",
+            "max_diff": "min_markup_pct",
+            "platforms": "platform_count",
+        }
+        sort_col = sort_column_map.get(sort_by, "min_markup_pct")
+        if sort_col == "min_markup_pct":
+            sort_dir = "ASC NULLS LAST" if sort_order == "desc" else "DESC NULLS LAST"
+        else:
+            sort_dir = "DESC" if sort_order == "desc" else "ASC"
+
+        query = text(f"""
+            WITH platform_prices AS (
+                SELECT
+                    p.id, p.sku, p.brand, p.model, p.year, p.base_price, p.status,
+                    pc.platform_name,
+                    CASE
+                        WHEN pc.platform_name = 'reverb' THEN
+                            COALESCE((rl.extended_attributes->'price'->>'amount')::float, rl.list_price)
+                        WHEN pc.platform_name = 'ebay' THEN el.price
+                        WHEN pc.platform_name = 'shopify' THEN sl.price
+                        WHEN pc.platform_name = 'vr' THEN vl.price_notax
+                    END as platform_price
+                FROM products p
+                JOIN platform_common pc ON p.id = pc.product_id
+                LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id AND pc.platform_name = 'reverb'
+                LEFT JOIN ebay_listings el   ON pc.id = el.platform_id AND pc.platform_name = 'ebay'
+                LEFT JOIN shopify_listings sl ON pc.id = sl.platform_id AND pc.platform_name = 'shopify'
+                LEFT JOIN vr_listings vl     ON pc.id = vl.platform_id AND pc.platform_name = 'vr'
+                {status_clause}
+                {"AND" if status_clause else "WHERE"} LOWER(pc.status) IN ('active', 'draft')
+                AND p.base_price > 0
+            ),
+            markup_calc AS (
+                SELECT *,
+                    ROUND(((platform_price - base_price) / base_price * 100)::numeric, 1) as markup_pct
+                FROM platform_prices
+                WHERE platform_price IS NOT NULL
+            ),
+            product_summary AS (
+                SELECT
+                    id, sku, brand, model, year, base_price, status,
+                    MIN(CASE WHEN platform_name != 'shopify' THEN markup_pct END) as min_markup_pct,
+                    ARRAY_AGG(
+                        json_build_object(
+                            'platform', platform_name,
+                            'price', platform_price,
+                            'markup_pct', markup_pct
+                        ) ORDER BY markup_pct ASC NULLS LAST
+                    ) as platform_details
+                FROM markup_calc
+                GROUP BY id, sku, brand, model, year, base_price, status
+                HAVING {having_predicate}
+            )
+            SELECT * FROM product_summary
+            ORDER BY {sort_col} {sort_dir}
+            LIMIT 500
+        """)
+
+        result = await db.execute(query, params)
+        rows = [dict(r._mapping) for r in result.fetchall()]
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "SKU", "Brand", "Model", "Year", "Base Price",
+        "Shopify Price", "Reverb Price", "Reverb Markup %",
+        "VR Price", "VR Markup %",
+        "eBay Price", "eBay Markup %",
+        "Suggested Reverb", "Suggested VR", "Suggested eBay",
+    ])
+
+    for item in rows:
+        details = {d["platform"]: d for d in (item.get("platform_details") or [])}
+        shopify = details.get("shopify", {})
+        reverb = details.get("reverb", {})
+        vr = details.get("vr", {})
+        ebay = details.get("ebay", {})
+        bp = item["base_price"]
+        writer.writerow([
+            item["sku"],
+            item.get("brand", ""),
+            item.get("model", ""),
+            item.get("year", ""),
+            f"{bp:.0f}",
+            f"{shopify['price']:.0f}" if shopify.get("price") else "",
+            f"{reverb['price']:.0f}" if reverb.get("price") else "",
+            f"{reverb['markup_pct']}" if reverb.get("markup_pct") is not None else "",
+            f"{vr['price']:.0f}" if vr.get("price") else "",
+            f"{vr['markup_pct']}" if vr.get("markup_pct") is not None else "",
+            f"{ebay['price']:.0f}" if ebay.get("price") else "",
+            f"{ebay['markup_pct']}" if ebay.get("markup_pct") is not None else "",
+            calculate_reverb_price(bp),
+            calculate_vr_price(bp),
+            calculate_ebay_price(bp),
+        ])
+
+    output.seek(0)
+    filename = f"price_inconsistencies_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @router.post("/check-price/{product_id}", response_class=JSONResponse)
 async def check_live_prices(request: Request, product_id: int):
     """

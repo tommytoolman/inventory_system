@@ -81,7 +81,8 @@
 
     /* ---------- Gallery – CSS checkbox hack ---------- */
     .lvg-gallery { position: relative; }
-    .lvg-gallery input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+    .lvg-gallery input[type="radio"],
+    .lvg-gallery input[type="checkbox"] { position: absolute; opacity: 0; pointer-events: none; }
 
     .lvg-gallery-slides {
       position: relative; width: 100%; padding-bottom: 100%; /* square aspect */
@@ -140,9 +141,64 @@
     {% if i < images|length - 1 %}
     #lvg-slide-{{ i }}:checked ~ .lvg-gallery-arrows .lvg-arrow-next-{{ i }} { display: block; }
     {% endif %}
+    /* Lightbox selectors */
+    #lvg-slide-{{ i }}:checked ~ .lvg-lightbox .lvg-lightbox-slide-{{ i }} { opacity: 1; z-index: 2; }
+    {% if i > 0 %}
+    #lvg-slide-{{ i }}:checked ~ .lvg-lightbox .lvg-lb-arrow-prev-{{ i }} { display: block; }
+    {% endif %}
+    {% if i < images|length - 1 %}
+    #lvg-slide-{{ i }}:checked ~ .lvg-lightbox .lvg-lb-arrow-next-{{ i }} { display: block; }
+    {% endif %}
     {% endfor %}
 
-    /* ---------- Social handles ---------- */
+    /* ---------- Lightbox ---------- */
+    .lvg-gallery-slide label { display: block; width: 100%; height: 100%; cursor: zoom-in; }
+    .lvg-lightbox {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 9999; background: rgba(0,0,0,0.92);
+    }
+    #lvg-lightbox:checked ~ .lvg-lightbox { display: block; }
+    .lvg-lightbox-close {
+      position: absolute; top: 16px; right: 20px; z-index: 10002;
+      color: #fff; font-size: 40px; line-height: 1; cursor: pointer;
+      width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.4); border-radius: 50%;
+    }
+    .lvg-lightbox-close:hover { background: rgba(255,255,255,0.15); }
+    .lvg-lightbox-bg {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 10000; cursor: pointer;
+    }
+    .lvg-lightbox-slides {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 85vmin; height: 85vmin; z-index: 10001;
+    }
+    .lvg-lightbox-slide {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .lvg-lightbox-slide span {
+      display: block; width: 100%; height: 100%;
+      background-size: contain; background-position: center; background-repeat: no-repeat;
+    }
+    .lvg-lightbox-arrows {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 80vmin; height: 85vmin; z-index: 10002; pointer-events: none;
+    }
+    .lvg-lb-arrow {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 44px; height: 44px; background: rgba(255,255,255,0.15); border-radius: 50%;
+      cursor: pointer; pointer-events: all; display: none;
+    }
+    .lvg-lb-arrow:hover { background: rgba(255,255,255,0.3); }
+    .lvg-lb-arrow::after {
+      content: ''; position: absolute; top: 50%; left: 50%;
+      width: 12px; height: 12px; border-top: 2.5px solid #fff; border-right: 2.5px solid #fff;
+    }
+    .lvg-lb-arrow-prev { left: 0; }
+    .lvg-lb-arrow-prev::after { transform: translate(-30%, -50%) rotate(-135deg); }
+    .lvg-lb-arrow-next { right: 0; }
+    .lvg-lb-arrow-next::after { transform: translate(-70%, -50%) rotate(45deg); }
 
     /* ---------- Description ---------- */
     .lvg-description {
@@ -296,14 +352,16 @@
           <input type="radio" id="lvg-slide-{{ loop.index0 }}" name="lvg-slides" {{ 'checked' if loop.first else '' }}>
           {% endfor %}
 
+          {# Lightbox toggle checkbox #}
+          <input type="checkbox" id="lvg-lightbox">
+
           {# Main slides area #}
           <div class="lvg-gallery-slides">
             {% for img in images %}
             <div class="lvg-gallery-slide lvg-gallery-slide-{{ loop.index0 }}">
-              <span style="background-image: url('{{ img }}');"></span>
+              <label for="lvg-lightbox"><span style="background-image: url('{{ img }}');"></span></label>
             </div>
             {% endfor %}
-
           </div>
 
           {# Prev / Next arrows – outside slides div so % height works off .lvg-gallery #}
@@ -325,6 +383,29 @@
               <span style="background-image: url('{{ img }}');"></span>
             </label>
             {% endfor %}
+          </div>
+
+          {# Lightbox overlay #}
+          <div class="lvg-lightbox">
+            <label for="lvg-lightbox" class="lvg-lightbox-bg"></label>
+            <label for="lvg-lightbox" class="lvg-lightbox-close">&times;</label>
+            <div class="lvg-lightbox-slides">
+              {% for img in images %}
+              <div class="lvg-lightbox-slide lvg-lightbox-slide-{{ loop.index0 }}">
+                <span style="background-image: url('{{ img }}');"></span>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="lvg-lightbox-arrows">
+              {% for img in images %}
+              {% if loop.index0 > 0 %}
+              <label for="lvg-slide-{{ loop.index0 - 1 }}" class="lvg-lb-arrow lvg-lb-arrow-prev lvg-lb-arrow-prev-{{ loop.index0 }}"></label>
+              {% endif %}
+              {% if loop.index0 < images|length - 1 %}
+              <label for="lvg-slide-{{ loop.index0 + 1 }}" class="lvg-lb-arrow lvg-lb-arrow-next lvg-lb-arrow-next-{{ loop.index0 }}"></label>
+              {% endif %}
+              {% endfor %}
+            </div>
           </div>
         </div>
         {% endif %}

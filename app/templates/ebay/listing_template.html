@@ -1,0 +1,410 @@
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans|Fjalla+One|Alfa+Slab+One|Roboto|Vollkorn">
+  <style>
+    /* ===== RIFF eBay Listing Template – replaces CrazyLister ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Open Sans', Arial, sans-serif; color: #2a2a2a; background: #4c4c4c; }
+
+    /* ---------- Preview toolbar (stripped when sending to eBay) ---------- */
+    {% if preview_mode %}
+    .riff-preview-toolbar {
+      position: sticky; top: 0; z-index: 9999;
+      background: #1e293b; color: #fff; padding: 10px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: system-ui, sans-serif; font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    .riff-preview-toolbar a { color: #60a5fa; text-decoration: none; }
+    .riff-preview-toolbar a:hover { text-decoration: underline; }
+    .riff-preview-toolbar .badge { background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; margin-left: 8px; }
+    {% endif %}
+
+    /* ---------- Layout ---------- */
+    .lvg-wrapper { max-width: 980px; margin: 0 auto; background: #fff; }
+    .lvg-section { width: 100%; position: relative; }
+
+    /* ---------- Header bar ---------- */
+    .lvg-header {
+      display: flex; align-items: stretch; min-height: 70px;
+    }
+    .lvg-header-logo {
+      flex-shrink: 0; background: #3e0a0a; padding: 8px 16px;
+      display: flex; align-items: center;
+    }
+    .lvg-header-logo img { height: 50px; width: auto; border: 0; }
+    .lvg-header-highlights {
+      flex: 1; background: #ffa100; display: flex;
+      gap: 10px; align-items: center; justify-content: space-around;
+      padding: 8px 16px;
+    }
+    .lvg-header-highlight { display: flex; align-items: center; gap: 8px; }
+    .lvg-header-highlight-icon {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: #fff; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0;
+    }
+    .lvg-header-highlight-icon svg { width: 24px; height: 24px; }
+    .lvg-header-highlight-text {
+      color: #fff; font-family: 'Fjalla One', sans-serif; font-size: 20px;
+      line-height: 1.2; text-transform: uppercase;
+    }
+
+    /* ---------- Banner ---------- */
+    .lvg-banner { position: relative; }
+    .lvg-banner img { width: 100%; display: block; border: 0; }
+    .lvg-intro-text {
+      text-align: center; padding: 20px 40px 0;
+      color: rgb(83,83,83); font-family: 'Vollkorn', serif; font-size: 22px;
+    }
+
+    /* ---------- Product title ---------- */
+    .lvg-title {
+      text-align: center; padding: 15px 40px 20px;
+      font-family: 'Fjalla One', sans-serif; font-size: 36px;
+      color: #2a2a2a; line-height: 1.2;
+      border-bottom: 1px solid #ccc; margin: 0 40px 30px;
+    }
+
+    /* ---------- Content area: gallery left, description right ---------- */
+    .lvg-content { display: flex; gap: 30px; padding: 0 40px 30px; align-items: stretch; }
+    .lvg-content-left { flex: 0 0 45%; max-width: 45%; }
+    .lvg-content-right { flex: 1; min-width: 0; position: relative; }
+    .lvg-description-scroll {
+      overflow-y: auto; overflow-x: hidden;
+      max-height: 100%; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      padding-right: 10px;
+    }
+    .lvg-description-scroll::-webkit-scrollbar { width: 0; background: transparent; }
+    .lvg-description-scroll { scrollbar-width: none; /* Firefox */ }
+
+    /* ---------- Gallery – CSS checkbox hack ---------- */
+    .lvg-gallery { position: relative; }
+    .lvg-gallery input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+
+    .lvg-gallery-slides {
+      position: relative; width: 100%; padding-bottom: 100%; /* square aspect */
+      overflow: hidden; background: #f5f5f5;
+    }
+    .lvg-gallery-slide {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .lvg-gallery-slide span {
+      display: block; width: 100%; height: 100%;
+      background-size: contain; background-position: center; background-repeat: no-repeat;
+    }
+
+    /* Prev / Next arrow labels */
+    .lvg-gallery-arrows {
+      position: absolute; top: 0; left: 0; width: 100%; height: 0;
+      padding-bottom: 100%; /* match the square hero image */
+      pointer-events: none; z-index: 5;
+    }
+    .lvg-gallery-arrow {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 36px; height: 36px; background: rgba(0,0,0,.35); border-radius: 50%;
+      cursor: pointer; pointer-events: all; display: none; /* shown per-slide */
+    }
+    .lvg-gallery-arrow::after {
+      content: ''; position: absolute; top: 50%; left: 50%;
+      width: 10px; height: 10px; border-top: 2px solid #fff; border-right: 2px solid #fff;
+    }
+    .lvg-gallery-arrow-prev { left: 8px; }
+    .lvg-gallery-arrow-prev::after { transform: translate(-30%, -50%) rotate(-135deg); }
+    .lvg-gallery-arrow-next { right: 8px; }
+    .lvg-gallery-arrow-next::after { transform: translate(-70%, -50%) rotate(45deg); }
+
+    /* Thumbnails */
+    .lvg-gallery-thumbs {
+      display: flex; gap: 6px; padding: 10px 0; justify-content: center;
+      flex-wrap: wrap; min-height: 75px;
+    }
+    .lvg-gallery-thumb {
+      width: 60px; height: 60px; cursor: pointer; border: 2px solid transparent;
+      overflow: hidden; flex-shrink: 0; transition: border-color 0.2s;
+    }
+    .lvg-gallery-thumb span {
+      display: block; width: 100%; height: 100%;
+      background-size: cover; background-position: center;
+    }
+
+    /* Per-slide :checked selectors (generated by Jinja2) */
+    {% for i in range(images|length) %}
+    #lvg-slide-{{ i }}:checked ~ .lvg-gallery-slides .lvg-gallery-slide-{{ i }} { opacity: 1; z-index: 2; }
+    #lvg-slide-{{ i }}:checked ~ .lvg-gallery-thumbs .lvg-gallery-thumb-{{ i }} { border-color: #ffa100; }
+    {% if i > 0 %}
+    #lvg-slide-{{ i }}:checked ~ .lvg-gallery-arrows .lvg-arrow-prev-{{ i }} { display: block; }
+    {% endif %}
+    {% if i < images|length - 1 %}
+    #lvg-slide-{{ i }}:checked ~ .lvg-gallery-arrows .lvg-arrow-next-{{ i }} { display: block; }
+    {% endif %}
+    {% endfor %}
+
+    /* ---------- Social handles ---------- */
+
+    /* ---------- Description ---------- */
+    .lvg-description {
+      padding: 0; font-size: 15px; line-height: 1.7;
+      color: #212121; font-family: 'Open Sans', sans-serif;
+    }
+    .lvg-description p { margin-bottom: 1.2em; }
+    .lvg-description strong { font-weight: 700; }
+    .lvg-description ul, .lvg-description ol {
+      margin: 0 0 1.2em 0; padding-left: 1.4em;
+      list-style-position: outside;
+    }
+    .lvg-description li { margin-bottom: 0.4em; }
+    .lvg-description li strong:first-child { font-weight: 700; }
+
+    /* ---------- Footer section ---------- */
+    .lvg-footer-dark {
+      background: #3e0a0a; padding: 30px 40px; text-align: center; color: #fff;
+    }
+    .lvg-footer-dark h2 {
+      font-family: 'Alfa Slab One', serif; font-size: 32px; margin-bottom: 20px;
+    }
+    .lvg-footer-dark p {
+      font-family: 'Open Sans', sans-serif; font-size: 15px; line-height: 1.6; margin-bottom: 8px;
+    }
+    .lvg-footer-dark .address {
+      font-weight: 700; margin-top: 12px;
+    }
+    .lvg-footer-icons { display: flex; justify-content: center; gap: 20px; margin: 20px 0; }
+    .lvg-footer-icons svg { width: 32px; height: 32px; }
+    .lvg-footer-logo { background: #2e3132; text-align: center; padding: 20px 0; }
+    .lvg-footer-logo img { max-width: 300px; display: inline-block; border: 0; }
+    .lvg-shop-section { background: #2e3132; width: 100%; }
+
+    /* ---------- Tabs – CSS checkbox hack ---------- */
+    .lvg-tabs { padding: 20px 40px 40px; }
+    .lvg-tabs input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+
+    .lvg-tab-labels { display: flex; gap: 4px; justify-content: center; }
+    .lvg-tab-label {
+      display: inline-block; padding: 10px 25px; cursor: pointer;
+      font-family: 'Fjalla One', sans-serif; font-size: 28px; color: #454545;
+      background: #ffa100; border-radius: 13px 13px 0 0;
+      box-shadow: rgba(0,0,0,0.5) 0 0 8px 0; opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .lvg-tab-content {
+      display: none; padding: 30px; background: #fff;
+      border-radius: 0 0 13px 13px; box-shadow: rgba(0,0,0,0.5) 0 0 8px 0;
+      font-family: 'Open Sans', sans-serif; font-size: 18px;
+      line-height: 1.6; color: #2d2f2f; text-align: center;
+    }
+    .lvg-tab-content p { margin-bottom: 12px; }
+    .lvg-tab-content em { font-family: 'Fjalla One', sans-serif; font-size: 24px; }
+
+    /* Tab :checked selectors */
+    #lvg-tab-1:checked ~ .lvg-tab-labels .lvg-tab-label-1,
+    #lvg-tab-2:checked ~ .lvg-tab-labels .lvg-tab-label-2,
+    #lvg-tab-3:checked ~ .lvg-tab-labels .lvg-tab-label-3 { opacity: 1; }
+
+    #lvg-tab-1:checked ~ .lvg-tab-content-1,
+    #lvg-tab-2:checked ~ .lvg-tab-content-2,
+    #lvg-tab-3:checked ~ .lvg-tab-content-3 { display: block; }
+
+    /* ---------- Mobile responsive ---------- */
+    @media (max-width: 600px) {
+      .lvg-header { flex-direction: column; }
+      .lvg-header-logo { justify-content: center; }
+      .lvg-header-highlights { gap: 8px; justify-content: center; padding: 8px; }
+      .lvg-header-highlight-text { font-size: 11px; }
+      .lvg-intro-text { font-size: 18px; padding: 16px 16px 0; }
+      .lvg-title { font-size: 24px; padding: 10px 16px 16px; margin: 0 16px 20px; }
+      .lvg-content { flex-direction: column; padding: 0 16px 20px; gap: 20px; }
+      .lvg-content-left { flex: 1; max-width: 100%; }
+      .lvg-gallery-thumb { width: 45px; height: 45px; }
+      .lvg-footer-dark { padding: 20px 16px; }
+      .lvg-footer-dark h2 { font-size: 24px; }
+      .lvg-tabs { padding: 16px; }
+      .lvg-tab-label { font-size: 20px; padding: 8px 16px; }
+      .lvg-tab-content { padding: 20px 16px; font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  {% if preview_mode %}
+  <div class="riff-preview-toolbar">
+    <div>
+      <a href="/inventory/product/{{ product.id }}">Back to Product</a>
+      <span class="badge">PREVIEW</span>
+      <span style="margin-left: 12px; opacity: 0.7;">eBay Listing Template for {{ product.sku }}</span>
+    </div>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <span style="opacity:0.6; font-size:12px;">{{ images|length }} image{{ 's' if images|length != 1 else '' }}</span>
+      <a href="/inventory/products/{{ product.id }}/edit">Edit Product</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="lvg-wrapper">
+
+    <!-- ========== HEADER BAR ========== -->
+    <div class="lvg-header">
+      <div class="lvg-header-logo">
+        <!-- TODO: Self-host this image -->
+        <img src="https://resized-images.crazylister.com/68747470733a2f2f696d672e6372617a796c69737465722e636f6d2f3132303631362f696d616765732f4c56472e6a70673f76657273696f6e49643d557a794c44454e6f4373544b5a6b45525f6d78306b64636554586864574c4876/auto/78.jpg" alt="London Vintage Guitars" title="Logo">
+      </div>
+      <div class="lvg-header-highlights">
+        <div class="lvg-header-highlight">
+          <div class="lvg-header-highlight-icon">
+            <!-- Star/award icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="#454545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <div class="lvg-header-highlight-text">Finest<br>Selection</div>
+        </div>
+        <div class="lvg-header-highlight">
+          <div class="lvg-header-highlight-icon">
+            <!-- Package/box icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="#454545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          </div>
+          <div class="lvg-header-highlight-text">Shipping<br>Specialists</div>
+        </div>
+        <div class="lvg-header-highlight">
+          <div class="lvg-header-highlight-icon">
+            <!-- Clock icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="#454545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="lvg-header-highlight-text">24 Hour<br>Support</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== BANNER ========== -->
+    <div class="lvg-banner">
+      <!-- TODO: Self-host this image -->
+      <img src="https://resized-images.crazylister.com/68747470733a2f2f696d672e6372617a796c69737465722e636f6d2f3132303631362f696d616765732f4d61726b2532304b6e6f70666c65725f42616e6e65725f547769747465722e6a70673f76657273696f6e49643d4c3569445f736a614a566f55624e4a4666783739616675524c61623649414c39/auto/317.jpg" alt="London Vintage Guitars">
+    </div>
+
+    <!-- ========== INTRO + TITLE ========== -->
+    <div class="lvg-intro-text">London Vintage Guitars are pleased to offer:</div>
+    <div class="lvg-title">{{ product.title or (product.brand ~ ' ' ~ product.model) }}</div>
+
+    <!-- ========== TWO-COLUMN: GALLERY + DESCRIPTION ========== -->
+    <div class="lvg-content">
+      <div class="lvg-content-left">
+        {% if images|length > 0 %}
+        <div class="lvg-gallery">
+          {# Hidden radio inputs – one per image #}
+          {% for img in images %}
+          <input type="radio" id="lvg-slide-{{ loop.index0 }}" name="lvg-slides" {{ 'checked' if loop.first else '' }}>
+          {% endfor %}
+
+          {# Main slides area #}
+          <div class="lvg-gallery-slides">
+            {% for img in images %}
+            <div class="lvg-gallery-slide lvg-gallery-slide-{{ loop.index0 }}">
+              <span style="background-image: url('{{ img }}');"></span>
+            </div>
+            {% endfor %}
+
+          </div>
+
+          {# Prev / Next arrows – outside slides div so % height works off .lvg-gallery #}
+          <div class="lvg-gallery-arrows">
+            {% for img in images %}
+            {% if loop.index0 > 0 %}
+            <label for="lvg-slide-{{ loop.index0 - 1 }}" class="lvg-gallery-arrow lvg-gallery-arrow-prev lvg-arrow-prev-{{ loop.index0 }}"></label>
+            {% endif %}
+            {% if loop.index0 < images|length - 1 %}
+            <label for="lvg-slide-{{ loop.index0 + 1 }}" class="lvg-gallery-arrow lvg-gallery-arrow-next lvg-arrow-next-{{ loop.index0 }}"></label>
+            {% endif %}
+            {% endfor %}
+          </div>
+
+          {# Thumbnail strip #}
+          <div class="lvg-gallery-thumbs">
+            {% for img in images %}
+            <label for="lvg-slide-{{ loop.index0 }}" class="lvg-gallery-thumb lvg-gallery-thumb-{{ loop.index0 }}">
+              <span style="background-image: url('{{ img }}');"></span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Social handles below gallery -->
+      </div>
+
+      <div class="lvg-content-right">
+        <div class="lvg-description-scroll">
+          <div class="lvg-description">
+            {{ description_html|safe }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== FOOTER ========== -->
+    <div class="lvg-footer-dark">
+      <h2>WE BUY - SELL - TRADE</h2>
+      <p>Over 40 years experience in buying, selling and trading new, used and vintage guitars, amplifiers and effects.</p>
+      <p>We also offer Part Exchange, Valuations, Consignment Sales and Appraisals.</p>
+      <p class="address">Vintage Guitar Showroom - Hanks, 27 Denmark Street, London WC2H 8NJ</p>
+      <p class="address">Customer Service email: sales {at} londonvintageguitars {dot} com</p>
+      <div class="lvg-footer-icons">
+        <!-- Instagram -->
+        <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="5" stroke="#fff" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.5" fill="#fff"/></svg>
+        <!-- Facebook -->
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3V2z" fill="#fff"/></svg>
+        <!-- X (Twitter) -->
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="#fff"/></svg>
+      </div>
+    </div>
+    <!-- TODO: Self-host this image -->
+    <div class="lvg-footer-logo">
+      <img src="https://resized-images.crazylister.com/68747470733a2f2f696d672e6372617a796c69737465722e636f6d2f3132303631362f696d616765732f666f6f7465722e706e673f76657273696f6e49643d4d6432462e53734f52724f6c487a554f6c316a74557372535637653779634f42/auto/85.png" alt="London Vintage Guitars Footer">
+    </div>
+
+    <!-- ========== PAYMENT / SHIPPING / RETURNS TABS ========== -->
+    <div class="lvg-tabs">
+      <input type="radio" id="lvg-tab-1" name="lvg-tabs" checked>
+      <input type="radio" id="lvg-tab-2" name="lvg-tabs">
+      <input type="radio" id="lvg-tab-3" name="lvg-tabs">
+
+      <div class="lvg-tab-labels">
+        <label for="lvg-tab-1" class="lvg-tab-label lvg-tab-label-1">Payment</label>
+        <label for="lvg-tab-2" class="lvg-tab-label lvg-tab-label-2">Shipping</label>
+        <label for="lvg-tab-3" class="lvg-tab-label lvg-tab-label-3">Returns</label>
+      </div>
+
+      <div class="lvg-tab-content lvg-tab-content-1">
+        <p>We accept payment by any of the following methods:</p>
+        <p><em>PayPal - Credit Card - Bank Wire</em></p>
+        <p>Please pay as soon as possible after winning an auction, as that will allow us to post your item to you sooner!</p>
+      </div>
+
+      <div class="lvg-tab-content lvg-tab-content-2">
+        <p>We offer <em>Competitive Shipping Prices</em> on all orders!</p>
+        <p>Small items will be dispatched via Royal Mail, larger items via TNT or FEDEX. If your item is a vintage piece please allow 1-2 days for us to process your order as we like to check your item over thoroughly before sending.</p>
+      </div>
+
+      <div class="lvg-tab-content lvg-tab-content-3">
+        <p>If the item we have sold you is not as described, you can return the product and get a full refund or exchange the product for another one, be it similar or not.</p>
+        <p>You can return a product for up to 14 days from the date you purchased it.</p>
+        <p>Any product you return must be in the same condition you received it and in the original packaging. Please keep the receipt.</p>
+      </div>
+    </div>
+
+    <!-- ========== SHOP IMAGE ========== -->
+    <div class="lvg-shop-section">
+      <!-- TODO: Self-host this image -->
+      <img src="https://resized-images.crazylister.com/68747470733a2f2f696d672e6372617a796c69737465722e636f6d2f3132303631362f696d616765732f5768617473417070253230496d616765253230323032342d30312d3130253230617425323031305f35355f34322832292e6a7065673f76657273696f6e49643d52435337455448653770524f494b6f4b7a53685f50306d454f73684f774a304f/auto/634.jpeg" alt="Hanks Denmark Street" style="width:100%; display:block; border:0;">
+    </div>
+
+  </div>
+
+  <!-- Mobile-only plain text description (for eBay SEO / schema.org) -->
+  <div vocab="https://schema.org/" typeof="Product" style="display:none;">
+    <span property="name">{{ product.title or (product.brand ~ ' ' ~ product.model) }}</span>
+    <span property="description">{{ description_plain }}</span>
+  </div>
+
+</body>
+</html>

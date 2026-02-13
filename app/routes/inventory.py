@@ -1976,6 +1976,58 @@ def _summarize_differences(results: List[Dict]) -> List[str]:
     return lines
 
 
+@router.get("/product/{product_id}/ebay-template-preview", response_class=HTMLResponse)
+async def ebay_template_preview(
+    request: Request,
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Preview the RIFF eBay listing template for a product."""
+    product = await db.get(Product, product_id)
+    if not product:
+        return templates.TemplateResponse(
+            "errors/404.html",
+            {"request": request, "error_message": f"Product ID {product_id} not found."},
+            status_code=404,
+        )
+
+    # Build image list: primary first, then additional
+    images: list[str] = []
+    if product.primary_image:
+        images.append(product.primary_image)
+    if product.additional_images:
+        source = product.additional_images
+        if isinstance(source, str):
+            try:
+                source = json.loads(source)
+            except json.JSONDecodeError:
+                source = [source]
+        if isinstance(source, list):
+            for item in source:
+                url = item.get("url") if isinstance(item, dict) else item if isinstance(item, str) else None
+                if url and url not in images:
+                    images.append(url)
+    # Cap at 12 for the gallery (eBay displays max 12 in description)
+    images = images[:12]
+
+    # Description: use product.description (HTML), strip tags for plain text
+    description_html = product.description or "No description available."
+    description_plain = re.sub(r"<[^>]+>", " ", description_html)
+    description_plain = re.sub(r"\s+", " ", description_plain).strip()
+
+    return templates.TemplateResponse(
+        "ebay/listing_template.html",
+        {
+            "request": request,
+            "product": product,
+            "images": images,
+            "description_html": description_html,
+            "description_plain": description_plain,
+            "preview_mode": True,
+        },
+    )
+
+
 @router.post("/product/{product_id}/refresh_images", response_class=JSONResponse)
 async def refresh_product_images(
     product_id: int,

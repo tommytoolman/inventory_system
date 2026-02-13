@@ -228,7 +228,7 @@
                                 </svg>
                             </a>
                         {% else %}
-                            <a href="/inventory/products/{{ product.id }}/edit" 
+                            <a href="/inventory/products/{{ product.id }}/edit"
                                class="inline-flex items-center justify-center w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full text-gray-600 hover:text-gray-800 transition-colors"
                                title="Edit Product">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -446,6 +446,8 @@
                                                 {% endif %}
                                                 {% if platform_entry.name|lower == 'vr' %}
                                                     Vintage & Rare
+                                                {% elif platform_entry.name|lower == 'ebay' %}
+                                                    <a href="/inventory/product/{{ product.id }}/ebay-template-preview" target="_blank" class="text-current no-underline hover:text-amber-700 cursor-pointer" title="CrazyLister Preview">Ebay</a>
                                                 {% else %}
                                                     {{ platform_entry.name|title }}
                                                 {% endif %}

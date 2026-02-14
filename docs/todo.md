@@ -1,12 +1,12 @@
 # Project TODO – Inventory Management System
-*Last updated: 2026-01-26*
+*Last updated: 2026-02-14*
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
 - [ ] **Review User Authentication:** Acknowledge existing internal authentication. Further formal review of auth/auth stack (User model, require_auth dependency) needed to ensure robustness and proper role management, especially for additional user access. _(Deferred by user for now)_
 
 ## 🔴 High Priority (Production blockers)
-- [ ] **Sync event automation** – confirm which sync events write to `_listings` tables (persistence audit) and add gradual automation so reconciled events publish without manual nudges. Includes gradually automating the sync pipeline so sold/ended propagation runs unattended.
+- [x] **Sync event automation** – _Completed 2026-02-14:_ Auto-processing now live for `order_sale` events (stocked items) and `status_change` events where new state is `ended` or `sold` (all platforms). Events still logged to `sync_events` table as audit trail (status=`processed` or `error`). Works for both scheduled syncs and manual UI syncs. Shopify DB consistency also fixed — `create_listing_from_product()` now creates its own `platform_common` + `shopify_listings` rows like the other 3 platforms. eBay price change detection no longer fires for ended listings. See session handoff `docs/new_session_handoff_prompt.md` for details.
 - [ ] **Database schema constraints (race condition fix)** – _Progress 2026-01-26:_ Fixed race condition that created orphaned platform listings by cleaning up 31 orphaned records (24 eBay, 7 VR) and adding NOT NULL constraints to `platform_id` columns on all platform-specific tables (`ebay_listings`, `reverb_listings`, `vr_listings`, `shopify_listings`). **Remaining:** Constraints were applied directly in production database via SQL but need to be codified in an Alembic migration so they're tracked in version control and can be applied to future environments/deployments. Migration should add `ALTER TABLE {table} ALTER COLUMN platform_id SET NOT NULL` for each platform table.
 - [ ] **Shopify-only products image persistence** – _Background 2026-01-26:_ During sync event cleanup, discovered 18 Shopify products created directly in Shopify (e.g., part-payment products, custom items) that don't have corresponding RIFF product records. These create recurring new_listing sync events because they can't be matched to local inventory. Current workaround is Skip button to mark events as skipped. **Remaining:** Need systemic solution: Either (1) Auto-import Shopify-only products into RIFF inventory with special SKU prefix (SHOP-ONLY-{id}) and sync images from Shopify to local storage, OR (2) Create permanent exclusion list/filter to suppress new_listing events for known Shopify-only SKUs. Consider impact on reporting and inventory counts.
 

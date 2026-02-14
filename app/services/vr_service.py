@@ -954,7 +954,10 @@ class VRService:
 
                 await self.db.flush()
 
-                vr_listing_stmt = select(VRListing).where(VRListing.platform_id == platform_common.id)
+                vr_listing_stmt = select(VRListing).where(
+                    VRListing.platform_id == platform_common.id,
+                    VRListing.vr_state.notin_(['ended', 'sold'])
+                )
                 existing_vr_listing = await self.db.execute(vr_listing_stmt)
                 vr_listing = existing_vr_listing.scalar_one_or_none()
 
@@ -1208,6 +1211,7 @@ class VRService:
             FROM platform_common pc
             LEFT JOIN products p ON p.id = pc.product_id
             LEFT JOIN vr_listings vl ON vl.platform_id = pc.id
+                AND vl.vr_state = 'active'
             WHERE pc.platform_name = 'vr'
               AND pc.status NOT IN ('refreshed', 'deleted', 'removed')
         """)

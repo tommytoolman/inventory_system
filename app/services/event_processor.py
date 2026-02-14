@@ -495,7 +495,10 @@ async def _ensure_platform_common_reverb(session: AsyncSession, product: Product
 async def _create_reverb_listing(session: AsyncSession, platform_common: PlatformCommon, reverb_data: dict):
     """Create reverb_listings entry"""
     # Check if already exists
-    stmt = select(ReverbListing).where(ReverbListing.platform_id == platform_common.id)
+    stmt = select(ReverbListing).where(
+        ReverbListing.platform_id == platform_common.id,
+        ReverbListing.reverb_state == 'live'
+    )
     result = await session.execute(stmt)
     if result.scalar_one_or_none():
         logger.info("Reverb listing already exists")
@@ -670,7 +673,10 @@ async def _upsert_ebay_listing_from_change(
 ) -> None:
     raw_data = change_data.get('raw_data') or {}
 
-    stmt = select(EbayListing).where(EbayListing.platform_id == platform_common.id)
+    stmt = select(EbayListing).where(
+        EbayListing.platform_id == platform_common.id,
+        EbayListing.listing_status == 'ACTIVE'
+    )
     listing = (await session.execute(stmt)).scalar_one_or_none()
 
     listing_status = (change_data.get('status') or 'active').upper()
@@ -845,7 +851,10 @@ async def _upsert_vr_listing_from_change(
 ) -> None:
     raw_data = change_data.get('extended_attributes') or change_data.get('raw_data') or {}
 
-    stmt = select(VRListing).where(VRListing.platform_id == platform_common.id)
+    stmt = select(VRListing).where(
+        VRListing.platform_id == platform_common.id,
+        VRListing.vr_state == 'active'
+    )
     listing = (await session.execute(stmt)).scalar_one_or_none()
 
     vr_state = 'sold' if change_data.get('is_sold') else (change_data.get('state') or 'active')
@@ -1196,7 +1205,10 @@ async def _process_status_change(
                     session.add(reverb_pc)
 
                     # Update reverb_listings table
-                    rl_query = select(ReverbListing).where(ReverbListing.platform_id == reverb_pc.id)
+                    rl_query = select(ReverbListing).where(
+                        ReverbListing.platform_id == reverb_pc.id,
+                        ReverbListing.reverb_state == 'live'
+                    )
                     rl_result = await session.execute(rl_query)
                     reverb_listing = rl_result.scalar_one_or_none()
                     if reverb_listing:
@@ -1267,8 +1279,7 @@ async def _process_status_change(
                                     old_ebay_listing = old_listing_result.scalar_one_or_none()
 
                                     if old_ebay_listing:
-                                        # Orphan the old listing - remove link to platform_common
-                                        old_ebay_listing.platform_id = None
+                                        # Mark old listing as ended (keep platform_id for audit trail)
                                         old_ebay_listing.listing_status = 'ENDED'
                                         old_ebay_listing.updated_at = now_utc
 
@@ -1675,7 +1686,10 @@ async def reconcile_vr_listing_for_product(session: AsyncSession, product: Produ
                 platform_common.sync_status = SyncStatus.SYNCED.value
 
                 # Update or create vr_listings entry
-                vr_stmt = select(VRListing).where(VRListing.platform_id == platform_common.id)
+                vr_stmt = select(VRListing).where(
+                    VRListing.platform_id == platform_common.id,
+                    VRListing.vr_state == 'active'
+                )
                 result = await session.execute(vr_stmt)
                 vr_listing = result.scalar_one_or_none()
 

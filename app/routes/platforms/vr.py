@@ -5,8 +5,10 @@ import json
 import base64
 import os
 from typing import Dict, Any
+import pandas as pd
+import io
 
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, UploadFile, File
 from app.services.vr_service import VRService
 from app.services.activity_logger import ActivityLogger
 from app.services.websockets.manager import manager
@@ -523,3 +525,83 @@ def get_vr_client_with_cached_cookies(settings: Settings) -> "VintageAndRareClie
         client.reload_cookies_from_list(_vr_cookies_cache)
 
     return client
+
+
+@router.post("/vr/upload-csv")
+async def upload_vr_csv(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Manual V&R CSV upload endpoint - fallback when automated sync fails.
+
+    User manually downloads CSV from V&R website and uploads it here.
+    Processes the CSV the same way as automated sync.
+    """
+    sync_run_id = uuid.uuid4()
+    logger.info(f"Manual V&R CSV upload initiated with run_id: {sync_run_id}")
+
+    try:
+        # Read CSV content
+        content = await file.read()
+        csv_text = content.decode('utf-8')
+
+        # Parse into DataFrame
+        df = pd.read_csv(io.StringIO(csv_text))
+        logger.info(f"Parsed uploaded CSV with {len(df)} rows")
+
+        # Broadcast start
+        await manager.broadcast({
+            "type": "sync_started",
+            "platform": "vr",
+            "source": "manual_upload",
+            "timestamp": datetime.now().isoformat()
+        })
+
+        # Process sync
+        vr_service = VRService(db)
+        result = await vr_service.sync_vr_inventory(df, sync_run_id)
+
+        # Update platform status
+        if result.get('events_logged', 0) > 0 or result.get('updated', 0) > 0:
+            update_query = text("""
+                UPDATE platform_common
+                SET last_sync = timezone('utc', now()),
+                    sync_status = 'SYNCED'
+                WHERE platform_name = 'vr'
+            """)
+            await db.execute(update_query)
+            await db.commit()
+
+        logger.info(f"Manual upload sync completed: {result}")
+
+        # Broadcast success
+        await manager.broadcast({
+            "type": "sync_completed",
+            "platform": "vr",
+            "status": "success",
+            "source": "manual_upload",
+            "data": result,
+            "timestamp": datetime.now().isoformat()
+        })
+
+        return {
+            "status": "success",
+            "message": f"CSV processed successfully: {result.get('events_logged', 0)} changes logged",
+            "data": result
+        }
+
+    except Exception as e:
+        logger.error(f"Manual CSV upload failed: {e}", exc_info=True)
+
+        await manager.broadcast({
+            "type": "sync_completed",
+            "platform": "vr",
+            "status": "error",
+            "source": "manual_upload",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        })
+
+        raise HTTPException(status_code=500, detail=f"CSV processing failed: {str(e)}")

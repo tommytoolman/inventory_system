@@ -453,15 +453,92 @@
                 const response = await fetch(endpoint, { method: 'POST' });
                 const data = await response.json();
 
+                console.log('Sync response:', data); // DEBUG
+
                 if (data.status === 'success') {
                     showNotification(data.message || `${platform} sync initiated successfully`, 'success');
                 } else {
                     showNotification(data.message || `Failed to start ${platform} sync`, 'error');
+
+                    // If V&R sync failed, offer manual upload option
+                    console.log('Checking for VR upload prompt:', platform, data); // DEBUG
+                    if (platform === 'vr') {
+                        console.log('Showing VR upload prompt'); // DEBUG
+                        setTimeout(() => showVRManualUploadPrompt(), 500);
+                    }
                 }
             } catch (error) {
                 console.error(`Error syncing ${platform}:`, error);
                 showNotification(`Error starting ${platform} sync`, 'error');
+
+                // If V&R sync failed, offer manual upload option
+                if (platform === 'vr') {
+                    console.log('Showing VR upload prompt (error path)'); // DEBUG
+                    setTimeout(() => showVRManualUploadPrompt(), 500);
+                }
             }
+        }
+
+        function showVRManualUploadPrompt() {
+            const dialog = document.createElement('div');
+            dialog.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
+            dialog.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">V&R Sync Failed</h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Automated sync couldn't connect to V&R. Would you like to upload a CSV manually?
+                    </p>
+                    <div class="flex gap-3">
+                        <button onclick="openVRFileUpload()"
+                                class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            Upload CSV
+                        </button>
+                        <button onclick="this.closest('[class*=fixed]').remove()"
+                                class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(dialog);
+        }
+
+        function openVRFileUpload() {
+            // Remove the prompt dialog
+            document.querySelector('[class*="fixed inset-0"]')?.remove();
+
+            // Create hidden file input
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv,text/csv';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                showNotification('Uploading V&R CSV...', 'info');
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const response = await fetch('/api/vr/upload-csv', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showNotification(data.message || 'CSV processed successfully!', 'success');
+                    } else {
+                        showNotification(data.detail || 'Upload failed', 'error');
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    showNotification('Upload failed: ' + error.message, 'error');
+                }
+            };
+            input.click();
         }
 
         // Notification helper

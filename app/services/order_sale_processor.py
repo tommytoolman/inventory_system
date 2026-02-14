@@ -265,7 +265,10 @@ class OrderSaleProcessor:
             if source_platform == "reverb":
                 from app.models.reverb import ReverbListing
                 rev_result = await self.db.execute(
-                    select(ReverbListing).where(ReverbListing.platform_id == source_listing.id)
+                    select(ReverbListing).where(
+                        ReverbListing.platform_id == source_listing.id,
+                        ReverbListing.reverb_state == 'live'
+                    )
                 )
                 rev_listing = rev_result.scalar_one_or_none()
                 if rev_listing and rev_listing.inventory_quantity != new_qty:
@@ -277,7 +280,10 @@ class OrderSaleProcessor:
             elif source_platform == "ebay":
                 from app.models.ebay import EbayListing
                 ebay_result = await self.db.execute(
-                    select(EbayListing).where(EbayListing.platform_id == source_listing.id)
+                    select(EbayListing).where(
+                        EbayListing.platform_id == source_listing.id,
+                        EbayListing.listing_status == 'ACTIVE'
+                    )
                 )
                 ebay_listing = ebay_result.scalar_one_or_none()
                 if ebay_listing and ebay_listing.quantity_available != new_qty:

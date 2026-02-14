@@ -1550,7 +1550,10 @@ class ReverbService:
             logger.error("Failed to update Reverb listing %s: %s", platform_link.external_id, exc, exc_info=True)
             return {"status": "error", "message": str(exc)}
 
-        listing_stmt = select(ReverbListing).where(ReverbListing.platform_id == platform_link.id)
+        listing_stmt = select(ReverbListing).where(
+            ReverbListing.platform_id == platform_link.id,
+            ReverbListing.reverb_state == 'live'
+        )
         listing_result = await self.db.execute(listing_stmt)
         listing = listing_result.scalar_one_or_none()
         if listing:
@@ -1643,9 +1646,8 @@ class ReverbService:
             if not platform_common:
                 raise ListingNotFoundError(f"PlatformCommon {listing.platform_id} not found")
             
-            # End the listing on Reverb
-            end_data = {"state": "ended"}
-            await self.client.update_listing(listing.reverb_listing_id, end_data)
+            # End the listing on Reverb (must use dedicated state/end endpoint)
+            await self.client.end_listing(listing.reverb_listing_id, reason=reason)
             
             # Update local database records
             platform_common.status = ListingStatus.ENDED.value
@@ -2917,6 +2919,7 @@ class ReverbService:
                 rl.reverb_state
             FROM platform_common pc
             LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id
+                AND rl.reverb_state = 'live'
             WHERE pc.platform_name = 'reverb'
               AND pc.external_id IS NOT NULL
               AND pc.status NOT IN ('deleted', 'removed')

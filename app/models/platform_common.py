@@ -44,9 +44,30 @@ class PlatformCommon(Base):
     # Relationships
     product = relationship("Product", back_populates="platform_listings")
     
-    ebay_listing = relationship("EbayListing", back_populates="platform_listing", uselist=False)
-    reverb_listing = relationship("ReverbListing", back_populates="platform_listing", uselist=False)
-    vr_listing = relationship("VRListing", back_populates="platform_listing", uselist=False)
+    ebay_listing = relationship(
+        "EbayListing",
+        primaryjoin="and_(PlatformCommon.id == EbayListing.platform_id, EbayListing.listing_status == 'ACTIVE')",
+        foreign_keys="EbayListing.platform_id",
+        back_populates="platform_listing",
+        uselist=False,
+        viewonly=True,
+    )
+    reverb_listing = relationship(
+        "ReverbListing",
+        primaryjoin="and_(PlatformCommon.id == ReverbListing.platform_id, ReverbListing.reverb_state == 'live')",
+        foreign_keys="ReverbListing.platform_id",
+        back_populates="platform_listing",
+        uselist=False,
+        viewonly=True,
+    )
+    vr_listing = relationship(
+        "VRListing",
+        primaryjoin="and_(PlatformCommon.id == VRListing.platform_id, VRListing.vr_state == 'active')",
+        foreign_keys="VRListing.platform_id",
+        back_populates="platform_listing",
+        uselist=False,
+        viewonly=True,
+    )
     shopify_listing = relationship("ShopifyListing", back_populates="platform_listing", uselist=False)
     
     sale = relationship("Sale", back_populates="platform_listing", uselist=False)

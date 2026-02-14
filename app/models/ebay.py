@@ -91,7 +91,7 @@ class EbayListing(Base):
     )
     
 
-    platform_id = Column(Integer, ForeignKey("platform_common.id"), nullable=True, index=True)
+    platform_id = Column(Integer, ForeignKey("platform_common.id"), nullable=False, index=True)
 
     # Complete data storage
     listing_data = Column(JSONB)  # Store the complete listing data for reference

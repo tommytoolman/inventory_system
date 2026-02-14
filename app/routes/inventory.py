@@ -234,11 +234,20 @@ async def _fetch_current_platform_prices(db: AsyncSession, product_id: int) -> D
         if platform_key == "shopify":
             stmt = select(ShopifyListing.price).where(ShopifyListing.platform_id == link.id)
         elif platform_key == "reverb":
-            stmt = select(ReverbListing.list_price).where(ReverbListing.platform_id == link.id)
+            stmt = select(ReverbListing.list_price).where(
+                ReverbListing.platform_id == link.id,
+                ReverbListing.reverb_state == 'live'
+            )
         elif platform_key == "ebay":
-            stmt = select(EbayListing.price).where(EbayListing.platform_id == link.id)
+            stmt = select(EbayListing.price).where(
+                EbayListing.platform_id == link.id,
+                EbayListing.listing_status == 'ACTIVE'
+            )
         elif platform_key == "vr":
-            stmt = select(VRListing.price_notax).where(VRListing.platform_id == link.id)
+            stmt = select(VRListing.price_notax).where(
+                VRListing.platform_id == link.id,
+                VRListing.vr_state == 'active'
+            )
 
         if stmt is not None:
             price_value = (await db.execute(stmt)).scalar_one_or_none()
@@ -1917,9 +1926,10 @@ async def product_detail(
 
         reverb_published_at = None
         if reverb_listing:
-            # Get reverb_listings to check published date
+            # Get reverb_listings to check published date (filter for live to handle refresh history)
             reverb_listing_query = select(ReverbListing).where(
-                ReverbListing.platform_id == reverb_listing.id
+                ReverbListing.platform_id == reverb_listing.id,
+                ReverbListing.reverb_state == 'live'
             )
             reverb_listing_result = await db.execute(reverb_listing_query)
             reverb_listing_row = reverb_listing_result.scalar_one_or_none()
@@ -2226,9 +2236,10 @@ async def relist_product(
                 reverb_pc.last_sync = now_utc
                 db.add(reverb_pc)
 
-                # Update reverb_listings table if exists
+                # Update reverb_listings table if exists (filter for live to handle refresh history)
                 reverb_listing_stmt = select(ReverbListing).where(
-                    ReverbListing.platform_id == reverb_pc.id
+                    ReverbListing.platform_id == reverb_pc.id,
+                    ReverbListing.reverb_state == 'live'
                 )
                 reverb_listing_result = await db.execute(reverb_listing_stmt)
                 reverb_listing = reverb_listing_result.scalar_one_or_none()
@@ -2283,8 +2294,7 @@ async def relist_product(
                             old_ebay_listing = old_listing_result.scalar_one_or_none()
 
                             if old_ebay_listing:
-                                # Orphan the old listing
-                                old_ebay_listing.platform_id = None
+                                # Mark old listing as ended (keep platform_id for audit trail)
                                 old_ebay_listing.listing_status = 'ENDED'
                                 old_ebay_listing.updated_at = now_utc
 
@@ -2362,14 +2372,13 @@ async def relist_product(
                             logger.info(f"eBay duplicate detected for {product.sku}: adopting existing listing {existing_item_id}")
                             old_item_id = ebay_pc.external_id
 
-                            # Orphan the old ebay_listings row if it exists
+                            # Mark old ebay_listings row as ended (keep platform_id for audit trail)
                             old_listing_stmt = select(EbayListing).where(
                                 EbayListing.ebay_item_id == old_item_id
                             )
                             old_listing_result = await db.execute(old_listing_stmt)
                             old_ebay_listing = old_listing_result.scalar_one_or_none()
                             if old_ebay_listing:
-                                old_ebay_listing.platform_id = None
                                 old_ebay_listing.listing_status = 'ENDED'
                                 old_ebay_listing.updated_at = now_utc
                                 db.add(old_ebay_listing)
@@ -2573,7 +2582,8 @@ async def refresh_stale_listing(
     This is different from relist (Flow 1/2) because:
     - Old listings are ENDED/DELETED, not just republished
     - NEW listing IDs are generated on all platforms
-    - Old platform_common records are orphaned with status=REFRESHED
+    - platform_common records are REUSED (updated with new listing IDs)
+    - Old _listings rows kept with ended status for audit trail
     - Fresh timestamps give better platform visibility
 
     Returns:
@@ -2583,6 +2593,7 @@ async def refresh_stale_listing(
     from app.services.vr_service import VRService
     from app.services.reverb_service import ReverbService
     from app.core.utils import is_listing_stale, get_listing_age_months
+    from app.services.pricing import calculate_platform_price
 
     logger.info(f"Stale refresh request for product {product_id}")
 
@@ -2619,7 +2630,8 @@ async def refresh_stale_listing(
     if 'reverb' in platform_commons:
         reverb_pc = platform_commons['reverb']
         reverb_listing_stmt = select(ReverbListing).where(
-            ReverbListing.platform_id == reverb_pc.id
+            ReverbListing.platform_id == reverb_pc.id,
+            ReverbListing.reverb_state == 'live'
         )
         reverb_listing_result = await db.execute(reverb_listing_stmt)
         reverb_listing = reverb_listing_result.scalar_one_or_none()
@@ -2647,9 +2659,10 @@ async def refresh_stale_listing(
                 reverb_service = ReverbService(db, settings)
                 old_reverb_id = reverb_pc.external_id
 
-                # Step 1: End the old listing
+                # Step 1: End the old listing (find the live one)
                 reverb_listing_stmt = select(ReverbListing).where(
-                    ReverbListing.platform_id == reverb_pc.id
+                    ReverbListing.platform_id == reverb_pc.id,
+                    ReverbListing.reverb_state == 'live'
                 )
                 reverb_listing_result = await db.execute(reverb_listing_stmt)
                 reverb_listing_record = reverb_listing_result.scalar_one_or_none()
@@ -2658,25 +2671,9 @@ async def refresh_stale_listing(
                     await reverb_service.end_listing(reverb_listing_record.id, reason="not_sold")
                     logger.info(f"Ended old Reverb listing {old_reverb_id}")
 
-                # Step 2: Orphan old platform_common (set product_id=NULL, status=REFRESHED)
-                reverb_pc.product_id = None
-                reverb_pc.status = ListingStatus.REFRESHED.value
-                reverb_pc.sync_status = SyncStatus.SYNCED.value
-                reverb_pc.updated_at = now_utc
-
-                # Also update platform_specific_data with refresh info
+                # Step 2: Update product SKU with refresh suffix (Reverb requires unique SKUs)
+                # Note: platform_common is kept — Reverb service upserts it with new listing data
                 old_sku = product.sku
-                psd = reverb_pc.platform_specific_data or {}
-                psd['_refresh_info'] = {
-                    'refreshed_at': now_utc.isoformat(),
-                    'original_product_id': product.id,
-                    'original_sku': old_sku,
-                    'reason': 'stale_listing_refresh'
-                }
-                reverb_pc.platform_specific_data = psd
-                db.add(reverb_pc)
-
-                # Step 2b: Update product SKU with refresh suffix (Reverb requires unique SKUs)
                 sku_match = re.match(r'^(.+?)(-R(\d+))?$', old_sku or '')
                 if sku_match:
                     base_sku = sku_match.group(1)
@@ -2690,10 +2687,12 @@ async def refresh_stale_listing(
                 await db.flush()
                 logger.info(f"Updated product SKU from {old_sku} to {new_sku} for Reverb refresh")
 
-                # Step 3: Create new Reverb listing
+                # Step 3: Create new Reverb listing (with platform markup applied)
+                reverb_price = calculate_platform_price("reverb", float(product.base_price or 0))
                 create_result = await reverb_service.create_listing_from_product(
                     product_id=product.id,
-                    publish=True
+                    publish=True,
+                    platform_options={"price": reverb_price}
                 )
 
                 if create_result.get('status') == 'success':
@@ -2734,7 +2733,7 @@ async def refresh_stale_listing(
                 await ebay_service.mark_item_as_sold(old_item_id)
                 logger.info(f"Ended old eBay listing {old_item_id}")
 
-                # Step 2: Orphan old ebay_listings row
+                # Step 2: Mark old ebay_listings row as ended
                 old_listing_stmt = select(EbayListing).where(
                     EbayListing.ebay_item_id == old_item_id
                 )
@@ -2742,7 +2741,7 @@ async def refresh_stale_listing(
                 old_ebay_listing = old_listing_result.scalar_one_or_none()
 
                 if old_ebay_listing:
-                    old_ebay_listing.platform_id = None
+                    # Mark old listing as ended (keep platform_id for audit trail)
                     old_ebay_listing.listing_status = 'ENDED'
                     old_ebay_listing.updated_at = now_utc
                     listing_data = old_ebay_listing.listing_data or {}
@@ -2755,25 +2754,23 @@ async def refresh_stale_listing(
                     old_ebay_listing.listing_data = listing_data
                     db.add(old_ebay_listing)
 
-                # Step 3: Orphan old platform_common
-                ebay_pc.product_id = None
-                ebay_pc.status = ListingStatus.REFRESHED.value
-                ebay_pc.sync_status = SyncStatus.SYNCED.value
-                ebay_pc.updated_at = now_utc
-                psd = ebay_pc.platform_specific_data or {}
-                psd['_refresh_info'] = {
-                    'refreshed_at': now_utc.isoformat(),
-                    'original_product_id': product.id,
-                    'original_sku': product.sku,
-                    'reason': 'stale_listing_refresh'
-                }
-                ebay_pc.platform_specific_data = psd
+                # Step 3: Mark platform_common as ended (will be updated to ACTIVE by create)
+                ebay_pc.status = ListingStatus.ENDED.value
                 db.add(ebay_pc)
 
-                # Step 4: Create new eBay listing
+                # Step 4: Create new eBay listing (reuses existing platform_common, with platform markup)
+                ebay_policies = {
+                    'shipping_profile_id': '252277357017',
+                    'payment_profile_id': '252544577017',
+                    'return_profile_id': '252277356017'
+                }
+                ebay_price = calculate_platform_price("ebay", float(product.base_price or 0))
                 create_result = await ebay_service.create_listing_from_product(
                     product=product,
-                    use_shipping_profile=True
+                    use_shipping_profile=True,
+                    existing_platform_common=ebay_pc,
+                    price_override=Decimal(str(ebay_price)),
+                    **ebay_policies
                 )
 
                 if create_result.get('status') == 'success':
@@ -2814,7 +2811,7 @@ async def refresh_stale_listing(
                 await vr_service.mark_item_as_sold(old_vr_id)
                 logger.info(f"Marked old V&R listing {old_vr_id} as sold")
 
-                # Step 2: Orphan old vr_listings row
+                # Step 2: Mark old vr_listings row as ended
                 old_vr_listing_stmt = select(VRListing).where(
                     VRListing.vr_listing_id == old_vr_id
                 )
@@ -2822,7 +2819,7 @@ async def refresh_stale_listing(
                 old_vr_listing = old_vr_listing_result.scalar_one_or_none()
 
                 if old_vr_listing:
-                    old_vr_listing.platform_id = None
+                    # Mark old listing as ended (keep platform_id for audit trail)
                     old_vr_listing.vr_state = 'ended'
                     old_vr_listing.updated_at = now_utc
                     extended = old_vr_listing.extended_attributes or {}
@@ -2835,24 +2832,15 @@ async def refresh_stale_listing(
                     old_vr_listing.extended_attributes = extended
                     db.add(old_vr_listing)
 
-                # Step 3: Orphan old platform_common
-                vr_pc.product_id = None
-                vr_pc.status = ListingStatus.REFRESHED.value
-                vr_pc.sync_status = SyncStatus.SYNCED.value
-                vr_pc.updated_at = now_utc
-                psd = vr_pc.platform_specific_data or {}
-                psd['_refresh_info'] = {
-                    'refreshed_at': now_utc.isoformat(),
-                    'original_product_id': product.id,
-                    'original_sku': product.sku,
-                    'reason': 'stale_listing_refresh'
-                }
-                vr_pc.platform_specific_data = psd
+                # Step 3: Mark platform_common as ended (VR service upserts it with new listing data)
+                vr_pc.status = ListingStatus.ENDED.value
                 db.add(vr_pc)
 
-                # Step 4: Create new V&R listing
+                # Step 4: Create new V&R listing (with platform markup)
+                vr_price = calculate_platform_price("vr", float(product.base_price or 0))
                 create_result = await vr_service.create_listing_from_product(
-                    product=product
+                    product=product,
+                    platform_options={"price": vr_price}
                 )
 
                 if create_result.get('status') == 'success':
@@ -3283,7 +3271,8 @@ async def handle_create_platform_listing_from_detail(
                         PlatformCommon
                     ).where(
                         PlatformCommon.product_id == product.id,
-                        PlatformCommon.platform_name == 'reverb'
+                        PlatformCommon.platform_name == 'reverb',
+                        ReverbListing.reverb_state == 'live'
                     )
                     reverb_result = await db.execute(reverb_listing_query)
                     reverb_listing = reverb_result.scalar_one_or_none()
@@ -4383,7 +4372,8 @@ async def add_product(
                         reverb_listing = await db.execute(
                             select(ReverbListing).join(PlatformCommon).where(
                                 PlatformCommon.product_id == product.id,
-                                PlatformCommon.platform_name == "reverb"
+                                PlatformCommon.platform_name == "reverb",
+                                ReverbListing.reverb_state == 'live'
                             )
                         )
                         reverb_listing = reverb_listing.scalar_one_or_none()
@@ -4400,7 +4390,8 @@ async def add_product(
                         ebay_listing = await db.execute(
                             select(EbayListing).join(PlatformCommon).where(
                                 PlatformCommon.product_id == product.id,
-                                PlatformCommon.platform_name == "ebay"
+                                PlatformCommon.platform_name == "ebay",
+                                EbayListing.listing_status == 'ACTIVE'
                             )
                         )
                         ebay_listing = ebay_listing.scalar_one_or_none()
@@ -5675,17 +5666,26 @@ async def edit_product_form(
             if listing and listing.price is not None:
                 price_value = float(listing.price)
         elif platform_key == "reverb":
-            listing_stmt = select(ReverbListing).where(ReverbListing.platform_id == link.id)
+            listing_stmt = select(ReverbListing).where(
+                ReverbListing.platform_id == link.id,
+                ReverbListing.reverb_state == 'live'
+            )
             listing = (await db.execute(listing_stmt)).scalar_one_or_none()
             if listing and listing.list_price is not None:
                 price_value = float(listing.list_price)
         elif platform_key == "ebay":
-            listing_stmt = select(EbayListing).where(EbayListing.platform_id == link.id)
+            listing_stmt = select(EbayListing).where(
+                EbayListing.platform_id == link.id,
+                EbayListing.listing_status == 'ACTIVE'
+            )
             listing = (await db.execute(listing_stmt)).scalar_one_or_none()
             if listing and listing.price is not None:
                 price_value = float(listing.price)
         elif platform_key == "vr":
-            listing_stmt = select(VRListing).where(VRListing.platform_id == link.id)
+            listing_stmt = select(VRListing).where(
+                VRListing.platform_id == link.id,
+                VRListing.vr_state == 'active'
+            )
             listing = (await db.execute(listing_stmt)).scalar_one_or_none()
             if listing and listing.price_notax is not None:
                 price_value = float(listing.price_notax)

@@ -110,7 +110,7 @@ class VintageAndRareClient:
         # Browser-like headers to satisfy Cloudflare
         chrome_ua = os.environ.get(
             "VR_USER_AGENT",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
         )
         self.headers = {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
@@ -1949,7 +1949,10 @@ class VintageAndRareClient:
             
             # Try to create/update VRListing entry (if the table exists)
             try:
-                query = select(VRListing).where(VRListing.platform_id == platform_common.id)
+                query = select(VRListing).where(
+                    VRListing.platform_id == platform_common.id,
+                    VRListing.vr_state == 'active'
+                )
                 result = await db_session.execute(query)
                 vr_listing = result.scalar_one_or_none()
                 

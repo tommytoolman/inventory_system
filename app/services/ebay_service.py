@@ -1817,8 +1817,8 @@ class EbayService:
         return shipping_details
     
     async def create_listing_from_product(
-        self, 
-        product: Product, 
+        self,
+        product: Product,
         reverb_api_data: Dict = None,
         sandbox: bool = None,
         use_shipping_profile: bool = False,
@@ -1827,7 +1827,8 @@ class EbayService:
         return_profile_id: str = None,
         shipping_details: Dict = None,
         price_override: Optional[Decimal] = None,
-        dry_run: bool = False
+        dry_run: bool = False,
+        existing_platform_common: Optional['PlatformCommon'] = None
     ) -> Dict[str, Any]:
         """
         Creates an eBay listing from a master Product object and rich Reverb API data.
@@ -2099,7 +2100,8 @@ class EbayService:
                     ebay_item_id=new_ebay_id,
                     listing_data=item_data,
                     full_api_response=full_listing_data,
-                    sandbox=sandbox if sandbox is not None else self.settings.EBAY_SANDBOX_MODE
+                    sandbox=sandbox if sandbox is not None else self.settings.EBAY_SANDBOX_MODE,
+                    existing_platform_common=existing_platform_common
                 )
                 
                 return {
@@ -2154,7 +2156,7 @@ class EbayService:
         listing_result = await self.db.execute(stmt)
         listing = listing_result.scalar_one_or_none()
         if listing:
-            listing.listing_status = 'ended'
+            listing.listing_status = 'ENDED'
             listing.quantity_available = 0
             listing.quantity = listing.quantity or 0
             listing.updated_at = datetime.utcnow()
@@ -2192,27 +2194,44 @@ class EbayService:
         ebay_item_id: str,
         listing_data: Dict[str, Any],
         full_api_response: Optional[Dict[str, Any]] = None,
-        sandbox: bool = False
+        sandbox: bool = False,
+        existing_platform_common: Optional['PlatformCommon'] = None
     ) -> None:
         """Create platform_common and ebay_listings entries for a new eBay listing."""
         try:
-            # First, create platform_common entry
-            platform_common = PlatformCommon(
-                product_id=product.id,
-                platform_name='ebay',
-                external_id=ebay_item_id,
-                status=ListingStatus.ACTIVE,  # Changed from listing_status
-                sync_status=SyncStatus.SYNCED.value.upper(),
-                last_sync=datetime.now(timezone.utc).replace(tzinfo=None),  # Changed from last_sync_date and removed timezone
-                listing_url=f"https://www.ebay.co.uk/itm/{ebay_item_id}",
-                platform_specific_data={
+            if existing_platform_common:
+                # Reuse existing platform_common (e.g. during refresh flow)
+                platform_common = existing_platform_common
+                platform_common.external_id = ebay_item_id
+                platform_common.status = ListingStatus.ACTIVE
+                platform_common.sync_status = SyncStatus.SYNCED.value.upper()
+                platform_common.last_sync = datetime.now(timezone.utc).replace(tzinfo=None)
+                platform_common.listing_url = f"https://www.ebay.co.uk/itm/{ebay_item_id}"
+                platform_common.platform_specific_data = {
                     'created_via': 'api',
                     'created_at': datetime.now(timezone.utc).isoformat(),
                     'sandbox': sandbox
                 }
-            )
-            self.db.add(platform_common)
-            await self.db.flush()  # Get the ID
+                self.db.add(platform_common)
+                await self.db.flush()
+            else:
+                # Create new platform_common entry
+                platform_common = PlatformCommon(
+                    product_id=product.id,
+                    platform_name='ebay',
+                    external_id=ebay_item_id,
+                    status=ListingStatus.ACTIVE,  # Changed from listing_status
+                    sync_status=SyncStatus.SYNCED.value.upper(),
+                    last_sync=datetime.now(timezone.utc).replace(tzinfo=None),  # Changed from last_sync_date and removed timezone
+                    listing_url=f"https://www.ebay.co.uk/itm/{ebay_item_id}",
+                    platform_specific_data={
+                        'created_via': 'api',
+                        'created_at': datetime.now(timezone.utc).isoformat(),
+                        'sandbox': sandbox
+                    }
+                )
+                self.db.add(platform_common)
+                await self.db.flush()  # Get the ID
             
             if not full_api_response:
                 full_api_response = await self._fetch_full_item_with_retry(ebay_item_id)
@@ -2320,7 +2339,7 @@ class EbayService:
                 ebay_condition_id=condition_id_value,
                 condition_display_name=condition_display_name or (self._get_ebay_condition_display_name(condition_id_value) if condition_id_value else None),
                 format='FIXEDPRICEITEM' if listing_type_value == 'FixedPriceItem' else 'AUCTION',
-                listing_status='active',
+                listing_status='ACTIVE',
                 listing_url=listing_url_value,
                 shipping_policy_id=shipping_profile_id,
                 payment_policy_id=payment_profile_id,
@@ -2478,7 +2497,10 @@ class EbayService:
         if not platform_link.external_id:
             return {"status": "skipped", "reason": "missing_external_id"}
 
-        listing_stmt = select(EbayListing).where(EbayListing.platform_id == platform_link.id)
+        listing_stmt = select(EbayListing).where(
+            EbayListing.platform_id == platform_link.id,
+            EbayListing.listing_status == 'ACTIVE'
+        )
         listing_result = await self.db.execute(listing_stmt)
         listing = listing_result.scalar_one_or_none()
 
@@ -2556,6 +2578,7 @@ class EbayService:
             FROM platform_common pc
             LEFT JOIN products p      ON p.id = pc.product_id
             LEFT JOIN ebay_listings el ON pc.id = el.platform_id
+                AND UPPER(el.listing_status) = 'ACTIVE'
             WHERE pc.platform_name = 'ebay'
               AND pc.status NOT IN ('refreshed', 'deleted', 'removed')
         """)
@@ -2599,9 +2622,9 @@ class EbayService:
             
             # Map eBay's list type to our universal platform_common statuses
             status_mapping = {
-                'active': 'active',
-                'sold': 'sold',
-                'unsold': 'ended'
+                'active': 'ACTIVE',
+                'sold': 'SOLD',
+                'unsold': 'ENDED'
             }
             listing_status = status_mapping.get(list_type, 'unknown')
             

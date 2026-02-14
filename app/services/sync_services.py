@@ -1625,7 +1625,10 @@ class SyncService:
         reverb_listing_stmt = (
             select(ReverbListing)
             .join(PlatformCommon, ReverbListing.platform_id == PlatformCommon.id)
-            .where(PlatformCommon.product_id == product.id)
+            .where(
+                PlatformCommon.product_id == product.id,
+                ReverbListing.reverb_state == 'live'
+            )
         )
         reverb_listing_result = await self.db.execute(reverb_listing_stmt)
         reverb_listing = reverb_listing_result.scalar_one_or_none()
@@ -2005,7 +2008,10 @@ class SyncService:
                             listing.last_synced_at = timestamp
                             self.db.add(listing)
                     elif link.platform_name == "ebay":
-                        listing_stmt = select(EbayListing).where(EbayListing.platform_id == link.id)
+                        listing_stmt = select(EbayListing).where(
+                            EbayListing.platform_id == link.id,
+                            EbayListing.listing_status == 'ACTIVE'
+                        )
                         listing_result = await self.db.execute(listing_stmt)
                         listing = listing_result.scalar_one_or_none()
                         if listing:
@@ -2014,7 +2020,10 @@ class SyncService:
                             listing.last_synced_at = timestamp
                             self.db.add(listing)
                     elif link.platform_name == "reverb":
-                        listing_stmt = select(ReverbListing).where(ReverbListing.platform_id == link.id)
+                        listing_stmt = select(ReverbListing).where(
+                            ReverbListing.platform_id == link.id,
+                            ReverbListing.reverb_state == 'live'
+                        )
                         listing_result = await self.db.execute(listing_stmt)
                         listing = listing_result.scalar_one_or_none()
                         if listing:
@@ -2060,7 +2069,10 @@ class SyncService:
                     if not link.external_id:
                         continue
 
-                    listing_stmt = select(VRListing).where(VRListing.platform_id == link.id)
+                    listing_stmt = select(VRListing).where(
+                        VRListing.platform_id == link.id,
+                        VRListing.vr_state == 'active'
+                    )
                     listing_result = await self.db.execute(listing_stmt)
                     listing = listing_result.scalar_one_or_none()
                     if listing:
@@ -2391,7 +2403,8 @@ class ChangeDetector:
                            el.price AS price, el.listing_status
                     FROM platform_common pc
                     JOIN products p ON pc.product_id = p.id
-                    LEFT JOIN ebay_listings el ON pc.external_id = el.ebay_item_id
+                    LEFT JOIN ebay_listings el ON el.platform_id = pc.id
+                        AND el.listing_status = 'ACTIVE'
                     WHERE pc.platform_name = 'ebay'
                     AND pc.status NOT IN ('deleted', 'removed')
                 """)
@@ -2402,7 +2415,8 @@ class ChangeDetector:
                            rl.list_price, rl.reverb_state
                     FROM platform_common pc
                     JOIN products p ON pc.product_id = p.id
-                    LEFT JOIN reverb_listings rl ON CONCAT('REV-', pc.external_id) = rl.reverb_listing_id
+                    LEFT JOIN reverb_listings rl ON rl.platform_id = pc.id
+                        AND rl.reverb_state = 'live'
                     WHERE pc.platform_name = 'reverb'
                     AND pc.status NOT IN ('deleted', 'removed')
                 """)
@@ -2424,7 +2438,8 @@ class ChangeDetector:
                            vl.price_notax, vl.vr_state
                     FROM platform_common pc
                     JOIN products p ON pc.product_id = p.id
-                    LEFT JOIN vr_listings vl ON pc.external_id = vl.vr_listing_id
+                    LEFT JOIN vr_listings vl ON vl.platform_id = pc.id
+                        AND vl.vr_state = 'active'
                     WHERE pc.platform_name = 'vr'
                     AND pc.status NOT IN ('deleted', 'removed')
                 """)
@@ -2455,16 +2470,25 @@ class ChangeDetector:
             if platform == "ebay":
                 platform_status = platform_item.get('listing_status') or platform_item.get('sellingStatus', {}).get('listingStatus')
             elif platform == "reverb":
-                platform_status = platform_item.get('state') or platform_item.get('reverb_state')
+                raw_state = platform_item.get('state') or platform_item.get('reverb_state')
+                # Reverb API returns state as dict {'slug': 'live', 'description': 'Live'}
+                platform_status = raw_state.get('slug') if isinstance(raw_state, dict) else raw_state
             elif platform == "shopify":
                 platform_status = platform_item.get('status')
             elif platform == "vr":
                 platform_status = platform_item.get('state') or platform_item.get('vr_state')
             else:
                 continue
-            
-            # Get local status
-            local_status = local_item.get('status')
+
+            # Get local status — prefer platform-specific state over pc.status
+            if platform == "reverb":
+                local_status = local_item.get('reverb_state') or local_item.get('status')
+            elif platform == "ebay":
+                local_status = local_item.get('listing_status') or local_item.get('status')
+            elif platform == "vr":
+                local_status = local_item.get('vr_state') or local_item.get('status')
+            else:
+                local_status = local_item.get('status')
             
             # Compare statuses
             normalized_platform_status = _normalize_platform_status(platform, platform_status)
@@ -2598,16 +2622,25 @@ class ChangeDetector:
         return changes
     
     async def _detect_new_listings(
-        self, 
-        platform: str, 
-        platform_lookup: Dict, 
+        self,
+        platform: str,
+        platform_lookup: Dict,
         local_lookup: Dict
     ) -> List[DetectedChange]:
         """Detect new listings that appeared on platform"""
         changes = []
-        
+
         for external_id, platform_item in platform_lookup.items():
             if external_id in local_lookup:
+                continue
+
+            # Check if this is a known old listing from a refresh (exists in
+            # platform-specific listing table but no longer in platform_common.external_id)
+            if await self._is_known_old_listing(platform, str(external_id)):
+                logger.debug(
+                    "Skipping known old %s listing %s (refresh artifact)",
+                    platform, external_id,
+                )
                 continue
 
             # Attempt to suggest a match for specific platforms
@@ -2649,6 +2682,36 @@ class ChangeDetector:
             ))
 
         return changes
+
+    async def _is_known_old_listing(self, platform: str, external_id: str) -> bool:
+        """Check if an external_id exists in the platform listing table.
+
+        After a refresh, old listing IDs are no longer in platform_common.external_id
+        but still exist in the platform-specific table with ended/sold state. These
+        should not be treated as new listings.
+        """
+        try:
+            if platform == "reverb":
+                from app.models.reverb import ReverbListing
+                stmt = select(ReverbListing.id).where(
+                    ReverbListing.reverb_listing_id == external_id
+                ).limit(1)
+            elif platform == "ebay":
+                from app.models.ebay import EbayListing
+                stmt = select(EbayListing.id).where(
+                    EbayListing.ebay_item_id == external_id
+                ).limit(1)
+            elif platform == "vr":
+                from app.models.vr import VRListing
+                stmt = select(VRListing.id).where(
+                    VRListing.vr_listing_id == external_id
+                ).limit(1)
+            else:
+                return False
+            result = await self.db.execute(stmt)
+            return result.scalar_one_or_none() is not None
+        except Exception:
+            return False
 
     async def _suggest_vr_match(self, platform_item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Attempt to match a V&R listing without a local record to an existing product."""

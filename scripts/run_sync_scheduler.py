@@ -25,6 +25,10 @@ from app.services.shopify.client import ShopifyGraphQLClient
 from app.services.activity_logger import ActivityLogger
 from app.services.order_sale_processor import OrderSaleProcessor
 from app.services.listing_stats_service import ListingStatsService
+from app.services.reverb_service import ReverbService
+from app.services.reconciliation_service import process_reconciliation
+from app.models.sync_event import SyncEvent
+from sqlalchemy import select
 from shopify.auto_archive import run_auto_archive
 
 logging.basicConfig(level=logging.INFO)
@@ -81,6 +85,90 @@ async def main():
             item_ids=None,
         )
 
+    async def _auto_process_ended_sold_events(db, sync_run_id):
+        """Auto-process status_change events where a listing went to ended/sold.
+
+        Called after each platform sync to propagate endings across all platforms.
+        Works for any source platform (Reverb, eBay, Shopify, VR).
+        """
+        try:
+            stmt = select(SyncEvent).where(
+                SyncEvent.sync_run_id == sync_run_id,
+                SyncEvent.status == "pending",
+                SyncEvent.change_type == "status_change",
+            )
+            result = await db.execute(stmt)
+            events = result.scalars().all()
+
+            auto_count = 0
+            for event in events:
+                new_state = (event.change_data or {}).get("new", "").lower()
+                if new_state not in ("ended", "sold"):
+                    continue  # leave other status changes for manual review
+
+                try:
+                    report = await process_reconciliation(
+                        db=db,
+                        event_id=event.id,
+                        dry_run=False,
+                    )
+                    auto_count += 1
+                    logger.info(
+                        "Auto-processed %s status_change event %s (%s → %s)",
+                        event.platform_name, event.id,
+                        (event.change_data or {}).get("old", "?"), new_state,
+                    )
+                    if report.summary.get("errors", 0) > 0:
+                        logger.warning(
+                            "Auto-process event %s had errors: %s",
+                            event.id, report.summary,
+                        )
+                except Exception as evt_err:
+                    logger.error("Failed to auto-process status_change event %s: %s", event.id, evt_err)
+
+            if auto_count:
+                logger.info("Auto-processed %s ended/sold status_change events for sync run %s", auto_count, sync_run_id)
+        except Exception as e:
+            logger.warning("Status change auto-processing failed: %s", e)
+
+    async def reverb_sync_and_autoprocess(db, settings, sync_run_id):
+        """Run Reverb listing sync, then auto-process ended/sold status changes."""
+        await run_reverb_sync_background(
+            api_key=settings.REVERB_API_KEY,
+            db=db,
+            settings=settings,
+            sync_run_id=sync_run_id,
+        )
+        await _auto_process_ended_sold_events(db, sync_run_id)
+
+    async def ebay_sync_and_autoprocess(db, settings, sync_run_id):
+        """Run eBay listing sync, then auto-process ended/sold status changes."""
+        await run_ebay_sync_background(
+            db=db,
+            settings=settings,
+            sync_run_id=sync_run_id,
+        )
+        await _auto_process_ended_sold_events(db, sync_run_id)
+
+    async def shopify_sync_and_autoprocess(db, settings, sync_run_id):
+        """Run Shopify listing sync, then auto-process ended/sold status changes."""
+        await run_shopify_sync_background(
+            db=db,
+            settings=settings,
+            sync_run_id=sync_run_id,
+        )
+        await _auto_process_ended_sold_events(db, sync_run_id)
+
+    async def vr_sync_and_autoprocess(db, settings, sync_run_id):
+        """Run VR listing sync, then auto-process ended/sold status changes."""
+        await run_vr_sync_background(
+            settings.VINTAGE_AND_RARE_USERNAME,
+            settings.VINTAGE_AND_RARE_PASSWORD,
+            db,
+            sync_run_id,
+        )
+        await _auto_process_ended_sold_events(db, sync_run_id)
+
     async def fetch_reverb_orders(db, settings, sync_run_id):
         """Fetch recent Reverb orders, upsert, and process for inventory."""
         logger.info("Fetching Reverb orders...")
@@ -98,6 +186,27 @@ async def main():
                 sale_summary = await processor.process_unprocessed_orders("reverb", dry_run=False)
                 logger.info("Reverb sale processing: %s", sale_summary)
 
+                # Create order_sale sync events for stocked items, then auto-process
+                # (propagates to eBay/Shopify/VR + sends email notification)
+                reverb_service = ReverbService(db, settings)
+                event_result = await reverb_service.create_sync_events_for_stocked_orders(sync_run_id)
+                events_created = event_result.get("events_created", 0)
+                logger.info("Reverb order_sale sync events: %s", event_result)
+
+                if events_created > 0:
+                    await db.commit()  # commit events before processing
+                    recon_report = await process_reconciliation(
+                        db=db,
+                        sync_run_id=str(sync_run_id),
+                        event_type="order_sale",
+                        dry_run=False,
+                    )
+                    logger.info(
+                        "Auto-processed %s order_sale events (errors: %s)",
+                        recon_report.summary.get("processed", 0),
+                        recon_report.summary.get("errors", 0),
+                    )
+
                 await activity_logger.log_activity(
                     action="orders_sync",
                     entity_type="orders",
@@ -112,6 +221,7 @@ async def main():
                         "updated": summary.get("updated", 0),
                         "sales_processed": sale_summary.get("sales_detected", 0),
                         "quantity_decrements": sale_summary.get("quantity_decrements", 0),
+                        "order_sale_events": events_created,
                     }
                 )
                 await db.commit()
@@ -306,40 +416,22 @@ async def main():
         ScheduledJob(
             "reverb_hourly",
             60,
-            lambda db, settings, sync_run_id: run_reverb_sync_background(
-                api_key=settings.REVERB_API_KEY,
-                db=db,
-                settings=settings,
-                sync_run_id=sync_run_id,
-            ),
+            reverb_sync_and_autoprocess,
         ),
         ScheduledJob(
             "ebay_hourly",
             60,
-            lambda db, settings, sync_run_id: run_ebay_sync_background(
-                db=db,
-                settings=settings,
-                sync_run_id=sync_run_id,
-            ),
+            ebay_sync_and_autoprocess,
         ),
         ScheduledJob(
             "shopify_hourly",
             60,
-            lambda db, settings, sync_run_id: run_shopify_sync_background(
-                db=db,
-                settings=settings,
-                sync_run_id=sync_run_id,
-            ),
+            shopify_sync_and_autoprocess,
         ),
         ScheduledJob(
             "vr_every_3h",
             180,
-            lambda db, settings, sync_run_id: run_vr_sync_background(
-                settings.VINTAGE_AND_RARE_USERNAME,
-                settings.VINTAGE_AND_RARE_PASSWORD,
-                db,
-                sync_run_id,
-            ),
+            vr_sync_and_autoprocess,
         ),
         ScheduledJob(
             "ebay_metadata_12h",

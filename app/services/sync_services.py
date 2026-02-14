@@ -2531,6 +2531,11 @@ class ChangeDetector:
                 
             local_item = local_lookup[external_id]
 
+            # Skip ended/sold listings — price changes are not actionable
+            local_status = str(local_item.get('status', '')).lower()
+            if local_status in ('ended', 'sold'):
+                continue
+
             if platform == "vr":
                 # VR listings intentionally carry platform-specific markups; API feed also
                 # returns inconsistent values. Skip automated price-drift detection.

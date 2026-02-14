@@ -563,7 +563,12 @@ async def _persist_shopify_listing(
     shopify_generated_seo_title: Optional[str] = None,
     shopify_generated_short_description: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Upsert platform_common and shopify_listings entries from a Shopify publish result."""
+    """Upsert platform_common and shopify_listings entries from a Shopify publish result.
+
+    DEPRECATED: DB rows are now created inside
+    shopify_service.create_listing_from_product() via _persist_listing_rows().
+    This function is retained temporarily as a fallback reference.
+    """
 
     if not isinstance(shopify_result, dict):
         logger.error("Shopify persistence aborted: result is not a dict (%s)", type(shopify_result))
@@ -3183,22 +3188,14 @@ async def handle_create_platform_listing_from_detail(
                     platform_options=saved_platform_options or None,
                 )
 
-                persist_response = await _persist_shopify_listing(
-                    db,
-                    settings,
-                    product,
-                    result,
-                    shopify_options=saved_platform_options,
-                    shopify_generated_keywords=shopify_generated_keywords,
-                    shopify_generated_seo_title=shopify_generated_seo_title,
-                    shopify_generated_short_description=shopify_generated_short_description,
-                )
-
-                if persist_response.get("status") == "success":
-                    message = persist_response.get("message") or "Successfully created Shopify listing"
+                # DB rows (platform_common + shopify_listings) are now
+                # created inside create_listing_from_product() automatically.
+                if result.get("status") == "success":
+                    ext_id = result.get("external_id", "")
+                    message = f"Listed on Shopify with ID: {ext_id}"
                     message_type = "success"
                 else:
-                    message = persist_response.get("message", "Failed to create Shopify listing")
+                    message = result.get("message", "Failed to create Shopify listing")
                     message_type = "error"
                     
             except Exception as e:
@@ -4219,27 +4216,18 @@ async def add_product(
                 )
                 logger.info(f"Shopify result: {result}")
 
-                persist_response = await _persist_shopify_listing(
-                    db,
-                    settings,
-                    product,
-                    result,
-                    shopify_options=shopify_options,
-                    shopify_generated_keywords=shopify_generated_keywords,
-                    shopify_generated_seo_title=shopify_generated_seo_title,
-                    shopify_generated_short_description=shopify_generated_short_description,
-                )
-
-                platform_statuses["shopify"] = persist_response
-                if persist_response.get("status") == "success":
+                # DB rows (platform_common + shopify_listings) are now
+                # created inside create_listing_from_product() automatically.
+                platform_statuses["shopify"] = result
+                if result.get("status") == "success":
                     logger.info(
                         "✅ Shopify listing created successfully: ID=%s",
-                        persist_response.get("external_id"),
+                        result.get("external_id"),
                     )
                 else:
                     logger.warning(
-                        "❌ Shopify listing failed to persist: %s",
-                        persist_response.get("message"),
+                        "❌ Shopify listing creation failed: %s",
+                        result.get("message"),
                     )
             except Exception as e:
                 logger.error(f"Shopify listing error: {str(e)}", exc_info=True)

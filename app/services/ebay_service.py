@@ -1198,11 +1198,15 @@ class EbayService:
             try:
                 api_data, db_data = item['api_data'], item['db_data']
                 external_id = api_data['external_id']
-                
+
+                # Skip ended/sold listings for ALL change detection
+                api_status = str(api_data.get('status', '')).lower()
+                is_active_listing = api_status not in ('ended', 'sold')
+
                 # Price change event check comparing against the last stored platform value
                 db_specialist_price = db_data.get('specialist_price')
                 db_price_for_compare = float(db_specialist_price or db_data.get('base_price') or 0.0)
-                if abs(api_data['price'] - db_price_for_compare) > 0.01:
+                if is_active_listing and abs(api_data['price'] - db_price_for_compare) > 0.01:
                     if (external_id, 'price') not in pending_events:
                         recorded_price = (
                             float(db_specialist_price)
@@ -1232,10 +1236,6 @@ class EbayService:
                     db_quantity_available = db_data.get('product_quantity')
 
                 is_stocked_item = bool(db_data.get('product_is_stocked'))
-
-                # Skip quantity change detection for ended/sold listings
-                api_status = str(api_data.get('status', '')).lower()
-                is_active_listing = api_status not in ('ended', 'sold')
 
                 if is_stocked_item and is_active_listing and api_quantity_available is not None and db_quantity_available is not None and api_quantity_available != db_quantity_available:
                     if (external_id, 'quantity_change') not in pending_events:

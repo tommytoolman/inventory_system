@@ -954,7 +954,12 @@ async def _create_ebay_listing(session: AsyncSession, product: Product, reverb_d
         }
 
 async def _create_shopify_listing(session: AsyncSession, product: Product, reverb_data: dict) -> dict:
-    """Create Shopify listing"""
+    """Create Shopify listing.
+
+    DB rows (platform_common + shopify_listings) are now created inside
+    shopify_service.create_listing_from_product(), so this function just
+    delegates and translates the response.
+    """
     try:
         settings = get_settings()
         shopify_service = ShopifyService(session, settings)
@@ -966,115 +971,6 @@ async def _create_shopify_listing(session: AsyncSession, product: Product, rever
 
         if shopify_result and shopify_result.get('status') == 'success':
             logger.info(f"✅ Shopify product created: {shopify_result.get('external_id')}")
-
-            # Generate handle for the product URL
-            import re
-            def generate_shopify_handle(brand: str, model: str, sku: str) -> str:
-                parts = [str(part) for part in [brand, model, sku] if part and str(part).lower() != 'nan']
-                text = '-'.join(parts).lower()
-                text = re.sub(r'[^a-z0-9\-]+', '-', text)
-                return text.strip('-')
-
-            handle = generate_shopify_handle(
-                product.brand or '',
-                product.model or '',
-                product.sku
-            )
-
-            # Build the listing URL
-            listing_url = f"https://londonvintageguitars.myshopify.com/products/{handle}" if handle else None
-
-            # Create platform_common entry for Shopify
-            platform_common = PlatformCommon(
-                product_id=product.id,
-                platform_name='shopify',
-                external_id=str(shopify_result.get('external_id', '')),
-                status='active',
-                last_sync=datetime.utcnow(),
-                sync_status=SyncStatus.SYNCED.value,
-                listing_url=listing_url,
-                platform_specific_data=shopify_result
-            )
-            session.add(platform_common)
-            await session.flush()
-
-            logger.info(f"Created platform_common record with ID: {platform_common.id}, URL: {listing_url}")
-
-            # Create shopify_listings entry
-            shopify_listing = ShopifyListing(
-                platform_id=platform_common.id,
-                shopify_product_id=f"gid://shopify/Product/{shopify_result.get('external_id', '')}",
-                shopify_legacy_id=str(shopify_result.get('external_id', '')),
-                handle=handle,
-                title=product.title or f"{product.year or ''} {product.brand} {product.model}".strip(),
-                status='active',
-                vendor=product.brand,
-                price=float(product.base_price) if product.base_price else None,
-                category_gid=None,  # Will be set later from extended_attrs
-                category_name=None,
-                category_full_name=None,
-                seo_title=None,
-                seo_description=None,
-                category_assigned_at=None,
-                category_assignment_status='PENDING',
-                extended_attributes=shopify_result,
-                last_synced_at=datetime.utcnow()
-            )
-            session.add(shopify_listing)
-
-            # Enrich SEO metadata
-            seo_title = (product.title or f"{product.year or ''} {product.brand} {product.model}".strip()).strip()
-            if seo_title:
-                shopify_listing.seo_title = seo_title[:255]
-
-            description_source = product.description or (reverb_data.get('description') if reverb_data else '')
-            plain_description = ShopifyService.strip_html_to_plain_text(description_source)
-            if plain_description:
-                shopify_listing.seo_description = plain_description[:320]
-
-            # Category enrichment
-            category_gid = shopify_result.get('category_gid')
-            category_full_name = shopify_result.get('category_full_name')
-            category_name = shopify_result.get('category_name') or (
-                category_full_name.split(' > ')[-1] if category_full_name else None
-            )
-
-            if category_gid:
-                shopify_listing.category_gid = category_gid
-                shopify_listing.category_name = category_name
-                shopify_listing.category_full_name = category_full_name
-                shopify_listing.category_assignment_status = 'ASSIGNED'
-                shopify_listing.category_assigned_at = datetime.utcnow()
-
-            await session.flush()
-
-            logger.info(f"Created shopify_listings entry with ID {shopify_listing.id}")
-
-            # Fetch full product data from Shopify to get the preview URL
-            try:
-                from app.services.shopify.client import ShopifyGraphQLClient
-                shopify_client = ShopifyGraphQLClient()
-                product_gid = f"gid://shopify/Product/{shopify_result.get('external_id')}"
-                full_product = shopify_client.get_product_snapshot_by_id(product_gid)
-                if full_product:
-                    # Log all URL fields to see what Shopify returns
-                    logger.info(f"Shopify API returned URLs:")
-                    logger.info(f"  handle: {full_product.get('handle')}")
-                    logger.info(f"  onlineStoreUrl: {full_product.get('onlineStoreUrl')}")
-                    logger.info(f"  onlineStorePreviewUrl: {full_product.get('onlineStorePreviewUrl')}")
-
-                    # Check which URL matches the expected format
-                    if full_product.get('onlineStoreUrl'):
-                        logger.info(f"  Using onlineStoreUrl for listing_url")
-                        platform_common.listing_url = full_product.get('onlineStoreUrl')
-                    elif full_product.get('onlineStorePreviewUrl'):
-                        logger.info(f"  Using onlineStorePreviewUrl for listing_url")
-                        platform_common.listing_url = full_product.get('onlineStorePreviewUrl')
-
-                    logger.info(f"Final platform_common URL: {platform_common.listing_url}")
-            except Exception as e:
-                logger.warning(f"Could not fetch full product data: {e}")
-
             return {
                 'success': True,
                 'external_id': str(shopify_result.get('external_id', '')),

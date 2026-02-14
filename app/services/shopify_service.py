@@ -1968,6 +1968,27 @@ class ShopifyService:
             except Exception as snapshot_error:
                 logger.warning(f"Failed to fetch Shopify snapshot for {product_gid}: {snapshot_error}")
 
+            # ── Persist platform_common + shopify_listings rows ──────────
+            try:
+                await self._persist_listing_rows(
+                    product=product,
+                    external_id=str(product_legacy_id),
+                    product_gid=product_gid,
+                    snapshot=snapshot,
+                    final_price=final_price,
+                    category_gid=category_gid_assigned,
+                    category_name=category_name_assigned,
+                    category_full_name=category_full_name_assigned,
+                    shipping_profile_gid=shipping_profile_gid_assigned,
+                    platform_options=platform_options,
+                )
+            except Exception as persist_err:
+                logger.error(
+                    "DB persistence failed for Shopify product %s (API product was created): %s",
+                    product_legacy_id, persist_err, exc_info=True,
+                )
+                # Don't fail the whole call — the Shopify product exists
+
             return {
                 "status": "success",
                 "external_id": product_legacy_id,
@@ -1985,6 +2006,154 @@ class ShopifyService:
         except Exception as e:
             logger.error(f"Exception while creating Shopify listing for SKU {product.sku}: {e}", exc_info=True)
             return {"status": "error", "message": str(e)}
+
+    # ------------------------------------------------------------------
+    # DB persistence helper — mirrors pattern used by vr_service / ebay
+    # ------------------------------------------------------------------
+    async def _persist_listing_rows(
+        self,
+        product: Product,
+        external_id: str,
+        product_gid: str,
+        snapshot: Optional[Dict[str, Any]],
+        final_price: Optional[float],
+        category_gid: Optional[str],
+        category_name: Optional[str],
+        category_full_name: Optional[str],
+        shipping_profile_gid: Optional[str],
+        platform_options: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Upsert platform_common + shopify_listings after a successful Shopify API create."""
+        snapshot = snapshot or {}
+        platform_options = platform_options or {}
+
+        # ── Derive fields ────────────────────────────────────────────
+        product_title = snapshot.get("title") or product.title or product.generate_title() or ""
+
+        # Handle
+        handle = snapshot.get("handle")
+        if not handle and product_title:
+            normalized = re.sub(r"[^a-zA-Z0-9\s-]", "", product_title)
+            normalized = re.sub(r"\s+", "-", normalized.strip())
+            handle = normalized.lower()
+
+        # Listing URL
+        listing_url = (
+            snapshot.get("onlineStoreUrl")
+            or snapshot.get("onlineStorePreviewUrl")
+        )
+        if not listing_url and handle:
+            listing_url = f"https://londonvintageguitars.myshopify.com/products/{handle}"
+
+        # Platform payload stored in platform_specific_data / extended_attributes
+        platform_payload = snapshot or {}
+
+        # Sync status
+        sync_status_value = SyncStatus.SYNCED.value.upper()
+
+        # Category
+        category_assignment_status = None
+        category_assigned_at = None
+        if not category_gid:
+            # Try from snapshot
+            cat_node = snapshot.get("category") if isinstance(snapshot, dict) else None
+            if isinstance(cat_node, dict):
+                category_gid = cat_node.get("id")
+                category_name = category_name or cat_node.get("name")
+                category_full_name = category_full_name or cat_node.get("fullName")
+            prod_cat = snapshot.get("productCategory")
+            if isinstance(prod_cat, dict):
+                tax_node = prod_cat.get("productTaxonomyNode") or {}
+                category_gid = category_gid or tax_node.get("id")
+                category_name = category_name or tax_node.get("name")
+                category_full_name = category_full_name or tax_node.get("fullName")
+        if category_gid:
+            category_assignment_status = "assigned"
+            category_assigned_at = datetime.utcnow()
+
+        # SEO
+        seo_data = snapshot.get("seo") if isinstance(snapshot.get("seo"), dict) else {}
+        seo_title = seo_data.get("title") or (product_title[:255] if product_title else None)
+        seo_description = seo_data.get("description")
+
+        # Price
+        price_float = float(final_price) if final_price is not None else (
+            float(product.base_price) if product.base_price else None
+        )
+
+        # Tags as keywords
+        snapshot_tags = snapshot.get("tags") if isinstance(snapshot.get("tags"), list) else None
+
+        # ── Upsert platform_common ───────────────────────────────────
+        existing = await self.db.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product.id,
+                PlatformCommon.platform_name == "shopify",
+            )
+        )
+        platform_common = existing.scalar_one_or_none()
+
+        if platform_common:
+            platform_common.external_id = external_id
+            platform_common.status = "active"
+            platform_common.listing_url = listing_url or platform_common.listing_url
+            platform_common.sync_status = sync_status_value
+            platform_common.last_sync = datetime.utcnow()
+            platform_common.platform_specific_data = platform_payload
+        else:
+            platform_common = PlatformCommon(
+                product_id=product.id,
+                platform_name="shopify",
+                external_id=external_id,
+                status="active",
+                listing_url=listing_url,
+                sync_status=sync_status_value,
+                last_sync=datetime.utcnow(),
+                platform_specific_data=platform_payload,
+            )
+            self.db.add(platform_common)
+
+        await self.db.flush()
+
+        # ── Upsert shopify_listings ──────────────────────────────────
+        listing_stmt = select(ShopifyListing).where(ShopifyListing.platform_id == platform_common.id)
+        existing_listing = await self.db.execute(listing_stmt)
+        shopify_listing = existing_listing.scalar_one_or_none()
+
+        listing_payload = {
+            "platform_id": platform_common.id,
+            "shopify_product_id": product_gid,
+            "shopify_legacy_id": external_id,
+            "handle": handle,
+            "title": product_title,
+            "status": "active",
+            "vendor": snapshot.get("vendor") or product.brand,
+            "price": price_float,
+            "category_gid": category_gid,
+            "category_name": category_name,
+            "category_full_name": category_full_name,
+            "category_assigned_at": category_assigned_at,
+            "category_assignment_status": category_assignment_status,
+            "seo_title": seo_title,
+            "seo_description": seo_description,
+            "seo_keywords": snapshot_tags,
+            "shipping_profile_id": shipping_profile_gid,
+            "extended_attributes": platform_payload,
+            "last_synced_at": datetime.utcnow(),
+        }
+
+        if shopify_listing:
+            for field, value in listing_payload.items():
+                setattr(shopify_listing, field, value)
+        else:
+            shopify_listing = ShopifyListing(**listing_payload)
+            self.db.add(shopify_listing)
+
+        await self.db.commit()
+        logger.info(
+            "Persisted platform_common (id=%s) + shopify_listings (id=%s) for product %s",
+            platform_common.id, shopify_listing.id, product.id,
+        )
 
     async def create_gallery_listing_from_product(self, product: Product) -> Dict[str, Any]:
         """

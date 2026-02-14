@@ -193,7 +193,14 @@ async def main():
         await _auto_process_ended_sold_events(db, sync_run_id)
 
     async def vr_sync_and_autoprocess(db, settings, sync_run_id):
-        """Run VR listing sync, then auto-process ended/sold status changes."""
+        """Run VR listing sync, then auto-process ended/sold status changes.
+        Skips the 03:00-05:00 UTC window (approx 3-5am UK) to avoid V&R downtime failures.
+        """
+        now_utc = datetime.now(timezone.utc)
+        if 3 <= now_utc.hour < 5:
+            logger.info("Skipping VR sync during maintenance window (%02d:%02d UTC)", now_utc.hour, now_utc.minute)
+            return
+
         await run_vr_sync_background(
             settings.VINTAGE_AND_RARE_USERNAME,
             settings.VINTAGE_AND_RARE_PASSWORD,

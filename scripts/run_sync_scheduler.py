@@ -91,22 +91,56 @@ async def main():
         Called after each platform sync to propagate endings across all platforms.
         Works for any source platform (Reverb, eBay, Shopify, VR).
         """
+        logger.info(
+            "🔍 Auto-process check: looking for pending status_change events in sync_run %s",
+            sync_run_id,
+        )
         try:
-            stmt = select(SyncEvent).where(
+            # First, log ALL pending events for this sync run so we can see what exists
+            all_pending_stmt = select(SyncEvent).where(
                 SyncEvent.sync_run_id == sync_run_id,
                 SyncEvent.status == "pending",
-                SyncEvent.change_type == "status_change",
             )
-            result = await db.execute(stmt)
-            events = result.scalars().all()
+            all_pending_result = await db.execute(all_pending_stmt)
+            all_pending = all_pending_result.scalars().all()
+            logger.info(
+                "🔍 Found %s total pending events for sync_run %s: %s",
+                len(all_pending),
+                sync_run_id,
+                [(e.id, e.change_type, e.platform_name, e.change_data.get("new") if e.change_data else None) for e in all_pending],
+            )
+
+            # Now filter to status_change only
+            status_change_events = [e for e in all_pending if e.change_type == "status_change"]
+            logger.info(
+                "🔍 Of those, %s are status_change events",
+                len(status_change_events),
+            )
 
             auto_count = 0
-            for event in events:
-                new_state = (event.change_data or {}).get("new", "").lower()
-                if new_state not in ("ended", "sold"):
-                    continue  # leave other status changes for manual review
+            for event in status_change_events:
+                new_state = (event.change_data or {}).get("new", "")
+                new_state_lower = new_state.lower() if new_state else ""
+                logger.info(
+                    "🔍 Event %s: platform=%s, product_id=%s, change_data=%s, new_state='%s' (lower='%s')",
+                    event.id, event.platform_name, event.product_id,
+                    event.change_data, new_state, new_state_lower,
+                )
+
+                if new_state_lower not in ("ended", "sold"):
+                    logger.info(
+                        "🔍 Skipping event %s: new_state '%s' not in (ended, sold)",
+                        event.id, new_state_lower,
+                    )
+                    continue
 
                 try:
+                    logger.info(
+                        "⚡ Auto-processing %s status_change event %s (%s → %s) for product %s",
+                        event.platform_name, event.id,
+                        (event.change_data or {}).get("old", "?"), new_state_lower,
+                        event.product_id,
+                    )
                     report = await process_reconciliation(
                         db=db,
                         event_id=event.id,
@@ -114,22 +148,25 @@ async def main():
                     )
                     auto_count += 1
                     logger.info(
-                        "Auto-processed %s status_change event %s (%s → %s)",
+                        "✅ Auto-processed %s status_change event %s (%s → %s) — summary: %s",
                         event.platform_name, event.id,
-                        (event.change_data or {}).get("old", "?"), new_state,
+                        (event.change_data or {}).get("old", "?"), new_state_lower,
+                        report.summary,
                     )
                     if report.summary.get("errors", 0) > 0:
                         logger.warning(
-                            "Auto-process event %s had errors: %s",
-                            event.id, report.summary,
+                            "⚠️ Auto-process event %s had errors: %s, actions: %s",
+                            event.id, report.summary, report.actions_taken,
                         )
                 except Exception as evt_err:
-                    logger.error("Failed to auto-process status_change event %s: %s", event.id, evt_err)
+                    logger.error("❌ Failed to auto-process status_change event %s: %s", event.id, evt_err, exc_info=True)
 
             if auto_count:
-                logger.info("Auto-processed %s ended/sold status_change events for sync run %s", auto_count, sync_run_id)
+                logger.info("✅ Auto-processed %s ended/sold status_change events for sync run %s", auto_count, sync_run_id)
+            else:
+                logger.info("🔍 No ended/sold status_change events to auto-process for sync run %s", sync_run_id)
         except Exception as e:
-            logger.warning("Status change auto-processing failed: %s", e)
+            logger.warning("❌ Status change auto-processing failed: %s", e, exc_info=True)
 
     async def reverb_sync_and_autoprocess(db, settings, sync_run_id):
         """Run Reverb listing sync, then auto-process ended/sold status changes."""

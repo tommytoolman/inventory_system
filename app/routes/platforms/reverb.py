@@ -28,9 +28,12 @@ from app.schemas.platform.reverb import (
     ReverbCategoryDTO,
     ReverbConditionDTO
 )
+from sqlalchemy import select
 from app.services.reverb_service import ReverbService
 from app.services.websockets.manager import manager
 from app.services.activity_logger import ActivityLogger
+from app.services.reconciliation_service import process_reconciliation
+from app.models.sync_event import SyncEvent
 from app.dependencies import get_db
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ReverbAPIError, ListingNotFoundError
@@ -147,7 +150,48 @@ async def run_reverb_sync_background(api_key: str, db: AsyncSession, settings: S
         
         # Commit the activity logging
         await db.commit()
-            
+
+        # Auto-process any pending ended/sold status_change events
+        if result.get('status') == 'success':
+            try:
+                pending_stmt = select(SyncEvent).where(
+                    SyncEvent.status == "pending",
+                    SyncEvent.change_type == "status_change",
+                )
+                pending_result = await db.execute(pending_stmt)
+                pending_events = pending_result.scalars().all()
+
+                auto_count = 0
+                for event in pending_events:
+                    new_state = (event.change_data or {}).get("new", "").lower()
+                    if new_state not in ("ended", "sold"):
+                        continue
+
+                    try:
+                        logger.info(
+                            "⚡ Auto-processing %s status_change event %s (%s → %s) for product %s",
+                            event.platform_name, event.id,
+                            (event.change_data or {}).get("old", "?"), new_state,
+                            event.product_id,
+                        )
+                        report = await process_reconciliation(
+                            db=db,
+                            event_id=event.id,
+                            dry_run=False,
+                        )
+                        auto_count += 1
+                        logger.info(
+                            "✅ Auto-processed event %s — summary: %s",
+                            event.id, report.summary,
+                        )
+                    except Exception as evt_err:
+                        logger.error("❌ Failed to auto-process event %s: %s", event.id, evt_err, exc_info=True)
+
+                if auto_count:
+                    logger.info("✅ Auto-processed %s ended/sold status_change events after manual Reverb sync", auto_count)
+            except Exception as auto_err:
+                logger.warning("Status change auto-processing after manual sync failed: %s", auto_err)
+
     except Exception as e:
         await db.rollback()
         error_message = str(e)

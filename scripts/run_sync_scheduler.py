@@ -92,26 +92,22 @@ async def main():
         Works for any source platform (Reverb, eBay, Shopify, VR).
         """
         logger.info(
-            "🔍 Auto-process check: looking for pending status_change events in sync_run %s",
-            sync_run_id,
+            "🔍 Auto-process check: looking for ALL pending ended/sold status_change events",
         )
         try:
-            # First, log ALL pending events for this sync run so we can see what exists
+            # Find ALL pending status_change events (not filtered by sync_run_id)
+            # so we also catch events from manual UI syncs or previous runs
             all_pending_stmt = select(SyncEvent).where(
-                SyncEvent.sync_run_id == sync_run_id,
                 SyncEvent.status == "pending",
+                SyncEvent.change_type == "status_change",
             )
             all_pending_result = await db.execute(all_pending_stmt)
-            all_pending = all_pending_result.scalars().all()
+            status_change_events = all_pending_result.scalars().all()
             logger.info(
-                "🔍 Found %s total pending events for sync_run %s: %s",
-                len(all_pending),
-                sync_run_id,
-                [(e.id, e.change_type, e.platform_name, e.change_data.get("new") if e.change_data else None) for e in all_pending],
+                "🔍 Found %s pending status_change events (all runs): %s",
+                len(status_change_events),
+                [(e.id, e.platform_name, e.change_data.get("old") if e.change_data else None, e.change_data.get("new") if e.change_data else None) for e in status_change_events],
             )
-
-            # Now filter to status_change only
-            status_change_events = [e for e in all_pending if e.change_type == "status_change"]
             logger.info(
                 "🔍 Of those, %s are status_change events",
                 len(status_change_events),
@@ -162,9 +158,9 @@ async def main():
                     logger.error("❌ Failed to auto-process status_change event %s: %s", event.id, evt_err, exc_info=True)
 
             if auto_count:
-                logger.info("✅ Auto-processed %s ended/sold status_change events for sync run %s", auto_count, sync_run_id)
+                logger.info("✅ Auto-processed %s ended/sold status_change events", auto_count)
             else:
-                logger.info("🔍 No ended/sold status_change events to auto-process for sync run %s", sync_run_id)
+                logger.info("🔍 No ended/sold status_change events to auto-process")
         except Exception as e:
             logger.warning("❌ Status change auto-processing failed: %s", e, exc_info=True)
 

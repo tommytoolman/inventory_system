@@ -21,6 +21,8 @@ from app.models.reverb_order import ReverbOrder
 from app.models.ebay_order import EbayOrder
 from app.models.shopify_order import ShopifyOrder
 
+from app.services.notification_service import EmailNotificationService
+
 if TYPE_CHECKING:
     from app.core.config import Settings
 
@@ -63,6 +65,7 @@ class OrderSaleProcessor:
         self._ebay_service = None
         self._reverb_service = None
         self._shopify_service = None
+        self._email_service = EmailNotificationService(settings) if settings else None
 
     def _get_ebay_service(self):
         """Lazy load EbayService."""
@@ -84,6 +87,43 @@ class OrderSaleProcessor:
             from app.services.shopify_service import ShopifyService
             self._shopify_service = ShopifyService(self.db, self.settings)
         return self._shopify_service
+
+    async def _send_sale_alert(
+        self,
+        product: Product,
+        platform: str,
+        order,
+        propagated_platforms: List[str],
+    ) -> None:
+        """Send sale alert email after a stocked item sale is processed."""
+        if not self._email_service:
+            return
+
+        # Extract sale price from order
+        sale_price = None
+        external_ref = None
+        if platform == "reverb":
+            sale_price = float(order.amount_product) if order.amount_product else None
+            external_ref = order.order_uuid
+        elif platform == "ebay":
+            sale_price = float(order.total_amount) if getattr(order, "total_amount", None) else None
+            external_ref = getattr(order, "order_id", None)
+        elif platform == "shopify":
+            sale_price = float(order.total_price) if getattr(order, "total_price", None) else None
+            external_ref = getattr(order, "shopify_order_id", None)
+
+        try:
+            await self._email_service.send_sale_alert(
+                product=product,
+                platform=platform,
+                sale_price=sale_price,
+                external_id=str(external_ref) if external_ref else None,
+                sale_status="sold",
+                propagated_platforms=propagated_platforms,
+            )
+            logger.info("Sale alert email sent for product %s (%s)", product.id, platform)
+        except Exception as exc:
+            logger.error("Failed to send sale alert for product %s: %s", product.id, exc, exc_info=True)
 
     def _is_sale_order(self, platform: str, order) -> bool:
         """
@@ -425,6 +465,11 @@ class OrderSaleProcessor:
                     product, platform, dry_run
                 )
                 result["actions"].extend(source_db_actions)
+
+                # Send sale alert email
+                if not dry_run:
+                    propagated = [a.split(":")[0] for a in propagate_actions if "qty updated" in a or "listing ended" in a]
+                    await self._send_sale_alert(product, platform, order, propagated)
             else:
                 result["notes"] = (
                     f"Insufficient quantity: have {product.quantity}, "

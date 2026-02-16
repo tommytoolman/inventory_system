@@ -1,7 +1,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans|Fjalla+One|Alfa+Slab+One|Roboto|Vollkorn">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,700|Fjalla+One|Alfa+Slab+One|Roboto|Vollkorn">
   <style>
     /* ===== RIFF eBay Listing Template – replaces CrazyLister ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -65,6 +65,7 @@
       font-family: 'Fjalla One', sans-serif; font-size: 36px;
       color: #2a2a2a; line-height: 1.2;
       border-bottom: 1px solid #ccc; margin: 0 40px 30px;
+      text-wrap: balance;
     }
 
     /* ---------- Content area: gallery left, description right ---------- */
@@ -264,6 +265,43 @@
     #lvg-tab-2:checked ~ .lvg-tab-content-2,
     #lvg-tab-3:checked ~ .lvg-tab-content-3 { display: block; }
 
+    /* ---------- Artist Owned Title Layout ---------- */
+    .lvg-title-row {
+      display: flex;
+      align-items: center;
+      padding: 10px 40px 0;
+      gap: 20px;
+    }
+    .lvg-artist-card {
+      flex: 0 0 auto;
+      width: 225px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .lvg-artist-card-img {
+      width: 100%;
+      height: auto;
+      display: block;
+      mix-blend-mode: multiply;
+    }
+    .lvg-title-row .lvg-title-area {
+      flex: 1;
+      min-width: 0;
+    }
+    .lvg-title-row .lvg-intro-text {
+      padding: 0;
+    }
+    .lvg-title-row .lvg-title {
+      padding: 15px 0 20px;
+      margin: 0;
+      border-bottom: none;
+    }
+    .lvg-title-row {
+      border-bottom: 1px solid #ccc;
+      margin: 0 40px 30px;
+    }
+
     /* ---------- Mobile responsive ---------- */
     @media (max-width: 600px) {
       .lvg-header { flex-direction: column; }
@@ -280,6 +318,8 @@
       .lvg-tabs { padding: 16px; }
       .lvg-tab-label { font-size: 20px; padding: 8px 16px; }
       .lvg-tab-content { padding: 20px 16px; font-size: 16px; }
+      .lvg-title-row { padding: 8px 16px 0; gap: 12px; margin: 0 16px 20px; }
+      .lvg-artist-card { width: 150px; }
     }
   </style>
 </head>
@@ -339,8 +379,20 @@
     </div>
 
     <!-- ========== INTRO + TITLE ========== -->
+    {% if product.artist_owned %}
+    <div class="lvg-title-row">
+      <div class="lvg-artist-card">
+        <img src="{{ artist_badge_url }}" alt="Artist Owned" class="lvg-artist-card-img">
+      </div>
+      <div class="lvg-title-area">
+        <div class="lvg-intro-text">London Vintage Guitars are pleased to offer:</div>
+        <div class="lvg-title">{{ product.title or (product.brand ~ ' ' ~ product.model) }}</div>
+      </div>
+    </div>
+    {% else %}
     <div class="lvg-intro-text">London Vintage Guitars are pleased to offer:</div>
     <div class="lvg-title">{{ product.title or (product.brand ~ ' ' ~ product.model) }}</div>
+    {% endif %}
 
     <!-- ========== TWO-COLUMN: GALLERY + DESCRIPTION ========== -->
     <div class="lvg-content">

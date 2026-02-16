@@ -69,14 +69,14 @@ async def run_reverb_sync_background(api_key: str, db: AsyncSession, settings: S
     activity_logger = ActivityLogger(db)
     
     try:
-        # Log sync start
-        await activity_logger.log_activity(
-            action="sync_start",
-            entity_type="platform",
-            entity_id="reverb",
-            platform="reverb",
-            details={"status": "started"}
-        )
+        # Log sync start — commented out to reduce activity_log noise (still visible in Railway logs)
+        # await activity_logger.log_activity(
+        #     action="sync_start",
+        #     entity_type="platform",
+        #     entity_id="reverb",
+        #     platform="reverb",
+        #     details={"status": "started"}
+        # )
         
         # Send start notification
         await manager.broadcast({

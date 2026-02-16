@@ -79,19 +79,17 @@ async def run_vr_sync_background(username: str, password: str, db: AsyncSession,
     activity_logger = ActivityLogger(db)
     
     try:
-        # Log sync start - wrap in try/catch
-        try:
-            await activity_logger.log_activity(
-                action="sync_start",
-                entity_type="platform",
-                entity_id="vr",
-                platform="vr",
-                details={"status": "started"}
-            )
-    
-        except Exception as log_error:
-            logger.warning(f"Failed to log activity start: {log_error}")
-            # Don't fail the sync due to logging issues
+        # Log sync start — commented out to reduce activity_log noise (still visible in Railway logs)
+        # try:
+        #     await activity_logger.log_activity(
+        #         action="sync_start",
+        #         entity_type="platform",
+        #         entity_id="vr",
+        #         platform="vr",
+        #         details={"status": "started"}
+        #     )
+        # except Exception as log_error:
+        #     logger.warning(f"Failed to log activity start: {log_error}")
     
         # Send start notification
         await manager.broadcast({

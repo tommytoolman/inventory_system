@@ -54,14 +54,14 @@ async def run_ebay_sync_background(db: AsyncSession, settings: Settings, sync_ru
     activity_logger = ActivityLogger(db)
     
     try:
-        # Log sync start
-        await activity_logger.log_activity(
-            action="sync_start",
-            entity_type="platform",
-            entity_id="ebay",
-            platform="ebay",
-            details={"status": "started"}
-        )
+        # Log sync start — commented out to reduce activity_log noise (still visible in Railway logs)
+        # await activity_logger.log_activity(
+        #     action="sync_start",
+        #     entity_type="platform",
+        #     entity_id="ebay",
+        #     platform="ebay",
+        #     details={"status": "started"}
+        # )
         
         # Send start notification
         await manager.broadcast({

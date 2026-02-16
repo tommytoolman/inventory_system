@@ -67,14 +67,14 @@ async def run_shopify_sync_background(
     activity_logger = ActivityLogger(db)
     
     try:
-        # Log sync start
-        await activity_logger.log_activity(
-            action="sync_start",
-            entity_type="platform",
-            entity_id="shopify",
-            platform="shopify",
-            details={"status": "started", "sync_run_id": str(sync_run_id)}
-        )
+        # Log sync start — commented out to reduce activity_log noise (still visible in Railway logs)
+        # await activity_logger.log_activity(
+        #     action="sync_start",
+        #     entity_type="platform",
+        #     entity_id="shopify",
+        #     platform="shopify",
+        #     details={"status": "started", "sync_run_id": str(sync_run_id)}
+        # )
         
         # Send start notification
         await manager.broadcast({

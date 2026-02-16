@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import logging
 
 # Import the correct database session dependency
@@ -467,7 +468,7 @@ class DashboardService:
             result = await self.db.execute(query)
             logs = result.scalars().all()
 
-            bst_tz = timezone(timedelta(hours=1))
+            uk_tz = ZoneInfo("Europe/London")
             activity = []
 
             for log in logs:
@@ -481,9 +482,9 @@ class DashboardService:
                 if log.created_at.tzinfo is None:
                     created_at_local = log.created_at.replace(
                         tzinfo=timezone.utc
-                    ).astimezone(bst_tz)
+                    ).astimezone(uk_tz)
                 else:
-                    created_at_local = log.created_at.astimezone(bst_tz)
+                    created_at_local = log.created_at.astimezone(uk_tz)
 
                 # Get status from details
                 status = "success"

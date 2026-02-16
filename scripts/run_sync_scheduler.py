@@ -28,7 +28,7 @@ from app.services.listing_stats_service import ListingStatsService
 from app.services.reverb_service import ReverbService
 from app.services.reconciliation_service import process_reconciliation
 from app.models.sync_event import SyncEvent
-from sqlalchemy import select
+from sqlalchemy import select, text
 from shopify.auto_archive import run_auto_archive
 
 logging.basicConfig(level=logging.INFO)
@@ -452,6 +452,117 @@ async def main():
         except Exception as e:
             logger.warning("Shopify auto-archive failed: %s", e)
 
+    # ── Proactive state reconciliation ───────────────────────────
+    async def reconcile_listing_states():
+        """
+        Compare platform_common.status with each platform's listing table state.
+        Auto-fix stale listing rows where platform_common (updated by sync) disagrees
+        with the listing table. Catches drift that individual syncs miss.
+        """
+        logger.info("=== STATE RECONCILIATION: Starting cross-platform audit ===")
+
+        # Define platform mappings:
+        # (platform_name, listing_table, status_col, id_col, active_pc, active_listing)
+        platforms = [
+            ("reverb",  "reverb_listings",  "reverb_state",    "reverb_listing_id",  "active", "live"),
+            ("ebay",    "ebay_listings",    "listing_status",  "ebay_item_id",       "active", "ACTIVE"),
+            ("shopify", "shopify_listings", "status",          "shopify_legacy_id",  "active", "active"),
+            ("vr",      "vr_listings",      "vr_state",        "vr_listing_id",      "active", "active"),
+        ]
+
+        total_fixed = 0
+        total_mismatches = 0
+
+        try:
+            async with async_session() as db:
+                for plat, tbl, status_col, id_col, pc_active, listing_active in platforms:
+                    # ── Direction 1: pc=active but listing != active ──
+                    # Join on external_id = listing_id to skip old refresh rows
+                    fwd = await db.execute(text(f"""
+                        SELECT pc.product_id, pc.external_id, pc.id AS pc_id,
+                               pl.{status_col} AS listing_status, pl.id AS listing_id
+                        FROM platform_common pc
+                        JOIN {tbl} pl ON pc.id = pl.platform_id
+                            AND pl.{id_col} = pc.external_id
+                        WHERE pc.platform_name = :plat
+                          AND LOWER(pc.status) = :pc_active
+                          AND LOWER(pl.{status_col}) <> :listing_active
+                    """), {
+                        "plat": plat,
+                        "pc_active": pc_active,
+                        "listing_active": listing_active.lower(),
+                    })
+                    fwd_rows = fwd.fetchall()
+
+                    if fwd_rows:
+                        total_mismatches += len(fwd_rows)
+                        listing_ids = [row.listing_id for row in fwd_rows]
+                        for row in fwd_rows:
+                            logger.warning(
+                                "State mismatch [%s] product=%s ext=%s: "
+                                "pc=active but %s=%s -> fixing to %s",
+                                plat, row.product_id, row.external_id,
+                                status_col, row.listing_status, listing_active,
+                            )
+
+                        await db.execute(text(f"""
+                            UPDATE {tbl}
+                            SET {status_col} = :active_val
+                            WHERE id = ANY(:ids)
+                        """), {"active_val": listing_active, "ids": listing_ids})
+                        total_fixed += len(listing_ids)
+
+                    # ── Direction 2: pc=ended/sold but listing = active ──
+                    rev = await db.execute(text(f"""
+                        SELECT pc.product_id, pc.external_id, pc.status AS pc_status,
+                               pl.{status_col} AS listing_status, pl.id AS listing_id
+                        FROM platform_common pc
+                        JOIN {tbl} pl ON pc.id = pl.platform_id
+                            AND pl.{id_col} = pc.external_id
+                        WHERE pc.platform_name = :plat
+                          AND LOWER(pc.status) IN ('ended', 'sold', 'archived')
+                          AND LOWER(pl.{status_col}) = :listing_active
+                    """), {
+                        "plat": plat,
+                        "listing_active": listing_active.lower(),
+                    })
+                    rev_rows = rev.fetchall()
+
+                    if rev_rows:
+                        total_mismatches += len(rev_rows)
+                        # Map pc status -> listing status
+                        ended_val = "ended" if plat != "ebay" else "ENDED"
+                        sold_val = "sold" if plat != "ebay" else "SOLD"
+                        for row in rev_rows:
+                            target = sold_val if row.pc_status == "sold" else ended_val
+                            logger.warning(
+                                "State mismatch [%s] product=%s ext=%s: "
+                                "pc=%s but %s=%s -> fixing to %s",
+                                plat, row.product_id, row.external_id,
+                                row.pc_status, status_col, row.listing_status, target,
+                            )
+                            await db.execute(text(f"""
+                                UPDATE {tbl}
+                                SET {status_col} = :target
+                                WHERE id = :lid
+                            """), {"target": target, "lid": row.listing_id})
+                            total_fixed += 1
+
+                    if not fwd_rows and not rev_rows:
+                        logger.info("State reconciliation [%s]: all consistent", plat)
+
+                if total_fixed > 0:
+                    await db.commit()
+
+                logger.info(
+                    "=== STATE RECONCILIATION: Done. "
+                    "Mismatches found: %d, Fixed: %d ===",
+                    total_mismatches, total_fixed,
+                )
+
+        except Exception as e:
+            logger.error("State reconciliation failed: %s", e, exc_info=True)
+
     jobs = [
         ScheduledJob(
             "reverb_hourly",
@@ -510,6 +621,12 @@ async def main():
             "shopify_auto_archive_weekly",
             10080,
             shopify_auto_archive,
+        ),
+        # State reconciliation - every 6 hours (360 minutes)
+        ScheduledJob(
+            "state_reconciliation_6h",
+            360,
+            reconcile_listing_states,
         ),
     ]
 

@@ -2593,16 +2593,29 @@ class ReverbService:
 
             # 5. For listings that exist both locally and on the API, detect status mismatches
             #    (e.g. local draft -> API live) and log them as status change events.
+            #    Also reconcile stale reverb_listings.reverb_state when API confirms live.
+            stale_rl_platform_ids = []
             for reverb_id in api_live_ids & local_known_ids:
                 db_item = local_reverb_items.get(reverb_id)
                 if not db_item:
                     continue
 
-                local_status = str(
-                    db_item.get('reverb_state')
-                    or db_item.get('platform_status')
-                    or ''
-                ).lower()
+                rl_state = str(db_item.get('reverb_state') or '').lower()
+                pc_status = str(db_item.get('platform_status') or '').lower()
+
+                # Reconcile: API says live, but reverb_listings.reverb_state is stale
+                if rl_state and rl_state != 'live':
+                    pc_id = db_item.get('platform_common_id')
+                    if pc_id:
+                        stale_rl_platform_ids.append(pc_id)
+                        logger.info(
+                            "Reconciling stale reverb_listings state for %s "
+                            "(rl=%s, pc=%s -> live)",
+                            reverb_id, rl_state, pc_status,
+                        )
+
+                # Use reverb_state if available, fall back to platform_status
+                local_status = rl_state or pc_status
 
                 if local_status in {'live', 'active'}:
                     continue
@@ -2620,6 +2633,22 @@ class ReverbService:
                             'reverb_id': reverb_id,
                         },
                     )
+                )
+
+            # Batch-fix stale reverb_listings rows where API confirms live
+            if stale_rl_platform_ids:
+                logger.info(
+                    "Fixing %d stale reverb_listings.reverb_state -> 'live'",
+                    len(stale_rl_platform_ids),
+                )
+                await self.db.execute(
+                    text("""
+                        UPDATE reverb_listings
+                        SET reverb_state = 'live', last_synced_at = NOW()
+                        WHERE platform_id = ANY(:ids)
+                          AND reverb_state <> 'live'
+                    """),
+                    {"ids": stale_rl_platform_ids},
                 )
 
             # 5. For items no longer 'live' on the API, fetch their details to find out WHY.
@@ -2908,10 +2937,15 @@ class ReverbService:
             )
 
     async def _fetch_local_live_reverb_ids(self) -> Dict[str, Dict]:
-        """Fetch all known Reverb listings from the local DB, regardless of status."""
+        """Fetch all known Reverb listings from the local DB, regardless of status.
+
+        Uses DISTINCT ON to return one row per external_id, preferring the
+        reverb_listings row with state='live' (handles refreshed items that
+        have both an old 'ended' and a new 'live' RL row).
+        """
         logger.info("Fetching Reverb listings from local DB (all statuses).")
         query = text("""
-            SELECT
+            SELECT DISTINCT ON (pc.external_id)
                 pc.external_id,
                 pc.product_id,
                 pc.id AS platform_common_id,
@@ -2919,10 +2953,11 @@ class ReverbService:
                 rl.reverb_state
             FROM platform_common pc
             LEFT JOIN reverb_listings rl ON pc.id = rl.platform_id
-                AND rl.reverb_state = 'live'
             WHERE pc.platform_name = 'reverb'
               AND pc.external_id IS NOT NULL
               AND pc.status NOT IN ('deleted', 'removed')
+            ORDER BY pc.external_id,
+                     CASE WHEN rl.reverb_state = 'live' THEN 0 ELSE 1 END
         """)
         result = await self.db.execute(query)
         return {str(row.external_id): row._asdict() for row in result.fetchall()}

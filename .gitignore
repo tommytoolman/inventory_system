@@ -38,6 +38,9 @@ ebay_tokens.json
 *.png
 # Exception for RIFF logo icon
 !app/static/images/riff_logo.png
+# Exception for eBay listing badge images
+!app/static/ebay/*.png
+!app/static/ebay/*.jpeg
 
 # Cache files
 app/cache/

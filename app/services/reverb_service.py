@@ -26,6 +26,7 @@ from app.services.reverb.client import ReverbClient
 from app.core.config import Settings
 from app.core.exceptions import ListingNotFoundError, ReverbAPIError
 from app.services.match_utils import suggest_product_match
+from app.services.activity_logger import ActivityLogger
 from app.core.enums import PlatformName, Handedness, ManufacturingCountry
 from app.models.category_mappings import ReverbCategory
 from app.services.sku_service import generate_next_riff_sku
@@ -1656,7 +1657,26 @@ class ReverbService:
             self.db.add(platform_common)
             self.db.add(listing)
             await self.db.flush()
-            
+
+            # Log activity with product context
+            product_info = {}
+            if platform_common.product_id:
+                product = await self.db.get(Product, platform_common.product_id)
+                if product:
+                    product_info = {
+                        "product_id": product.id,
+                        "sku": product.sku,
+                        "title": product.title or f"{product.brand} {product.model}",
+                    }
+            activity_logger = ActivityLogger(self.db)
+            await activity_logger.log_activity(
+                action="end_listing",
+                entity_type="listing",
+                entity_id=str(listing.reverb_listing_id),
+                platform="reverb",
+                details={"status": "ended", "reason": reason, "method": "manual_ui", **product_info}
+            )
+
             logger.info(f"Ended listing {listing.reverb_listing_id}")
             return True
             

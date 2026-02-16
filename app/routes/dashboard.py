@@ -547,6 +547,15 @@ class DashboardService:
             if log.details and "error" in log.details:
                 message += f": {log.details['error'][:30]}..."
             return message
+        elif log.action in ("end_listing", "delete_listing"):
+            if log.details and "title" in log.details:
+                title = log.details["title"]
+                platform = (log.platform or "").upper()
+                action_word = "Deleted" if log.action == "delete_listing" else "Ended"
+                return f"{action_word} {title} on {platform}"
+            else:
+                action_word = "Deleted" if log.action == "delete_listing" else "Ended"
+                return f"{action_word} listing #{log.entity_id} on {(log.platform or '').upper()}"
         else:
             message = f"{log.action.capitalize()} {log.entity_type} #{log.entity_id}"
             if log.platform:

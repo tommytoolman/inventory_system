@@ -352,14 +352,30 @@ async def archive_shopify_product(
             """)
             await db.execute(query, {"product_id": product_id})
 
-            # Log activity
+            # Log activity with product context
+            product_info = {}
+            pc_result = await db.execute(text(
+                "SELECT product_id FROM platform_common WHERE platform_name = 'shopify' AND external_id = :lid"
+            ), {"lid": product_id})
+            pc_row = pc_result.fetchone()
+            if pc_row and pc_row.product_id:
+                p_result = await db.execute(text(
+                    "SELECT id, sku, title, brand, model FROM products WHERE id = :pid"
+                ), {"pid": pc_row.product_id})
+                p_row = p_result.fetchone()
+                if p_row:
+                    product_info = {
+                        "product_id": p_row.id,
+                        "sku": p_row.sku,
+                        "title": p_row.title or f"{p_row.brand} {p_row.model}",
+                    }
             activity_logger = ActivityLogger(db)
             await activity_logger.log_activity(
-                action="archive_listing",
+                action="end_listing",
                 entity_type="listing",
                 entity_id=product_id,
                 platform="shopify",
-                details={"status": "archived", "method": "manual_ui"}
+                details={"status": "archived", "method": "manual_ui", **product_info}
             )
 
             await db.commit()

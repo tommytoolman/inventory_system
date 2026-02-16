@@ -31,6 +31,7 @@ from app.models.vr import VRListing
 from app.models.sync_event import SyncEvent
 from app.core.enums import SyncStatus, ListingStatus
 from app.services.sync_stats_service import SyncStatsService
+from app.services.activity_logger import ActivityLogger
 from app.services.notification_service import EmailNotificationService
 from app.core.events import StockUpdateEvent
 from app.core.config import get_settings
@@ -772,7 +773,30 @@ class SyncService:
                 new_status,
                 raw_new_status,
             )
-            event.notes = f"Acknowledged non-sale status change '{new_status}' with no action."
+
+            # Detect relist: sold/ended → live/active — log for visibility
+            raw_old_status = (event.change_data.get('old') or '').lower() if event.change_data else ''
+            if raw_old_status in ('sold', 'ended') and new_status == ListingStatus.ACTIVE.value:
+                activity_logger = ActivityLogger(self.db)
+                await activity_logger.log_activity(
+                    action="relist_detected",
+                    entity_type="product",
+                    entity_id=str(product.id),
+                    platform=event.platform_name,
+                    details={
+                        "product_id": product.id,
+                        "sku": product.sku,
+                        "title": product.title or f"{product.brand} {product.model}",
+                        "old_status": raw_old_status,
+                        "new_status": raw_new_status,
+                        "message": f"Relisted {product.title or product.sku} on {event.platform_name.upper()} ({raw_old_status} → {raw_new_status})",
+                        "status": "info",
+                    }
+                )
+                event.notes = f"Relist detected ({raw_old_status} → {raw_new_status}). Activity logged. Manual relist on other platforms required."
+            else:
+                event.notes = f"Acknowledged non-sale status change '{new_status}' with no action."
+
             return True
 
         # Update the master product based on whether it's a stocked item

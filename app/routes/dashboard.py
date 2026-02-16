@@ -523,6 +523,7 @@ class DashboardService:
             "sync_start": "🔄",
             "sync_error": "⚠️",
             "sale": "💰",
+            "relist_detected": "🔁",
             "auto_archive": "📦",
             "orders_sync": "📦",
             "stats_refresh": "📊",

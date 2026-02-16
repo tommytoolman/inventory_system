@@ -1,5 +1,5 @@
 # Project TODO – Inventory Management System
-*Last updated: 2026-02-14*
+*Last updated: 2026-02-16*
 > We only tick or strike items once we have confirmed they are done in production.
 
 ## ✅ Security & Configuration Hardening
@@ -43,6 +43,8 @@ _(No items currently)_
 - [ ] Refresh `docs/project-summary.md` to reflect the current platform status and ordering of next steps.
 
 ## 🆕 New Functionality
+- [x] **eBay template: Artist Owned badge** – _Completed 2026-02-16:_ Conditional "Artist Owned" badge on eBay listing template for products with `artist_owned = True`. Flex layout with badge image (225px, scaled to 193px) alongside centred intro + title. CSS `mix-blend-mode: multiply` handles non-transparent PNGs. Mobile responsive. Badge image passed via route context (`artist_badge_url`). Badge PNGs in `app/static/ebay/`.
+- [x] **eBay template: Description auto-formatting** – _Completed 2026-02-16:_ `_clean_ebay_description_html()` filter in `inventory.py` corrects common Reverb/CMS import issues: removes empty `<p>&nbsp;</p>` paragraphs, merges fragmented `<strong>` tags (e.g. `<strong>Year</strong>&nbsp;<strong>of</strong>` → `<strong>Year of</strong>`), auto-bolds first paragraph if not already, adds `<hr>` divider before EU footer block. Also fixed Open Sans 700 weight not loading (bold was invisible), and added `text-wrap: balance` to title for even line wrapping.
 - [ ] **Standardise toast/notification messages** – refactor inline notifications to use global `showNotification()` from base.html; align timing and styling across all templates. See `docs/toast-notifications-audit.md` for full audit and implementation plan.
 - [ ] **Database table healthchecker** – build a report that goes beyond `/reports/listing-health` to show field population stats across all key tables (products, platform_common, platform-specific tables). Summarise NULL/populated counts per field to identify data gaps.
 - [ ] (Verify) Add bulk operations API.

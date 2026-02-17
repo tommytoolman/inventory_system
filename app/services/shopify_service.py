@@ -1463,12 +1463,12 @@ class ShopifyService:
             listing = listing_result.scalar_one_or_none()
 
             current_status = listing.status if listing else None
-            is_archived = current_status == 'archived' or days_since_sold > 7
+            needs_reactivation = current_status not in ('active', None) or days_since_sold >= 7
 
             results = {"status_updated": False, "inventory_updated": False}
 
-            # Step 1: If archived or > 7 days, update status to ACTIVE
-            if is_archived:
+            # Step 1: If not active (ended/archived/sold), update status to ACTIVE
+            if needs_reactivation:
                 logger.info(f"Setting Shopify product {external_id} status to ACTIVE (was: {current_status})")
                 update_payload = {
                     "id": product_gid,
@@ -1510,7 +1510,7 @@ class ShopifyService:
 
             # Step 3: Update local database
             if listing and (results["status_updated"] or results["inventory_updated"]):
-                if results["status_updated"]:
+                if results["status_updated"] or needs_reactivation:
                     listing.status = 'active'
                 listing.last_synced_at = datetime.utcnow()
                 listing.updated_at = datetime.utcnow()

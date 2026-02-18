@@ -4272,6 +4272,8 @@ async def add_product(
 
                 # DB rows (platform_common + shopify_listings) are now
                 # created inside create_listing_from_product() automatically.
+                if "message" not in result:
+                    result["message"] = f"Listed on Shopify with ID: {result.get('external_id', 'unknown')}"
                 platform_statuses["shopify"] = result
                 if result.get("status") == "success":
                     logger.info(
@@ -4386,12 +4388,13 @@ async def add_product(
 
         logger.info(f"=== PLATFORM SYNC SUMMARY ===")
         for platform, status in platform_statuses.items():
-            if status["status"] == "success":
-                logger.info(f"✅ {platform}: {status['message']}")
-            elif status["status"] == "error":
-                logger.error(f"❌ {platform}: {status['message']}")
+            msg = status.get("message", status.get("status", "unknown"))
+            if status.get("status") == "success":
+                logger.info(f"✅ {platform}: {msg}")
+            elif status.get("status") == "error":
+                logger.error(f"❌ {platform}: {msg}")
             else:
-                logger.info(f"ℹ️  {platform}: {status['message']}")
+                logger.info(f"ℹ️  {platform}: {msg}")
 
         # Step 4: Check if we need to rollback due to failures
         # Count successes and failures
@@ -4486,10 +4489,28 @@ async def add_product(
                 }
 
         # Step 4.5: Update product status to ACTIVE if any platform creation succeeded
+        # Refresh product first — prior service commits expired all ORM objects
+        try:
+            await db.refresh(product)
+        except Exception:
+            product = await product_service.get_product_model_instance(product.id)
+
         if successful_platforms and product.status == ProductStatus.DRAFT:
             logger.info(f"✅ Updating product status to ACTIVE - successful platforms: {successful_platforms}")
-            product.status = ProductStatus.ACTIVE
-            await db.commit()
+            try:
+                product.status = ProductStatus.ACTIVE
+                await db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to update product status via shared session: {e}")
+                try:
+                    await db.execute(
+                        text("UPDATE products SET status = 'ACTIVE' WHERE id = :pid"),
+                        {"pid": product.id},
+                    )
+                    await db.commit()
+                    logger.info("Product status updated to ACTIVE via raw SQL fallback")
+                except Exception as e2:
+                    logger.error(f"Failed to update product status even via raw SQL: {e2}")
 
         # Step 5: Queue for platform sync (if stock manager is available)
         try:
@@ -4571,20 +4592,15 @@ async def add_product(
         print(error_message)
         
         # Don't rollback the transaction since the product was created
-        return JSONResponse({
+        response_data = {
             "status": "warning",
             "warning": error_message,
-                "ebay_status": platform_statuses["ebay"]["status"],
-                "ebay_message": platform_statuses["ebay"]["message"],
-                "reverb_status": platform_statuses["reverb"]["status"],
-                "reverb_message": platform_statuses["reverb"]["message"],
-                "vr_status": platform_statuses["vr"]["status"],
-                "vr_message": platform_statuses["vr"]["message"],
-                "shopify_status": platform_statuses["shopify"]["status"],
-                "shopify_message": platform_statuses["shopify"]["message"]
-            },
-            status_code=400
-        )
+        }
+        for p in ("ebay", "reverb", "vr", "shopify"):
+            ps = platform_statuses.get(p, {})
+            response_data[f"{p}_status"] = ps.get("status", "unknown")
+            response_data[f"{p}_message"] = ps.get("message", ps.get("status", "unknown"))
+        return JSONResponse(response_data, status_code=400)
     except HTTPException as exc:
         raise exc
     except Exception as e:

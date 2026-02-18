@@ -613,9 +613,9 @@ class EbayTradingLegacyAPI:
         </GetOrdersRequest>"""
 
         response = await self._make_request("GetOrders", xml_request)
-        payload = response.get("GetOrdersResponse", {})
-        order_array = payload.get("OrderArray", {})
-        orders = order_array.get("Order", [])
+        payload = response.get("GetOrdersResponse") or {}
+        order_array = payload.get("OrderArray") or {}
+        orders = order_array.get("Order") or []
         if isinstance(orders, dict):
             orders = [orders]
 

@@ -322,6 +322,21 @@ async def main():
                 await db.commit()
             else:
                 logger.info("No eBay orders returned")
+                await activity_logger.log_activity(
+                    action="orders_sync",
+                    entity_type="orders",
+                    entity_id="ebay",
+                    platform="ebay",
+                    details={
+                        "icon": "📦",
+                        "status": "success",
+                        "message": "Synced eBay orders (0 orders)",
+                        "total": 0,
+                        "inserted": 0,
+                        "updated": 0,
+                    }
+                )
+                await db.commit()
         except Exception as e:
             logger.warning("eBay orders fetch failed: %s", e)
 

@@ -474,7 +474,7 @@ async def main():
             logger.warning("Shopify auto-archive failed: %s", e)
 
     # ── Proactive state reconciliation ───────────────────────────
-    async def reconcile_listing_states():
+    async def reconcile_listing_states(db=None, settings=None, sync_run_id=None):
         """
         Compare platform_common.status with each platform's listing table state.
         Auto-fix stale listing rows where platform_common (updated by sync) disagrees

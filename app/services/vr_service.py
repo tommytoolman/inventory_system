@@ -1003,13 +1003,17 @@ class VRService:
             return {"status": "error", "message": str(e)}
 
     async def update_listing_images(self, product: Product) -> Dict[str, Any]:
-        """Update images on an existing VR listing via HTTP multipart POST.
+        """Update images on an existing VR listing.
 
-        Uses the same approach as update_listing_via_requests but adds
-        image files as upload_file_box_N multipart fields.
+        VR uses Dropzone.js for image management. The flow is:
+        1. Upload each new image via AJAX to /ajax/dropzone_upload/{user_id}
+        2. Submit the edit form with delete_item_images[] for old images
         """
+        import re as _re
         import tempfile
         import requests as req
+        from bs4 import BeautifulSoup
+
         logger.info("Updating VR images for product %s (SKU: %s)", product.id, product.sku)
         try:
             from app.core.utils import ImageTransformer, ImageQuality
@@ -1030,7 +1034,7 @@ class VRService:
             if not all_images:
                 return {"status": "error", "message": "No canonical images found on product"}
 
-            logger.info("VR image-fix payload for %s: %d images", product.sku, len(all_images))
+            logger.info("VR image-fix: %d canonical images for %s", len(all_images), product.sku)
 
             # --- Look up VR external_id from platform_common ---
             pc_query = text(
@@ -1054,107 +1058,58 @@ class VRService:
             if not await client.authenticate():
                 return {"status": "error", "message": "VR authentication failed"}
 
-            # Transfer cookies from cf_session to regular session so we can
-            # use requests.Session for multipart file upload (curl_cffi
-            # doesn't support the files= parameter).
+            # Transfer cookies from cf_session to regular session for file uploads
             if client.cf_session:
                 for name, value in client.cf_session.cookies.items():
                     client.session.cookies.set(name, value, domain=".vintageandrare.com")
                 logger.info("Transferred %d cookies from cf_session to session",
                             len(client.cf_session.cookies))
 
-            # --- Load edit form and extract existing fields ---
+            # --- Load edit form ---
             edit_url = f"https://www.vintageandrare.com/instruments/add_edit_item/{vr_external_id}"
-            logger.info("Loading VR edit form: %s", edit_url)
-
-            # Use cf_session for GET (Cloudflare bypass)
             http_session = client.cf_session or client.session
             response = http_session.get(edit_url, headers=client.headers)
             if response.status_code != 200:
                 return {"status": "error", "message": f"Failed to load edit page (HTTP {response.status_code})"}
 
-            # --- Diagnostic: inspect form structure for image handling ---
-            from bs4 import BeautifulSoup
             soup = BeautifulSoup(response.text, "html.parser")
-            form = soup.find("form", id="frm_step1")
-            if form:
-                form_action = form.get("action", "<no action attr>")
-                logger.info("VR edit form action: %s", form_action)
-                # Log ALL file inputs
-                file_inputs = form.find_all("input", {"type": "file"})
-                logger.info("File inputs on edit form (%d):", len(file_inputs))
-                for fi in file_inputs:
-                    logger.info("  file input: name=%s id=%s accept=%s",
-                                fi.get("name"), fi.get("id"), fi.get("accept"))
-                # Log image-related hidden fields
-                img_hiddens = [inp for inp in form.find_all("input", {"type": "hidden"})
-                               if any(kw in (inp.get("name") or "").lower()
-                                      for kw in ("file", "image", "photo", "upload", "video"))]
-                logger.info("Image-related hidden fields (%d):", len(img_hiddens))
-                for ih in img_hiddens:
-                    logger.info("  hidden: name=%s value=%s",
-                                ih.get("name"), (ih.get("value") or "")[:80])
-                # Log enctype
-                logger.info("Form enctype: %s", form.get("enctype", "<none>"))
 
-                # --- Extract JS upload patterns from page ---
-                import re as _re
-                page_text = response.text
-                # Find all script src URLs
-                script_tags = soup.find_all("script")
-                for st in script_tags:
-                    src = st.get("src", "")
-                    if src:
-                        logger.info("  script src: %s", src)
-                # Search inline JS and full page for upload-related patterns
-                # Extract key upload patterns from inline JS
-                for st in script_tags:
-                    if not st.string:
-                        continue
-                    js_text = st.string
-                    if not any(kw in js_text.lower() for kw in
-                               ["dropzone", "ajaxupload", "file_unique", "new_upload"]):
-                        continue
-                    # Search for upload URL configs and file_unique_id usage
-                    # Get context around Dropzone init and key patterns
-                    context_patterns = [
-                        ("new Dropzone", 3),
-                        ("Dropzone.options", 2),
-                        (".dropzone(", 2),
-                        ("url:", 5),
-                        ("paramName", 2),
-                        ("removedfile", 2),
-                        ("success", 3),
-                        ("thumb_name", 2),
-                    ]
-                    for cp, max_matches in context_patterns:
-                        start = 0
-                        count = 0
-                        while count < max_matches:
-                            idx = js_text.find(cp, start)
-                            if idx < 0:
-                                # Try case-insensitive
-                                idx = js_text.lower().find(cp.lower(), start)
-                            if idx < 0:
-                                break
-                            context_start = max(0, idx - 60)
-                            context_end = min(len(js_text), idx + 540)
-                            snippet = js_text[context_start:context_end].replace('\n', ' ').replace('\r', '')
-                            logger.info("JS[%s @%d]: ...%s...", cp, idx, snippet[:580])
-                            start = idx + len(cp)
-                            count += 1
+            # --- Extract user_id and siteURL from inline JS ---
+            user_id = None
+            site_url = "https://www.vintageandrare.com/"
+            for st in soup.find_all("script"):
+                if not st.string:
+                    continue
+                # Look for: var user_id = '12345'; or user_id = "12345"
+                uid_match = _re.search(r"(?:var\s+)?user_id\s*=\s*['\"](\d+)['\"]", st.string)
+                if uid_match:
+                    user_id = uid_match.group(1)
+                site_match = _re.search(r"(?:var\s+)?siteURL\s*=\s*['\"]([^'\"]+)['\"]", st.string)
+                if site_match:
+                    site_url = site_match.group(1)
 
-                # Also log thumb_name[] inputs from HTML (existing image metadata)
-                thumb_inputs = soup.find_all("input", {"name": "thumb_name[]"})
-                logger.info("thumb_name[] inputs: %d", len(thumb_inputs))
-                for ti in thumb_inputs[:6]:
-                    attrs = {k: v for k, v in ti.attrs.items() if k.startswith("data-") or k == "value"}
-                    logger.info("  thumb: %s", attrs)
+            if not user_id:
+                # Try from hidden input or other patterns
+                uid_input = soup.find("input", {"name": "user_id"})
+                if uid_input:
+                    user_id = uid_input.get("value")
 
-            fields = client._extract_form_fields(response.text)
-            logger.info("Extracted %d form fields from VR edit page for %s", len(fields), vr_external_id)
+            if not user_id:
+                return {"status": "error", "message": "Could not find VR user_id on edit page"}
 
-            # --- Download images to temp files ---
+            logger.info("VR user_id=%s, siteURL=%s", user_id, site_url)
+
+            # --- Collect existing image product_media_ids for deletion ---
+            thumb_inputs = soup.find_all("input", {"name": "thumb_name[]"})
+            old_media_ids = []
+            for ti in thumb_inputs:
+                pmid = ti.get("data-product_media_id")
+                if pmid:
+                    old_media_ids.append(pmid)
+            logger.info("Existing VR images to delete: %d (media_ids: %s)",
+                        len(old_media_ids), old_media_ids)
+
+            # --- Download canonical images to temp files ---
             temp_dir = tempfile.mkdtemp(prefix="vr_imgfix_")
             image_files: List[str] = []
             try:
@@ -1168,107 +1123,96 @@ class VRService:
                             with open(temp_path, "wb") as f:
                                 f.write(img_resp.content)
                             image_files.append(temp_path)
-                            logger.debug("Downloaded image %d to %s", idx + 1, temp_path)
                         else:
-                            logger.warning("Failed to download image %s: HTTP %s", img_url[:60], img_resp.status_code)
+                            logger.warning("Failed to download image %d: HTTP %s", idx, img_resp.status_code)
                     except Exception as dl_err:
-                        logger.warning("Error downloading image %s: %s", img_url[:60], dl_err)
+                        logger.warning("Error downloading image %d: %s", idx, dl_err)
 
                 if not image_files:
                     return {"status": "error", "message": "Failed to download any images"}
 
-                logger.info("Downloaded %d/%d images for VR upload", len(image_files), len(all_images))
+                logger.info("Downloaded %d/%d images", len(image_files), len(all_images))
 
-                # --- Build form fields as list of tuples (preserves duplicates) ---
-                # Strip ALL image-related hidden fields — we'll rebuild them
-                # to match the number of images we're uploading.
-                skip_prefixes = ("upload_file_box_", "file_unique_id", "video_file_name", "new_upload")
+                # --- Step 1: Upload each image via Dropzone AJAX endpoint ---
+                upload_url = f"{site_url}ajax/dropzone_upload/{user_id}"
+                upload_session = client.session
+                upload_headers = client.headers.copy()
+                upload_headers["Referer"] = edit_url
+                upload_headers["X-Requested-With"] = "XMLHttpRequest"
+                upload_headers.pop("Content-Type", None)
+
+                uploaded_count = 0
+                for idx, img_path in enumerate(image_files):
+                    try:
+                        with open(img_path, "rb") as fh:
+                            # Dropzone paramName is "filename"
+                            files = {"filename": (os.path.basename(img_path), fh, "image/jpeg")}
+                            resp = upload_session.post(
+                                upload_url, files=files, headers=upload_headers
+                            )
+                        logger.info("Dropzone upload %d/%d: status=%s body=%s",
+                                    idx + 1, len(image_files), resp.status_code,
+                                    (resp.text or "")[:300])
+                        if resp.status_code == 200:
+                            uploaded_count += 1
+                        else:
+                            logger.warning("Dropzone upload %d failed: HTTP %s", idx + 1, resp.status_code)
+                    except Exception as up_err:
+                        logger.error("Dropzone upload %d error: %s", idx + 1, up_err)
+
+                if uploaded_count == 0:
+                    return {"status": "error", "message": "All Dropzone uploads failed"}
+
+                logger.info("Uploaded %d/%d images via Dropzone", uploaded_count, len(image_files))
+
+                # --- Step 2: Submit edit form with delete_item_images[] ---
+                fields = client._extract_form_fields(response.text)
+                # Strip old image-related hidden fields
+                skip_prefixes = ("upload_file_box_", "file_unique_id", "video_file_name",
+                                 "new_upload", "thumb_name", "delete_item")
                 form_fields: List[Tuple[str, str]] = []
                 for name, value in fields:
                     if any(name.startswith(p) for p in skip_prefixes):
                         continue
                     form_fields.append((name, value))
 
-                logger.info(
-                    "Submitting VR edit with %d images for item %s (form fields: %d)",
-                    len(image_files), vr_external_id, len(form_fields),
-                )
+                # Add delete_item_images[] for each old image
+                for pmid in old_media_ids:
+                    form_fields.append(("delete_item_images[]", pmid))
 
-                # --- POST the edit form with images ---
+                logger.info("Submitting edit form: %d fields + %d delete_item_images",
+                            len(form_fields), len(old_media_ids))
+
                 submit_headers = client.headers.copy()
                 submit_headers["Referer"] = edit_url
-                submit_headers.pop("Content-Type", None)  # Let requests set multipart boundary
+                submit_headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
 
-                # Use regular requests session with transferred cookies
-                upload_session = client.session
+                submit_resp = upload_session.post(
+                    edit_url,
+                    data=form_fields,
+                    headers=submit_headers,
+                    allow_redirects=False,
+                )
 
-                # Build multipart body using the files= list-of-tuples API.
-                # VR edit form uses per-slot triplets:
-                #   file_unique_id[] — ID of existing image (empty = new slot)
-                #   new_upload[]     — file data for this slot
-                #   video_file_name[] — empty for images
-                files_list: List[Tuple[str, Any]] = []
-
-                # Regular form fields first
-                for name, value in form_fields:
-                    files_list.append((name, (None, value)))
-
-                # Image slots — one triplet per image
-                open_handles = []
-                try:
-                    for idx, img_path in enumerate(image_files):
-                        fh = open(img_path, "rb")
-                        open_handles.append(fh)
-                        # Empty file_unique_id means "this is a new/replacement slot"
-                        files_list.append(("file_unique_id[]", (None, "")))
-                        files_list.append(("new_upload[]", (os.path.basename(img_path), fh, "image/jpeg")))
-                        files_list.append(("video_file_name[]", (None, "")))
-
-                    logger.info(
-                        "Multipart payload: %d form fields + %d image triplets (file_unique_id/new_upload/video_file_name)",
-                        len(form_fields), len(image_files),
-                    )
-
-                    submit_resp = upload_session.post(
-                        edit_url,
-                        files=files_list,
-                        headers=submit_headers,
-                        allow_redirects=False,
-                    )
-                finally:
-                    for fh in open_handles:
-                        fh.close()
-
-                logger.info("VR image-fix POST response: status=%s location=%s body=%s",
+                logger.info("VR edit form response: status=%s location=%s",
                             submit_resp.status_code,
-                            submit_resp.headers.get("Location", "<none>"),
-                            (submit_resp.text or "")[:800])
+                            submit_resp.headers.get("Location", "<none>"))
 
-                # Check for success patterns
                 if submit_resp.status_code in (200, 302, 303):
-                    response_text = submit_resp.text[:500].lower() if submit_resp.text else ""
-                    if submit_resp.status_code in (302, 303) or "published" in response_text or "success" in response_text:
-                        return {
-                            "status": "success",
-                            "message": f"Images updated for VR item {vr_external_id}",
-                            "images_uploaded": len(image_files),
-                        }
-
-                    # 200 might still be success (VR sometimes doesn't redirect on edit)
                     return {
                         "status": "success",
-                        "message": f"Edit form submitted for VR item {vr_external_id} (HTTP {submit_resp.status_code})",
-                        "images_uploaded": len(image_files),
+                        "message": f"Images updated for VR item {vr_external_id}",
+                        "images_uploaded": uploaded_count,
+                        "images_deleted": len(old_media_ids),
                     }
 
                 return {
                     "status": "error",
-                    "message": f"Unexpected response {submit_resp.status_code}",
-                    "body": submit_resp.text[:500] if submit_resp.text else "",
+                    "message": f"Form submit failed: HTTP {submit_resp.status_code}",
+                    "body": (submit_resp.text or "")[:500],
                 }
 
             finally:
-                # Clean up temp files
                 import shutil
                 shutil.rmtree(temp_dir, ignore_errors=True)
 

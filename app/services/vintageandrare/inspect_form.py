@@ -424,8 +424,12 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
             
             print(f"11. Final URL: {driver.current_url}")
             driver.save_screenshot("data/final_page.png")
-            
-            if map_categories:
+
+            if edit_mode and edit_item_id:
+                print(f"\n12. Editing item {edit_item_id}...")
+                result = edit_item_form(driver, edit_item_id, item_data, test_mode, db_session)
+                return result
+            elif map_categories:
                 print("\n12. Mapping category hierarchy...")
                 category_map = map_category_options(driver)
             elif item_data:
@@ -1403,61 +1407,103 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
             # --- Clear existing images if this is an edit (product_id present) ---
             is_edit = bool(item_data.get('product_id'))
             if is_edit and item_data['images']:
-                print("Edit mode detected - clearing existing images before upload...")
+                print("Edit mode detected - dumping image area DOM and clearing existing images...")
                 try:
-                    removed = driver.execute_script("""
-                        // VR edit form: existing images have remove/delete buttons
-                        // Try multiple common selectors for the remove button
-                        var selectors = [
-                            '.remove_photo', '.delete_photo', '.remove-photo',
-                            '.delete-photo', '.photo-remove', '.image-remove',
-                            '.remove_image', '.delete_image',
-                            '[class*="remove"][class*="photo"]',
-                            '[class*="delete"][class*="photo"]',
-                            '[class*="remove"][class*="image"]',
-                            '[class*="delete"][class*="image"]',
-                            '.close_btn', '.photo_close',
-                            // VR uses .uploaded_photo containers with a close/X element
-                            '.uploaded_photo .close', '.uploaded_photo .remove',
-                            '.photo_box .close', '.photo_box .remove',
-                            '.image_box .close', '.image_box .remove',
-                            // Generic X buttons near images
-                            '.photo_container a[title*="remove" i]',
-                            '.photo_container a[title*="delete" i]',
-                            // Try finding any clickable element inside photo containers
-                            '.photos_area .close', '.photos_area .remove',
-                            '.upload_area .close', '.upload_area .remove'
-                        ];
-                        var totalRemoved = 0;
-                        for (var s = 0; s < selectors.length; s++) {
-                            var btns = document.querySelectorAll(selectors[s]);
-                            for (var i = 0; i < btns.length; i++) {
-                                try { btns[i].click(); totalRemoved++; } catch(e) {}
+                    # First: dump the image area HTML so we know exactly what VR's form looks like
+                    dom_dump = driver.execute_script("""
+                        var result = '';
+
+                        // 1. Find all elements with 'photo' or 'image' or 'upload' in id/class
+                        var all = document.querySelectorAll('[id*="photo" i], [class*="photo" i], [id*="image" i][id*="upload" i], [class*="image" i][class*="upload" i], [id*="upload_file" i], [class*="upload_file" i]');
+                        result += 'PHOTO/IMAGE/UPLOAD ELEMENTS (' + all.length + '):\\n';
+                        for (var i = 0; i < Math.min(all.length, 30); i++) {
+                            var el = all[i];
+                            result += '  tag=' + el.tagName + ' id=' + el.id + ' class=' + el.className + '\\n';
+                            // Show children that might be remove buttons
+                            var children = el.querySelectorAll('a, button, span, div, input');
+                            for (var j = 0; j < Math.min(children.length, 5); j++) {
+                                var c = children[j];
+                                result += '    child: tag=' + c.tagName + ' id=' + c.id + ' class=' + c.className + ' text=' + (c.textContent || '').substring(0, 30).trim() + ' type=' + (c.type || '') + ' name=' + (c.name || '') + '\\n';
                             }
                         }
-                        // Also try: VR might use a hidden checkbox/input to mark photos for deletion
-                        var deleteChecks = document.querySelectorAll('input[name*="delete_photo"], input[name*="remove_photo"], input[name*="photo_delete"]');
-                        for (var i = 0; i < deleteChecks.length; i++) {
+
+                        // 2. Find all file inputs and their context
+                        var files = document.querySelectorAll('input[type="file"]');
+                        result += '\\nFILE INPUTS (' + files.length + '):\\n';
+                        for (var i = 0; i < files.length; i++) {
+                            var f = files[i];
+                            var p = f.parentElement;
+                            var gp = p ? p.parentElement : null;
+                            result += '  [' + i + '] name=' + f.name + ' id=' + f.id + ' value=' + f.value + '\\n';
+                            if (p) result += '    parent: tag=' + p.tagName + ' id=' + p.id + ' class=' + p.className + '\\n';
+                            if (gp) result += '    grandparent: tag=' + gp.tagName + ' id=' + gp.id + ' class=' + gp.className + '\\n';
+                        }
+
+                        // 3. Find any hidden inputs related to images/photos
+                        var hidden = document.querySelectorAll('input[type="hidden"][name*="photo" i], input[type="hidden"][name*="image" i], input[type="hidden"][name*="pic" i], input[type="hidden"][name*="file" i], input[type="hidden"][name*="delete" i], input[type="hidden"][name*="remove" i]');
+                        result += '\\nHIDDEN INPUTS related to images (' + hidden.length + '):\\n';
+                        for (var i = 0; i < hidden.length; i++) {
+                            result += '  name=' + hidden[i].name + ' value=' + (hidden[i].value || '').substring(0, 80) + '\\n';
+                        }
+
+                        // 4. Find any img tags inside the form area (existing image previews)
+                        var form = document.querySelector('form') || document.body;
+                        var imgs = form.querySelectorAll('img[src*="vintageandrare"], img[src*="photo"], img[src*="upload"], img[src*="product"]');
+                        result += '\\nEXISTING IMAGE PREVIEWS (' + imgs.length + '):\\n';
+                        for (var i = 0; i < Math.min(imgs.length, 10); i++) {
+                            var img = imgs[i];
+                            var ip = img.parentElement;
+                            result += '  src=' + (img.src || '').substring(0, 80) + '\\n';
+                            if (ip) result += '    parent: tag=' + ip.tagName + ' id=' + ip.id + ' class=' + ip.className + '\\n';
+                            // Check for sibling remove buttons
+                            if (ip) {
+                                var siblings = ip.querySelectorAll('a, button, span[onclick], div[onclick]');
+                                for (var j = 0; j < siblings.length; j++) {
+                                    var sib = siblings[j];
+                                    result += '    sibling: tag=' + sib.tagName + ' class=' + sib.className + ' text=' + (sib.textContent || '').substring(0, 30).trim() + ' onclick=' + (sib.getAttribute('onclick') || '').substring(0, 60) + '\\n';
+                                }
+                            }
+                        }
+
+                        return result;
+                    """)
+                    print(f"VR EDIT FORM IMAGE DOM DUMP:\\n{dom_dump}")
+                except Exception as e:
+                    print(f"Warning: DOM dump failed: {str(e)}")
+
+                # Now try to clear existing images using what we know
+                try:
+                    removed = driver.execute_script("""
+                        var totalRemoved = 0;
+
+                        // Strategy 1: Click any elements that look like remove/delete/close buttons near images
+                        var clickTargets = document.querySelectorAll(
+                            '[onclick*="delete" i], [onclick*="remove" i], ' +
+                            'a.close, a.remove, a.delete, ' +
+                            'span.close, span.remove, span.delete, ' +
+                            '.close_btn, .btn-close, .btn-remove, .btn-delete'
+                        );
+                        for (var i = 0; i < clickTargets.length; i++) {
+                            try { clickTargets[i].click(); totalRemoved++; } catch(e) {}
+                        }
+
+                        // Strategy 2: Set any hidden delete/remove flags
+                        var flags = document.querySelectorAll(
+                            'input[name*="delete" i], input[name*="remove" i]'
+                        );
+                        for (var i = 0; i < flags.length; i++) {
                             try {
-                                deleteChecks[i].checked = true;
-                                deleteChecks[i].value = '1';
+                                if (flags[i].type === 'checkbox') flags[i].checked = true;
+                                else flags[i].value = '1';
                                 totalRemoved++;
                             } catch(e) {}
                         }
+
                         return totalRemoved;
                     """)
-                    print(f"Attempted to clear existing images: {removed} remove actions triggered")
-                    time.sleep(3)  # Wait for DOM to update after removals
-
-                    # Also try to reset file input values directly
-                    driver.execute_script("""
-                        var fileInputs = document.querySelectorAll('input[type="file"]');
-                        for (var i = 0; i < fileInputs.length; i++) {
-                            try { fileInputs[i].value = ''; } catch(e) {}
-                        }
-                    """)
-                    print("Reset all file input fields")
-                    time.sleep(1)
+                    print(f"Clear existing images: {removed} actions triggered")
+                    if removed > 0:
+                        time.sleep(3)
                 except Exception as e:
                     print(f"Warning: Could not clear existing images: {str(e)}")
 

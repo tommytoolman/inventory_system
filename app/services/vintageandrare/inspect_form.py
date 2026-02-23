@@ -1386,7 +1386,7 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
         # Handle image uploads
         if 'images' in item_data:
             print("Starting image upload process...")
-            
+
             # Scroll to top of page before image uploads
             try:
                 driver.execute_script("window.scrollTo(0, 0);")
@@ -1394,29 +1394,84 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
                 time.sleep(2)  # Small pause to ensure visibility
             except Exception as e:
                 print(f"Error scrolling to top: {str(e)}")
-            
+
             if len(item_data['images']) > 20:
                 print(f"Warning: Received {len(item_data['images'])} images but maximum allowed is 20.")
                 print("Only the first 20 images will be processed.")
                 item_data['images'] = item_data['images'][:20]
-            
-            
-            if len(item_data['images']) > 20:
-                print(f"Warning: Received {len(item_data['images'])} images but maximum allowed is 20.")
-                print("Only the first 20 images will be processed.")
-                item_data['images'] = item_data['images'][:20]
-            
+
+            # --- Clear existing images if this is an edit (product_id present) ---
+            is_edit = bool(item_data.get('product_id'))
+            if is_edit and item_data['images']:
+                print("Edit mode detected - clearing existing images before upload...")
+                try:
+                    removed = driver.execute_script("""
+                        // VR edit form: existing images have remove/delete buttons
+                        // Try multiple common selectors for the remove button
+                        var selectors = [
+                            '.remove_photo', '.delete_photo', '.remove-photo',
+                            '.delete-photo', '.photo-remove', '.image-remove',
+                            '.remove_image', '.delete_image',
+                            '[class*="remove"][class*="photo"]',
+                            '[class*="delete"][class*="photo"]',
+                            '[class*="remove"][class*="image"]',
+                            '[class*="delete"][class*="image"]',
+                            '.close_btn', '.photo_close',
+                            // VR uses .uploaded_photo containers with a close/X element
+                            '.uploaded_photo .close', '.uploaded_photo .remove',
+                            '.photo_box .close', '.photo_box .remove',
+                            '.image_box .close', '.image_box .remove',
+                            // Generic X buttons near images
+                            '.photo_container a[title*="remove" i]',
+                            '.photo_container a[title*="delete" i]',
+                            // Try finding any clickable element inside photo containers
+                            '.photos_area .close', '.photos_area .remove',
+                            '.upload_area .close', '.upload_area .remove'
+                        ];
+                        var totalRemoved = 0;
+                        for (var s = 0; s < selectors.length; s++) {
+                            var btns = document.querySelectorAll(selectors[s]);
+                            for (var i = 0; i < btns.length; i++) {
+                                try { btns[i].click(); totalRemoved++; } catch(e) {}
+                            }
+                        }
+                        // Also try: VR might use a hidden checkbox/input to mark photos for deletion
+                        var deleteChecks = document.querySelectorAll('input[name*="delete_photo"], input[name*="remove_photo"], input[name*="photo_delete"]');
+                        for (var i = 0; i < deleteChecks.length; i++) {
+                            try {
+                                deleteChecks[i].checked = true;
+                                deleteChecks[i].value = '1';
+                                totalRemoved++;
+                            } catch(e) {}
+                        }
+                        return totalRemoved;
+                    """)
+                    print(f"Attempted to clear existing images: {removed} remove actions triggered")
+                    time.sleep(3)  # Wait for DOM to update after removals
+
+                    # Also try to reset file input values directly
+                    driver.execute_script("""
+                        var fileInputs = document.querySelectorAll('input[type="file"]');
+                        for (var i = 0; i < fileInputs.length; i++) {
+                            try { fileInputs[i].value = ''; } catch(e) {}
+                        }
+                    """)
+                    print("Reset all file input fields")
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"Warning: Could not clear existing images: {str(e)}")
+
             print(f"Processing {len(item_data['images'])} images...")
             import sys
             project_root = os.path.expanduser('~/Documents/GitHub/PROJECTS/HANKS/inventory_system')
             sys.path.append(project_root)
-            
+
             from app.services.vintageandrare.media_handler import MediaHandler
-            
+
             with MediaHandler() as handler:
                 for image_url in item_data['images']:
                     print(f"Processing image: {image_url}")
-                    
+
                     # Download image if it's a URL
                     if image_url.startswith(('http://', 'https://')):
                         temp_file = handler.download_image(image_url)
@@ -1452,7 +1507,7 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
                             try:
                                 # Use JavaScript to check if field is empty
                                 is_empty = driver.execute_script(
-                                    "return arguments[0].value === '';", 
+                                    "return arguments[0].value === '';",
                                     upload_field
                                 )
                                 if is_empty:
@@ -1465,11 +1520,35 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
                             except Exception as e:
                                 print(f"Error checking field: {str(e)}")
                                 continue
-                        
+
                         if not empty_field_found:
-                            print("No empty upload fields available")
+                            print("No empty upload fields available - attempting to diagnose...")
+                            # Log the form's image area HTML for debugging
+                            try:
+                                img_area_html = driver.execute_script("""
+                                    // Capture the image upload area HTML for debugging
+                                    var areas = document.querySelectorAll('#photos_area, .photos_area, .upload_area, .image_upload, [id*="photo"], [id*="image"][id*="upload"]');
+                                    var html = '';
+                                    for (var i = 0; i < areas.length; i++) {
+                                        html += 'AREA ' + i + ' (id=' + areas[i].id + ', class=' + areas[i].className + '):\\n';
+                                        html += areas[i].innerHTML.substring(0, 500) + '\\n---\\n';
+                                    }
+                                    if (!html) {
+                                        // Fallback: find all file inputs and their parent containers
+                                        var inputs = document.querySelectorAll('input[type="file"]');
+                                        for (var i = 0; i < inputs.length; i++) {
+                                            var p = inputs[i].parentElement;
+                                            html += 'FILE_INPUT ' + i + ' parent (tag=' + p.tagName + ', id=' + p.id + ', class=' + p.className + '):\\n';
+                                            html += p.innerHTML.substring(0, 300) + '\\n---\\n';
+                                        }
+                                    }
+                                    return html || 'No image areas found';
+                                """)
+                                print(f"Image area DOM dump:\n{img_area_html[:2000]}")
+                            except Exception as diag_e:
+                                print(f"Could not dump image area: {diag_e}")
                             break
-                            
+
                     except Exception as e:
                         print(f"Error during image upload: {str(e)}")
                         driver.save_screenshot("upload_error.png")

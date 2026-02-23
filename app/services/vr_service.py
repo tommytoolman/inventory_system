@@ -1165,10 +1165,10 @@ class VRService:
                 upload_headers.pop("Content-Type", None)
 
                 uploaded_count = 0
+                uploaded_file_ids: List[str] = []
                 for idx, img_path in enumerate(image_files):
                     try:
                         with open(img_path, "rb") as fh:
-                            # Dropzone paramName is "filename"
                             # Dropzone has uploadMultiple:true so PHP expects filename[0]
                             files = [("filename[0]", (os.path.basename(img_path), fh, "image/jpeg"))]
                             resp = upload_session.post(
@@ -1179,6 +1179,16 @@ class VRService:
                                     (resp.text or "")[:300])
                         if resp.status_code == 200:
                             uploaded_count += 1
+                            # Parse file_unique_id from response
+                            try:
+                                import json as _json
+                                resp_data = _json.loads(resp.text)
+                                if isinstance(resp_data, list) and resp_data:
+                                    fuid = resp_data[0].get("file_unique_id", "")
+                                    if fuid:
+                                        uploaded_file_ids.append(fuid)
+                            except Exception:
+                                logger.warning("Could not parse Dropzone response for upload %d", idx + 1)
                         else:
                             logger.warning("Dropzone upload %d failed: HTTP %s", idx + 1, resp.status_code)
                     except Exception as up_err:
@@ -1187,9 +1197,10 @@ class VRService:
                 if uploaded_count == 0:
                     return {"status": "error", "message": "All Dropzone uploads failed"}
 
-                logger.info("Uploaded %d/%d images via Dropzone", uploaded_count, len(image_files))
+                logger.info("Uploaded %d/%d images via Dropzone (file_ids: %s)",
+                            uploaded_count, len(image_files), uploaded_file_ids)
 
-                # --- Step 2: Submit edit form with delete_item_images[] ---
+                # --- Step 2: Submit edit form with file_unique_ids + delete_item_images[] ---
                 fields = client._extract_form_fields(response.text)
                 # Strip old image-related hidden fields
                 skip_prefixes = ("upload_file_box_", "file_unique_id", "video_file_name",
@@ -1199,6 +1210,13 @@ class VRService:
                     if any(name.startswith(p) for p in skip_prefixes):
                         continue
                     form_fields.append((name, value))
+
+                # Add uploaded image triplets (file_unique_id/new_upload/video_file_name)
+                # This tells VR to associate the Dropzone-uploaded files with this listing
+                for fuid in uploaded_file_ids:
+                    form_fields.append(("file_unique_id[]", fuid))
+                    form_fields.append(("new_upload[]", "1"))
+                    form_fields.append(("video_file_name[]", ""))
 
                 # Add delete_item_images[] for each old image
                 for pmid in old_media_ids:

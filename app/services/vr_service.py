@@ -1097,6 +1097,30 @@ class VRService:
                 # Log enctype
                 logger.info("Form enctype: %s", form.get("enctype", "<none>"))
 
+                # --- Extract JS upload patterns from page ---
+                import re as _re
+                page_text = response.text
+                # Find all script src URLs
+                script_tags = soup.find_all("script")
+                for st in script_tags:
+                    src = st.get("src", "")
+                    if src:
+                        logger.info("  script src: %s", src)
+                # Search inline JS and full page for upload-related patterns
+                upload_patterns = [
+                    r'(https?://[^\s\'"]+(?:upload|image|photo|file)[^\s\'"]*)',
+                    r'(/[^\s\'"]*(?:upload|image_upload|photo_upload|add_photo|add_image)[^\s\'"]*)',
+                    r'(ajax|fetch|XMLHttpRequest)[^;]{0,200}(?:upload|image|photo|file)',
+                    r'(dropzone|plupload|fileupload|fine-uploader)',
+                    r'file_unique_id[^;]{0,150}',
+                    r'new_upload[^;]{0,150}',
+                ]
+                for pattern in upload_patterns:
+                    matches = _re.findall(pattern, page_text, _re.IGNORECASE)
+                    if matches:
+                        for m in matches[:5]:  # cap at 5 per pattern
+                            logger.info("  JS pattern [%s]: %s", pattern[:30], str(m)[:200])
+
             fields = client._extract_form_fields(response.text)
             logger.info("Extracted %d form fields from VR edit page for %s", len(fields), vr_external_id)
 

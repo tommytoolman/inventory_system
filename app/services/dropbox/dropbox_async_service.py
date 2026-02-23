@@ -382,11 +382,15 @@ class AsyncDropboxClient:
                 
     async def test_connection(self) -> bool:
         """
-        Test the connection to Dropbox API with auto-refresh if needed.
-        
+        Test the connection to Dropbox API, refreshing the token first if possible.
+
         Returns:
             bool: True if connection works, False otherwise
         """
+        # Proactively refresh token before testing — avoids the 401 round-trip
+        if self.refresh_token and self.app_key and self.app_secret:
+            await self.refresh_access_token()
+
         async def _test_connection():
             """Internal function to test connection"""
             logger.info("Testing Dropbox API connection...")

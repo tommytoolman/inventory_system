@@ -1003,12 +1003,13 @@ class VRService:
             return {"status": "error", "message": str(e)}
 
     async def update_listing_images(self, product: Product) -> Dict[str, Any]:
-        """Update only the images on an existing VR listing.
+        """Update images on an existing VR listing via HTTP multipart POST.
 
-        Loads canonical images from the product, transforms to MAX_RES,
-        looks up the VR external_id, and calls update_listing_selenium
-        with only image fields populated.
+        Uses the same approach as update_listing_via_requests but adds
+        image files as upload_file_box_N multipart fields.
         """
+        import tempfile
+        import requests as req
         logger.info("Updating VR images for product %s (SKU: %s)", product.id, product.sku)
         try:
             from app.core.utils import ImageTransformer, ImageQuality
@@ -1044,18 +1045,7 @@ class VRService:
 
             vr_external_id = pc_row.external_id
 
-            # --- Build minimal product_data with only image fields ---
-            product_data = {
-                "primary_image": all_images[0],
-                "additional_images": all_images[1:] if len(all_images) > 1 else [],
-                # Fields required by _prepare_form_data_for_edit but not being changed
-                "brand": product.brand or "",
-                "model": product.model or "",
-                "price": str(product.base_price) if product.base_price else "0",
-                "description": product.description or "",
-            }
-
-            # --- Call Selenium update ---
+            # --- Authenticate client ---
             settings = get_settings()
             client = VintageAndRareClient(
                 username=settings.VINTAGE_AND_RARE_USERNAME,
@@ -1064,13 +1054,116 @@ class VRService:
             if not await client.authenticate():
                 return {"status": "error", "message": "VR authentication failed"}
 
-            result = await client.update_listing_selenium(
-                item_id=vr_external_id,
-                product_data=product_data,
-            )
+            # --- Load edit form and extract existing fields ---
+            edit_url = f"https://www.vintageandrare.com/instruments/add_edit_item/{vr_external_id}"
+            logger.info("Loading VR edit form: %s", edit_url)
 
-            logger.info("VR image-fix result for %s: %s", product.sku, result.get("status"))
-            return result
+            http_session = client.cf_session or client.session
+            response = http_session.get(edit_url, headers=client.headers)
+            if response.status_code != 200:
+                return {"status": "error", "message": f"Failed to load edit page (HTTP {response.status_code})"}
+
+            fields = client._extract_form_fields(response.text)
+            logger.info("Extracted %d form fields from VR edit page for %s", len(fields), vr_external_id)
+
+            # --- Download images to temp files ---
+            temp_dir = tempfile.mkdtemp(prefix="vr_imgfix_")
+            image_files: List[str] = []
+            try:
+                for idx, img_url in enumerate(all_images):
+                    try:
+                        img_resp = req.get(img_url, timeout=30)
+                        if img_resp.status_code == 200:
+                            content_type = img_resp.headers.get("content-type", "image/jpeg")
+                            ext = ".png" if "png" in content_type else ".jpg"
+                            temp_path = os.path.join(temp_dir, f"image_{idx}{ext}")
+                            with open(temp_path, "wb") as f:
+                                f.write(img_resp.content)
+                            image_files.append(temp_path)
+                            logger.debug("Downloaded image %d to %s", idx + 1, temp_path)
+                        else:
+                            logger.warning("Failed to download image %s: HTTP %s", img_url[:60], img_resp.status_code)
+                    except Exception as dl_err:
+                        logger.warning("Error downloading image %s: %s", img_url[:60], dl_err)
+
+                if not image_files:
+                    return {"status": "error", "message": "Failed to download any images"}
+
+                logger.info("Downloaded %d/%d images for VR upload", len(image_files), len(all_images))
+
+                # --- Build multipart form data ---
+                form_data = {}
+                for name, value in fields:
+                    if name in form_data:
+                        if isinstance(form_data[name], list):
+                            form_data[name].append(value)
+                        else:
+                            form_data[name] = [form_data[name], value]
+                    else:
+                        form_data[name] = value
+
+                # Build files dict for multipart upload
+                files_dict = {}
+                for idx, img_path in enumerate(image_files):
+                    field_name = f"upload_file_box_{idx + 1}"
+                    files_dict[field_name] = (
+                        os.path.basename(img_path),
+                        open(img_path, "rb"),
+                        "image/jpeg",
+                    )
+
+                logger.info(
+                    "Submitting VR edit with %d images for item %s (fields: %d)",
+                    len(files_dict), vr_external_id, len(form_data),
+                )
+
+                # --- POST the edit form with images ---
+                submit_headers = client.headers.copy()
+                submit_headers["Referer"] = edit_url
+                submit_headers.pop("Content-Type", None)  # Let requests set multipart boundary
+
+                try:
+                    submit_resp = http_session.post(
+                        edit_url,
+                        data=form_data,
+                        files=files_dict if files_dict else None,
+                        headers=submit_headers,
+                        allow_redirects=False,
+                    )
+                finally:
+                    for f in files_dict.values():
+                        if hasattr(f[1], "close"):
+                            f[1].close()
+
+                logger.info("VR image-fix POST response: %s", submit_resp.status_code)
+
+                # Check for success patterns
+                if submit_resp.status_code in (200, 302, 303):
+                    response_text = submit_resp.text[:500].lower() if submit_resp.text else ""
+                    if submit_resp.status_code in (302, 303) or "published" in response_text or "success" in response_text:
+                        return {
+                            "status": "success",
+                            "message": f"Images updated for VR item {vr_external_id}",
+                            "images_uploaded": len(image_files),
+                        }
+
+                    # 200 might still be success (VR sometimes doesn't redirect on edit)
+                    return {
+                        "status": "success",
+                        "message": f"Edit form submitted for VR item {vr_external_id} (HTTP {submit_resp.status_code})",
+                        "images_uploaded": len(image_files),
+                    }
+
+                return {
+                    "status": "error",
+                    "message": f"Unexpected response {submit_resp.status_code}",
+                    "body": submit_resp.text[:500] if submit_resp.text else "",
+                }
+
+            finally:
+                # Clean up temp files
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
         except Exception as e:
             logger.error("Exception updating VR images for product %s: %s", product.id, e, exc_info=True)

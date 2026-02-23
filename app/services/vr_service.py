@@ -1165,28 +1165,25 @@ class VRService:
                 upload_headers.pop("Content-Type", None)
 
                 uploaded_count = 0
-                uploaded_file_ids: List[str] = []
+                uploaded_responses: List[Dict[str, Any]] = []
                 for idx, img_path in enumerate(image_files):
                     try:
                         with open(img_path, "rb") as fh:
                             # Dropzone has uploadMultiple:true so PHP expects filename[0]
-                            files = [("filename[0]", (os.path.basename(img_path), fh, "image/jpeg"))]
+                            upload_files = [("filename[0]", (os.path.basename(img_path), fh, "image/jpeg"))]
                             resp = upload_session.post(
-                                upload_url, files=files, headers=upload_headers
+                                upload_url, files=upload_files, headers=upload_headers
                             )
                         logger.info("Dropzone upload %d/%d: status=%s body=%s",
                                     idx + 1, len(image_files), resp.status_code,
                                     (resp.text or "")[:300])
                         if resp.status_code == 200:
-                            uploaded_count += 1
-                            # Parse file_unique_id from response
                             try:
                                 import json as _json
                                 resp_data = _json.loads(resp.text)
-                                if isinstance(resp_data, list) and resp_data:
-                                    fuid = resp_data[0].get("file_unique_id", "")
-                                    if fuid:
-                                        uploaded_file_ids.append(fuid)
+                                if isinstance(resp_data, list) and resp_data and resp_data[0].get("success"):
+                                    uploaded_count += 1
+                                    uploaded_responses.append(resp_data[0])
                             except Exception:
                                 logger.warning("Could not parse Dropzone response for upload %d", idx + 1)
                         else:
@@ -1197,8 +1194,7 @@ class VRService:
                 if uploaded_count == 0:
                     return {"status": "error", "message": "All Dropzone uploads failed"}
 
-                logger.info("Uploaded %d/%d images via Dropzone (file_ids: %s)",
-                            uploaded_count, len(image_files), uploaded_file_ids)
+                logger.info("Uploaded %d/%d images via Dropzone", uploaded_count, len(image_files))
 
                 # --- Step 2: Submit edit form with file_unique_ids + delete_item_images[] ---
                 fields = client._extract_form_fields(response.text)
@@ -1211,12 +1207,18 @@ class VRService:
                         continue
                     form_fields.append((name, value))
 
-                # Add uploaded image triplets (file_unique_id/new_upload/video_file_name)
-                # This tells VR to associate the Dropzone-uploaded files with this listing
-                for fuid in uploaded_file_ids:
-                    form_fields.append(("file_unique_id[]", fuid))
+                # Add uploaded image fields — must match exactly what the browser sends
+                # per image (from network capture of VR edit form submission)
+                for upload_info in uploaded_responses:
+                    form_fields.append(("thumb_name[]", upload_info.get("thumbnailName", "")))
+                    form_fields.append(("file_unique_id[]", upload_info.get("file_unique_id", "")))
+                    form_fields.append(("product_media_id[]", "0"))
+                    form_fields.append(("original_name[]", upload_info.get("fileName", "")))
+                    form_fields.append(("media_type[]", "photo"))
+                    form_fields.append(("size[]", str(upload_info.get("size", 0))))
                     form_fields.append(("new_upload[]", "1"))
                     form_fields.append(("video_file_name[]", ""))
+                    form_fields.append(("description_name[]", ""))
 
                 # Add delete_item_images[] for each old image
                 for pmid in old_media_ids:

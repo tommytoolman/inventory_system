@@ -586,16 +586,21 @@ async def reconcile_vr(
 
     vr_image_count = len(re.findall(r'rel=["\']prettyPhoto', html))
     response["platform_count"] = vr_image_count
-    response["needs_fix"] = vr_image_count != len(canonical_gallery)
+
+    # VR accepts max 20 images per listing, so cap the canonical count for comparison
+    MAX_VR_IMAGES = 20
+    effective_canonical = min(len(canonical_gallery), MAX_VR_IMAGES)
+    response["canonical_count"] = effective_canonical
+    response["needs_fix"] = vr_image_count != effective_canonical
 
     if response["needs_fix"]:
-        response["message"] = f"VR has {vr_image_count} images, canonical has {len(canonical_gallery)}."
+        response["message"] = f"VR has {vr_image_count} images, expected {effective_canonical}."
     else:
         response["message"] = "VR gallery matches canonical set."
 
     log.info(
-        "Product %s VR images: canonical=%s, vr=%s",
-        product.id, len(canonical_gallery), vr_image_count,
+        "Product %s VR images: canonical=%s (capped %s), vr=%s",
+        product.id, len(canonical_gallery), effective_canonical, vr_image_count,
     )
 
     if apply_fix and response["needs_fix"]:

@@ -4094,13 +4094,15 @@ async def vr_image_health_data(request: Request):
                 except (json.JSONDecodeError, TypeError):
                     pass
 
+        # VR accepts max 20 images per listing
+        MAX_VR_IMAGES = 20
         items.append({
             "product_id": mapping["id"],
             "sku": mapping["sku"],
             "brand": mapping["brand"] or "",
             "model": mapping["model"] or "",
             "primary_image": primary_image,
-            "canonical_count": canonical_count,
+            "canonical_count": min(canonical_count, MAX_VR_IMAGES),
             "external_id": mapping["external_id"],
             "listing_url": mapping["listing_url"],
         })
@@ -4115,43 +4117,55 @@ async def vr_image_health_data(request: Request):
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         }
 
+        BATCH_SIZE = 5
+        DELAY_BETWEEN_BATCHES = 0.3  # seconds between batches
+
+        async def check_one(client, item, idx):
+            entry = {
+                "product_id": item["product_id"],
+                "sku": item["sku"],
+                "brand": item["brand"],
+                "model": item["model"],
+                "primary_image": item["primary_image"],
+                "canonical_count": item["canonical_count"],
+                "vr_count": None,
+                "status": "error",
+                "error": None,
+                "listing_url": item["listing_url"] or f"https://www.vintageandrare.com/product/{item['external_id']}",
+                "external_id": item["external_id"],
+                "index": idx,
+            }
+            try:
+                resp = await client.get(
+                    f"https://www.vintageandrare.com/product/{item['external_id']}",
+                    follow_redirects=True,
+                )
+                resp.raise_for_status()
+                vr_count = len(re.findall(r'rel=["\']prettyPhoto', resp.text))
+                entry["vr_count"] = vr_count
+                entry["status"] = "match" if vr_count == item["canonical_count"] else "mismatch"
+            except Exception as exc:  # noqa: BLE001
+                entry["error"] = str(exc)
+                logger.warning(
+                    "VR image check failed for product %s (vr_id %s): %s",
+                    item["product_id"], item["external_id"], exc,
+                )
+            return entry
+
         async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
-            for idx, item in enumerate(items):
-                entry = {
-                    "product_id": item["product_id"],
-                    "sku": item["sku"],
-                    "brand": item["brand"],
-                    "model": item["model"],
-                    "primary_image": item["primary_image"],
-                    "canonical_count": item["canonical_count"],
-                    "vr_count": None,
-                    "status": "error",
-                    "error": None,
-                    "listing_url": item["listing_url"] or f"https://www.vintageandrare.com/product/{item['external_id']}",
-                    "external_id": item["external_id"],
-                    "index": idx,
-                }
+            for batch_start in range(0, total, BATCH_SIZE):
+                batch = items[batch_start:batch_start + BATCH_SIZE]
+                tasks = [
+                    check_one(client, item, batch_start + i)
+                    for i, item in enumerate(batch)
+                ]
+                results = await asyncio.gather(*tasks)
 
-                try:
-                    resp = await client.get(
-                        f"https://www.vintageandrare.com/product/{item['external_id']}",
-                        follow_redirects=True,
-                    )
-                    resp.raise_for_status()
-                    vr_count = len(re.findall(r'rel=["\']prettyPhoto', resp.text))
-                    entry["vr_count"] = vr_count
-                    entry["status"] = "match" if vr_count == item["canonical_count"] else "mismatch"
-                except Exception as exc:  # noqa: BLE001
-                    entry["error"] = str(exc)
-                    logger.warning(
-                        "VR image check failed for product %s (vr_id %s): %s",
-                        item["product_id"], item["external_id"], exc,
-                    )
+                for entry in results:
+                    yield f"event: result\ndata: {json.dumps(entry)}\n\n"
 
-                yield f"event: result\ndata: {json.dumps(entry)}\n\n"
-
-                # Small delay to be respectful of VR's server
-                await asyncio.sleep(0.5)
+                if batch_start + BATCH_SIZE < total:
+                    await asyncio.sleep(DELAY_BETWEEN_BATCHES)
 
         yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
 

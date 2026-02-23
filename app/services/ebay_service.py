@@ -53,6 +53,7 @@ ROSEWOOD_VARIANT_PATTERNS = [
     re.compile(r"\bbrazil\s+rosewood\b", re.IGNORECASE),
     re.compile(r"\bbrasilian\s+rosewood\b", re.IGNORECASE),
     re.compile(r"\bbrasil\s+rosewood\b", re.IGNORECASE),
+    re.compile(r"\brio\s+rosewood\b", re.IGNORECASE),
 ]
 
 class EbayService:
@@ -1972,8 +1973,10 @@ class EbayService:
             # 6. Build ItemSpecifics based on category
             logger.info(f"=== BUILDING ITEM SPECIFICS ===")
             item_specifics = self._build_item_specifics(product, ebay_category_info['CategoryID'])
+            # Sanitize item specifics values (e.g. "Rio Rosewood" → "Rosewood")
+            item_specifics = {k: self._sanitize_description_for_ebay(v) or v for k, v in item_specifics.items()}
             logger.info(f"  ItemSpecifics: {json.dumps(item_specifics, indent=2)}")
-            
+
             # Determine price
             if price_override is not None:
                 price_decimal = Decimal(str(price_override))
@@ -1986,8 +1989,10 @@ class EbayService:
             description_text = product.description or "No description available."
             description_text = self._sanitize_description_for_ebay(description_text)
 
+            title = (product.title or f"{product.year or ''} {product.brand} {product.model}".strip())[:80]
+            title = self._sanitize_description_for_ebay(title) or title
             item_data = {
-                "Title": (product.title or f"{product.year or ''} {product.brand} {product.model}".strip())[:80],  # eBay limit is 80 chars
+                "Title": title,
                 "Description": description_text,
                 "CategoryID": ebay_category_info['CategoryID'],
                 "Price": price_str,
@@ -2534,9 +2539,12 @@ class EbayService:
                 category_id,
                 existing_specifics=existing_specifics,
             )
+            item_specifics = {k: self._sanitize_description_for_ebay(v) or v for k, v in item_specifics.items()}
 
         if description:
             description = self._sanitize_description_for_ebay(description)
+        if title:
+            title = self._sanitize_description_for_ebay(title) or title
 
         if title or description or item_specifics:
             response = await self.trading_api.revise_listing_details(

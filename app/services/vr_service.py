@@ -1126,9 +1126,9 @@ class VRService:
                 logger.info("Downloaded %d/%d images for VR upload", len(image_files), len(all_images))
 
                 # --- Build form fields as list of tuples (preserves duplicates) ---
-                # Filter out file-type inputs and existing image hidden fields
-                # so we only submit our new images
-                skip_prefixes = ("upload_file_box_", "file_unique_id", "video_file_name")
+                # Strip ALL image-related hidden fields — we'll rebuild them
+                # to match the number of images we're uploading.
+                skip_prefixes = ("upload_file_box_", "file_unique_id", "video_file_name", "new_upload")
                 form_fields: List[Tuple[str, str]] = []
                 for name, value in fields:
                     if any(name.startswith(p) for p in skip_prefixes):
@@ -1136,7 +1136,7 @@ class VRService:
                     form_fields.append((name, value))
 
                 logger.info(
-                    "Submitting VR edit with %d images for item %s (form fields: %d, skipped image fields)",
+                    "Submitting VR edit with %d images for item %s (form fields: %d)",
                     len(image_files), vr_external_id, len(form_fields),
                 )
 
@@ -1148,24 +1148,32 @@ class VRService:
                 # Use regular requests session with transferred cookies
                 upload_session = client.session
 
+                # Build multipart body using the files= list-of-tuples API.
+                # VR edit form uses per-slot triplets:
+                #   file_unique_id[] — ID of existing image (empty = new slot)
+                #   new_upload[]     — file data for this slot
+                #   video_file_name[] — empty for images
                 files_list: List[Tuple[str, Any]] = []
-                # Add form fields as "files" tuples so requests encodes everything
-                # as multipart/form-data (mixing data= and files= can cause issues
-                # with duplicate field names)
+
+                # Regular form fields first
                 for name, value in form_fields:
                     files_list.append((name, (None, value)))
 
-                # Add image files
+                # Image slots — one triplet per image
                 open_handles = []
                 try:
                     for idx, img_path in enumerate(image_files):
-                        field_name = f"upload_file_box_{idx + 1}"
                         fh = open(img_path, "rb")
                         open_handles.append(fh)
-                        files_list.append((
-                            field_name,
-                            (os.path.basename(img_path), fh, "image/jpeg"),
-                        ))
+                        # Empty file_unique_id means "this is a new/replacement slot"
+                        files_list.append(("file_unique_id[]", (None, "")))
+                        files_list.append(("new_upload[]", (os.path.basename(img_path), fh, "image/jpeg")))
+                        files_list.append(("video_file_name[]", (None, "")))
+
+                    logger.info(
+                        "Multipart payload: %d form fields + %d image triplets (file_unique_id/new_upload/video_file_name)",
+                        len(form_fields), len(image_files),
+                    )
 
                     submit_resp = upload_session.post(
                         edit_url,

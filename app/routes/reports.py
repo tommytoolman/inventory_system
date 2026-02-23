@@ -20,6 +20,9 @@ from app.models.shopify import ShopifyListing
 from app.models.vr import VRListing
 from app.models.reverb import ReverbListing
 from scripts.product_matcher import ProductMatcher
+import asyncio
+import re
+import httpx
 import logging
 
 logger = logging.getLogger(__name__)
@@ -4043,3 +4046,118 @@ async def listing_engagement_report(
             "search": search or "",
             "min_watches": min_watches,
         })
+
+
+@router.get("/vr-image-health", response_class=HTMLResponse)
+async def vr_image_health_page(request: Request):
+    """Render the VR Image Health report page (data loaded via JS)."""
+    return templates.TemplateResponse("reports/vr_image_health.html", {
+        "request": request,
+    })
+
+
+@router.get("/vr-image-health/data", response_class=JSONResponse)
+async def vr_image_health_data(request: Request):
+    """Scan all active VR listings and compare image counts against canonical gallery."""
+    async with get_session() as db:
+        query = text("""
+            SELECT p.id, p.sku, p.brand, p.model, p.primary_image, p.additional_images,
+                   pc.external_id, pc.listing_url, pc.status
+            FROM products p
+            JOIN platform_common pc ON p.id = pc.product_id
+            WHERE pc.platform_name = 'vr' AND pc.status IN ('active', 'live')
+            ORDER BY p.id
+        """)
+        result = await db.execute(query)
+        rows = result.fetchall()
+
+    results = []
+    semaphore = asyncio.Semaphore(3)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    async def check_vr_images(row):
+        mapping = row._mapping
+        product_id = mapping["id"]
+        sku = mapping["sku"]
+        brand = mapping["brand"] or ""
+        model = mapping["model"] or ""
+        primary_image = mapping["primary_image"]
+        additional_images = mapping["additional_images"]
+        external_id = mapping["external_id"]
+        listing_url = mapping["listing_url"]
+
+        # Calculate canonical count
+        canonical_count = 0
+        if primary_image:
+            canonical_count += 1
+        if additional_images:
+            if isinstance(additional_images, list):
+                canonical_count += len([img for img in additional_images if img])
+            elif isinstance(additional_images, str):
+                try:
+                    parsed = json.loads(additional_images)
+                    if isinstance(parsed, list):
+                        canonical_count += len([img for img in parsed if img])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        entry = {
+            "product_id": product_id,
+            "sku": sku,
+            "brand": brand,
+            "model": model,
+            "primary_image": primary_image,
+            "canonical_count": canonical_count,
+            "vr_count": None,
+            "status": "error",
+            "error": None,
+            "listing_url": listing_url or f"https://www.vintageandrare.com/product/{external_id}",
+            "external_id": external_id,
+        }
+
+        async with semaphore:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"https://www.vintageandrare.com/product/{external_id}",
+                        headers=headers,
+                        follow_redirects=True,
+                    )
+                    resp.raise_for_status()
+                    html = resp.text
+
+                vr_count = len(re.findall(r'rel=["\']prettyPhoto', html))
+                entry["vr_count"] = vr_count
+
+                if vr_count == canonical_count:
+                    entry["status"] = "match"
+                else:
+                    entry["status"] = "mismatch"
+            except Exception as exc:  # noqa: BLE001
+                entry["error"] = str(exc)
+                logger.warning("VR image check failed for product %s (vr_id %s): %s", product_id, external_id, exc)
+
+            # Small delay to be respectful of VR's server
+            await asyncio.sleep(0.5)
+
+        return entry
+
+    tasks = [check_vr_images(row) for row in rows]
+    results = await asyncio.gather(*tasks)
+
+    matches = sum(1 for r in results if r["status"] == "match")
+    mismatches = sum(1 for r in results if r["status"] == "mismatch")
+    errors = sum(1 for r in results if r["status"] == "error")
+
+    return JSONResponse({
+        "results": results,
+        "summary": {
+            "total": len(results),
+            "matches": matches,
+            "mismatches": mismatches,
+            "errors": errors,
+        },
+    })

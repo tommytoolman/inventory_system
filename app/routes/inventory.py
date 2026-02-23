@@ -69,6 +69,7 @@ from app.services.image_reconciliation import (
     refresh_canonical_gallery,
     reconcile_shopify,
     reconcile_ebay,
+    reconcile_vr,
 )
 from app.services.shopify.utils import (
     ensure_description_has_standard_footer,
@@ -1917,6 +1918,7 @@ async def product_detail(
             common_listings_map.get("REVERB")
             or common_listings_map.get("SHOPIFY")
             or common_listings_map.get("EBAY")
+            or common_listings_map.get("VR")
         )
 
         # Get sale info for sold products
@@ -2120,6 +2122,9 @@ async def refresh_product_images(
     ebay_result = await reconcile_ebay(db, settings, product, canonical_gallery, apply_fix=False)
     platform_results.append(ebay_result)
 
+    vr_result = await reconcile_vr(db, settings, product, canonical_gallery, apply_fix=False)
+    platform_results.append(vr_result)
+
     errors = [res for res in platform_results if res.get("error")]
     if errors:
         message = "; ".join(res.get("message", "Unknown error") for res in errors)
@@ -2183,6 +2188,9 @@ async def fix_product_images(
     ebay_result = await reconcile_ebay(db, settings, product, canonical_gallery, apply_fix=True)
     platform_results.append(ebay_result)
 
+    vr_result = await reconcile_vr(db, settings, product, canonical_gallery, apply_fix=True)
+    platform_results.append(vr_result)
+
     errors = [res for res in platform_results if res.get("error")]
     if errors:
         message = "; ".join(res.get("message", "Unable to update images") for res in errors)
@@ -2208,7 +2216,7 @@ async def fix_product_images(
             base_message += " " + ", ".join(summary_lines)
         message_type = "warning"
     else:
-        base_message = "Shopify and eBay galleries now mirror the RIFF images."
+        base_message = "Platform galleries now mirror the RIFF images."
         message_type = "success"
 
     return JSONResponse(
@@ -3790,8 +3798,14 @@ async def add_product(
         # Convert local static paths to full URLs for external platforms
         def make_full_url(path):
             if path and path.startswith('/static/'):
-                # Get the base URL from the request
-                base_url = str(request.base_url).rstrip('/')
+                # Prefer Railway's public domain (avoids storing localhost URLs
+                # when the form is submitted from a local dev machine connected
+                # to the production database).
+                railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
+                if railway_domain:
+                    base_url = f"https://{railway_domain}"
+                else:
+                    base_url = str(request.base_url).rstrip('/')
                 return f"{base_url}{path}"
             return path
 

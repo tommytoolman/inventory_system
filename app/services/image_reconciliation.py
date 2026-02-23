@@ -4,6 +4,8 @@ import re
 from typing import Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlparse
 
+import httpx
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,7 +22,7 @@ from app.services.shopify_service import ShopifyService
 
 logger = logging.getLogger("image_reconciliation")
 
-SUPPORTED_PLATFORMS = {"reverb", "shopify", "ebay"}
+SUPPORTED_PLATFORMS = {"reverb", "shopify", "ebay", "vr"}
 
 
 def normalize_gallery(urls: Iterable[str]) -> List[Tuple[str, str]]:
@@ -519,5 +521,84 @@ async def reconcile_ebay(
             item_id,
             exc,
         )
+
+    return response
+
+
+async def reconcile_vr(
+    session: AsyncSession,
+    settings: Settings,
+    product: Product,
+    canonical_gallery: List[str],
+    apply_fix: bool,
+    log: Optional[logging.Logger] = None,
+) -> Dict:
+    """Reconcile VR image count against canonical gallery by scraping the public product page."""
+    log = log or logger
+
+    response: Dict = {
+        "platform": "vr",
+        "available": False,
+        "canonical_count": len(canonical_gallery),
+        "platform_count": 0,
+        "missing": [],
+        "extra": [],
+        "needs_fix": False,
+        "updated": False,
+        "message": "",
+        "error": None,
+    }
+
+    stmt = (
+        select(PlatformCommon)
+        .where(
+            PlatformCommon.product_id == product.id,
+            PlatformCommon.platform_name == "vr",
+        )
+    )
+    result = await session.execute(stmt)
+    common = result.scalar_one_or_none()
+
+    if not common or not common.external_id:
+        response["message"] = "Product has no VR listing."
+        return response
+
+    response["available"] = True
+    vr_id = common.external_id
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"https://www.vintageandrare.com/product/{vr_id}",
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                },
+                follow_redirects=True,
+            )
+            resp.raise_for_status()
+            html = resp.text
+    except Exception as exc:  # noqa: BLE001
+        response["message"] = f"Failed to fetch VR product page: {exc}"
+        response["error"] = "fetch_error"
+        log.warning("Failed to fetch VR page for product %s (vr_id %s): %s", product.id, vr_id, exc)
+        return response
+
+    vr_image_count = len(re.findall(r'rel=["\']prettyPhoto', html))
+    response["platform_count"] = vr_image_count
+    response["needs_fix"] = vr_image_count != len(canonical_gallery)
+
+    if response["needs_fix"]:
+        response["message"] = f"VR has {vr_image_count} images, canonical has {len(canonical_gallery)}."
+    else:
+        response["message"] = "VR gallery matches canonical set."
+
+    log.info(
+        "Product %s VR images: canonical=%s, vr=%s",
+        product.id, len(canonical_gallery), vr_image_count,
+    )
+
+    if apply_fix and response["needs_fix"]:
+        response["message"] += " VR image fix must be queued separately."
 
     return response

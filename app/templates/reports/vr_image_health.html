@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}VR Image Health - RIFF{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 mb-1">VR Image Health</h1>
+                <p class="text-gray-600">Compare Vintage &amp; Rare image counts against canonical gallery</p>
+            </div>
+            <a href="/reports" class="text-blue-600 hover:text-blue-800">&larr; Back to Reports</a>
+        </div>
+    </div>
+
+    <!-- Summary Bar -->
+    <div id="summaryBar" class="bg-white rounded-lg shadow p-4 mb-6 hidden">
+        <div class="flex flex-wrap gap-6 items-center">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900" id="totalCount">0</div>
+                <div class="text-xs text-gray-500 uppercase">Total</div>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-green-600" id="matchCount">0</div>
+                <div class="text-xs text-gray-500 uppercase">Match</div>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-red-600" id="mismatchCount">0</div>
+                <div class="text-xs text-gray-500 uppercase">Mismatch</div>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-yellow-600" id="errorCount">0</div>
+                <div class="text-xs text-gray-500 uppercase">Errors</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="bg-white rounded-lg shadow p-12 text-center">
+        <svg class="animate-spin h-10 w-10 text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-gray-600 text-lg">Scanning VR listings... this may take 15-20 seconds</p>
+        <p class="text-gray-400 text-sm mt-1">Checking each listing's public page for image counts</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="bg-white rounded-lg shadow p-12 text-center hidden">
+        <p class="text-red-600 text-lg font-medium">Failed to load VR image data</p>
+        <p class="text-gray-500 text-sm mt-1" id="errorMessage"></p>
+        <button onclick="loadData()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Retry</button>
+    </div>
+
+    <!-- Results Table -->
+    <div id="resultsTable" class="bg-white rounded-lg shadow hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Canonical</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">VR</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">VR Link</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody" class="divide-y divide-gray-200">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function loadData() {
+    document.getElementById('loadingState').classList.remove('hidden');
+    document.getElementById('errorState').classList.add('hidden');
+    document.getElementById('resultsTable').classList.add('hidden');
+    document.getElementById('summaryBar').classList.add('hidden');
+
+    fetch('/reports/vr-image-health/data')
+        .then(resp => {
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            return resp.json();
+        })
+        .then(data => {
+            document.getElementById('loadingState').classList.add('hidden');
+
+            // Populate summary
+            const s = data.summary;
+            document.getElementById('totalCount').textContent = s.total;
+            document.getElementById('matchCount').textContent = s.matches;
+            document.getElementById('mismatchCount').textContent = s.mismatches;
+            document.getElementById('errorCount').textContent = s.errors;
+            document.getElementById('summaryBar').classList.remove('hidden');
+
+            // Populate table
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            // Sort: mismatches first, then errors, then matches
+            const order = { mismatch: 0, error: 1, match: 2 };
+            data.results.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+
+            data.results.forEach(r => {
+                const row = document.createElement('tr');
+                if (r.status === 'mismatch') {
+                    row.className = 'bg-red-50 hover:bg-red-100';
+                } else if (r.status === 'error') {
+                    row.className = 'bg-yellow-50 hover:bg-yellow-100';
+                } else {
+                    row.className = 'hover:bg-gray-50';
+                }
+
+                const imgHtml = r.primary_image
+                    ? `<img src="${r.primary_image}" alt="" class="w-10 h-10 rounded object-cover mr-3">`
+                    : `<div class="w-10 h-10 bg-gray-200 rounded mr-3"></div>`;
+
+                let statusBadge;
+                if (r.status === 'match') {
+                    statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Match</span>';
+                } else if (r.status === 'mismatch') {
+                    statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Mismatch</span>';
+                } else {
+                    statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Error</span>';
+                }
+
+                row.innerHTML = `
+                    <td class="px-4 py-3">
+                        <div class="flex items-center">
+                            ${imgHtml}
+                            <div>
+                                <a href="/inventory/product/${r.product_id}" class="text-sm font-medium text-blue-600 hover:text-blue-800">${r.brand} ${r.model}</a>
+                                <div class="text-xs text-gray-500">${r.sku}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 text-center text-sm font-medium">${r.canonical_count}</td>
+                    <td class="px-4 py-3 text-center text-sm font-medium">${r.vr_count !== null ? r.vr_count : '—'}</td>
+                    <td class="px-4 py-3 text-center">${statusBadge}</td>
+                    <td class="px-4 py-3">
+                        <a href="${r.listing_url}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm">View on VR &rarr;</a>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('resultsTable').classList.remove('hidden');
+        })
+        .catch(err => {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('errorMessage').textContent = err.message;
+            document.getElementById('errorState').classList.remove('hidden');
+        });
+}
+
+// Load on page ready
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+{% endblock %}

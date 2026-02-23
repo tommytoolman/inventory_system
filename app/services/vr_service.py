@@ -1107,17 +1107,30 @@ class VRService:
                     if src:
                         logger.info("  script src: %s", src)
                 # Search inline JS and full page for upload-related patterns
-                # Extract inline JS blocks that mention upload/dropzone/file_unique
+                # Extract key upload patterns from inline JS
                 for st in script_tags:
                     if not st.string:
                         continue
                     js_text = st.string
-                    has_keyword = any(kw in js_text.lower() for kw in
-                                     ["dropzone", "ajaxupload", "file_unique", "new_upload", "upload_file"])
-                    if has_keyword:
-                        # Log the relevant portions (cap at 3000 chars)
-                        logger.info("=== INLINE JS WITH UPLOAD LOGIC (len=%d) ===\n%s",
-                                    len(js_text), js_text[:3000])
+                    if not any(kw in js_text.lower() for kw in
+                               ["dropzone", "ajaxupload", "file_unique", "new_upload"]):
+                        continue
+                    # Search for upload URL configs and file_unique_id usage
+                    js_patterns = [
+                        (r'[Dd]ropzone[^}]{0,500}url\s*[:=]\s*["\'][^"\']+["\']', "dropzone_url"),
+                        (r'[Aa]jax[Uu]pload[^)]{0,500}', "ajaxupload_init"),
+                        (r'url\s*[:=]\s*["\'][^"\']*upload[^"\']*["\']', "upload_url"),
+                        (r'action\s*[:=]\s*["\'][^"\']*["\']', "action_url"),
+                        (r'file_unique_id[^;]{0,300}', "file_unique_id_usage"),
+                        (r'new_upload[^;]{0,300}', "new_upload_usage"),
+                        (r'function\s+\w*[Uu]pload\w*\s*\([^)]*\)\s*\{[^}]{0,400}', "upload_func"),
+                        (r'\.post\s*\(\s*["\'][^"\']+["\']', "post_url"),
+                        (r'\.ajax\s*\(\s*\{[^}]{0,500}url', "ajax_config"),
+                    ]
+                    for pattern, label in js_patterns:
+                        matches = _re.findall(pattern, js_text)
+                        for m in matches[:3]:
+                            logger.info("JS[%s]: %s", label, m[:400])
 
             fields = client._extract_form_fields(response.text)
             logger.info("Extracted %d form fields from VR edit page for %s", len(fields), vr_external_id)

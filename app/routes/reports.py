@@ -4056,9 +4056,11 @@ async def vr_image_health_page(request: Request):
     })
 
 
-@router.get("/vr-image-health/data", response_class=JSONResponse)
+@router.get("/vr-image-health/data")
 async def vr_image_health_data(request: Request):
-    """Scan all active VR listings and compare image counts against canonical gallery."""
+    """Stream VR image check results as Server-Sent Events for live progress."""
+    from fastapi.responses import StreamingResponse
+
     async with get_session() as db:
         query = text("""
             SELECT p.id, p.sku, p.brand, p.model, p.primary_image, p.additional_images,
@@ -4071,25 +4073,13 @@ async def vr_image_health_data(request: Request):
         result = await db.execute(query)
         rows = result.fetchall()
 
-    results = []
-    semaphore = asyncio.Semaphore(3)
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    }
-
-    async def check_vr_images(row):
+    # Pre-process rows into dicts so we can iterate outside the session
+    items = []
+    for row in rows:
         mapping = row._mapping
-        product_id = mapping["id"]
-        sku = mapping["sku"]
-        brand = mapping["brand"] or ""
-        model = mapping["model"] or ""
         primary_image = mapping["primary_image"]
         additional_images = mapping["additional_images"]
-        external_id = mapping["external_id"]
-        listing_url = mapping["listing_url"]
 
-        # Calculate canonical count
         canonical_count = 0
         if primary_image:
             canonical_count += 1
@@ -4104,60 +4094,69 @@ async def vr_image_health_data(request: Request):
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-        entry = {
-            "product_id": product_id,
-            "sku": sku,
-            "brand": brand,
-            "model": model,
+        items.append({
+            "product_id": mapping["id"],
+            "sku": mapping["sku"],
+            "brand": mapping["brand"] or "",
+            "model": mapping["model"] or "",
             "primary_image": primary_image,
             "canonical_count": canonical_count,
-            "vr_count": None,
-            "status": "error",
-            "error": None,
-            "listing_url": listing_url or f"https://www.vintageandrare.com/product/{external_id}",
-            "external_id": external_id,
+            "external_id": mapping["external_id"],
+            "listing_url": mapping["listing_url"],
+        })
+
+    async def event_stream():
+        total = len(items)
+        # Send total count first so UI can show "0 / N"
+        yield f"event: total\ndata: {json.dumps({'total': total})}\n\n"
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         }
 
-        async with semaphore:
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+            for idx, item in enumerate(items):
+                entry = {
+                    "product_id": item["product_id"],
+                    "sku": item["sku"],
+                    "brand": item["brand"],
+                    "model": item["model"],
+                    "primary_image": item["primary_image"],
+                    "canonical_count": item["canonical_count"],
+                    "vr_count": None,
+                    "status": "error",
+                    "error": None,
+                    "listing_url": item["listing_url"] or f"https://www.vintageandrare.com/product/{item['external_id']}",
+                    "external_id": item["external_id"],
+                    "index": idx,
+                }
+
+                try:
                     resp = await client.get(
-                        f"https://www.vintageandrare.com/product/{external_id}",
-                        headers=headers,
+                        f"https://www.vintageandrare.com/product/{item['external_id']}",
                         follow_redirects=True,
                     )
                     resp.raise_for_status()
-                    html = resp.text
+                    vr_count = len(re.findall(r'rel=["\']prettyPhoto', resp.text))
+                    entry["vr_count"] = vr_count
+                    entry["status"] = "match" if vr_count == item["canonical_count"] else "mismatch"
+                except Exception as exc:  # noqa: BLE001
+                    entry["error"] = str(exc)
+                    logger.warning(
+                        "VR image check failed for product %s (vr_id %s): %s",
+                        item["product_id"], item["external_id"], exc,
+                    )
 
-                vr_count = len(re.findall(r'rel=["\']prettyPhoto', html))
-                entry["vr_count"] = vr_count
+                yield f"event: result\ndata: {json.dumps(entry)}\n\n"
 
-                if vr_count == canonical_count:
-                    entry["status"] = "match"
-                else:
-                    entry["status"] = "mismatch"
-            except Exception as exc:  # noqa: BLE001
-                entry["error"] = str(exc)
-                logger.warning("VR image check failed for product %s (vr_id %s): %s", product_id, external_id, exc)
+                # Small delay to be respectful of VR's server
+                await asyncio.sleep(0.5)
 
-            # Small delay to be respectful of VR's server
-            await asyncio.sleep(0.5)
+        yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
 
-        return entry
-
-    tasks = [check_vr_images(row) for row in rows]
-    results = await asyncio.gather(*tasks)
-
-    matches = sum(1 for r in results if r["status"] == "match")
-    mismatches = sum(1 for r in results if r["status"] == "mismatch")
-    errors = sum(1 for r in results if r["status"] == "error")
-
-    return JSONResponse({
-        "results": results,
-        "summary": {
-            "total": len(results),
-            "matches": matches,
-            "mismatches": mismatches,
-            "errors": errors,
-        },
-    })
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

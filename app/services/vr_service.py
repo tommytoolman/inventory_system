@@ -1095,6 +1095,22 @@ class VRService:
                     user_id = uid_input.get("value")
 
             if not user_id:
+                # Broader search: user_id without quotes, or inside URL patterns
+                page_text = response.text
+                # Try: var user_id = 12345  (no quotes)
+                uid_nq = _re.search(r"(?:var\s+)?user_id\s*=\s*(\d+)", page_text)
+                if uid_nq:
+                    user_id = uid_nq.group(1)
+                else:
+                    # Try: dropzone_upload/12345 in the page
+                    dz_match = _re.search(r"dropzone_upload/(\d+)", page_text)
+                    if dz_match:
+                        user_id = dz_match.group(1)
+
+            if not user_id:
+                # Log context around any user_id occurrence for debugging
+                for m in _re.finditer(r"user_id.{0,80}", response.text):
+                    logger.info("user_id context: %s", m.group()[:100])
                 return {"status": "error", "message": "Could not find VR user_id on edit page"}
 
             logger.info("VR user_id=%s, siteURL=%s", user_id, site_url)

@@ -11,7 +11,10 @@
                 <h1 class="text-3xl font-bold text-gray-900 mb-1">VR Image Health</h1>
                 <p class="text-gray-600">Compare Vintage &amp; Rare image counts against canonical gallery</p>
             </div>
-            <a href="/reports" class="text-blue-600 hover:text-blue-800">&larr; Back to Reports</a>
+            <div class="flex items-center gap-3">
+                <span id="scannedAt" class="text-xs text-gray-400"></span>
+                <a href="/reports" class="text-blue-600 hover:text-blue-800">&larr; Back to Reports</a>
+            </div>
         </div>
     </div>
 
@@ -34,8 +37,8 @@
                 <div class="text-2xl font-bold text-yellow-600" id="errorCount">0</div>
                 <div class="text-xs text-gray-500 uppercase">Errors</div>
             </div>
-            <!-- Filter controls -->
-            <div class="ml-auto flex items-center gap-2">
+            <!-- Filter + actions -->
+            <div class="ml-auto flex items-center gap-2 flex-wrap">
                 <label class="text-sm text-gray-600">Show:</label>
                 <select id="statusFilter" onchange="applyFilter()" class="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                     <option value="all">All</option>
@@ -44,15 +47,34 @@
                     <option value="error">Errors only</option>
                     <option value="match">Matches only</option>
                 </select>
-                <button id="retryErrorsBtn" onclick="retryErrors()" class="hidden ml-2 px-3 py-1.5 text-sm bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
+                <button id="retryErrorsBtn" onclick="retryErrors()" class="hidden px-3 py-1.5 text-sm bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
                     Retry Errors
+                </button>
+                <button id="regenerateBtn" onclick="confirmRegenerate()" class="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                    Regenerate Report
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Loading State -->
-    <div id="loadingState" class="bg-white rounded-lg shadow p-8 text-center">
+    <!-- Regenerate warning banner (hidden by default) -->
+    <div id="regenerateWarning" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 hidden">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <p class="text-sm text-amber-800">This will re-scan every VR listing from scratch. It typically takes <strong>2-5 minutes</strong> depending on how many listings you have. Continue?</p>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0 ml-4">
+                <button onclick="startRegenerate()" class="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Yes, regenerate</button>
+                <button onclick="document.getElementById('regenerateWarning').classList.add('hidden')" class="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State (for regenerate) -->
+    <div id="loadingState" class="bg-white rounded-lg shadow p-8 text-center hidden">
         <svg class="animate-spin h-10 w-10 text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -66,11 +88,21 @@
         </div>
     </div>
 
+    <!-- No data state -->
+    <div id="noDataState" class="bg-white rounded-lg shadow p-12 text-center hidden">
+        <svg class="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <p class="text-gray-600 text-lg font-medium">No scan data yet</p>
+        <p class="text-gray-400 text-sm mt-1 mb-4">Run a full scan to check VR image counts against your canonical gallery.</p>
+        <button onclick="startRegenerate()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Scan VR Listings</button>
+    </div>
+
     <!-- Error State -->
     <div id="errorState" class="bg-white rounded-lg shadow p-12 text-center hidden">
         <p class="text-red-600 text-lg font-medium">Failed to load VR image data</p>
         <p class="text-gray-500 text-sm mt-1" id="errorMessage"></p>
-        <button onclick="loadData()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Retry</button>
+        <button onclick="startRegenerate()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Retry</button>
     </div>
 
     <!-- Results Table -->
@@ -94,6 +126,12 @@
 </div>
 
 <script>
+// Server-injected cache
+const CACHED_RESULTS = {{ cached_results | safe }};
+const CACHED_SUMMARY = {{ cached_summary | safe }};
+const SCANNED_AT = {{ ("'" + scanned_at + "'") | safe if scanned_at else "null" }};
+const HAS_CACHE = {{ "true" if has_cache else "false" }};
+
 let evtSource = null;
 let allResults = [];
 let total = 0;
@@ -103,22 +141,66 @@ let mismatches = 0;
 let errors = 0;
 let currentFilter = 'all';
 let scanDone = false;
+let isRegenerating = false;
 
-function loadData() {
-    // Reset state
-    document.getElementById('loadingState').classList.remove('hidden');
+function init() {
+    if (HAS_CACHE) {
+        loadFromCache();
+    } else {
+        document.getElementById('noDataState').classList.remove('hidden');
+    }
+}
+
+function loadFromCache() {
+    allResults = CACHED_RESULTS;
+    total = CACHED_SUMMARY.total || allResults.length;
+    checked = total;
+    matches = CACHED_SUMMARY.matches || 0;
+    mismatches = CACHED_SUMMARY.mismatches || 0;
+    errors = CACHED_SUMMARY.errors || 0;
+    scanDone = true;
+
+    document.getElementById('noDataState').classList.add('hidden');
+    document.getElementById('loadingState').classList.add('hidden');
+    document.getElementById('summaryBar').classList.remove('hidden');
+    document.getElementById('resultsTable').classList.remove('hidden');
+
+    updateCounters();
+    if (errors > 0) document.getElementById('retryErrorsBtn').classList.remove('hidden');
+    updateScannedAt(SCANNED_AT);
+
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+
+    // Sort: mismatches first, then errors, then matches
+    const order = { mismatch: 0, error: 1, match: 2 };
+    allResults.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    allResults.forEach(r => appendRow(r));
+}
+
+function confirmRegenerate() {
+    document.getElementById('regenerateWarning').classList.remove('hidden');
+}
+
+function startRegenerate() {
+    document.getElementById('regenerateWarning').classList.add('hidden');
+    document.getElementById('noDataState').classList.add('hidden');
     document.getElementById('errorState').classList.add('hidden');
-    document.getElementById('resultsTable').classList.add('hidden');
-    document.getElementById('summaryBar').classList.add('hidden');
+    document.getElementById('loadingState').classList.remove('hidden');
+    document.getElementById('resultsTable').classList.remove('hidden');
+    document.getElementById('summaryBar').classList.remove('hidden');
     document.getElementById('tableBody').innerHTML = '';
     document.getElementById('progressBar').style.width = '0%';
     document.getElementById('progressText').textContent = 'Connecting...';
     document.getElementById('progressDetail').textContent = 'Waiting for server...';
     document.getElementById('retryErrorsBtn').classList.add('hidden');
+    document.getElementById('regenerateBtn').disabled = true;
+    document.getElementById('regenerateBtn').classList.add('opacity-50');
 
     total = 0; checked = 0; matches = 0; mismatches = 0; errors = 0;
     allResults = [];
     scanDone = false;
+    isRegenerating = true;
 
     if (evtSource) evtSource.close();
     evtSource = new EventSource('/reports/vr-image-health/data');
@@ -128,8 +210,6 @@ function loadData() {
         total = data.total;
         document.getElementById('progressText').textContent = `Scanning ${total} VR listings...`;
         document.getElementById('progressDetail').textContent = `0 / ${total} checked`;
-        document.getElementById('resultsTable').classList.remove('hidden');
-        document.getElementById('summaryBar').classList.remove('hidden');
         document.getElementById('checkedCount').textContent = `0 / ${total}`;
     });
 
@@ -149,13 +229,20 @@ function loadData() {
         evtSource.close();
         evtSource = null;
         scanDone = true;
+        isRegenerating = false;
         document.getElementById('loadingState').classList.add('hidden');
         document.getElementById('checkedCount').textContent = checked;
+        document.getElementById('regenerateBtn').disabled = false;
+        document.getElementById('regenerateBtn').classList.remove('opacity-50');
         if (errors > 0) document.getElementById('retryErrorsBtn').classList.remove('hidden');
+        updateScannedAt(new Date().toISOString());
         sortTable();
     });
 
     evtSource.onerror = function(e) {
+        isRegenerating = false;
+        document.getElementById('regenerateBtn').disabled = false;
+        document.getElementById('regenerateBtn').classList.remove('opacity-50');
         if (checked < total && total > 0) {
             document.getElementById('loadingState').classList.add('hidden');
             document.getElementById('errorMessage').textContent = 'Connection lost. Results so far are shown below.';
@@ -171,15 +258,33 @@ function loadData() {
     };
 }
 
+function updateScannedAt(isoStr) {
+    if (!isoStr) return;
+    const el = document.getElementById('scannedAt');
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.round(diffMs / 60000);
+    let ago;
+    if (diffMins < 1) ago = 'just now';
+    else if (diffMins < 60) ago = `${diffMins}m ago`;
+    else if (diffMins < 1440) ago = `${Math.round(diffMins / 60)}h ago`;
+    else ago = `${Math.round(diffMins / 1440)}d ago`;
+    el.textContent = `Last scan: ${ago}`;
+    el.title = d.toLocaleString();
+}
+
 function updateCounters() {
     const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
     document.getElementById('checkedCount').textContent = scanDone ? checked : `${checked} / ${total}`;
     document.getElementById('matchCount').textContent = matches;
     document.getElementById('mismatchCount').textContent = mismatches;
     document.getElementById('errorCount').textContent = errors;
-    document.getElementById('progressBar').style.width = pct + '%';
-    document.getElementById('progressText').textContent = `Scanning VR listings... ${pct}%`;
-    document.getElementById('progressDetail').textContent = `${checked} / ${total} checked`;
+    if (!scanDone) {
+        document.getElementById('progressBar').style.width = pct + '%';
+        document.getElementById('progressText').textContent = `Scanning VR listings... ${pct}%`;
+        document.getElementById('progressDetail').textContent = `${checked} / ${total} checked`;
+    }
 }
 
 function appendRow(r) {
@@ -197,14 +302,20 @@ function appendRow(r) {
         row.className = 'hover:bg-gray-50';
     }
 
-    // Apply current filter visibility
-    if (!shouldShow(r.status)) {
-        row.classList.add('hidden');
-    }
+    if (!shouldShow(r.status)) row.classList.add('hidden');
 
     const imgHtml = r.primary_image
         ? `<img src="${r.primary_image}" alt="" class="w-10 h-10 rounded object-cover mr-3">`
         : `<div class="w-10 h-10 bg-gray-200 rounded mr-3"></div>`;
+
+    // Actions column: Recheck always available, Fix Images for mismatches, View on VR always
+    let actionButtons = `<button onclick="recheckSingle(${r.product_id}, this)" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors" title="Recheck this product">Recheck</button>`;
+
+    if (r.status === 'mismatch') {
+        actionButtons += ` <button onclick="fixImages(${r.product_id}, this)" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors">Fix Images</button>`;
+    }
+
+    actionButtons += ` <a href="${r.listing_url}" target="_blank" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-purple-100 text-purple-800 hover:bg-purple-200 transition-colors">View on VR</a>`;
 
     row.innerHTML = `
         <td class="px-4 py-3">
@@ -220,15 +331,7 @@ function appendRow(r) {
         <td class="px-4 py-3 text-center text-sm font-medium">${r.vr_count !== null ? r.vr_count : '\u2014'}</td>
         <td class="px-4 py-3 text-center">${statusBadge(r.status)}</td>
         <td class="px-4 py-3 text-center">
-            <div class="flex items-center justify-center gap-2">
-                ${r.status === 'error'
-                    ? `<button onclick="retrySingle(${r.product_id})" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200 transition-colors">Retry</button>`
-                    : r.status === 'mismatch'
-                        ? `<button onclick="fixImages(${r.product_id}, this)" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors">Fix Images</button>`
-                        : ''
-                }
-                <a href="${r.listing_url}" target="_blank" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">View on VR</a>
-            </div>
+            <div class="flex items-center justify-center gap-2">${actionButtons}</div>
         </td>
     `;
     tbody.appendChild(row);
@@ -254,13 +357,8 @@ function setFilter(f) {
 
 function applyFilter() {
     currentFilter = document.getElementById('statusFilter').value;
-    const rows = document.querySelectorAll('#tableBody tr');
-    rows.forEach(row => {
-        if (shouldShow(row.dataset.status)) {
-            row.classList.remove('hidden');
-        } else {
-            row.classList.add('hidden');
-        }
+    document.querySelectorAll('#tableBody tr').forEach(row => {
+        row.classList.toggle('hidden', !shouldShow(row.dataset.status));
     });
 }
 
@@ -272,53 +370,45 @@ function sortTable() {
     rows.forEach(row => tbody.appendChild(row));
 }
 
-async function retrySingle(productId) {
-    const row = document.getElementById(`row-${productId}`);
-    if (!row) return;
-
-    // Find the original result data
+function updateRowFromResult(productId, entry) {
     const idx = allResults.findIndex(r => r.product_id === productId);
     if (idx === -1) return;
-    const item = allResults[idx];
 
-    // Show loading in the status cell
-    const statusCell = row.querySelector('td:nth-child(4)');
-    statusCell.innerHTML = '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><svg class="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Checking...</span>';
+    const old = allResults[idx];
+    // Adjust counters
+    if (old.status === 'match') matches--;
+    else if (old.status === 'mismatch') mismatches--;
+    else errors--;
+
+    if (entry.status === 'match') matches++;
+    else if (entry.status === 'mismatch') mismatches++;
+    else errors++;
+
+    allResults[idx] = entry;
+    updateCounters();
+
+    if (errors > 0) document.getElementById('retryErrorsBtn').classList.remove('hidden');
+    else document.getElementById('retryErrorsBtn').classList.add('hidden');
+
+    const row = document.getElementById(`row-${productId}`);
+    if (row) row.remove();
+    appendRow(entry);
+    sortTable();
+}
+
+async function recheckSingle(productId, btnEl) {
+    const origText = btnEl.textContent;
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<svg class="animate-spin h-3 w-3 mr-1 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Checking...';
 
     try {
-        const resp = await fetch(`/inventory/product/${productId}/refresh_images`, { method: 'POST' });
+        const resp = await fetch(`/reports/vr-image-health/recheck/${productId}`, { method: 'POST' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
-
-        // Find the VR result in platform_results
-        const vrResult = (data.platform_results || []).find(p => p.platform === 'vr');
-        if (vrResult) {
-            // Update counters
-            if (item.status === 'error') errors--;
-            else if (item.status === 'mismatch') mismatches--;
-            else if (item.status === 'match') matches--;
-
-            const newStatus = vrResult.error ? 'error' : (vrResult.needs_fix ? 'mismatch' : 'match');
-            if (newStatus === 'match') matches++;
-            else if (newStatus === 'mismatch') mismatches++;
-            else errors++;
-
-            item.status = newStatus;
-            item.vr_count = vrResult.platform_count;
-            item.canonical_count = vrResult.canonical_count;
-            item.error = vrResult.error;
-            allResults[idx] = item;
-
-            updateCounters();
-            if (errors > 0) document.getElementById('retryErrorsBtn').classList.remove('hidden');
-            else document.getElementById('retryErrorsBtn').classList.add('hidden');
-
-            // Rebuild row
-            row.remove();
-            appendRow(item);
-            sortTable();
-        }
+        updateRowFromResult(productId, data.result);
     } catch (err) {
-        statusCell.innerHTML = statusBadge('error');
+        btnEl.disabled = false;
+        btnEl.textContent = origText;
     }
 }
 
@@ -329,7 +419,13 @@ async function retryErrors() {
     btn.textContent = `Retrying ${errorItems.length}...`;
 
     for (const item of errorItems) {
-        await retrySingle(item.product_id);
+        try {
+            const resp = await fetch(`/reports/vr-image-health/recheck/${item.product_id}`, { method: 'POST' });
+            if (resp.ok) {
+                const data = await resp.json();
+                updateRowFromResult(item.product_id, data.result);
+            }
+        } catch (err) { /* skip */ }
     }
 
     btn.disabled = false;
@@ -350,29 +446,10 @@ async function fixImages(productId, btnEl) {
 
         if (vrResult && idx !== -1) {
             const item = allResults[idx];
-            // Update counters
-            if (item.status === 'mismatch') mismatches--;
-            else if (item.status === 'error') errors--;
-            else if (item.status === 'match') matches--;
-
             const newStatus = vrResult.error ? 'error' : (vrResult.needs_fix ? 'mismatch' : 'match');
-            if (newStatus === 'match') matches++;
-            else if (newStatus === 'mismatch') mismatches++;
-            else errors++;
-
-            item.status = newStatus;
-            item.vr_count = vrResult.platform_count;
-            item.canonical_count = vrResult.canonical_count;
-            allResults[idx] = item;
-
-            updateCounters();
-
-            const row = document.getElementById(`row-${productId}`);
-            if (row) row.remove();
-            appendRow(item);
-            sortTable();
+            const entry = { ...item, status: newStatus, vr_count: vrResult.platform_count, canonical_count: vrResult.canonical_count };
+            updateRowFromResult(productId, entry);
         } else {
-            // VR fix returns "must be queued separately" — show message
             btnEl.disabled = false;
             btnEl.textContent = 'Queued';
             btnEl.classList.remove('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200');
@@ -384,6 +461,6 @@ async function fixImages(productId, btnEl) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', loadData);
+document.addEventListener('DOMContentLoaded', init);
 </script>
 {% endblock %}

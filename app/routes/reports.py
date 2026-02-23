@@ -4048,32 +4048,17 @@ async def listing_engagement_report(
         })
 
 
-@router.get("/vr-image-health", response_class=HTMLResponse)
-async def vr_image_health_page(request: Request):
-    """Render the VR Image Health report page (data loaded via JS)."""
-    return templates.TemplateResponse("reports/vr_image_health.html", {
-        "request": request,
-    })
+MAX_VR_IMAGES = 20
+
+# In-memory cache for VR image health results (survives between page loads)
+_vr_image_cache: Dict[str, Any] = {
+    "results": [],
+    "scanned_at": None,
+}
 
 
-@router.get("/vr-image-health/data")
-async def vr_image_health_data(request: Request):
-    """Stream VR image check results as Server-Sent Events for live progress."""
-    from fastapi.responses import StreamingResponse
-
-    async with get_session() as db:
-        query = text("""
-            SELECT p.id, p.sku, p.brand, p.model, p.primary_image, p.additional_images,
-                   pc.external_id, pc.listing_url, pc.status
-            FROM products p
-            JOIN platform_common pc ON p.id = pc.product_id
-            WHERE pc.platform_name = 'vr' AND pc.status IN ('active', 'live')
-            ORDER BY p.id
-        """)
-        result = await db.execute(query)
-        rows = result.fetchall()
-
-    # Pre-process rows into dicts so we can iterate outside the session
+def _build_vr_items(rows) -> list:
+    """Convert DB rows into dicts with canonical counts capped at VR max."""
     items = []
     for row in rows:
         mapping = row._mapping
@@ -4094,8 +4079,6 @@ async def vr_image_health_data(request: Request):
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-        # VR accepts max 20 images per listing
-        MAX_VR_IMAGES = 20
         items.append({
             "product_id": mapping["id"],
             "sku": mapping["sku"],
@@ -4106,10 +4089,89 @@ async def vr_image_health_data(request: Request):
             "external_id": mapping["external_id"],
             "listing_url": mapping["listing_url"],
         })
+    return items
+
+
+async def _check_vr_page(client, item, idx) -> dict:
+    """Check a single VR product page for image count."""
+    entry = {
+        "product_id": item["product_id"],
+        "sku": item["sku"],
+        "brand": item["brand"],
+        "model": item["model"],
+        "primary_image": item["primary_image"],
+        "canonical_count": item["canonical_count"],
+        "vr_count": None,
+        "status": "error",
+        "error": None,
+        "listing_url": item["listing_url"] or f"https://www.vintageandrare.com/product/{item['external_id']}",
+        "external_id": item["external_id"],
+        "checked_at": datetime.utcnow().isoformat() + "Z",
+        "index": idx,
+    }
+    try:
+        resp = await client.get(
+            f"https://www.vintageandrare.com/product/{item['external_id']}",
+            follow_redirects=True,
+        )
+        resp.raise_for_status()
+        vr_count = len(re.findall(r'rel=["\']prettyPhoto', resp.text))
+        entry["vr_count"] = vr_count
+        entry["status"] = "match" if vr_count == item["canonical_count"] else "mismatch"
+    except Exception as exc:  # noqa: BLE001
+        entry["error"] = str(exc)
+        logger.warning(
+            "VR image check failed for product %s (vr_id %s): %s",
+            item["product_id"], item["external_id"], exc,
+        )
+    return entry
+
+
+def _summarise_cache():
+    """Build summary dict from cached results."""
+    results = _vr_image_cache["results"]
+    return {
+        "total": len(results),
+        "matches": sum(1 for r in results if r["status"] == "match"),
+        "mismatches": sum(1 for r in results if r["status"] == "mismatch"),
+        "errors": sum(1 for r in results if r["status"] == "error"),
+    }
+
+
+@router.get("/vr-image-health", response_class=HTMLResponse)
+async def vr_image_health_page(request: Request):
+    """Render VR Image Health report. Serves cached data instantly if available."""
+    has_cache = bool(_vr_image_cache["results"])
+    return templates.TemplateResponse("reports/vr_image_health.html", {
+        "request": request,
+        "has_cache": has_cache,
+        "cached_results": json.dumps(_vr_image_cache["results"]) if has_cache else "[]",
+        "cached_summary": json.dumps(_summarise_cache()) if has_cache else "{}",
+        "scanned_at": _vr_image_cache["scanned_at"].isoformat() + "Z" if _vr_image_cache["scanned_at"] else None,
+    })
+
+
+@router.get("/vr-image-health/data")
+async def vr_image_health_data(request: Request):
+    """Full regenerate: stream VR image check results as SSE, then cache."""
+    from fastapi.responses import StreamingResponse
+
+    async with get_session() as db:
+        query = text("""
+            SELECT p.id, p.sku, p.brand, p.model, p.primary_image, p.additional_images,
+                   pc.external_id, pc.listing_url, pc.status
+            FROM products p
+            JOIN platform_common pc ON p.id = pc.product_id
+            WHERE pc.platform_name = 'vr' AND pc.status IN ('active', 'live')
+            ORDER BY p.id
+        """)
+        result = await db.execute(query)
+        rows = result.fetchall()
+
+    items = _build_vr_items(rows)
 
     async def event_stream():
         total = len(items)
-        # Send total count first so UI can show "0 / N"
         yield f"event: total\ndata: {json.dumps({'total': total})}\n\n"
 
         headers = {
@@ -4118,54 +4180,28 @@ async def vr_image_health_data(request: Request):
         }
 
         BATCH_SIZE = 5
-        DELAY_BETWEEN_BATCHES = 0.3  # seconds between batches
-
-        async def check_one(client, item, idx):
-            entry = {
-                "product_id": item["product_id"],
-                "sku": item["sku"],
-                "brand": item["brand"],
-                "model": item["model"],
-                "primary_image": item["primary_image"],
-                "canonical_count": item["canonical_count"],
-                "vr_count": None,
-                "status": "error",
-                "error": None,
-                "listing_url": item["listing_url"] or f"https://www.vintageandrare.com/product/{item['external_id']}",
-                "external_id": item["external_id"],
-                "index": idx,
-            }
-            try:
-                resp = await client.get(
-                    f"https://www.vintageandrare.com/product/{item['external_id']}",
-                    follow_redirects=True,
-                )
-                resp.raise_for_status()
-                vr_count = len(re.findall(r'rel=["\']prettyPhoto', resp.text))
-                entry["vr_count"] = vr_count
-                entry["status"] = "match" if vr_count == item["canonical_count"] else "mismatch"
-            except Exception as exc:  # noqa: BLE001
-                entry["error"] = str(exc)
-                logger.warning(
-                    "VR image check failed for product %s (vr_id %s): %s",
-                    item["product_id"], item["external_id"], exc,
-                )
-            return entry
+        DELAY_BETWEEN_BATCHES = 0.3
+        all_entries = []
 
         async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
             for batch_start in range(0, total, BATCH_SIZE):
                 batch = items[batch_start:batch_start + BATCH_SIZE]
                 tasks = [
-                    check_one(client, item, batch_start + i)
+                    _check_vr_page(client, item, batch_start + i)
                     for i, item in enumerate(batch)
                 ]
                 results = await asyncio.gather(*tasks)
 
                 for entry in results:
+                    all_entries.append(entry)
                     yield f"event: result\ndata: {json.dumps(entry)}\n\n"
 
                 if batch_start + BATCH_SIZE < total:
                     await asyncio.sleep(DELAY_BETWEEN_BATCHES)
+
+        # Save to cache
+        _vr_image_cache["results"] = all_entries
+        _vr_image_cache["scanned_at"] = datetime.utcnow()
 
         yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
 
@@ -4174,3 +4210,43 @@ async def vr_image_health_data(request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/vr-image-health/recheck/{product_id}", response_class=JSONResponse)
+async def vr_image_health_recheck(product_id: int, request: Request):
+    """Recheck a single product's VR images and update the cache."""
+    async with get_session() as db:
+        query = text("""
+            SELECT p.id, p.sku, p.brand, p.model, p.primary_image, p.additional_images,
+                   pc.external_id, pc.listing_url, pc.status
+            FROM products p
+            JOIN platform_common pc ON p.id = pc.product_id
+            WHERE pc.platform_name = 'vr' AND pc.status IN ('active', 'live')
+              AND p.id = :pid
+        """)
+        result = await db.execute(query, {"pid": product_id})
+        row = result.first()
+
+    if not row:
+        return JSONResponse({"error": "Product not found or has no active VR listing"}, status_code=404)
+
+    items = _build_vr_items([row])
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+        entry = await _check_vr_page(client, items[0], 0)
+
+    # Update cache in place
+    found = False
+    for i, cached in enumerate(_vr_image_cache["results"]):
+        if cached["product_id"] == product_id:
+            _vr_image_cache["results"][i] = entry
+            found = True
+            break
+    if not found:
+        _vr_image_cache["results"].append(entry)
+
+    return JSONResponse({"result": entry, "summary": _summarise_cache()})

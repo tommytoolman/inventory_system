@@ -1073,6 +1073,30 @@ class VRService:
             if response.status_code != 200:
                 return {"status": "error", "message": f"Failed to load edit page (HTTP {response.status_code})"}
 
+            # --- Diagnostic: inspect form structure for image handling ---
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(response.text, "html.parser")
+            form = soup.find("form", id="frm_step1")
+            if form:
+                form_action = form.get("action", "<no action attr>")
+                logger.info("VR edit form action: %s", form_action)
+                # Log ALL file inputs
+                file_inputs = form.find_all("input", {"type": "file"})
+                logger.info("File inputs on edit form (%d):", len(file_inputs))
+                for fi in file_inputs:
+                    logger.info("  file input: name=%s id=%s accept=%s",
+                                fi.get("name"), fi.get("id"), fi.get("accept"))
+                # Log image-related hidden fields
+                img_hiddens = [inp for inp in form.find_all("input", {"type": "hidden"})
+                               if any(kw in (inp.get("name") or "").lower()
+                                      for kw in ("file", "image", "photo", "upload", "video"))]
+                logger.info("Image-related hidden fields (%d):", len(img_hiddens))
+                for ih in img_hiddens:
+                    logger.info("  hidden: name=%s value=%s",
+                                ih.get("name"), (ih.get("value") or "")[:80])
+                # Log enctype
+                logger.info("Form enctype: %s", form.get("enctype", "<none>"))
+
             fields = client._extract_form_fields(response.text)
             logger.info("Extracted %d form fields from VR edit page for %s", len(fields), vr_external_id)
 
@@ -1153,7 +1177,10 @@ class VRService:
                     for fh in open_handles:
                         fh.close()
 
-                logger.info("VR image-fix POST response: %s", submit_resp.status_code)
+                logger.info("VR image-fix POST response: status=%s location=%s body=%s",
+                            submit_resp.status_code,
+                            submit_resp.headers.get("Location", "<none>"),
+                            (submit_resp.text or "")[:800])
 
                 # Check for success patterns
                 if submit_resp.status_code in (200, 302, 303):

@@ -1054,10 +1054,20 @@ class VRService:
             if not await client.authenticate():
                 return {"status": "error", "message": "VR authentication failed"}
 
+            # Transfer cookies from cf_session to regular session so we can
+            # use requests.Session for multipart file upload (curl_cffi
+            # doesn't support the files= parameter).
+            if client.cf_session:
+                for name, value in client.cf_session.cookies.items():
+                    client.session.cookies.set(name, value, domain=".vintageandrare.com")
+                logger.info("Transferred %d cookies from cf_session to session",
+                            len(client.cf_session.cookies))
+
             # --- Load edit form and extract existing fields ---
             edit_url = f"https://www.vintageandrare.com/instruments/add_edit_item/{vr_external_id}"
             logger.info("Loading VR edit form: %s", edit_url)
 
+            # Use cf_session for GET (Cloudflare bypass)
             http_session = client.cf_session or client.session
             response = http_session.get(edit_url, headers=client.headers)
             if response.status_code != 200:
@@ -1091,30 +1101,19 @@ class VRService:
 
                 logger.info("Downloaded %d/%d images for VR upload", len(image_files), len(all_images))
 
-                # --- Build multipart form data ---
-                form_data = {}
+                # --- Build form fields as list of tuples (preserves duplicates) ---
+                # Filter out file-type inputs and existing image hidden fields
+                # so we only submit our new images
+                skip_prefixes = ("upload_file_box_", "file_unique_id", "video_file_name")
+                form_fields: List[Tuple[str, str]] = []
                 for name, value in fields:
-                    if name in form_data:
-                        if isinstance(form_data[name], list):
-                            form_data[name].append(value)
-                        else:
-                            form_data[name] = [form_data[name], value]
-                    else:
-                        form_data[name] = value
-
-                # Build files dict for multipart upload
-                files_dict = {}
-                for idx, img_path in enumerate(image_files):
-                    field_name = f"upload_file_box_{idx + 1}"
-                    files_dict[field_name] = (
-                        os.path.basename(img_path),
-                        open(img_path, "rb"),
-                        "image/jpeg",
-                    )
+                    if any(name.startswith(p) for p in skip_prefixes):
+                        continue
+                    form_fields.append((name, value))
 
                 logger.info(
-                    "Submitting VR edit with %d images for item %s (fields: %d)",
-                    len(files_dict), vr_external_id, len(form_data),
+                    "Submitting VR edit with %d images for item %s (form fields: %d, skipped image fields)",
+                    len(image_files), vr_external_id, len(form_fields),
                 )
 
                 # --- POST the edit form with images ---
@@ -1122,18 +1121,37 @@ class VRService:
                 submit_headers["Referer"] = edit_url
                 submit_headers.pop("Content-Type", None)  # Let requests set multipart boundary
 
+                # Use regular requests session with transferred cookies
+                upload_session = client.session
+
+                files_list: List[Tuple[str, Any]] = []
+                # Add form fields as "files" tuples so requests encodes everything
+                # as multipart/form-data (mixing data= and files= can cause issues
+                # with duplicate field names)
+                for name, value in form_fields:
+                    files_list.append((name, (None, value)))
+
+                # Add image files
+                open_handles = []
                 try:
-                    submit_resp = http_session.post(
+                    for idx, img_path in enumerate(image_files):
+                        field_name = f"upload_file_box_{idx + 1}"
+                        fh = open(img_path, "rb")
+                        open_handles.append(fh)
+                        files_list.append((
+                            field_name,
+                            (os.path.basename(img_path), fh, "image/jpeg"),
+                        ))
+
+                    submit_resp = upload_session.post(
                         edit_url,
-                        data=form_data,
-                        files=files_dict if files_dict else None,
+                        files=files_list,
                         headers=submit_headers,
                         allow_redirects=False,
                     )
                 finally:
-                    for f in files_dict.values():
-                        if hasattr(f[1], "close"):
-                            f[1].close()
+                    for fh in open_handles:
+                        fh.close()
 
                 logger.info("VR image-fix POST response: %s", submit_resp.status_code)
 

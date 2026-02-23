@@ -4,7 +4,7 @@ import math
 import re
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List, Any, Tuple, Set, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -1299,6 +1299,21 @@ class ShopifyService:
                                 (api_status == db_status)
 
                 if not statuses_match:
+                    # Grace period: skip status changes for listings created in the last 5 minutes.
+                    # Prevents false "sold" signals when Shopify inventory hasn't propagated yet
+                    # after listing creation (totalInventory briefly reports 0).
+                    platform_created_at = db_data.get('platform_created_at')
+                    if platform_created_at and api_status == 'sold':
+                        created_utc = platform_created_at.replace(tzinfo=timezone.utc) if platform_created_at.tzinfo is None else platform_created_at
+                        age = datetime.now(timezone.utc) - created_utc
+                        if age < timedelta(minutes=5):
+                            logger.info(
+                                "Skipping status change for recently created Shopify listing %s "
+                                "(product %s, age %s) — inventory may not have propagated yet",
+                                api_data['external_id'], db_data['product_id'], age,
+                            )
+                            continue
+
                     is_archived = api_data.get('status') == 'archived'
                     all_events.append({
                         'sync_run_id': sync_run_id,
@@ -2215,14 +2230,15 @@ class ShopifyService:
     async def _fetch_existing_shopify_data(self) -> List[Dict]:
         """Fetches all Shopify-related data from the local database, focusing on the source of truth."""
         query = text("""
-            SELECT 
-                p.id as product_id, 
-                p.sku, 
+            SELECT
+                p.id as product_id,
+                p.sku,
                 p.base_price, -- For price comparison
-                pc.id as platform_common_id, 
-                pc.external_id, 
+                pc.id as platform_common_id,
+                pc.external_id,
                 pc.status as platform_common_status, -- This is our source of truth
                 pc.listing_url,
+                pc.created_at as platform_created_at, -- For grace period on new listings
                 sl.shopify_legacy_id -- Keep for matching
             FROM platform_common pc
             LEFT JOIN products p ON p.id = pc.product_id

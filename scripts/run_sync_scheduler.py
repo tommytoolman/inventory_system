@@ -124,10 +124,15 @@ async def main():
                 )
 
                 if new_state_lower not in ("ended", "sold"):
+                    old_state = (event.change_data or {}).get("old", "?")
                     logger.info(
-                        "🔍 Skipping event %s: new_state '%s' not in (ended, sold)",
-                        event.id, new_state_lower,
+                        "🔍 Event %s: non-sale status change (%s → %s) — acknowledging",
+                        event.id, old_state, new_state_lower,
                     )
+                    event.status = "acknowledged"
+                    event.notes = f"Non-sale status change ({old_state} → {new_state}). Auto-acknowledged."
+                    event.processed_at = datetime.now(timezone.utc)
+                    await db.commit()
                     continue
 
                 try:

@@ -1116,21 +1116,28 @@ class VRService:
                                ["dropzone", "ajaxupload", "file_unique", "new_upload"]):
                         continue
                     # Search for upload URL configs and file_unique_id usage
-                    js_patterns = [
-                        (r'[Dd]ropzone[^}]{0,500}url\s*[:=]\s*["\'][^"\']+["\']', "dropzone_url"),
-                        (r'[Aa]jax[Uu]pload[^)]{0,500}', "ajaxupload_init"),
-                        (r'url\s*[:=]\s*["\'][^"\']*upload[^"\']*["\']', "upload_url"),
-                        (r'action\s*[:=]\s*["\'][^"\']*["\']', "action_url"),
-                        (r'file_unique_id[^;]{0,300}', "file_unique_id_usage"),
-                        (r'new_upload[^;]{0,300}', "new_upload_usage"),
-                        (r'function\s+\w*[Uu]pload\w*\s*\([^)]*\)\s*\{[^}]{0,400}', "upload_func"),
-                        (r'\.post\s*\(\s*["\'][^"\']+["\']', "post_url"),
-                        (r'\.ajax\s*\(\s*\{[^}]{0,500}url', "ajax_config"),
+                    # Get 600 chars of context around key patterns
+                    context_patterns = [
+                        "file_unique_id",
+                        "new_upload",
+                        "edit=add",
+                        "edit=delete",
+                        "AjaxUpload",
+                        "dropzone",
                     ]
-                    for pattern, label in js_patterns:
-                        matches = _re.findall(pattern, js_text)
-                        for m in matches[:3]:
-                            logger.info("JS[%s]: %s", label, m[:400])
+                    for cp in context_patterns:
+                        start = 0
+                        count = 0
+                        while count < 3:
+                            idx = js_text.lower().find(cp.lower(), start)
+                            if idx < 0:
+                                break
+                            context_start = max(0, idx - 100)
+                            context_end = min(len(js_text), idx + 500)
+                            snippet = js_text[context_start:context_end].replace('\n', ' ').replace('\r', '')
+                            logger.info("JS_CTX[%s @%d]: ...%s...", cp, idx, snippet[:580])
+                            start = idx + len(cp)
+                            count += 1
 
             fields = client._extract_form_fields(response.text)
             logger.info("Extracted %d form fields from VR edit page for %s", len(fields), vr_external_id)

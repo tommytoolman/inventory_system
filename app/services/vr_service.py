@@ -1116,28 +1116,40 @@ class VRService:
                                ["dropzone", "ajaxupload", "file_unique", "new_upload"]):
                         continue
                     # Search for upload URL configs and file_unique_id usage
-                    # Get 600 chars of context around key patterns
+                    # Get context around Dropzone init and key patterns
                     context_patterns = [
-                        "file_unique_id",
-                        "new_upload",
-                        "edit=add",
-                        "edit=delete",
-                        "AjaxUpload",
-                        "dropzone",
+                        ("new Dropzone", 3),
+                        ("Dropzone.options", 2),
+                        (".dropzone(", 2),
+                        ("url:", 5),
+                        ("paramName", 2),
+                        ("removedfile", 2),
+                        ("success", 3),
+                        ("thumb_name", 2),
                     ]
-                    for cp in context_patterns:
+                    for cp, max_matches in context_patterns:
                         start = 0
                         count = 0
-                        while count < 3:
-                            idx = js_text.lower().find(cp.lower(), start)
+                        while count < max_matches:
+                            idx = js_text.find(cp, start)
+                            if idx < 0:
+                                # Try case-insensitive
+                                idx = js_text.lower().find(cp.lower(), start)
                             if idx < 0:
                                 break
-                            context_start = max(0, idx - 100)
-                            context_end = min(len(js_text), idx + 500)
+                            context_start = max(0, idx - 60)
+                            context_end = min(len(js_text), idx + 540)
                             snippet = js_text[context_start:context_end].replace('\n', ' ').replace('\r', '')
-                            logger.info("JS_CTX[%s @%d]: ...%s...", cp, idx, snippet[:580])
+                            logger.info("JS[%s @%d]: ...%s...", cp, idx, snippet[:580])
                             start = idx + len(cp)
                             count += 1
+
+                # Also log thumb_name[] inputs from HTML (existing image metadata)
+                thumb_inputs = soup.find_all("input", {"name": "thumb_name[]"})
+                logger.info("thumb_name[] inputs: %d", len(thumb_inputs))
+                for ti in thumb_inputs[:6]:
+                    attrs = {k: v for k, v in ti.attrs.items() if k.startswith("data-") or k == "value"}
+                    logger.info("  thumb: %s", attrs)
 
             fields = client._extract_form_fields(response.text)
             logger.info("Extracted %d form fields from VR edit page for %s", len(fields), vr_external_id)

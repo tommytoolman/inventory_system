@@ -1129,16 +1129,23 @@ class VRService:
             temp_dir = tempfile.mkdtemp(prefix="vr_imgfix_")
             image_files: List[str] = []
             try:
+                from PIL import Image as PILImage
+                import io as _io
+
                 for idx, img_url in enumerate(all_images):
                     try:
                         img_resp = req.get(img_url, timeout=30)
                         if img_resp.status_code == 200:
-                            content_type = img_resp.headers.get("content-type", "image/jpeg")
-                            ext = ".png" if "png" in content_type else ".jpg"
-                            temp_path = os.path.join(temp_dir, f"image_{idx}{ext}")
-                            with open(temp_path, "wb") as f:
-                                f.write(img_resp.content)
+                            # Convert to JPEG regardless of source format
+                            # (Reverb CDN may serve WebP which VR rejects)
+                            pil_img = PILImage.open(_io.BytesIO(img_resp.content))
+                            if pil_img.mode in ("RGBA", "P", "LA"):
+                                pil_img = pil_img.convert("RGB")
+                            temp_path = os.path.join(temp_dir, f"image_{idx}.jpg")
+                            pil_img.save(temp_path, "JPEG", quality=95)
                             image_files.append(temp_path)
+                            logger.debug("Downloaded+converted image %d (%s -> JPEG)",
+                                         idx, pil_img.format)
                         else:
                             logger.warning("Failed to download image %d: HTTP %s", idx, img_resp.status_code)
                     except Exception as dl_err:

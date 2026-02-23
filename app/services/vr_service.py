@@ -1169,7 +1169,8 @@ class VRService:
                     try:
                         with open(img_path, "rb") as fh:
                             # Dropzone paramName is "filename"
-                            files = {"filename": (os.path.basename(img_path), fh, "image/jpeg")}
+                            # Dropzone has uploadMultiple:true so PHP expects filename[0]
+                            files = [("filename[0]", (os.path.basename(img_path), fh, "image/jpeg"))]
                             resp = upload_session.post(
                                 upload_url, files=files, headers=upload_headers
                             )

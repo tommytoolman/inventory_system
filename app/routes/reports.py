@@ -4250,3 +4250,34 @@ async def vr_image_health_recheck(product_id: int, request: Request):
         _vr_image_cache["results"].append(entry)
 
     return JSONResponse({"result": entry, "summary": _summarise_cache()})
+
+
+@router.post("/vr-image-health/fix/{product_id}", response_class=JSONResponse)
+async def vr_image_health_fix(product_id: int, request: Request):
+    """Enqueue a VR job to re-upload canonical images for a product."""
+    from app.services.vr_job_queue import enqueue_vr_job
+
+    async with get_session() as db:
+        # Verify the product has an active VR listing
+        check = await db.execute(
+            text(
+                "SELECT pc.id FROM platform_common pc "
+                "WHERE pc.product_id = :pid AND pc.platform_name = 'vr' "
+                "AND pc.status IN ('active', 'live') LIMIT 1"
+            ),
+            {"pid": product_id},
+        )
+        if not check.first():
+            return JSONResponse(
+                {"error": "Product not found or has no active VR listing"},
+                status_code=404,
+            )
+
+        job = await enqueue_vr_job(
+            db,
+            product_id=product_id,
+            payload={"sync_source": "image_fix"},
+        )
+        await db.commit()
+
+    return JSONResponse({"status": "queued", "job_id": job.id})

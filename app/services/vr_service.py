@@ -1002,6 +1002,80 @@ class VRService:
             logger.error(f"Exception while creating V&R listing for SKU {product.sku}: {e}", exc_info=True)
             return {"status": "error", "message": str(e)}
 
+    async def update_listing_images(self, product: Product) -> Dict[str, Any]:
+        """Update only the images on an existing VR listing.
+
+        Loads canonical images from the product, transforms to MAX_RES,
+        looks up the VR external_id, and calls update_listing_selenium
+        with only image fields populated.
+        """
+        logger.info("Updating VR images for product %s (SKU: %s)", product.id, product.sku)
+        try:
+            from app.core.utils import ImageTransformer, ImageQuality
+
+            # --- Gather canonical images (primary + additional, capped at 20) ---
+            all_images: List[str] = []
+            if product.primary_image:
+                all_images.append(
+                    ImageTransformer.transform_reverb_url(product.primary_image, ImageQuality.MAX_RES)
+                )
+            if hasattr(product, "additional_images") and product.additional_images:
+                for img_url in product.additional_images:
+                    transformed = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
+                    if transformed and transformed not in all_images:
+                        all_images.append(transformed)
+            all_images = all_images[:20]  # VR limit
+
+            if not all_images:
+                return {"status": "error", "message": "No canonical images found on product"}
+
+            logger.info("VR image-fix payload for %s: %d images", product.sku, len(all_images))
+
+            # --- Look up VR external_id from platform_common ---
+            pc_query = text(
+                "SELECT external_id FROM platform_common "
+                "WHERE product_id = :pid AND platform_name = 'vr' "
+                "AND status IN ('active', 'live') LIMIT 1"
+            )
+            pc_result = await self.db.execute(pc_query, {"pid": product.id})
+            pc_row = pc_result.first()
+            if not pc_row:
+                return {"status": "error", "message": f"No active VR listing found for product {product.id}"}
+
+            vr_external_id = pc_row.external_id
+
+            # --- Build minimal product_data with only image fields ---
+            product_data = {
+                "primary_image": all_images[0],
+                "additional_images": all_images[1:] if len(all_images) > 1 else [],
+                # Fields required by _prepare_form_data_for_edit but not being changed
+                "brand": product.brand or "",
+                "model": product.model or "",
+                "price": str(product.base_price) if product.base_price else "0",
+                "description": product.description or "",
+            }
+
+            # --- Call Selenium update ---
+            settings = get_settings()
+            client = VintageAndRareClient(
+                username=settings.VINTAGE_AND_RARE_USERNAME,
+                password=settings.VINTAGE_AND_RARE_PASSWORD,
+            )
+            if not await client.authenticate():
+                return {"status": "error", "message": "VR authentication failed"}
+
+            result = await client.update_listing_selenium(
+                item_id=vr_external_id,
+                product_data=product_data,
+            )
+
+            logger.info("VR image-fix result for %s: %s", product.sku, result.get("status"))
+            return result
+
+        except Exception as e:
+            logger.error("Exception updating VR images for product %s: %s", product.id, e, exc_info=True)
+            return {"status": "error", "message": str(e)}
+
     async def update_listing_price(self, external_id: str, new_price: float) -> bool:
         """Outbound action to update the price of a listing on the V&R platform."""
         logger.info(f"Received request to update V&R listing {external_id} to price £{new_price:.2f}.")

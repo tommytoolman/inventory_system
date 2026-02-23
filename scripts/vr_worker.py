@@ -151,6 +151,31 @@ async def _process_job(session: AsyncSession, job, skip_id_resolution: bool = Fa
     return result
 
 
+async def _process_image_fix_job(session: AsyncSession, job) -> Dict[str, Any]:
+    """Process a VR image-fix job — update images on an existing listing."""
+    product = await session.get(
+        Product,
+        job.product_id,
+        options=[selectinload(Product.shipping_profile)],
+    )
+    if not product:
+        raise RuntimeError(f"Product {job.product_id} no longer exists")
+
+    logger.info("Processing V&R image-fix job %s for product %s", job.id, product.sku)
+
+    vr_service = VRService(session)
+    result = await vr_service.update_listing_images(product)
+
+    if not isinstance(result, dict):
+        raise RuntimeError("Unexpected V&R response format")
+
+    if result.get("status") != "success":
+        raise RuntimeError(result.get("message", "VR image update failed"))
+
+    logger.info("V&R image-fix job %s completed for %s", job.id, product.sku)
+    return result
+
+
 async def _resolve_pending_batch(session: AsyncSession) -> None:
     """
     Resolve V&R IDs for all pending jobs using a single CSV download.
@@ -292,49 +317,79 @@ async def worker_loop() -> None:
                     _current_job_id = None
                     continue
 
-                # Check if more jobs are queued to decide on batching
-                queue_count = await peek_queue_count(session)
-                skip_id_resolution = queue_count > 0  # Batch if more jobs waiting
+                # Determine job type from payload
+                payload = job.payload or {}
+                sync_source = payload.get("sync_source", "")
+                is_image_fix = sync_source == "image_fix"
 
-                # Process the job
-                try:
-                    result = await _process_job(session, job, skip_id_resolution=skip_id_resolution)
-
-                    if skip_id_resolution and result.get("match_criteria"):
-                        # Mark as pending ID resolution
-                        await mark_job_pending_id(session, job, result["match_criteria"])
-                        await session.commit()
-                        logger.info(f"V&R job {job.id} marked pending_id (batched mode)")
-                    else:
-                        # Immediate resolution was done, mark fully completed
+                if is_image_fix:
+                    # Image-fix jobs: no batching, no ID resolution
+                    try:
+                        result = await _process_image_fix_job(session, job)
                         await mark_job_completed(session, job)
                         await session.commit()
-                        logger.info(f"V&R job {job.id} marked completed (immediate mode)")
-
-                    job_processed = True
-
-                except Exception as exc:
-                    await session.rollback()
-                    error_message = str(exc)
-                    try:
-                        await mark_job_failed(session, job, error_message)
-                        await session.commit()
-                    except Exception as inner_exc:
+                        logger.info("V&R image-fix job %s completed", job.id)
+                        job_processed = True
+                    except Exception as exc:
                         await session.rollback()
-                        logger.exception(
-                            "Failed to record failure for job %s (%s): %s",
-                            job.id,
-                            error_message,
-                            inner_exc,
-                        )
-                    else:
-                        logger.error("V&R job %s failed: %s", job.id, error_message)
-                    await asyncio.sleep(1)
+                        error_message = str(exc)
+                        try:
+                            await mark_job_failed(session, job, error_message)
+                            await session.commit()
+                        except Exception as inner_exc:
+                            await session.rollback()
+                            logger.exception(
+                                "Failed to record failure for image-fix job %s (%s): %s",
+                                job.id, error_message, inner_exc,
+                            )
+                        else:
+                            logger.error("V&R image-fix job %s failed: %s", job.id, error_message)
+                        await asyncio.sleep(1)
+                else:
+                    # Regular listing-creation jobs: batching + ID resolution
+                    # Check if more jobs are queued to decide on batching
+                    queue_count = await peek_queue_count(session)
+                    skip_id_resolution = queue_count > 0  # Batch if more jobs waiting
+
+                    # Process the job
+                    try:
+                        result = await _process_job(session, job, skip_id_resolution=skip_id_resolution)
+
+                        if skip_id_resolution and result.get("match_criteria"):
+                            # Mark as pending ID resolution
+                            await mark_job_pending_id(session, job, result["match_criteria"])
+                            await session.commit()
+                            logger.info(f"V&R job {job.id} marked pending_id (batched mode)")
+                        else:
+                            # Immediate resolution was done, mark fully completed
+                            await mark_job_completed(session, job)
+                            await session.commit()
+                            logger.info(f"V&R job {job.id} marked completed (immediate mode)")
+
+                        job_processed = True
+
+                    except Exception as exc:
+                        await session.rollback()
+                        error_message = str(exc)
+                        try:
+                            await mark_job_failed(session, job, error_message)
+                            await session.commit()
+                        except Exception as inner_exc:
+                            await session.rollback()
+                            logger.exception(
+                                "Failed to record failure for job %s (%s): %s",
+                                job.id,
+                                error_message,
+                                inner_exc,
+                            )
+                        else:
+                            logger.error("V&R job %s failed: %s", job.id, error_message)
+                        await asyncio.sleep(1)
 
                 _current_job_id = None
 
-                # Check if we should resolve now
-                if job_processed:
+                # Check if we should resolve now (only for listing jobs)
+                if job_processed and not is_image_fix:
                     should_resolve = await _should_resolve_now(session)
                     if should_resolve:
                         await _resolve_pending_batch(session)

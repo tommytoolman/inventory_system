@@ -309,13 +309,14 @@ function appendRow(r) {
         : `<div class="w-10 h-10 bg-gray-200 rounded mr-3"></div>`;
 
     // Actions column: Recheck always available, Fix Images for mismatches, View on VR always
-    let actionButtons = `<button onclick="recheckSingle(${r.product_id}, this)" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors" title="Recheck this product">Recheck</button>`;
+    const btnClass = 'inline-flex items-center justify-center w-24 py-1.5 text-xs font-medium rounded transition-colors';
+    let actionButtons = `<button onclick="recheckSingle(${r.product_id}, this)" class="${btnClass} bg-gray-100 text-gray-700 hover:bg-gray-200" title="Recheck this product">Recheck</button>`;
 
     if (r.status === 'mismatch') {
-        actionButtons += ` <button onclick="fixImages(${r.product_id}, this)" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors">Fix Images</button>`;
+        actionButtons += ` <button onclick="fixImages(${r.product_id}, this)" class="${btnClass} bg-blue-100 text-blue-800 hover:bg-blue-200">Fix Images</button>`;
     }
 
-    actionButtons += ` <a href="${r.listing_url}" target="_blank" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded bg-purple-100 text-purple-800 hover:bg-purple-200 transition-colors">View on VR</a>`;
+    actionButtons += ` <a href="${r.listing_url}" target="_blank" class="${btnClass} bg-purple-100 text-purple-800 hover:bg-purple-200">View on VR</a>`;
 
     row.innerHTML = `
         <td class="px-4 py-3">

@@ -406,7 +406,10 @@ class AsyncDropboxClient:
                     ) as response:
                         if response.status != 200:
                             text = await response.text()
-                            logger.error(f"Connection test failed with status {response.status}: {text}")
+                            if response.status == 401:
+                                logger.info(f"Dropbox token expired (status 401), will refresh")
+                            else:
+                                logger.error(f"Connection test failed with status {response.status}: {text}")
                             # If this is an auth error, raise specifically so we can refresh
                             if response.status == 401:
                                 raise aiohttp.ClientResponseError(

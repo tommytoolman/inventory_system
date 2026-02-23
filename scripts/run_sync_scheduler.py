@@ -31,7 +31,8 @@ from app.models.sync_event import SyncEvent
 from sqlalchemy import select, text
 from shopify.auto_archive import run_auto_archive
 
-logging.basicConfig(level=logging.INFO)
+from app.core.logging_config import configure_logging
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -650,7 +651,7 @@ async def main():
         ),
     ]
 
-    heartbeat_interval = timedelta(minutes=10)
+    heartbeat_interval = timedelta(minutes=60)
     next_heartbeat = datetime.now(timezone.utc) + heartbeat_interval
 
     while True:

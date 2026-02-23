@@ -2090,7 +2090,7 @@ class EbayService:
                         full_listing_data = get_item_response
                         logger.info("Successfully fetched full listing details from eBay")
                     else:
-                        logger.warning("Could not fetch full listing details, using creation data")
+                        logger.info("Could not fetch full listing details, using creation data")
                 except Exception as e:
                     logger.warning(f"Error fetching full listing details: {e}")
                 

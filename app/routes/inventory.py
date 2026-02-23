@@ -4295,8 +4295,7 @@ async def add_product(
         if "ebay" in platforms_to_sync:
             logger.info(f"=== CREATING EBAY LISTING ===")
             logger.info(f"Product: {product.sku} - {product.brand} {product.model}")
-            logger.warning("⚠️  NOTE: eBay listing creation may fail due to shipping profile requirements")
-            logger.warning("⚠️  eBay requires business policies to be configured properly")
+            logger.debug("eBay listing creation requires shipping profile and business policies")
             try:
                 # Get policies from platform data
                 ebay_options = platform_data.get("ebay", {})

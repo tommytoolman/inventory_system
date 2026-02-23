@@ -1227,11 +1227,17 @@ class VRService:
 
                 submit_headers = client.headers.copy()
                 submit_headers["Referer"] = edit_url
-                submit_headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
+                submit_headers.pop("Content-Type", None)  # Let requests set multipart boundary
+
+                # Submit as multipart/form-data (matching form enctype)
+                # Use files= with (None, value) tuples to encode as multipart
+                files_list: List[Tuple[str, Any]] = []
+                for name, value in form_fields:
+                    files_list.append((name, (None, value)))
 
                 submit_resp = upload_session.post(
                     edit_url,
-                    data=form_fields,
+                    files=files_list,
                     headers=submit_headers,
                     allow_redirects=False,
                 )

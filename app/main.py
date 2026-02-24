@@ -37,6 +37,14 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Attach log aggregator early so it captures everything from startup onwards
+    import logging as _logging
+    from app.services.log_review_service import LogAggregatorHandler, DailyLogReviewScheduler
+
+    log_handler = LogAggregatorHandler()
+    _logging.getLogger().addHandler(log_handler)
+    app.state.log_handler = log_handler  # expose for manual inspection
+
     # Run migrations on startup
     try:
         import subprocess
@@ -84,6 +92,10 @@ async def lifespan(app: FastAPI):
     
     print("Starting periodic Dropbox refresh task...")
     asyncio.create_task(periodic_dropbox_refresh(app))
+
+    # Daily log review email
+    log_review_scheduler = DailyLogReviewScheduler(log_handler)
+    asyncio.create_task(log_review_scheduler.run())
 
     # Initialise shared executors
     app.state.vr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vr-worker")

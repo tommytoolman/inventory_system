@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     ADAM_EMAIL: str = ""
     SIMON_EMAIL: str = ""
 
+    # Log review
+    LOG_REVIEW_TIME: str = "07:00"  # UTC, daily
+    LOG_REVIEW_EMAILS: Annotated[List[str], BeforeValidator(lambda v: _parse_email_list(v))] = []
+
     # SMTP / Email
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

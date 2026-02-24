@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import smtplib
+from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr
-from typing import Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from app.core.config import Settings, get_settings
 
@@ -116,6 +117,113 @@ class EmailNotificationService:
         body_html = "".join(body_html_lines)
 
         message = self._build_message(subject, to_addresses, body_text, body_html)
+        return await self._dispatch(message)
+
+    # ------------------------------------------------------------------
+    # Log review report
+    # ------------------------------------------------------------------
+    async def send_log_report(self, summary: Dict[str, Any]) -> bool:
+        """Send the daily log review email."""
+        if not self._ready():
+            logger.warning("SMTP config incomplete; log report skipped")
+            return False
+
+        recipients = [e.strip() for e in self._settings.LOG_REVIEW_EMAILS if e]
+        if not recipients:
+            logger.warning("LOG_REVIEW_EMAILS not set; log report skipped")
+            return False
+
+        errors = summary.get("errors", [])
+        warnings = summary.get("warnings", [])
+        stats = summary.get("stats", {})
+        error_count = len(errors)
+
+        today = datetime.utcnow().strftime("%d %b %Y")
+        subject = f"RIFF Daily Log Report - {today}"
+
+        # Health badge
+        if error_count == 0:
+            badge_colour, badge_label = "#22c55e", "HEALTHY"
+        elif error_count <= 5:
+            badge_colour, badge_label = "#f59e0b", "WARNINGS"
+        else:
+            badge_colour, badge_label = "#ef4444", "ERRORS"
+
+        # --- Build HTML ---
+        html_parts: List[str] = [
+            "<div style='font-family:Arial,sans-serif;max-width:700px;margin:auto;'>",
+            f"<h2 style='margin-bottom:4px;'>RIFF Daily Log Report</h2>",
+            f"<p style='color:#666;margin-top:0;'>{summary.get('period_start', '')[:10]} &rarr; {summary.get('period_end', '')[:10]}</p>",
+            f"<p><span style='background:{badge_colour};color:#fff;padding:4px 12px;border-radius:12px;font-weight:bold;'>{badge_label}</span>"
+            f"  &nbsp; {error_count} error(s), {len(warnings)} warning(s)</p>",
+            "<hr>",
+        ]
+
+        # Errors
+        if errors:
+            html_parts.append("<h3>Errors</h3><table style='width:100%;border-collapse:collapse;font-size:13px;'>")
+            html_parts.append("<tr style='background:#f8f8f8;'><th style='text-align:left;padding:4px 8px;'>Time</th><th style='text-align:left;padding:4px 8px;'>Logger</th><th style='text-align:left;padding:4px 8px;'>Message</th></tr>")
+            for e in errors[-50:]:  # cap at 50
+                tb = f"<br><pre style='font-size:11px;color:#888;white-space:pre-wrap;'>{e.get('traceback', '')[:500]}</pre>" if e.get("traceback") else ""
+                html_parts.append(
+                    f"<tr><td style='padding:4px 8px;white-space:nowrap;'>{e['time'][11:19]}</td>"
+                    f"<td style='padding:4px 8px;'>{e.get('logger','')}</td>"
+                    f"<td style='padding:4px 8px;'>{e['message'][:200]}{tb}</td></tr>"
+                )
+            html_parts.append("</table>")
+
+        # Warnings
+        if warnings:
+            html_parts.append(f"<h3>Warnings ({len(warnings)})</h3>")
+            if len(warnings) <= 20:
+                html_parts.append("<ul style='font-size:13px;'>")
+                for w in warnings:
+                    html_parts.append(f"<li><b>{w['time'][11:19]}</b> [{w.get('logger','')}] {w['message'][:200]}</li>")
+                html_parts.append("</ul>")
+            else:
+                html_parts.append(f"<p style='font-size:13px;'>{len(warnings)} warnings logged (showing last 10):</p><ul style='font-size:13px;'>")
+                for w in warnings[-10:]:
+                    html_parts.append(f"<li><b>{w['time'][11:19]}</b> [{w.get('logger','')}] {w['message'][:200]}</li>")
+                html_parts.append("</ul>")
+
+        # Platform activity
+        syncs = stats.get("platform_syncs", {})
+        html_parts.append("<h3>Platform Activity</h3><table style='font-size:13px;border-collapse:collapse;'>")
+        for plat in ("reverb", "ebay", "shopify", "vr"):
+            cnt = syncs.get(plat, 0)
+            html_parts.append(f"<tr><td style='padding:2px 12px 2px 0;font-weight:bold;'>{plat.upper()}</td><td>{cnt} sync(s)</td></tr>")
+        html_parts.append("</table>")
+
+        # Traffic & notable events
+        html_parts.append("<h3>Traffic &amp; Events</h3><ul style='font-size:13px;'>")
+        html_parts.append(f"<li>Total requests logged: {stats.get('total_requests', 0)}</li>")
+        html_parts.append(f"<li>404 responses: {stats.get('status_404_count', 0)}</li>")
+        html_parts.append(f"<li>Sales detected: {stats.get('sales_detected', 0)}</li>")
+        vr_auth = stats.get("vr_auth_failures", 0)
+        if vr_auth:
+            html_parts.append(f"<li style='color:#ef4444;'>VR auth failures: {vr_auth}</li>")
+        html_parts.append("</ul>")
+
+        html_parts.append("<hr><p style='font-size:11px;color:#999;'>Sent automatically by RIFF Inventory System</p></div>")
+
+        body_html = "\n".join(html_parts)
+
+        # Plain-text fallback
+        plain_lines = [
+            f"RIFF Daily Log Report - {today}",
+            f"Status: {badge_label}  |  {error_count} error(s), {len(warnings)} warning(s)",
+            "",
+        ]
+        if errors:
+            plain_lines.append("--- ERRORS ---")
+            for e in errors[-20:]:
+                plain_lines.append(f"  {e['time'][11:19]} [{e.get('logger','')}] {e['message'][:200]}")
+            plain_lines.append("")
+        plain_lines.append(f"Requests: {stats.get('total_requests',0)}  |  404s: {stats.get('status_404_count',0)}  |  Sales: {stats.get('sales_detected',0)}")
+        plain_lines.append("\nSent automatically by RIFF Inventory System")
+        body_text = "\n".join(plain_lines)
+
+        message = self._build_message(subject, recipients, body_text, body_html)
         return await self._dispatch(message)
 
     # ------------------------------------------------------------------

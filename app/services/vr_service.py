@@ -1198,12 +1198,16 @@ class VRService:
 
                 # --- Step 2: Submit edit form with file_unique_ids + delete_item_images[] ---
                 fields = client._extract_form_fields(response.text)
-                # Strip old image-related hidden fields
+                # Strip image-related fields (we rebuild them) and the description
+                # textarea (re-submitting it corrupts HTML encoding)
                 skip_prefixes = ("upload_file_box_", "file_unique_id", "video_file_name",
                                  "new_upload", "thumb_name", "delete_item")
+                skip_names = {"item_desc", "description"}
                 form_fields: List[Tuple[str, str]] = []
                 for name, value in fields:
                     if any(name.startswith(p) for p in skip_prefixes):
+                        continue
+                    if name in skip_names:
                         continue
                     form_fields.append((name, value))
 

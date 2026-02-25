@@ -36,14 +36,14 @@
 <body class="bg-gray-100 min-h-screen">
     <nav class="bg-white shadow-lg sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4">
-            <div class="flex justify-between h-16">
-                <div class="flex-shrink-0 flex items-center">
+            <div class="flex justify-between items-center h-16 relative">
+                <div class="flex-shrink-0 flex items-center sm:relative">
                     <a href="/inventory" class="flex items-center gap-3 text-xl font-bold text-gray-800">
                         <img src="/static/images/riff_logo.png"
                              alt="RIFF logo"
-                             class="h-9 w-auto object-contain"
+                             class="h-9 w-auto object-contain sm:static absolute left-1/2 -translate-x-1/2 sm:translate-x-0 sm:left-auto"
                         >
-                        <span>Realtime Inventory Fast Flow</span>
+                        <span class="hidden sm:inline">Realtime Inventory Fast Flow</span>
                     </a>
                 </div>
 
@@ -240,8 +240,110 @@
                 </div>
             </nav>
 
-            <div class="flex items-center">
+            <!-- Mobile hamburger button -->
+            <div class="flex items-center sm:hidden">
+                <button type="button" onclick="toggleMobileMenu()" class="text-gray-500 hover:text-gray-700 focus:outline-none p-2">
+                    <svg id="mobileMenuIconOpen" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <svg id="mobileMenuIconClose" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile menu -->
+    <div id="mobileMenu" class="hidden sm:hidden border-t border-gray-200 bg-white">
+        <div class="px-4 py-3 space-y-1">
+            <a href="/" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Dashboard</a>
+            <a href="/inventory" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Products</a>
+            <a href="/inventory/add" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Add Product</a>
+            <a href="/reports/sales" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Sales</a>
+            <a href="/orders" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Orders</a>
+            <a href="/insights" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Insights</a>
+
+            <!-- Reports section (collapsible) -->
+            <div class="border-t border-gray-100 pt-2 mt-2">
+                <button onclick="toggleMobileSection('mobileReports')" class="w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-100 rounded-md">
+                    Reports
+                    <svg class="h-4 w-4 text-gray-400 transition-transform" id="mobileReportsChevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="mobileReports" class="hidden pl-3">
+                    <a href="/reports/sync-events" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Sync Events</a>
+                    <a href="/reports/inventory-reconciliation" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Inventory Reconciliation</a>
+                    <a href="/reports/non-performing-inventory" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Non-Performing Inventory</a>
+                    <a href="/reports/listing-engagement" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Listing Engagement</a>
+                    <a href="/reports/archive-status-sync" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Archive Manager</a>
+                    <a href="/reports/platform-coverage" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Platform Coverage</a>
                 </div>
+            </div>
+
+            <!-- Sync section (collapsible) -->
+            <div class="border-t border-gray-100 pt-2 mt-2">
+                <button onclick="toggleMobileSection('mobileSync')" class="w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-100 rounded-md">
+                    Sync
+                    <svg class="h-4 w-4 text-gray-400 transition-transform" id="mobileSyncChevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="mobileSync" class="hidden pl-3">
+                    <a href="#" onclick="triggerSync('all'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <svg class="w-4 h-4 mr-2 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Sync All Platforms
+                    </a>
+                    <a href="#" onclick="triggerSync('reverb'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2 w-4 h-4"> Sync Reverb
+                    </a>
+                    <a href="#" onclick="triggerSync('ebay'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2 w-4 h-4"> Sync eBay
+                    </a>
+                    <a href="#" onclick="triggerSync('shopify'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2 w-4 h-4"> Sync Shopify
+                    </a>
+                    <a href="#" onclick="triggerSync('vr'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2 w-4 h-4"> Sync V&R
+                    </a>
+                </div>
+            </div>
+
+            <!-- Platforms section (collapsible) -->
+            <div class="border-t border-gray-100 pt-2 mt-2">
+                <button onclick="toggleMobileSection('mobilePlatforms')" class="w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-100 rounded-md">
+                    Platforms
+                    <svg class="h-4 w-4 text-gray-400 transition-transform" id="mobilePlatformsChevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="mobilePlatforms" class="hidden pl-3">
+                    <a href="https://reverb.com/uk/my/selling/listings?state=live" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2 w-4 h-4"> Reverb
+                    </a>
+                    <a href="https://www.ebay.co.uk/sh/lst/active" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2 w-4 h-4"> eBay
+                    </a>
+                    <a href="https://admin.shopify.com/store/londonvintageguitars?ui_locales=en-GB" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2 w-4 h-4"> Shopify Admin
+                    </a>
+                    <a href="https://www.vintageandrare.com/account" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2 w-4 h-4"> Vintage & Rare
+                    </a>
+                    <a href="https://www.denmarkstreetguitars.co.uk/" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://icons.duckduckgo.com/ip3/denmarkstreetguitars.co.uk.ico" class="mr-2 w-4 h-4"> Hanks
+                    </a>
+                    <a href="https://railway.com/project/acc36520-166b-4569-8718-3cf1a9920bad" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=railway.app" class="mr-2 w-4 h-4"> Railway
+                    </a>
+                    <a href="https://www.dhl.com/gb-en/home/redirect/express/portal.html" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=dhl.com" class="mr-2 w-4 h-4"> DHL
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 </nav>
@@ -254,7 +356,7 @@
     <footer class="bg-white shadow-lg mt-8">
         <div class="max-w-7xl mx-auto py-4 px-4">
             <div class="text-center text-gray-500 text-sm">
-                &copy; 2025 Realtime Inventory Fast Flow. All rights reserved.
+                &copy; {{ now().year }} Realtime Inventory Fast Flow. All rights reserved.
             </div>
         </div>
     </footer>
@@ -262,6 +364,24 @@
     {% block scripts %}{% endblock %}
 
     <script>
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            const iconOpen = document.getElementById('mobileMenuIconOpen');
+            const iconClose = document.getElementById('mobileMenuIconClose');
+            menu.classList.toggle('hidden');
+            iconOpen.classList.toggle('hidden');
+            iconClose.classList.toggle('hidden');
+        }
+
+        function toggleMobileSection(id) {
+            const section = document.getElementById(id);
+            const chevron = document.getElementById(id + 'Chevron');
+            section.classList.toggle('hidden');
+            if (chevron) {
+                chevron.style.transform = section.classList.contains('hidden') ? '' : 'rotate(180deg)';
+            }
+        }
+
         function togglePlatformMenu(event) {
             event.stopPropagation(); // Prevent immediate document click
             const menu = document.getElementById('platformMenu');

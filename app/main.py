@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from fastapi.responses import RedirectResponse
@@ -122,9 +122,9 @@ async def proxy_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
-# Templates - define this once at module level
+# Templates - reuse single instance from app.core.templates
+from app.core.templates import templates
 settings = get_settings() # Ensure settings are loaded early
-templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["settings"] = settings
 
 # Mount draft media directory before the broader /static mount so lookups resolve correctly

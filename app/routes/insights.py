@@ -7,15 +7,14 @@ Provides velocity analytics, category benchmarks, and inventory health insights.
 
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.services.analytics_service import InventoryAnalyticsService
 from app.core.security import require_auth
+from app.core.templates import templates
 
 router = APIRouter(prefix="/insights", tags=["insights"])
-templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("", response_class=HTMLResponse)

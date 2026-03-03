@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
 from datetime import datetime, timezone, timedelta
@@ -12,6 +12,7 @@ from app.models.platform_common import PlatformCommon
 from app.models.product import Product
 from app.models.activity_log import ActivityLog
 from app.models.sync_event import SyncEvent
+from app.core.security import get_current_username
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -22,7 +23,7 @@ class DashboardService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.platforms = ["ebay", "reverb", "vr", "shopify"]
+        self.platforms = ["ebay", "reverb", "vr", "shopify", "woocommerce"]
 
     async def get_platform_counts(self) -> dict:
         """Get counts for all platforms"""
@@ -39,6 +40,8 @@ class DashboardService:
                 counts = await self._get_shopify_counts()
             elif platform == "vr":
                 counts = await self._get_vr_counts()
+            elif platform == "woocommerce":
+                counts = await self._get_woocommerce_counts()
             else:
                 counts = await self._get_default_platform_counts(platform)
 
@@ -317,6 +320,80 @@ class DashboardService:
 
         except Exception as e:
             logger.error(f"Error getting V&R counts: {str(e)}")
+            return {
+                "count": 0,
+                "sold_count": 0,
+                "ended_count": 0,
+                "archived_count": 0,
+                "draft_count": 0,
+                "other_count": 0,
+                "total": 0,
+            }
+
+    async def _get_woocommerce_counts(self) -> dict:
+        """Get WooCommerce counts from woocommerce_listings table"""
+        try:
+            query = text(
+                """
+                SELECT status, COUNT(*) as count
+                FROM woocommerce_listings
+                GROUP BY status
+                ORDER BY status
+            """
+            )
+            result = await self.db.execute(query)
+            rows = result.fetchall()
+
+            status_category_map = {
+                "publish": "count",
+                "active": "count",
+                "draft": "draft_count",
+                "pending": "draft_count",
+                "private": "ended_count",
+                "trash": "ended_count",
+                "sold": "sold_count",
+                "archived": "archived_count",
+            }
+
+            counts = {
+                "count": 0,
+                "sold_count": 0,
+                "ended_count": 0,
+                "archived_count": 0,
+                "draft_count": 0,
+                "other_count": 0,
+                "total": 0,
+            }
+
+            unknown_statuses = set()
+
+            for row in rows:
+                status = (row.status or "").strip().lower()
+                count = row.count or 0
+
+                target_bucket = status_category_map.get(status)
+                if target_bucket:
+                    counts[target_bucket] += count
+                else:
+                    counts["other_count"] += count
+                    if status:
+                        unknown_statuses.add(status)
+
+            counts["total"] = sum(
+                value for key, value in counts.items() if key != "total"
+            )
+
+            if unknown_statuses:
+                logger.info(
+                    "WooCommerce counts grouped additional statuses into other_count: %s",
+                    sorted(unknown_statuses),
+                )
+
+            logger.info(f"WooCommerce counts: {counts}")
+            return counts
+
+        except Exception as e:
+            logger.error(f"Error getting WooCommerce counts: {str(e)}")
             return {
                 "count": 0,
                 "sold_count": 0,
@@ -703,6 +780,34 @@ class DashboardService:
                     "status": row.status,
                 })
 
+            # WooCommerce orders
+            woocommerce_query = text("""
+                SELECT
+                    wc_order_id as order_id,
+                    COALESCE(
+                        line_items->0->>'name',
+                        CONCAT('WC Order #', order_number)
+                    ) as title,
+                    customer_name as buyer_name,
+                    total as total,
+                    created_at,
+                    status
+                FROM woocommerce_orders
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """)
+            result = await self.db.execute(woocommerce_query, {"limit": limit})
+            for row in result.fetchall():
+                orders.append({
+                    "platform": "woocommerce",
+                    "order_id": row.order_id,
+                    "title": row.title or "WooCommerce Order",
+                    "buyer": row.buyer_name,
+                    "total": row.total,
+                    "created_at": row.created_at,
+                    "status": row.status,
+                })
+
             # Sort all orders by created_at descending and take top N
             orders.sort(key=lambda x: x["created_at"] or datetime.min, reverse=True)
             orders = orders[:limit]
@@ -893,10 +998,14 @@ async def api_pending_sync():
 
 
 @router.get("/")
-async def dashboard(request: Request):
+async def dashboard(request: Request, username: str = Depends(get_current_username)):
     """
     Render the dashboard with key metrics
     """
+    # Get user's platform visibility preferences
+    from app.routes.settings import get_visible_platforms
+    visible_platforms = await get_visible_platforms(username)
+
     async with async_session() as db:
         try:
             service = DashboardService(db)
@@ -935,6 +1044,7 @@ async def dashboard(request: Request):
             # Prepare template context
             context = {
                 "request": request,
+                "visible_platforms": visible_platforms,
                 **platform_counts,
                 **connections,
                 **sync_times,
@@ -983,16 +1093,16 @@ async def dashboard(request: Request):
                 # Set all platform counts to 0
                 **{
                     f"{platform}_{key}": 0
-                    for platform in ["ebay", "reverb", "vr", "shopify"]
+                    for platform in ["ebay", "reverb", "vr", "shopify", "woocommerce"]
                     for key in ["count", "sold_count", "other_count"]
                 },
                 **{
                     f"{platform}_connected": False
-                    for platform in ["ebay", "reverb", "vr", "shopify"]
+                    for platform in ["ebay", "reverb", "vr", "shopify", "woocommerce"]
                 },
                 **{
                     f"{platform}_sync_status": "error"
-                    for platform in ["ebay", "reverb", "vr", "shopify"]
+                    for platform in ["ebay", "reverb", "vr", "shopify", "woocommerce"]
                 },
                 # Reverb specific fields
                 "reverb_ended_count": 0,

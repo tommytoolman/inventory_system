@@ -19,6 +19,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
+
+    json_type = sa.JSON() if is_sqlite else postgresql.JSONB(astext_type=sa.Text())
+    ts_default = sa.text("CURRENT_TIMESTAMP") if is_sqlite else sa.text("timezone('utc', now())")
+    json_empty_default = sa.text("'{}'") if is_sqlite else sa.text("'{}'::jsonb")
+
     op.create_table(
         "shopify_orders",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -53,21 +60,21 @@ def upgrade() -> None:
         sa.Column("shipping_zip", sa.String(), nullable=True),
         sa.Column("shipping_phone", sa.String(), nullable=True),
         sa.Column("shipping_company", sa.String(), nullable=True),
-        sa.Column("billing_address", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("billing_address", json_type, nullable=True),
         sa.Column("tracking_number", sa.String(), nullable=True),
         sa.Column("tracking_company", sa.String(), nullable=True),
         sa.Column("tracking_url", sa.String(), nullable=True),
-        sa.Column("fulfillments", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("fulfillments", json_type, nullable=True),
         sa.Column("primary_sku", sa.String(), nullable=True),
         sa.Column("primary_title", sa.String(), nullable=True),
         sa.Column("primary_quantity", sa.Integer(), nullable=True),
         sa.Column("primary_price", sa.Numeric(), nullable=True),
         sa.Column("primary_price_currency", sa.String(), nullable=True),
-        sa.Column("line_items", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("line_items", json_type, nullable=True),
         sa.Column(
             "raw_payload",
-            postgresql.JSONB(astext_type=sa.Text()),
-            server_default=sa.text("'{}'::jsonb"),
+            json_type,
+            server_default=json_empty_default,
             nullable=False,
         ),
         sa.Column("product_id", sa.Integer(), nullable=True),
@@ -75,13 +82,13 @@ def upgrade() -> None:
         sa.Column(
             "created_row_at",
             sa.DateTime(),
-            server_default=sa.text("timezone('utc', now())"),
+            server_default=ts_default,
             nullable=False,
         ),
         sa.Column(
             "updated_row_at",
             sa.DateTime(),
-            server_default=sa.text("timezone('utc', now())"),
+            server_default=ts_default,
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),

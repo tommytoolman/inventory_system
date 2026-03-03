@@ -19,6 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
+    json_type = sa.JSON() if is_sqlite else postgresql.JSONB(astext_type=sa.Text())
+
     # Create reverb_historical_listings table
     op.create_table('reverb_historical_listings',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -51,7 +55,7 @@ def upgrade() -> None:
         sa.Column('image_count', sa.Integer(), nullable=True, default=0),
         sa.Column('shop_id', sa.String(), nullable=True),
         sa.Column('shop_name', sa.String(), nullable=True),
-        sa.Column('raw_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('raw_data', json_type, nullable=True),
         sa.Column('imported_at', sa.DateTime(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint('id')
@@ -135,7 +139,7 @@ def upgrade() -> None:
         sa.Column('total_watches', sa.Integer(), nullable=True, default=0),
         sa.Column('avg_views_per_item', sa.Float(), nullable=True),
         sa.Column('avg_watches_per_item', sa.Float(), nullable=True),
-        sa.Column('category_breakdown', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('category_breakdown', json_type, nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )

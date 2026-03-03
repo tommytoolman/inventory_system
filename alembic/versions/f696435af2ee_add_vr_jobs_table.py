@@ -19,6 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
+    ts_default = sa.text("CURRENT_TIMESTAMP") if is_sqlite else sa.text("timezone('utc', now())")
+
     op.create_table(
         "vr_jobs",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -37,13 +41,13 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("timezone('utc', now())"),
+            server_default=ts_default,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("timezone('utc', now())"),
+            server_default=ts_default,
         ),
     )
 

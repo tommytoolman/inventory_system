@@ -18,6 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
+    ts_default = sa.text("CURRENT_TIMESTAMP") if is_sqlite else sa.text("timezone('utc', now())")
+
     op.create_table(
         'jobs',
         sa.Column('id', sa.Integer(), primary_key=True),
@@ -25,8 +29,8 @@ def upgrade() -> None:
         sa.Column('status', sa.String(length=32), nullable=False, server_default='pending', index=True),
         sa.Column('payload', sa.JSON(), nullable=True),
         sa.Column('message', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text("timezone('utc', now())"), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text("timezone('utc', now())"), onupdate=sa.text("timezone('utc', now())"), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=ts_default, nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=ts_default, nullable=False),
     )
 
 

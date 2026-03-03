@@ -69,6 +69,7 @@ class PlatformCommon(Base):
         viewonly=True,
     )
     shopify_listing = relationship("ShopifyListing", back_populates="platform_listing", uselist=False)
+    woocommerce_listing = relationship("WooCommerceListing", back_populates="platform_listing", uselist=False)
     
     sale = relationship("Sale", back_populates="platform_listing", uselist=False)
     

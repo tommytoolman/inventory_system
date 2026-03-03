@@ -19,9 +19,73 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+_VIEW_COLUMNS = """
+        SELECT
+            id,
+            created_at,
+            updated_at,
+            sku,
+            title,
+            brand,
+            model,
+            year,
+            decade,
+            serial_number,
+            handedness,
+            artist_owned,
+            artist_names,
+            manufacturing_country,
+            category,
+            finish,
+            condition,
+            base_price,
+            cost_price,
+            price,
+            price_notax,
+            collective_discount,
+            offer_discount,
+            status,
+            is_sold,
+            is_stocked_item,
+            quantity,
+            inventory_location,
+            storefront,
+            in_collective,
+            in_inventory,
+            in_reseller,
+            free_shipping,
+            buy_now,
+            show_vat,
+            local_pickup,
+            available_for_shipment,
+            processing_time,
+            shipping_profile_id,
+            package_type,
+            package_weight,
+            package_dimensions,
+            case_status,
+            case_details,
+            primary_image,
+            additional_images,
+            video_url,
+            external_link,
+            description,
+            extra_attributes
+        FROM products
+"""
+
+
 def upgrade() -> None:
     bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
 
+    if is_sqlite:
+        _upgrade_sqlite()
+    else:
+        _upgrade_postgresql(bind)
+
+
+def _upgrade_postgresql(bind):
     handedness_enum = postgresql.ENUM(
         'RIGHT', 'LEFT', 'AMBIDEXTROUS', 'UNSPECIFIED',
         name='handedness'
@@ -127,63 +191,48 @@ def upgrade() -> None:
         ),
     )
 
-    op.execute(
-        """
-        CREATE OR REPLACE VIEW products_admin_view AS
-        SELECT
-            id,
-            created_at,
-            updated_at,
-            sku,
-            title,
-            brand,
-            model,
-            year,
-            decade,
-            serial_number,
-            handedness,
-            artist_owned,
-            artist_names,
-            manufacturing_country,
-            category,
-            finish,
-            condition,
-            base_price,
-            cost_price,
-            price,
-            price_notax,
-            collective_discount,
-            offer_discount,
-            status,
-            is_sold,
-            is_stocked_item,
-            quantity,
-            inventory_location,
-            storefront,
-            in_collective,
-            in_inventory,
-            in_reseller,
-            free_shipping,
-            buy_now,
-            show_vat,
-            local_pickup,
-            available_for_shipment,
-            processing_time,
-            shipping_profile_id,
-            package_type,
-            package_weight,
-            package_dimensions,
-            case_status,
-            case_details,
-            primary_image,
-            additional_images,
-            video_url,
-            external_link,
-            description,
-            extra_attributes
-        FROM products;
-        """
+    op.execute("CREATE OR REPLACE VIEW products_admin_view AS" + _VIEW_COLUMNS)
+
+
+def _upgrade_sqlite():
+    op.add_column('products', sa.Column('serial_number', sa.String(), nullable=True))
+    op.add_column(
+        'products',
+        sa.Column('handedness', sa.String(), server_default='RIGHT', nullable=False),
     )
+    op.add_column(
+        'products',
+        sa.Column('artist_owned', sa.Boolean(), server_default='0', nullable=False),
+    )
+    op.add_column(
+        'products',
+        sa.Column('artist_names', sa.JSON(), server_default='[]', nullable=False),
+    )
+    op.add_column(
+        'products',
+        sa.Column('manufacturing_country', sa.String(), nullable=True),
+    )
+    op.add_column(
+        'products',
+        sa.Column('inventory_location', sa.String(), server_default='unspecified', nullable=False),
+    )
+    op.add_column(
+        'products',
+        sa.Column('storefront', sa.String(), server_default='unspecified', nullable=False),
+    )
+    op.add_column(
+        'products',
+        sa.Column('case_status', sa.String(), server_default='unspecified', nullable=False),
+    )
+    op.add_column('products', sa.Column('case_details', sa.Text(), nullable=True))
+    op.add_column(
+        'products',
+        sa.Column('extra_attributes', sa.JSON(), server_default='{}', nullable=False),
+    )
+
+    # SQLite doesn't support CREATE OR REPLACE VIEW
+    op.execute("DROP VIEW IF EXISTS products_admin_view")
+    op.execute("CREATE VIEW products_admin_view AS" + _VIEW_COLUMNS)
 
 
 def downgrade() -> None:
@@ -200,11 +249,14 @@ def downgrade() -> None:
     op.drop_column('products', 'handedness')
     op.drop_column('products', 'serial_number')
 
-    for enum_name in (
-        'casestatus',
-        'storefront',
-        'inventorylocation',
-        'manufacturingcountry',
-        'handedness',
-    ):
-        op.execute(f"DROP TYPE IF EXISTS {enum_name}")
+    # Only drop PostgreSQL enum types on PostgreSQL
+    bind = op.get_bind()
+    if bind.dialect.name != 'sqlite':
+        for enum_name in (
+            'casestatus',
+            'storefront',
+            'inventorylocation',
+            'manufacturingcountry',
+            'handedness',
+        ):
+            op.execute(f"DROP TYPE IF EXISTS {enum_name}")

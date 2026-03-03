@@ -30,21 +30,30 @@ depends_on: Union[str, Sequence[str], None] = None
 def column_exists(table_name: str, column_name: str) -> bool:
     """Check if a column exists in a table."""
     bind = op.get_bind()
-    result = bind.execute(
-        text(
-            """
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_name = :table_name
-              AND column_name = :column_name
-            """
-        ),
-        {"table_name": table_name, "column_name": column_name}
-    ).scalar()
-    return result is not None
+    if bind.dialect.name == 'sqlite':
+        result = bind.execute(text(f"PRAGMA table_info('{table_name}')"))
+        columns = [row[1] for row in result.fetchall()]
+        return column_name in columns
+    else:
+        result = bind.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = :table_name
+                  AND column_name = :column_name
+                """
+            ),
+            {"table_name": table_name, "column_name": column_name}
+        ).scalar()
+        return result is not None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
+    bool_false = sa.text("0") if is_sqlite else sa.text("false")
+
     # Add columns to reverb_orders
     if not column_exists("reverb_orders", "sale_processed"):
         op.add_column(
@@ -53,7 +62,7 @@ def upgrade() -> None:
                 "sale_processed",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("false"),
+                server_default=bool_false,
             ),
         )
     if not column_exists("reverb_orders", "sale_processed_at"):
@@ -70,7 +79,7 @@ def upgrade() -> None:
                 "sale_processed",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("false"),
+                server_default=bool_false,
             ),
         )
     if not column_exists("ebay_orders", "sale_processed_at"):
@@ -87,7 +96,7 @@ def upgrade() -> None:
                 "sale_processed",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("false"),
+                server_default=bool_false,
             ),
         )
     if not column_exists("shopify_orders", "sale_processed_at"):

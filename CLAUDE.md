@@ -44,7 +44,7 @@ Before writing ANY SQL or ORM queries:
 
 #### Products Table
 - `id`: integer (PK)
-- `sku`: varchar (format: REV-{id}, EBY-{id}, VR-{id}, SHOP-{id})
+- `sku`: varchar (format: REV-{id}, EBY-{id}, VR-{id}, SHOP-{id}, WC-{id})
 - `primary_image`: varchar (URL)
 - `additional_images`: jsonb (array of URLs)
 - `brand`: varchar
@@ -57,7 +57,7 @@ Before writing ANY SQL or ORM queries:
 #### Platform Common Table
 - Links products to platform-specific tables
 - `product_id`: FK to products.id
-- `platform_name`: 'reverb', 'ebay', 'shopify', 'vr'
+- `platform_name`: 'reverb', 'ebay', 'shopify', 'vr', 'woocommerce'
 - `external_id`: The platform's ID for the item
 
 #### Reverb Listings Table
@@ -143,11 +143,12 @@ This is an inventory management system that syncs products across multiple platf
 - **eBay**: Secondary marketplace (SKU: EBY-{id})
 - **Shopify**: E-commerce platform (SKU: SHOP-{id})
 - **VR (Vintage & Rare)**: Specialized platform (SKU: VR-{id})
+- **WooCommerce**: E-commerce store (SKU: WC-{id})
 
 The sync flow is typically:
 1. Import from Reverb (primary source)
 2. Create product in local database
-3. Sync to other platforms (eBay, Shopify, VR)
+3. Sync to other platforms (eBay, Shopify, VR, WooCommerce)
 4. Track sync status in sync_events table
 
 ## Key Documentation

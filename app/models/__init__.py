@@ -5,6 +5,7 @@ from .ebay import EbayListing
 from .reverb import ReverbListing
 from .vr import VRListing
 from .shopify import ShopifyListing
+from .woocommerce import WooCommerceListing
 from .sale import Sale
 from .category_mapping import CategoryMapping 
 from .product_mapping import ProductMapping   
@@ -19,6 +20,7 @@ from .vr_job import VRJob, VRJobStatus
 from .listing_stats_history import ListingStatsHistory
 from .reverb_historical import ReverbHistoricalListing
 from .category_stats import CategoryVelocityStats, InventoryHealthSnapshot
+from .platform_preference import PlatformPreference
 
 # from .product_merges import ProductMerge # We don't currently have a model for this.
 # from .user import User  # Want to add this before we go live 
@@ -35,6 +37,7 @@ __all__ = [
     'ReverbListing',
     'VRListing',
     'ShopifyListing',
+    'WooCommerceListing',
     'Sale',
     'CategoryMapping',
     'ProductMapping',
@@ -54,8 +57,10 @@ __all__ = [
     'ReverbHistoricalListing',
     'CategoryVelocityStats',
     'InventoryHealthSnapshot',
+    'PlatformPreference',
     # 'User',
 ]
 from .ebay_order import EbayOrder
 from .ebay_order import EbayOrder
 from .reverb_order import ReverbOrder
+from .woocommerce_order import WooCommerceOrder

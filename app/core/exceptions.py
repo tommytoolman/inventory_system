@@ -59,5 +59,13 @@ class ShopifyServiceError(PlatformServiceError):
     pass
 
 class ShopifyAPIError(ShopifyServiceError):
-    """Raised when Reverb API calls fail."""
+    """Raised when Shopify API calls fail."""
+    pass
+
+class WooCommerceServiceError(PlatformServiceError):
+    """Base exception for WooCommerce-specific errors."""
+    pass
+
+class WooCommerceAPIError(WooCommerceServiceError):
+    """Raised when WooCommerce API calls fail."""
     pass

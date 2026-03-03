@@ -92,6 +92,14 @@ class Settings(BaseSettings):
     VR_USE_UDC: bool = False
     VR_HEADLESS: bool = True
     
+    # WooCommerce API
+    WC_STORE_URL: Optional[str] = None
+    WC_CONSUMER_KEY: Optional[str] = None
+    WC_CONSUMER_SECRET: Optional[str] = None
+    WC_AUTH_METHOD: str = "basic"  # "basic" for sandbox, "oauth" for production
+    WC_SANDBOX_MODE: bool = True
+    WC_PRICE_MARKUP_PERCENT: float = 0.0
+
     # Shopify API (Optional)
     SHOPIFY_SHOP_URL: Optional[str] = None
     SHOPIFY_ONLINE_STORE_PUB_GID: Optional[str] = None

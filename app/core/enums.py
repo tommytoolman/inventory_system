@@ -9,6 +9,7 @@ class PlatformName(str, Enum):
     SHOPIFY = "SHOPIFY"
     EBAY = "EBAY"
     VR = "VR"
+    WOOCOMMERCE = "WOOCOMMERCE"
     
     @property
     def slug(self):

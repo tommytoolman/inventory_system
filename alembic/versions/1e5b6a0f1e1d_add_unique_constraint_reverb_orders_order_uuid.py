@@ -17,45 +17,62 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _constraint_exists(bind, is_sqlite: bool) -> bool:
+    """Check if the unique constraint already exists."""
+    if is_sqlite:
+        result = bind.execute(
+            text("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='uq_reverb_orders_order_uuid'")
+        )
+        return result.scalar() > 0
+    else:
+        result = bind.execute(
+            text(
+                """
+                SELECT 1
+                FROM pg_constraint c
+                JOIN pg_class t ON c.conrelid = t.oid
+                WHERE c.conname = 'uq_reverb_orders_order_uuid'
+                  AND t.relname = 'reverb_orders'
+                """
+            )
+        )
+        return result.scalar() is not None
+
+
 def upgrade() -> None:
     bind = op.get_bind()
-    exists = bind.execute(
-        text(
-            """
-            SELECT 1
-            FROM pg_constraint c
-            JOIN pg_class t ON c.conrelid = t.oid
-            WHERE c.conname = 'uq_reverb_orders_order_uuid'
-              AND t.relname = 'reverb_orders'
-            """
-        )
-    ).scalar()
+    is_sqlite = bind.dialect.name == 'sqlite'
 
-    if not exists:
-        op.create_unique_constraint(
-            "uq_reverb_orders_order_uuid",
-            "reverb_orders",
-            ["order_uuid"],
-        )
+    if not _constraint_exists(bind, is_sqlite):
+        if is_sqlite:
+            # SQLite doesn't support ALTER TABLE ADD CONSTRAINT; use batch mode
+            with op.batch_alter_table("reverb_orders") as batch_op:
+                batch_op.create_unique_constraint(
+                    "uq_reverb_orders_order_uuid",
+                    ["order_uuid"],
+                )
+        else:
+            op.create_unique_constraint(
+                "uq_reverb_orders_order_uuid",
+                "reverb_orders",
+                ["order_uuid"],
+            )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
-    exists = bind.execute(
-        text(
-            """
-            SELECT 1
-            FROM pg_constraint c
-            JOIN pg_class t ON c.conrelid = t.oid
-            WHERE c.conname = 'uq_reverb_orders_order_uuid'
-              AND t.relname = 'reverb_orders'
-            """
-        )
-    ).scalar()
+    is_sqlite = bind.dialect.name == 'sqlite'
 
-    if exists:
-        op.drop_constraint(
-            "uq_reverb_orders_order_uuid",
-            "reverb_orders",
-            type_="unique",
-        )
+    if _constraint_exists(bind, is_sqlite):
+        if is_sqlite:
+            with op.batch_alter_table("reverb_orders") as batch_op:
+                batch_op.drop_constraint(
+                    "uq_reverb_orders_order_uuid",
+                    type_="unique",
+                )
+        else:
+            op.drop_constraint(
+                "uq_reverb_orders_order_uuid",
+                "reverb_orders",
+                type_="unique",
+            )

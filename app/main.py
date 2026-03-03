@@ -23,11 +23,13 @@ from app.core.security import get_current_username
 
 from app import models
 
-from app.routes import shipping, dashboard, reports, health, orders, insights  # matching is now in reports
+from app.routes import shipping, dashboard, reports, health, orders, insights
+from app.routes import settings as settings_routes  # matching is now in reports
 from app.routes.platforms.ebay import router as ebay_router
 from app.routes.platforms.reverb import router as reverb_router
 from app.routes.platforms.vr import router as vr_router
 from app.routes.platforms.shopify import router as shopify_router
+from app.routes.platforms.woocommerce import router as woocommerce_router
 from app.routes.platforms.sync_all import router as sync_all_router
 from app.routes.webhooks import router as webhook_router
 from app.routes.admin import router as admin_router
@@ -150,6 +152,7 @@ app.include_router(ebay_router, dependencies=[require_auth()])
 app.include_router(reverb_router, dependencies=[require_auth()])
 app.include_router(vr_router, dependencies=[require_auth()])
 app.include_router(shopify_router, dependencies=[require_auth()])
+app.include_router(woocommerce_router, dependencies=[require_auth()])
 app.include_router(sync_all_router, dependencies=[require_auth()])
 app.include_router(webhook_router)  # Webhooks need to be accessible without auth
 app.include_router(websocket_router.router)  # WebSockets handle auth differently
@@ -158,6 +161,7 @@ app.include_router(insights.router, tags=["insights"], dependencies=[require_aut
 app.include_router(orders.router, prefix="/orders", tags=["orders"], dependencies=[require_auth()])
 app.include_router(shipping.router, dependencies=[require_auth()])
 # app.include_router(matching.router, prefix="/matching", tags=["matching"], dependencies=[require_auth()])  # Moved to reports
+app.include_router(settings_routes.router, tags=["settings"], dependencies=[require_auth()])
 app.include_router(admin_router, dependencies=[require_auth()])
 app.include_router(health.router)  # Health check should be accessible without auth
 

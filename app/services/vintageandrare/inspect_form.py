@@ -1241,13 +1241,15 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
                 print("✅ Added empty paragraphs before and after bold headers")
                 
                 print(f"Setting TinyMCE content: {processed_description[:100]}...")
-                
+
                 # Method 1: Use TinyMCE API to set HTML content
+                # Pre-escape backticks outside f-string (Python 3.11 doesn't allow backslashes in f-string expressions)
+                escaped_desc = processed_description.replace('`', '\\`')
                 try:
                     driver.execute_script(f"""
                         var editor = tinymce.get('item_desc');
                         if (editor) {{
-                            editor.setContent(`{processed_description.replace('`', '\\`')}`);
+                            editor.setContent(`{escaped_desc}`);
                             console.log('TinyMCE content set via API');
                         }} else {{
                             console.log('TinyMCE editor not found, trying iframe method');
@@ -1264,7 +1266,7 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
                     driver.switch_to.frame(iframe)
                     
                     driver.execute_script(f"""
-                        document.getElementById('tinymce').innerHTML = `{processed_description.replace('`', '\\`')}`;
+                        document.getElementById('tinymce').innerHTML = `{escaped_desc}`;
                     """)
                     
                     driver.switch_to.default_content()

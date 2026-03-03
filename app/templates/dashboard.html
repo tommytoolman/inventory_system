@@ -18,9 +18,11 @@
     {% endif %} -->
 
     <!-- Platform Status Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+    {% set vp_count = visible_platforms|length if visible_platforms else 5 %}
+    <div class="grid grid-cols-1 md:grid-cols-2 {% if vp_count <= 3 %}lg:grid-cols-3{% elif vp_count == 4 %}lg:grid-cols-4{% else %}lg:grid-cols-5{% endif %} gap-6 mb-6">
         
         <!-- Shopify Card -->
+        {% if not visible_platforms or 'shopify' in visible_platforms %}
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-green-500">
             <div class="flex items-center justify-between mb-3 border-b pb-2">
                 <div class="flex items-center">
@@ -70,9 +72,11 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
 
-        
+
         <!-- Reverb Card -->
+        {% if not visible_platforms or 'reverb' in visible_platforms %}
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-orange-500">
             <div class="flex items-center justify-between mb-3 border-b pb-2">
                 <div class="flex items-center">
@@ -118,9 +122,11 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
 
-        
+
         <!-- V&R Card -->
+        {% if not visible_platforms or 'vr' in visible_platforms %}
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-gray-500">
             <div class="flex items-center justify-between mb-3 border-b pb-2">
                 <div class="flex items-center">
@@ -166,9 +172,11 @@
                 {% endif %}
             </div>
         </div>
-        
+        {% endif %}
+
 
         <!-- eBay Card -->
+        {% if not visible_platforms or 'ebay' in visible_platforms %}
         <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-blue-500">
             <div class="flex items-center justify-between mb-3 border-b pb-2">
                 <div class="flex items-center">
@@ -214,7 +222,60 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
 
+        <!-- WooCommerce Card -->
+        {% if not visible_platforms or 'woocommerce' in visible_platforms %}
+        <div class="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow border-l-4 border-l-purple-500">
+            <div class="flex items-center justify-between mb-3 border-b pb-2">
+                <div class="flex items-center">
+                    <img src="https://www.google.com/s2/favicons?sz=16&domain=woocommerce.com" class="mr-2 w-4 h-4">
+                    <a href="{{ settings.WC_STORE_URL or '#' }}/wp-admin/edit.php?post_type=product" target="_blank" class="text-lg font-semibold text-inherit no-underline hover:no-underline">WooCommerce</a>
+                </div>
+                <div class="w-3 h-3 rounded-full {% if woocommerce_sync_status == 'error' %}bg-red-500{% elif woocommerce_sync_status == 'stale' %}bg-amber-500{% else %}bg-green-500{% endif %}"
+                     title="{% if woocommerce_sync_status == 'error' %}Last sync failed{% elif woocommerce_sync_status == 'stale' %}Sync overdue{% else %}Synced OK{% endif %}"></div>
+            </div>
+
+            <!-- Active Count -->
+            <div class="mb-3">
+                <span class="text-2xl font-bold">{{ woocommerce_count|default(0) }}</span>
+                <span class="text-gray-500 text-sm ml-1">active</span>
+            </div>
+
+            <!-- Other Counts - Compact Grid -->
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Sold</span>
+                    <span class="font-medium">{{ woocommerce_sold_count|default(0) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Ended</span>
+                    <span class="font-medium">{{ woocommerce_ended_count|default(0) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Archived</span>
+                    <span class="font-medium">{{ woocommerce_archived_count|default(0) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Draft</span>
+                    <span class="font-medium">{{ woocommerce_draft_count|default(0) }}</span>
+                </div>
+            </div>
+
+            <!-- Last Sync -->
+            <div class="text-xs text-gray-400 border-t pt-2">
+                {% if woocommerce_last_sync %}
+                    {% if woocommerce_last_sync is not none and woocommerce_last_sync is not string %}
+                    Synced: {{ woocommerce_last_sync.strftime("%d/%m %H:%M") }}
+                    {% else %}
+                    Synced: {{ woocommerce_last_sync }}
+                    {% endif %}
+                {% else %}
+                Never synced
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
 
     </div>
 
@@ -292,6 +353,8 @@
                         <img src="https://www.google.com/s2/favicons?sz=32&domain=ebay.com" class="w-5 h-5 flex-shrink-0">
                         {% elif order.platform == 'shopify' %}
                         <img src="https://www.google.com/s2/favicons?sz=32&domain=shopify.com" class="w-5 h-5 flex-shrink-0">
+                        {% elif order.platform == 'woocommerce' %}
+                        <img src="https://www.google.com/s2/favicons?sz=32&domain=woocommerce.com" class="w-5 h-5 flex-shrink-0">
                         {% endif %}
                         <span class="text-xs text-gray-500 flex-shrink-0">#{{ order.order_id }} @ {{ order.created_at }}</span>
                     </div>
@@ -363,6 +426,8 @@
                         <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="w-4 h-4">
                         {% elif event.platform == 'vr' %}
                         <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="w-4 h-4">
+                        {% elif event.platform == 'woocommerce' %}
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=woocommerce.com" class="w-4 h-4">
                         {% endif %}
                         {% if event.change_type == 'status' %}
                         <span class="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-800">status</span>
@@ -460,7 +525,7 @@ const maxReconnectAttempts = 5;
 
 let syncAllState = {
     isSyncingAll: false,
-    platformsToSync: ['ebay', 'reverb', 'vr', 'shopify'],
+    platformsToSync: ['ebay', 'reverb', 'vr', 'shopify', 'woocommerce'],
     completedPlatforms: new Set()
 };
 
@@ -779,7 +844,7 @@ function convertToBritishTime(utcTimeString) {
 
 function convertAllSyncTimes() {
     // Convert all sync times on page load
-    ['shopify', 'reverb', 'vr', 'ebay'].forEach(platform => {
+    ['shopify', 'reverb', 'vr', 'ebay', 'woocommerce'].forEach(platform => {
         const syncDisplay = document.getElementById(`${platform}-last-sync-display`);
         if (syncDisplay && syncDisplay.textContent.includes('Last sync:')) {
             const timeMatch = syncDisplay.textContent.match(/Last sync:\s*(\d{2}\/\d{2}\/\d{4},\s*\d{2}:\d{2}:\d{2})/);
@@ -935,7 +1000,8 @@ function getPlatformIcon(platform) {
     const icons = {
         'reverb': '<img src="https://www.google.com/s2/favicons?sz=32&domain=reverb.com" class="w-5 h-5 flex-shrink-0">',
         'ebay': '<img src="https://www.google.com/s2/favicons?sz=32&domain=ebay.com" class="w-5 h-5 flex-shrink-0">',
-        'shopify': '<img src="https://www.google.com/s2/favicons?sz=32&domain=shopify.com" class="w-5 h-5 flex-shrink-0">'
+        'shopify': '<img src="https://www.google.com/s2/favicons?sz=32&domain=shopify.com" class="w-5 h-5 flex-shrink-0">',
+        'woocommerce': '<img src="https://www.google.com/s2/favicons?sz=32&domain=woocommerce.com" class="w-5 h-5 flex-shrink-0">'
     };
     return icons[platform] || '';
 }
@@ -1028,7 +1094,8 @@ function getSyncPlatformIcon(platform) {
         'reverb': '<img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="w-4 h-4">',
         'ebay': '<img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="w-4 h-4">',
         'shopify': '<img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="w-4 h-4">',
-        'vr': '<img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="w-4 h-4">'
+        'vr': '<img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="w-4 h-4">',
+        'woocommerce': '<img src="https://www.google.com/s2/favicons?sz=16&domain=woocommerce.com" class="w-4 h-4">'
     };
     return icons[platform] || '';
 }

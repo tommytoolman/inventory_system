@@ -27,6 +27,7 @@ from app.routes.platforms.ebay import run_ebay_sync_background
 from app.routes.platforms.reverb import run_reverb_sync_background
 from app.routes.platforms.shopify import run_shopify_sync_background
 from app.routes.platforms.vr import run_vr_sync_background
+from app.routes.platforms.woocommerce import run_woocommerce_sync_background
 from app.services.websockets.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -160,6 +161,10 @@ async def _run_sync_all_background(
     if getattr(settings, "VINTAGE_AND_RARE_USERNAME", None) and getattr(settings, "VINTAGE_AND_RARE_PASSWORD", None):
         if not target_platforms or "vr" in target_platforms:
             available_platforms.append(("vr", _create_vr_sync_task))
+
+    if getattr(settings, "WC_STORE_URL", None) and getattr(settings, "WC_CONSUMER_KEY", None):
+        if not target_platforms or "woocommerce" in target_platforms:
+            available_platforms.append(("woocommerce", _create_woocommerce_sync_task))
 
     if not available_platforms:
         message = "No platforms available for sync"
@@ -372,3 +377,15 @@ async def _create_vr_sync_task(settings: Settings, sync_run_id: uuid.UUID):
             )
 
     return await _retry_with_backoff(vr_sync, "V&R")
+
+
+async def _create_woocommerce_sync_task(settings: Settings, sync_run_id: uuid.UUID):
+    async def woocommerce_sync():
+        async with async_session() as db:
+            return await run_woocommerce_sync_background(
+                db=db,
+                settings=settings,
+                sync_run_id=sync_run_id,
+            )
+
+    return await _retry_with_backoff(woocommerce_sync, "WooCommerce")

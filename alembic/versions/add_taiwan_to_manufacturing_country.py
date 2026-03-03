@@ -18,8 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add TW (Taiwan) to the manufacturingcountry enum
-    op.execute("ALTER TYPE manufacturingcountry ADD VALUE IF NOT EXISTS 'TW'")
+    bind = op.get_bind()
+    if bind.dialect.name != 'sqlite':
+        # SQLite uses String columns instead of ENUMs, no ALTER TYPE needed
+        op.execute("ALTER TYPE manufacturingcountry ADD VALUE IF NOT EXISTS 'TW'")
 
 
 def downgrade() -> None:

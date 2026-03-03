@@ -280,7 +280,7 @@ async def status_mismatches_report(
             "platform_a": platform_a,
             "platform_b": platform_b,
             "total_value": sum(float(item['price'] or 0) for item in mismatches),
-            "platforms": ["reverb", "ebay", "shopify", "vr"]
+            "platforms": ["reverb", "ebay", "shopify", "vr", "woocommerce"]
         })
 
 
@@ -2144,6 +2144,7 @@ async def sales_report(
             "ebay_sales": platform_totals.get("ebay", 0),
             "shopify_sales": platform_totals.get("shopify", 0),
             "vr_sales": platform_totals.get("vr", 0),
+            "woocommerce_sales": platform_totals.get("woocommerce", 0),
         }
 
         # Build WHERE clause for the trend query using the same filters as the
@@ -2181,7 +2182,7 @@ async def sales_report(
             "days_filter": days_filter,
             "sort_by": sort_by,
             "sort_order": sort_order,
-            "platforms": ["reverb", "ebay", "shopify", "vr"]
+            "platforms": ["reverb", "ebay", "shopify", "vr", "woocommerce"]
         })
 
 
@@ -3057,7 +3058,7 @@ async def matching_interface(request: Request):
     """Manual product matching interface"""
     return templates.TemplateResponse("matching/interface.html", {
         "request": request,
-        "platforms": ["reverb", "shopify", "vr", "ebay"]
+        "platforms": ["reverb", "shopify", "vr", "ebay", "woocommerce"]
     })
 
 

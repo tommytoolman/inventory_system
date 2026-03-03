@@ -18,15 +18,28 @@ if not database_url:
 if database_url.startswith('postgresql://'):
     database_url = database_url.replace('postgresql://', 'postgresql+asyncpg://', 1)
 
-engine = create_async_engine(
-    database_url,
-    echo=False,
-    future=True,
-    pool_size=10,             # Add these lines
-    max_overflow=20,          # Add these lines
-    pool_timeout=30,          # Add these lines
-    pool_recycle=1800         # Add these lines
-)
+# Check if using SQLite
+is_sqlite = database_url.startswith('sqlite')
+
+# Create engine with conditional parameters
+if is_sqlite:
+    # SQLite doesn't support pool_size, max_overflow, pool_timeout
+    engine = create_async_engine(
+        database_url,
+        echo=False,
+        future=True,
+    )
+else:
+    # PostgreSQL supports pooling
+    engine = create_async_engine(
+        database_url,
+        echo=False,
+        future=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_timeout=30,
+        pool_recycle=1800,
+    )
 
 
 async_session = async_sessionmaker(

@@ -26,31 +26,42 @@ depends_on: Union[str, Sequence[str], None] = None
 def table_exists(table_name: str) -> bool:
     """Check if a table exists in the database."""
     conn = op.get_bind()
-    result = conn.execute(
-        text(
-            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = :table_name)"
-        ),
-        {"table_name": table_name},
-    )
-    return result.scalar()
+    if conn.dialect.name == 'sqlite':
+        result = conn.execute(
+            text("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = :table_name"),
+            {"table_name": table_name},
+        )
+        return result.scalar() > 0
+    else:
+        result = conn.execute(
+            text(
+                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = :table_name)"
+            ),
+            {"table_name": table_name},
+        )
+        return result.scalar()
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
+    ts_default = text("CURRENT_TIMESTAMP") if is_sqlite else text("timezone('utc', now())")
+
     if not table_exists("listing_stats_history"):
         op.create_table(
             "listing_stats_history",
             sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-            sa.Column("platform", sa.String(50), nullable=False, index=True),  # 'reverb', 'ebay', etc.
-            sa.Column("platform_listing_id", sa.String(100), nullable=False, index=True),  # External ID
-            sa.Column("product_id", sa.Integer(), nullable=True, index=True),  # FK to products.id for easy navigation
+            sa.Column("platform", sa.String(50), nullable=False, index=True),
+            sa.Column("platform_listing_id", sa.String(100), nullable=False, index=True),
+            sa.Column("product_id", sa.Integer(), nullable=True, index=True),
             sa.Column("view_count", sa.Integer(), nullable=True),
             sa.Column("watch_count", sa.Integer(), nullable=True),
-            sa.Column("price", sa.Float(), nullable=True),  # Price at time of snapshot
-            sa.Column("state", sa.String(50), nullable=True),  # Listing state (live, ended, etc.)
+            sa.Column("price", sa.Float(), nullable=True),
+            sa.Column("state", sa.String(50), nullable=True),
             sa.Column(
                 "recorded_at",
                 sa.TIMESTAMP(timezone=False),
-                server_default=text("timezone('utc', now())"),
+                server_default=ts_default,
                 nullable=False,
                 index=True,
             ),

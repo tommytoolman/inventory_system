@@ -19,7 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE productstatus ADD VALUE IF NOT EXISTS 'DELETED'")
+    bind = op.get_bind()
+    if bind.dialect.name != 'sqlite':
+        # SQLite uses String columns instead of ENUMs, no ALTER TYPE needed
+        op.execute("ALTER TYPE productstatus ADD VALUE IF NOT EXISTS 'DELETED'")
 
 
 def downgrade() -> None:

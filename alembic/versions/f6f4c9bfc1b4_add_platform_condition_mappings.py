@@ -26,17 +26,23 @@ product_condition_enum = postgresql.ENUM(
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
+
+    ts_default = sa.text("CURRENT_TIMESTAMP") if is_sqlite else sa.text("timezone('utc', now())")
+    condition_type = sa.String(length=20) if is_sqlite else product_condition_enum
+
     op.create_table(
         'platform_condition_mappings',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('platform_name', sa.String(length=32), nullable=False),
-        sa.Column('condition', product_condition_enum, nullable=False),
+        sa.Column('condition', condition_type, nullable=False),
         sa.Column('platform_condition_id', sa.String(length=128), nullable=False),
         sa.Column('display_name', sa.String(length=128), nullable=True),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('category_scope', sa.String(length=64), nullable=False, server_default='default'),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text("timezone('utc', now())"), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text("timezone('utc', now())"), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=ts_default, nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=ts_default, nullable=False),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('platform_name', 'condition', 'category_scope', name='uq_platform_condition_scope')
     )
@@ -53,10 +59,11 @@ def upgrade() -> None:
         unique=False
     )
 
+    # Use sa.String for the table definition (compatible with both dialects for bulk_insert)
     platform_condition_table = sa.table(
         'platform_condition_mappings',
         sa.column('platform_name', sa.String),
-        sa.column('condition', product_condition_enum),
+        sa.column('condition', sa.String),
         sa.column('platform_condition_id', sa.String),
         sa.column('display_name', sa.String),
         sa.column('description', sa.Text),

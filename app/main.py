@@ -162,27 +162,9 @@ app.include_router(admin_router, dependencies=[require_auth()])
 app.include_router(health.router)  # Health check should be accessible without auth
 
 ## This will show us in CLI all our registered routes. Uncomment to show.
-# print("Registered routes:")
-# for route in app.routes:
-#     if hasattr(route, 'path') and hasattr(route, 'methods'):
-#         print(f"  {route.methods} {route.path}")
-
-# Root redirect - now requires authentication
 @app.get("/", dependencies=[Depends(get_current_username)])
 async def root():
     return RedirectResponse(url="/inventory")
-
-# Root redirect - this might conflict with dashboard.router if dashboard is also on "/"
-# If dashboard.router handles "/", this root redirect might not be hit as dashboard would match first.
-# Check the order or ensure dashboard.router is not on the bare "/" if this redirect is desired.
-# Your dashboard.router is on prefix="", so its @router.get("/") is indeed the root.
-# This @app.get("/") will likely not be reached if dashboard.router handles "/".
-# You might want to remove this or make dashboard.router have a prefix if this is the intended root.
-# For now, assuming dashboard.router serves your root HTML page.
-# @app.get("/")
-# async def root():
-#     return RedirectResponse(url="/inventory") # Or perhaps "/dashboard" if dashboard.py is the entry?
-# Your dashboard.html seems to be served from "/" by dashboard.router
 
 
 # Test route for 404

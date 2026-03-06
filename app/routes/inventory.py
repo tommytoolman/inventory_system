@@ -1,7 +1,13 @@
+# NOTE: This file is ~8K lines. A future split into products.py, listings.py,
+# dropbox.py, data_api.py was considered but deferred. Pros: smaller blast radius
+# if a bad import breaks a file. Cons: the file works fine as-is, AI tooling handles
+# large files without issue, and the split risks breaking imports, route ordering,
+# and shared helpers for no behavioral gain. Revisit if multi-developer or if the
+# file grows significantly beyond current size.
+
 import os
 import re
 import json
-import math
 import asyncio
 import aiofiles
 import logging
@@ -11,7 +17,7 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from urllib.parse import quote_plus, urlparse
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Union, Tuple
 
 from fastapi import (
@@ -29,9 +35,9 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
 
-from sqlalchemy import select, or_, distinct, func, desc, and_, delete, text
+from sqlalchemy import select, or_, func, desc, and_, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings, get_settings
 from app.core.enums import (
@@ -58,7 +64,6 @@ from app.models.vr import VRListing
 from app.models.reverb import ReverbListing
 from app.models.ebay import EbayListing
 from app.models.shopify import ShopifyListing
-# from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
 from app.services.category_mapping_service import CategoryMappingService
 from app.services.product_service import ProductService
 from app.services.ebay_service import EbayService, MUSICAL_INSTRUMENT_CATEGORY_IDS
@@ -77,7 +82,6 @@ from app.services.shopify.utils import (
     generate_shopify_short_description,
 )
 from app.services.vintageandrare.brand_validator import VRBrandValidator
-from app.services.vintageandrare.client import VintageAndRareClient
 from app.services.vintageandrare.export import VRExportService
 from app.services.vintageandrare.constants import DEFAULT_VR_BRAND
 from app.schemas.product import ProductCreate
@@ -270,14 +274,10 @@ async def _fetch_current_platform_prices(db: AsyncSession, product_id: int) -> D
 
 PRICE_CHANGE_EPSILON = 0.01
 
-# DEFAULT_EBAY_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR eBay Accepted Brands TABLE***
-# DEFAULT_REVERB_BRAND = "Gibson" # <<< ***IMPORTANT: CHOOSE A VALID BRAND FROM YOUR Reverb Accepted Brands TABLE***
-
 logger = logging.getLogger(__name__)
 
 
 UPLOAD_DIR_PATH = Path(UPLOAD_DIR)
-# DROPBOX_UPLOAD_ROOT = "/InventorySystem/auto-uploads"
 
 def _is_local_upload(url: Optional[str]) -> bool:
     return bool(url and url.startswith("/static/uploads/"))
@@ -415,16 +415,6 @@ async def _determine_vr_price(
         logger_instance.warning(
             "Unable to determine VR price for SKU %s; base price missing", product.sku
         )
-    return None
-    if isinstance(value, str):
-        cleaned = value.replace(",", "").strip()
-        if not cleaned:
-            return None
-        try:
-            return Decimal(cleaned)
-        except Exception:
-            logger.warning("Unable to parse price value '%s'", value)
-            return None
     return None
 
 
@@ -1071,8 +1061,7 @@ async def _prepare_vr_payload_from_product_object(
 
     # --- SKU --- 
     if product.sku:
-        # payload["sku"] = product.sku  # ✅ Keep this for reference  
-        payload["external_id"] = product.sku  # ✅ Add this - what client.py expects
+        payload["external_id"] = product.sku
             
     #  --- Condition --- (not a value in V&R)
     if product.condition:
@@ -1528,9 +1517,6 @@ async def list_products(
     else:
         # Default ordering - newest first
         query = query.order_by(desc(Product.created_at))
-    
-    # Apply pagination and ordering
-    # query = query.order_by(desc(Product.created_at))
     
     if pagination_limit:
         query = query.offset(pagination_offset).limit(pagination_limit)

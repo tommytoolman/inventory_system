@@ -73,120 +73,138 @@ async def sync_woocommerce(
 async def run_woocommerce_sync_background(
     settings: Settings,
     sync_run_id: uuid.UUID,
+    db: AsyncSession = None,
 ):
     """Run WooCommerce sync in background with WebSocket updates.
 
-    Creates its own DB session to avoid sharing the route's session,
-    which may close before the background task completes.
+    Args:
+        settings: Application settings.
+        sync_run_id: UUID for this sync run.
+        db: Optional database session. If provided, uses it directly
+            (called from sync_all). If None, creates its own session
+            (called from the standalone sync endpoint).
     """
     logger.info(f"Starting WooCommerce sync background task for run_id: {sync_run_id}")
 
+    if db is not None:
+        await _run_woocommerce_sync_with_session(db, settings, sync_run_id)
+        return
+
     async with async_session() as db:
-        activity_logger = ActivityLogger(db)
+        await _run_woocommerce_sync_with_session(db, settings, sync_run_id)
 
-        try:
-            # Send start notification
-            await manager.broadcast({
-                "type": "sync_started",
-                "platform": "woocommerce",
-                "sync_run_id": str(sync_run_id),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
 
-            # Run import
-            wc_service = WooCommerceService(db, settings)
-            result = await wc_service.run_import_process(sync_run_id)
+async def _run_woocommerce_sync_with_session(
+    db: AsyncSession,
+    settings: Settings,
+    sync_run_id: uuid.UUID,
+):
+    """Core sync logic shared by both standalone and sync_all code paths."""
+    activity_logger = ActivityLogger(db)
 
-            if result.get("status") == "success" or "total_from_woocommerce" in result:
-                # Update last_sync timestamp for WooCommerce platform entries
-                update_query = text("""
-                    UPDATE platform_common
-                    SET last_sync = :now,
-                        sync_status = 'SYNCED'
-                    WHERE platform_name = 'woocommerce'
-                """).bindparams(now=datetime.now(timezone.utc))
-                await db.execute(update_query)
+    try:
+        # Send start notification
+        await manager.broadcast({
+            "type": "sync_started",
+            "platform": "woocommerce",
+            "sync_run_id": str(sync_run_id),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
-                # Log successful sync
-                await activity_logger.log_activity(
-                    action="sync",
-                    entity_type="platform",
-                    entity_id="woocommerce",
-                    platform="woocommerce",
-                    details={
-                        "status": "success",
-                        "total": result.get("total_from_woocommerce", 0),
-                        "created": result.get("created", 0),
-                        "updated": result.get("updated", 0),
-                        "errors": result.get("errors", 0),
-                        "icon": "✅",
-                        "message": f"Synced WooCommerce ({result.get('total_from_woocommerce', 0)} items)",
-                    },
-                )
+        # Run import
+        wc_service = WooCommerceService(db, settings)
+        result = await wc_service.run_import_process(sync_run_id)
 
-                # Send success notification (include error summary if present)
-                broadcast_data = {
-                    "type": "sync_completed",
-                    "platform": "woocommerce",
+        if result.get("status") == "success" or "total_from_woocommerce" in result:
+            # Update last_sync timestamp for WooCommerce platform entries
+            update_query = text("""
+                UPDATE platform_common
+                SET last_sync = :now,
+                    sync_status = 'SYNCED'
+                WHERE platform_name = 'woocommerce'
+            """).bindparams(now=datetime.now(timezone.utc))
+            await db.execute(update_query)
+
+            # Log successful sync
+            await activity_logger.log_activity(
+                action="sync",
+                entity_type="platform",
+                entity_id="woocommerce",
+                platform="woocommerce",
+                details={
                     "status": "success",
-                    "data": result,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-                if result.get("error_summary"):
-                    broadcast_data["error_summary"] = result["error_summary"]
-                await manager.broadcast(broadcast_data)
+                    "total": result.get("total_from_woocommerce", 0),
+                    "created": result.get("created", 0),
+                    "updated": result.get("updated", 0),
+                    "errors": result.get("errors", 0),
+                    "icon": "✅",
+                    "message": f"Synced WooCommerce ({result.get('total_from_woocommerce', 0)} items)",
+                },
+            )
 
-                logger.info(f"WooCommerce import result: {result}")
+            # Send success notification (include error summary if present)
+            broadcast_data = {
+                "type": "sync_completed",
+                "platform": "woocommerce",
+                "status": "success",
+                "data": result,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            if result.get("error_summary"):
+                broadcast_data["error_summary"] = result["error_summary"]
+            await manager.broadcast(broadcast_data)
 
-            else:
-                # Log failed sync
-                await activity_logger.log_activity(
-                    action="sync_error",
-                    entity_type="platform",
-                    entity_id="woocommerce",
-                    platform="woocommerce",
-                    details={
-                        "error": result.get("message", "Unknown error"),
-                        "sync_run_id": str(sync_run_id),
-                    },
-                )
+            logger.info(f"WooCommerce import result: {result}")
 
-                await manager.broadcast({
-                    "type": "sync_completed",
-                    "platform": "woocommerce",
-                    "status": "error",
-                    "message": result.get("message", "Unknown error"),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                })
-
-                logger.error(f"WooCommerce sync error: {result.get('message')}")
-
-            await db.commit()
-
-        except Exception as e:
-            await db.rollback()
-            error_message = str(e)
-            logger.exception(f"WooCommerce sync background task failed: {error_message}")
-
+        else:
+            # Log failed sync
             await activity_logger.log_activity(
                 action="sync_error",
                 entity_type="platform",
                 entity_id="woocommerce",
                 platform="woocommerce",
                 details={
-                    "error": error_message,
+                    "error": result.get("message", "Unknown error"),
                     "sync_run_id": str(sync_run_id),
                 },
             )
-            await db.commit()
 
             await manager.broadcast({
                 "type": "sync_completed",
                 "platform": "woocommerce",
                 "status": "error",
-                "message": error_message,
+                "message": result.get("message", "Unknown error"),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
+
+            logger.error(f"WooCommerce sync error: {result.get('message')}")
+
+        await db.commit()
+
+    except Exception as e:
+        await db.rollback()
+        error_message = str(e)
+        logger.exception(f"WooCommerce sync background task failed: {error_message}")
+
+        await activity_logger.log_activity(
+            action="sync_error",
+            entity_type="platform",
+            entity_id="woocommerce",
+            platform="woocommerce",
+            details={
+                "error": error_message,
+                "sync_run_id": str(sync_run_id),
+            },
+        )
+        await db.commit()
+
+        await manager.broadcast({
+            "type": "sync_completed",
+            "platform": "woocommerce",
+            "status": "error",
+            "message": error_message,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
 
 # ------------------------------------------------------------------

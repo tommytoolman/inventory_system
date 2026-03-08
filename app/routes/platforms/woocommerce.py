@@ -388,12 +388,12 @@ async def test_woocommerce_connection(
     """Test WooCommerce API connectivity."""
     try:
         from app.services.woocommerce.client import WooCommerceClient
-        client = WooCommerceClient()
-        connected = await client.test_connection()
-        if connected:
-            return {"status": "connected", "store_url": settings.WC_STORE_URL}
-        else:
-            return {"status": "failed", "message": "Could not connect to WooCommerce API"}
+        async with WooCommerceClient() as client:
+            connected = await client.test_connection()
+            if connected:
+                return {"status": "connected", "store_url": settings.WC_STORE_URL}
+            else:
+                return {"status": "failed", "message": "Could not connect to WooCommerce API"}
     except Exception as e:
         # NOTE: test-connection intentionally returns a dict with status/error rather than
         # raising HTTPException, as this is a diagnostic endpoint — the "error" IS the response.

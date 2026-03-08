@@ -51,6 +51,16 @@ class WooCommerceService:
         self.settings = settings or get_settings()
         self.client = WooCommerceClient()
 
+    async def close(self):
+        """Close the underlying HTTP client."""
+        await self.client.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
     # ------------------------------------------------------------------
     # Import process (WooCommerce → RIFF)
     # ------------------------------------------------------------------
@@ -73,9 +83,12 @@ class WooCommerceService:
 
         try:
             importer = WooCommerceImporter(self.db)
-            stats = await importer.import_all_listings(
-                sync_run_id=str(sync_run_id)
-            )
+            try:
+                stats = await importer.import_all_listings(
+                    sync_run_id=str(sync_run_id)
+                )
+            finally:
+                await importer.close()
 
             result = {
                 "status": "success",

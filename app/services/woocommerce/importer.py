@@ -40,6 +40,16 @@ class WooCommerceImporter:
         self._sync_run_id: Optional[uuid_mod.UUID] = None
         self._processed_wc_ids: set = set()
 
+    async def close(self):
+        """Close the underlying HTTP client."""
+        await self.client.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
     async def import_all_listings(self, status_filter: Optional[str] = None,
                                   limit: Optional[int] = None,
                                   sync_run_id: str = None) -> Dict[str, Any]:

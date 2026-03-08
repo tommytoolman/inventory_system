@@ -30,6 +30,7 @@ from app.services.reverb.client import ReverbClient
 from app.services.ebay_service import EbayService
 from app.services.shopify_service import ShopifyService
 from app.services.vr_service import VRService
+from app.services.woocommerce_service import WooCommerceService
 from app.core.config import get_settings
 from app.services.vr_job_queue import enqueue_vr_job
 
@@ -294,6 +295,23 @@ async def _process_new_listing(
                 logger.error(f"VR creation failed: {e}")
                 result.platforms_failed.append('vr')
                 result.errors.append(f"VR: {str(e)}")
+
+        if 'woocommerce' in platforms_to_create:
+            try:
+                logger.info("\n=== Creating WooCommerce listing ===")
+                settings = get_settings()
+                wc_service = WooCommerceService(session, settings)
+                wc_result = await wc_service.publish_product(product.id)
+                if wc_result.get('success'):
+                    result.platforms_created.append('woocommerce')
+                    result.details['woocommerce'] = wc_result
+                else:
+                    result.platforms_failed.append('woocommerce')
+                    result.errors.append(f"WooCommerce: {wc_result.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"WooCommerce creation failed: {e}")
+                result.platforms_failed.append('woocommerce')
+                result.errors.append(f"WooCommerce: {str(e)}")
 
         # VR Reconciliation - Match VR listing to get real ID
         if 'vr' in result.platforms_created and result.details.get('vr', {}).get('needs_reconciliation'):
@@ -1323,6 +1341,31 @@ async def _process_status_change(
                 else:
                     logger.info(f"No Shopify listing found for {product.sku}, skipping")
 
+            # --- Propagate to WooCommerce ---
+            if 'woocommerce' in target_platforms:
+                wc_pc = platform_commons.get('woocommerce')
+                if wc_pc and wc_pc.external_id:
+                    if wc_pc.status in (ListingStatus.ACTIVE.value, 'live'):
+                        logger.info(f"WooCommerce already active for {product.sku}, skipping relist API call")
+                        result.platforms_created.append('woocommerce')
+                    else:
+                        try:
+                            settings = get_settings()
+                            wc_service = WooCommerceService(session, settings)
+                            await wc_service.update_product(product.id, {"status": "publish"})
+                            wc_pc.status = ListingStatus.ACTIVE.value
+                            wc_pc.sync_status = SyncStatus.SYNCED.value
+                            wc_pc.last_sync = datetime.utcnow()
+                            session.add(wc_pc)
+                            result.platforms_created.append('woocommerce')
+                            logger.info(f"WooCommerce relist successful for {product.sku}")
+                        except Exception as e:
+                            result.platforms_failed.append('woocommerce')
+                            result.errors.append(f"WooCommerce error: {str(e)}")
+                            logger.error(f"WooCommerce relist failed for {product.sku}: {e}")
+                else:
+                    logger.info(f"No WooCommerce listing found for {product.sku}, skipping")
+
             # Update product status
             product.status = ProductStatus.ACTIVE
             session.add(product)
@@ -1364,10 +1407,54 @@ async def _process_price_change(
     event: SyncEvent,
     platforms: Optional[List[str]]
 ) -> EventProcessingResult:
-    """Process price change events"""
+    """Process price change events — propagate price to WooCommerce if applicable."""
     result = EventProcessingResult()
-    result.message = "Price change processing not yet implemented in event_processor"
-    result.success = False
+
+    try:
+        if not event.product_id:
+            result.message = "Event is missing product_id, cannot propagate price."
+            return result
+
+        product = await session.get(Product, event.product_id)
+        if not product:
+            result.message = f"Product with ID {event.product_id} not found."
+            return result
+
+        change_data = event.change_data or {}
+        new_price = change_data.get("new")
+        source_platform = (event.platform_name or "").lower()
+
+        # Propagate to WooCommerce if the change did not originate there
+        if source_platform != "woocommerce":
+            pc_result = await session.execute(
+                select(PlatformCommon).where(
+                    PlatformCommon.product_id == product.id,
+                    PlatformCommon.platform_name == "woocommerce",
+                    PlatformCommon.status == ListingStatus.ACTIVE.value,
+                )
+            )
+            wc_pc = pc_result.scalar_one_or_none()
+            if wc_pc and wc_pc.external_id:
+                try:
+                    settings = get_settings()
+                    wc_service = WooCommerceService(session, settings)
+                    await wc_service.update_product(product.id, {"regular_price": str(new_price)})
+                    result.platforms_created.append("woocommerce")
+                    logger.info(f"Propagated price change to WooCommerce for product {product.id}")
+                except Exception as e:
+                    result.platforms_failed.append("woocommerce")
+                    result.errors.append(f"WooCommerce: {str(e)}")
+                    logger.error(f"Failed to propagate price to WooCommerce: {e}")
+
+        result.success = True
+        result.product_id = product.id
+        result.message = f"Price change processed for product {product.id}"
+
+    except Exception as e:
+        result.message = f"Error processing price change: {e}"
+        logger.error(result.message, exc_info=True)
+        result.errors.append(str(e))
+
     return result
 
 
@@ -1438,6 +1525,26 @@ async def _process_quantity_change(
                     except (TypeError, ValueError):
                         pass
                 session.add(listing)
+
+        # Propagate quantity to WooCommerce if source is not WC
+        source_platform = (event.platform_name or "").lower()
+        if source_platform != "woocommerce":
+            wc_pc_result = await session.execute(
+                select(PlatformCommon).where(
+                    PlatformCommon.product_id == product.id,
+                    PlatformCommon.platform_name == "woocommerce",
+                    PlatformCommon.status == ListingStatus.ACTIVE.value,
+                )
+            )
+            wc_pc = wc_pc_result.scalar_one_or_none()
+            if wc_pc and wc_pc.external_id:
+                try:
+                    settings = get_settings()
+                    wc_service = WooCommerceService(session, settings)
+                    await wc_service.update_inventory(wc_pc.external_id, new_quantity_int)
+                    logger.info(f"Propagated quantity {new_quantity_int} to WooCommerce for product {product.id}")
+                except Exception as e:
+                    logger.error(f"Failed to propagate quantity to WooCommerce: {e}")
 
         result.success = True
         result.product_id = product.id

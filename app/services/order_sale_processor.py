@@ -365,6 +365,21 @@ class OrderSaleProcessor:
                         actions.append(f"Shopify: local DB qty updated to {new_qty}")
                         logger.info(f"Updated Shopify local DB qty to {new_qty} for listing {source_listing.external_id}")
 
+            elif source_platform == "woocommerce":
+                from app.models.woocommerce import WooCommerceListing
+                wc_result = await self.db.execute(
+                    select(WooCommerceListing).where(
+                        WooCommerceListing.platform_id == source_listing.id
+                    )
+                )
+                wc_listing = wc_result.scalar_one_or_none()
+                if wc_listing and wc_listing.stock_quantity != new_qty:
+                    wc_listing.stock_quantity = new_qty
+                    wc_listing.stock_status = "outofstock" if new_qty <= 0 else "instock"
+                    self.db.add(wc_listing)
+                    actions.append(f"WooCommerce: local DB qty updated to {new_qty}")
+                    logger.info(f"Updated WooCommerce local DB qty to {new_qty} for listing {source_listing.external_id}")
+
         except Exception as e:
             actions.append(f"{source_platform}: local DB update error - {str(e)[:50]}")
             logger.error(f"Error updating {source_platform} local DB qty: {e}", exc_info=True)

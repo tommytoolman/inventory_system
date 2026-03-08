@@ -462,6 +462,83 @@ def verify_wc_webhook_signature(payload: bytes, signature: str, secret: str) -> 
     return hmac.compare_digest(expected, signature)
 
 
+# -- Payload validation helpers ------------------------------------
+
+def _validate_webhook_product_payload(payload: dict) -> dict:
+    """Validate and sanitise a WooCommerce product webhook payload."""
+    validated = {}
+
+    # ID must be a positive integer
+    product_id = payload.get("id")
+    if not isinstance(product_id, int) or product_id <= 0:
+        raise ValueError(f"Invalid product id: {product_id}")
+    validated["id"] = product_id
+
+    # stock_quantity: non-negative integer or None
+    stock_qty = payload.get("stock_quantity")
+    if stock_qty is not None:
+        if not isinstance(stock_qty, (int, float)) or stock_qty < 0:
+            stock_qty = 0
+        validated["stock_quantity"] = int(stock_qty)
+
+    # price fields: parseable positive number or empty
+    for price_field in ("regular_price", "sale_price", "price"):
+        price_val = payload.get(price_field, "")
+        if price_val and price_val not in ("", None):
+            try:
+                parsed = float(price_val)
+                if parsed < 0:
+                    price_val = "0"
+            except (ValueError, TypeError):
+                price_val = "0"
+        validated[price_field] = price_val
+
+    # images: limit to 50
+    images = payload.get("images", [])
+    if isinstance(images, list):
+        validated["images"] = images[:50]
+
+    # description: truncate to 500KB
+    for desc_field in ("description", "short_description"):
+        desc = payload.get(desc_field, "")
+        if isinstance(desc, str) and len(desc) > 500_000:
+            desc = desc[:500_000]
+        validated[desc_field] = desc
+
+    # Pass through remaining safe fields
+    safe_fields = ("name", "sku", "slug", "status", "type", "manage_stock",
+                   "stock_status", "categories", "tags", "meta_data")
+    for field in safe_fields:
+        if field in payload:
+            validated[field] = payload[field]
+
+    return validated
+
+
+def _validate_webhook_order_payload(payload: dict) -> dict:
+    """Validate and sanitise a WooCommerce order webhook payload."""
+    validated = {}
+
+    # ID must be a positive integer
+    order_id = payload.get("id")
+    if not isinstance(order_id, int) or order_id <= 0:
+        raise ValueError(f"Invalid order id: {order_id}")
+    validated["id"] = order_id
+
+    # Safe pass-through fields
+    safe_fields = (
+        "number", "order_key", "status", "payment_method",
+        "payment_method_title", "customer_id", "billing", "shipping",
+        "total", "shipping_total", "total_tax", "discount_total",
+        "currency", "line_items", "date_created", "date_modified",
+    )
+    for field in safe_fields:
+        if field in payload:
+            validated[field] = payload[field]
+
+    return validated
+
+
 # -- Product webhook -----------------------------------------------
 
 @webhook_router.post("/webhooks/woocommerce/product")
@@ -501,11 +578,18 @@ async def handle_wc_product_webhook(
 
     logger.info(f"WC product webhook: topic={topic}, product_id={payload.get('id')}")
 
+    # Validate payload before passing to background task
+    try:
+        validated_payload = _validate_webhook_product_payload(payload)
+    except ValueError as e:
+        logger.warning(f"Invalid WC product webhook payload: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
     # Process in background
     background_tasks.add_task(
         _process_product_webhook_background,
         topic,
-        payload,
+        validated_payload,
         settings,
     )
 
@@ -649,10 +733,17 @@ async def handle_wc_order_webhook(
 
     logger.info(f"WC order webhook: topic={topic}, order_id={payload.get('id')}")
 
+    # Validate payload before passing to background task
+    try:
+        validated_payload = _validate_webhook_order_payload(payload)
+    except ValueError as e:
+        logger.warning(f"Invalid WC order webhook payload: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
     background_tasks.add_task(
         _process_order_webhook_background,
         topic,
-        payload,
+        validated_payload,
         settings,
     )
 

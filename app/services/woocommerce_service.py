@@ -253,6 +253,16 @@ class WooCommerceService:
         # Create in WooCommerce -- enrich any API error with product context
         try:
             wc_product = await self.client.create_product(wc_payload)
+        except WCValidationError as e:
+            # WC-P3-026: Provide actionable error for duplicate SKU
+            if "duplicated SKU" in str(e) or "invalid_sku" in str(e):
+                raise WCValidationError(
+                    f"Product SKU '{product.sku}' already exists on WooCommerce. "
+                    f"Either update the existing WC product or change the SKU in RIFF.",
+                    operation="publish_product",
+                    product_id=product_id,
+                ) from e
+            raise
         except WooCommerceAPIError as e:
             if hasattr(e, "product_id"):
                 e.product_id = product_id
@@ -319,6 +329,23 @@ class WooCommerceService:
                     )
                 )
             raise db_err
+
+        # WC-P3-024: Create SyncEvent for publish audit trail
+        sync_event = SyncEvent(
+            sync_run_id=uuid.uuid4(),
+            platform_name="woocommerce",
+            product_id=product.id,
+            platform_common_id=platform_common.id,
+            external_id=wc_product_id,
+            change_type="initial_publish",
+            change_data={
+                "source": "riff_push",
+                "permalink": wc_product.get("permalink"),
+            },
+            status="completed",
+        )
+        self.db.add(sync_event)
+        await self.db.commit()
 
         logger.info(f"Published product {product_id} to WooCommerce as WC#{wc_product_id}")
 
@@ -399,6 +426,14 @@ class WooCommerceService:
             )
 
         wc_product_id = self._safe_int_id(pc.external_id)
+
+        # WC-P3-031: Include _riff_last_sync meta on every update
+        if "meta_data" not in fields:
+            fields["meta_data"] = []
+        fields["meta_data"].append({
+            "key": "_riff_last_sync",
+            "value": datetime.now(timezone.utc).isoformat(),
+        })
 
         # Push update to WooCommerce
         wc_data = await self.client.update_product(wc_product_id, fields)

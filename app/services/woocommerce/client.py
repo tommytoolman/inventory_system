@@ -319,7 +319,7 @@ class WooCommerceClient:
     async def delete_product(self, product_id: int, force: bool = False) -> Dict[str, Any]:
         """Delete a product (moves to trash by default, force=True permanently deletes)."""
         logger.info(f"Deleting WooCommerce product {product_id} (force={force})")
-        return await self._request("DELETE", f"products/{product_id}", params={"force": force})
+        return await self._request("DELETE", f"products/{product_id}", params={"force": "true" if force else "false"})
 
     async def batch_products(self, create: Optional[List] = None,
                              update: Optional[List] = None,
@@ -335,11 +335,25 @@ class WooCommerceClient:
         return await self._request("POST", "products/batch", json=payload)
 
     async def get_products_count(self) -> int:
-        """Get total number of products."""
-        products = await self.get_products(per_page=1)
-        # WC API doesn't have a dedicated count endpoint; use the header approach
-        # For now, do a full count via pagination
-        return len(await self.get_all_products())
+        """Get total number of products using the X-WP-Total header."""
+        response = await self._request_raw("GET", "products", params={"per_page": 1})
+        return int(response.headers.get("X-WP-Total", 0))
+
+    async def _request_raw(self, method: str, endpoint: str, **kwargs) -> httpx.Response:
+        """Make an authenticated request and return the raw httpx Response object."""
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        params = kwargs.pop("params", {})
+        auth = None
+        if self._uses_https:
+            auth = (self.consumer_key, self.consumer_secret)
+        else:
+            params.update(self._auth_params())
+        timeout = kwargs.pop("timeout", 30)
+        response = await self._client.request(
+            method, url, params=params, auth=auth, timeout=timeout, **kwargs
+        )
+        response.raise_for_status()
+        return response
 
     # ------------------------------------------------------------------
     # Category endpoints

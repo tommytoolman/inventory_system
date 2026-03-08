@@ -191,6 +191,14 @@ class WooCommerceImporter:
         wc_sku = wc_data.get("sku", "")
         self._processed_wc_ids.add(wc_product_id)
 
+        # Warn about unsupported product types
+        product_type = wc_data.get("type", "simple")
+        if product_type in ("variable", "grouped", "external"):
+            logger.warning(
+                f"WooCommerce product {wc_product_id} is type '{product_type}' "
+                f"— imported as simple product. Variations not supported."
+            )
+
         # Extract data for our tables
         product_info = self._extract_product_data(wc_data)
         listing_info = self._extract_listing_data(wc_data)
@@ -250,7 +258,8 @@ class WooCommerceImporter:
                 options = attr.get("options", [])
                 model_name = options[0] if options else ""
 
-        price_str = wc_data.get("regular_price") or wc_data.get("price") or "0"
+        # Use effective price first (reflects sale price when active), then regular_price
+        price_str = wc_data.get("price") or wc_data.get("regular_price") or "0"
         try:
             price = float(price_str)
         except (ValueError, TypeError):

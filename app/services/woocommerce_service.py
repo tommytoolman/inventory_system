@@ -459,6 +459,69 @@ class WooCommerceService:
         return True
 
     # ------------------------------------------------------------------
+    # Product delete with DB cleanup
+    # ------------------------------------------------------------------
+
+    async def delete_product(self, product_id: int, force: bool = False) -> bool:
+        """
+        Delete a product from WooCommerce and clean up local DB records.
+
+        Args:
+            product_id: Local RIFF product ID
+            force: If True, permanently deletes from WC. Otherwise moves to trash.
+
+        Returns:
+            True if successful
+        """
+        result = await self.db.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "woocommerce",
+            )
+        )
+        pc = result.scalar_one_or_none()
+        if not pc:
+            raise WCValidationError(
+                f"No WooCommerce listing found for product {product_id}",
+                operation="delete_product",
+                product_id=product_id,
+            )
+
+        wc_product_id = int(pc.external_id)
+
+        # Delete from WooCommerce
+        await self.client.delete_product(wc_product_id, force=force)
+
+        # Clean up local WooCommerceListing
+        listing_result = await self.db.execute(
+            select(WooCommerceListing).where(
+                WooCommerceListing.wc_product_id == str(wc_product_id)
+            )
+        )
+        listing = listing_result.scalar_one_or_none()
+        if listing:
+            await self.db.delete(listing)
+
+        # Create SyncEvent before deleting PlatformCommon
+        sync_event = SyncEvent(
+            sync_run_id=uuid.uuid4(),
+            platform_name="woocommerce",
+            product_id=product_id,
+            external_id=str(wc_product_id),
+            change_type="product_deleted",
+            change_data={"force": force},
+            status="processed",
+        )
+        self.db.add(sync_event)
+
+        # Delete PlatformCommon
+        await self.db.delete(pc)
+
+        await self.db.commit()
+        logger.info(f"Deleted WC product {wc_product_id} for RIFF product {product_id}")
+        return True
+
+    # ------------------------------------------------------------------
     # Order import
     # ------------------------------------------------------------------
 

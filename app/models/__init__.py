@@ -58,9 +58,9 @@ __all__ = [
     'CategoryVelocityStats',
     'InventoryHealthSnapshot',
     'PlatformPreference',
+    'WooCommerceOrder',
     # 'User',
 ]
-from .ebay_order import EbayOrder
 from .ebay_order import EbayOrder
 from .reverb_order import ReverbOrder
 from .woocommerce_order import WooCommerceOrder

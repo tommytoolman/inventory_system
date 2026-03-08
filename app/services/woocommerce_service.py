@@ -361,10 +361,16 @@ class WooCommerceService:
                 if existing:
                     for key, value in order_fields.items():
                         setattr(existing, key, value)
+                    # Link to RIFF product if not already linked
+                    if not existing.product_id:
+                        await self._link_order_to_product(existing, order_data)
                     updated += 1
                 else:
                     new_order = WooCommerceOrder(**order_fields)
                     self.db.add(new_order)
+                    await self.db.flush()
+                    # Link the new order to a RIFF product
+                    await self._link_order_to_product(new_order, order_data)
                     created += 1
 
             except Exception as e:
@@ -408,6 +414,104 @@ class WooCommerceService:
     async def get_product(self, wc_product_id: str) -> Dict[str, Any]:
         """Get product details from WooCommerce."""
         return await self.client.get_product(int(wc_product_id))
+
+    # ------------------------------------------------------------------
+    # Order-product linking
+    # ------------------------------------------------------------------
+
+    async def _link_order_to_product(
+        self, order: WooCommerceOrder, order_data: Dict[str, Any]
+    ) -> None:
+        """
+        Attempt to link an order to a RIFF product via line items.
+
+        Matching strategy (in priority order):
+        1. SKU field against Product.sku
+        2. WC product_id against WooCommerceListing.wc_product_id
+        3. _riff_id meta in line item meta_data
+
+        Links to the first matched product. Logs a warning for multi-item orders.
+        """
+        line_items = order_data.get("line_items", [])
+        if not line_items:
+            return
+
+        if len(line_items) > 1:
+            logger.warning(
+                f"WC order {order.wc_order_id} has {len(line_items)} line items — "
+                f"will link to first matched product only"
+            )
+
+        for item in line_items:
+            product = None
+            platform_common = None
+
+            # Strategy 1: Match by SKU
+            item_sku = item.get("sku")
+            if item_sku:
+                result = await self.db.execute(
+                    select(Product).where(Product.sku == item_sku)
+                )
+                product = result.scalar_one_or_none()
+
+            # Strategy 2: Match by WC product_id → WooCommerceListing
+            if not product:
+                wc_pid = str(item.get("product_id", ""))
+                if wc_pid:
+                    result = await self.db.execute(
+                        select(WooCommerceListing).where(
+                            WooCommerceListing.wc_product_id == wc_pid
+                        )
+                    )
+                    wc_listing = result.scalar_one_or_none()
+                    if wc_listing and wc_listing.platform_id:
+                        pc_result = await self.db.execute(
+                            select(PlatformCommon).where(
+                                PlatformCommon.id == wc_listing.platform_id
+                            )
+                        )
+                        platform_common = pc_result.scalar_one_or_none()
+                        if platform_common and platform_common.product_id:
+                            p_result = await self.db.execute(
+                                select(Product).where(
+                                    Product.id == platform_common.product_id
+                                )
+                            )
+                            product = p_result.scalar_one_or_none()
+
+            # Strategy 3: Match by _riff_id meta
+            if not product:
+                for meta in item.get("meta_data", []):
+                    if meta.get("key") == "_riff_id":
+                        riff_id = meta.get("value")
+                        if riff_id:
+                            try:
+                                result = await self.db.execute(
+                                    select(Product).where(Product.id == int(riff_id))
+                                )
+                                product = result.scalar_one_or_none()
+                            except (ValueError, TypeError):
+                                pass
+                        break
+
+            if product:
+                order.product_id = product.id
+                # Find PlatformCommon if not already found
+                if not platform_common:
+                    pc_result = await self.db.execute(
+                        select(PlatformCommon).where(
+                            PlatformCommon.product_id == product.id,
+                            PlatformCommon.platform_name == "woocommerce",
+                        )
+                    )
+                    platform_common = pc_result.scalar_one_or_none()
+                if platform_common:
+                    order.platform_listing_id = platform_common.id
+                logger.info(
+                    f"Linked WC order {order.wc_order_id} to product {product.id} "
+                    f"(SKU: {product.sku})"
+                )
+                return  # Link to first match only
 
     # ------------------------------------------------------------------
     # Helpers

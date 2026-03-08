@@ -626,6 +626,16 @@ async def handle_wc_product_webhook(
         logger.warning(f"Invalid WC product webhook payload: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+    # WC-P3-016: Validate webhook source header against configured store URL
+    source = request.headers.get("X-WC-Webhook-Source", "")
+    if source:
+        expected_source = (settings.WC_STORE_URL or "").rstrip("/")
+        actual_source = source.rstrip("/")
+        if expected_source and actual_source != expected_source:
+            logger.warning(
+                f"Webhook source mismatch: expected {expected_source}, got {actual_source}"
+            )
+
     # Process in background
     background_tasks.add_task(
         _process_product_webhook_background,
@@ -648,6 +658,20 @@ async def _process_product_webhook_background(
         try:
             service = WooCommerceService(db, settings, wc_store=wc_store)
             wc_product_id = str(payload.get("id", ""))
+
+            # WC-P3-018: Check for missing required fields and re-fetch if needed
+            required_fields = ["id", "name", "sku", "status", "type"]
+            missing = [f for f in required_fields if f not in payload]
+            if missing and payload.get("id"):
+                logger.warning(
+                    f"Webhook payload missing fields: {missing}. Re-fetching from API."
+                )
+                try:
+                    payload = await service.client.get_product(int(wc_product_id))
+                except Exception as fetch_err:
+                    logger.error(
+                        f"Failed to re-fetch WC product {wc_product_id}: {fetch_err}"
+                    )
 
             if topic == "product.created":
                 from app.services.woocommerce.importer import WooCommerceImporter
@@ -787,6 +811,16 @@ async def handle_wc_order_webhook(
         logger.warning(f"Invalid WC order webhook payload: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+    # WC-P3-016: Validate webhook source header
+    source = request.headers.get("X-WC-Webhook-Source", "")
+    if source:
+        expected_source = (settings.WC_STORE_URL or "").rstrip("/")
+        actual_source = source.rstrip("/")
+        if expected_source and actual_source != expected_source:
+            logger.warning(
+                f"Webhook source mismatch: expected {expected_source}, got {actual_source}"
+            )
+
     background_tasks.add_task(
         _process_order_webhook_background,
         topic,
@@ -875,6 +909,17 @@ async def handle_wc_product_webhook_tenant(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # WC-P3-016: Validate webhook source against store URL
+    source = request.headers.get("X-WC-Webhook-Source", "")
+    if wc_store and source:
+        expected_source = wc_store.store_url.rstrip("/")
+        actual_source = source.rstrip("/")
+        if expected_source and actual_source != expected_source:
+            logger.warning(
+                f"Webhook source mismatch for store {store_id}: "
+                f"expected {expected_source}, got {actual_source}"
+            )
+
     background_tasks.add_task(
         _process_product_webhook_background, topic, validated_payload, settings, wc_store,
     )
@@ -931,6 +976,17 @@ async def handle_wc_order_webhook_tenant(
         validated_payload = _validate_webhook_order_payload(payload)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # WC-P3-016: Validate webhook source against store URL
+    source = request.headers.get("X-WC-Webhook-Source", "")
+    if wc_store and source:
+        expected_source = wc_store.store_url.rstrip("/")
+        actual_source = source.rstrip("/")
+        if expected_source and actual_source != expected_source:
+            logger.warning(
+                f"Webhook source mismatch for store {store_id}: "
+                f"expected {expected_source}, got {actual_source}"
+            )
 
     background_tasks.add_task(
         _process_order_webhook_background, topic, validated_payload, settings, wc_store,

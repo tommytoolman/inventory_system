@@ -239,13 +239,16 @@ class WooCommerceClient:
         status = response.status_code
         body_text = response.text
 
-        # Try to extract message from JSON response body
+        # WC-P3-020: Extract both message and machine-parseable code from JSON response
         message = body_text
+        error_code = "unknown"
         try:
             body_json = response.json()
             message = body_json.get("message", body_text)
+            error_code = body_json.get("code", "unknown")
+            wc_logger.error(f"WC API error [{error_code}]: {message}")
         except Exception:
-            pass
+            error_code = "parse_error"
 
         clean_url = self._strip_query(f"{self.base_url}/{endpoint.lstrip('/')}")
         common = {
@@ -255,6 +258,7 @@ class WooCommerceClient:
             "response_body": body_text[:2000],
             "retry_count": attempt,
             "operation": f"api_{method.lower()}_{endpoint.split('/')[0]}",
+            "error_code": error_code,
         }
 
         if status in (401, 403):

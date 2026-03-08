@@ -296,12 +296,20 @@ class WooCommerceClient:
         params = {"per_page": per_page, "page": page, **extra_params}
         return await self._request("GET", "products", params=params)
 
-    async def get_all_products(self, per_page: int = 100) -> List[Dict[str, Any]]:
-        """Fetch all products with automatic pagination."""
+    async def get_all_products(self, per_page: int = 100,
+                              **extra_params) -> List[Dict[str, Any]]:
+        """Fetch all products with automatic pagination.
+
+        WC-P3-005: Filters to publish/draft/pending/private by default,
+        excluding auto-draft and inherit which are not real products.
+        """
         all_products = []
         page = 1
+        # Default status filter excludes auto-draft/inherit
+        if "status" not in extra_params:
+            extra_params["status"] = "publish,draft,pending,private"
         while True:
-            batch = await self.get_products(per_page=per_page, page=page)
+            batch = await self.get_products(per_page=per_page, page=page, **extra_params)
             if not batch:
                 break
             all_products.extend(batch)

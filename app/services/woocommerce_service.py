@@ -613,34 +613,7 @@ class WooCommerceService:
                     billing = order_data.get("billing", {})
                     shipping = order_data.get("shipping", {})
 
-                    order_fields = {
-                        "wc_order_id": wc_order_id,
-                        "order_number": str(order_data.get("number", "")),
-                        "order_key": order_data.get("order_key"),
-                        "status": order_data.get("status"),
-                        "payment_method": order_data.get("payment_method"),
-                        "payment_method_title": order_data.get("payment_method_title"),
-                        "customer_id": str(order_data.get("customer_id", "")),
-                        "customer_name": f"{billing.get('first_name', '')} {billing.get('last_name', '')}".strip(),
-                        "customer_email": billing.get("email"),
-                        "shipping_name": f"{shipping.get('first_name', '')} {shipping.get('last_name', '')}".strip(),
-                        "shipping_address_1": shipping.get("address_1"),
-                        "shipping_address_2": shipping.get("address_2"),
-                        "shipping_city": shipping.get("city"),
-                        "shipping_state": shipping.get("state"),
-                        "shipping_postcode": shipping.get("postcode"),
-                        "shipping_country": shipping.get("country"),
-                        "total": float(order_data.get("total", 0)),
-                        "subtotal": sum(float(li.get("subtotal", 0)) for li in order_data.get("line_items", [])),
-                        "shipping_total": float(order_data.get("shipping_total", 0)),
-                        "tax_total": float(order_data.get("total_tax", 0)),
-                        "discount_total": float(order_data.get("discount_total", 0)),
-                        "currency": order_data.get("currency"),
-                        "line_items": order_data.get("line_items"),
-                        "raw_payload": order_data,
-                        "wc_created_at": self._parse_datetime(order_data.get("date_created")),
-                        "wc_modified_at": self._parse_datetime(order_data.get("date_modified")),
-                    }
+                    order_fields = self._build_order_fields(order_data)
 
                     if existing:
                         old_status = existing.status
@@ -650,7 +623,7 @@ class WooCommerceService:
                         if not existing.product_id:
                             await self._link_order_to_product(existing, order_data)
                         # Process sale or handle cancellation/refund
-                        await self._process_order_sale(existing, old_status)
+                        await self._process_order_sale(existing, old_status, order_data)
                         updated += 1
                     else:
                         new_order = WooCommerceOrder(**order_fields)
@@ -659,7 +632,7 @@ class WooCommerceService:
                         # Link the new order to a RIFF product
                         await self._link_order_to_product(new_order, order_data)
                         # Process sale for new orders
-                        await self._process_order_sale(new_order)
+                        await self._process_order_sale(new_order, order_data=order_data)
                         created += 1
 
             except Exception as e:
@@ -720,37 +693,7 @@ class WooCommerceService:
         )
         existing = result.scalar_one_or_none()
 
-        billing = order_data.get("billing", {})
-        shipping = order_data.get("shipping", {})
-
-        order_fields = {
-            "wc_order_id": wc_order_id,
-            "order_number": str(order_data.get("number", "")),
-            "order_key": order_data.get("order_key"),
-            "status": order_data.get("status"),
-            "payment_method": order_data.get("payment_method"),
-            "payment_method_title": order_data.get("payment_method_title"),
-            "customer_id": str(order_data.get("customer_id", "")),
-            "customer_name": f"{billing.get('first_name', '')} {billing.get('last_name', '')}".strip(),
-            "customer_email": billing.get("email"),
-            "shipping_name": f"{shipping.get('first_name', '')} {shipping.get('last_name', '')}".strip(),
-            "shipping_address_1": shipping.get("address_1"),
-            "shipping_address_2": shipping.get("address_2"),
-            "shipping_city": shipping.get("city"),
-            "shipping_state": shipping.get("state"),
-            "shipping_postcode": shipping.get("postcode"),
-            "shipping_country": shipping.get("country"),
-            "total": float(order_data.get("total", 0)),
-            "subtotal": sum(float(li.get("subtotal", 0)) for li in order_data.get("line_items", [])),
-            "shipping_total": float(order_data.get("shipping_total", 0)),
-            "tax_total": float(order_data.get("total_tax", 0)),
-            "discount_total": float(order_data.get("discount_total", 0)),
-            "currency": order_data.get("currency"),
-            "line_items": order_data.get("line_items"),
-            "raw_payload": order_data,
-            "wc_created_at": self._parse_datetime(order_data.get("date_created")),
-            "wc_modified_at": self._parse_datetime(order_data.get("date_modified")),
-        }
+        order_fields = self._build_order_fields(order_data)
 
         if existing:
             old_status = existing.status
@@ -758,14 +701,14 @@ class WooCommerceService:
                 setattr(existing, key, value)
             if not existing.product_id:
                 await self._link_order_to_product(existing, order_data)
-            await self._process_order_sale(existing, old_status)
+            await self._process_order_sale(existing, old_status, order_data)
             action = "updated"
         else:
             new_order = WooCommerceOrder(**order_fields)
             self.db.add(new_order)
             await self.db.flush()
             await self._link_order_to_product(new_order, order_data)
-            await self._process_order_sale(new_order)
+            await self._process_order_sale(new_order, order_data=order_data)
             action = "created"
 
         await self.db.commit()
@@ -789,12 +732,19 @@ class WooCommerceService:
     _CANCELLED_STATUSES = {"cancelled", "refunded", "failed"}
 
     async def _process_order_sale(
-        self, order: WooCommerceOrder, old_status: Optional[str] = None
+        self, order: WooCommerceOrder, old_status: Optional[str] = None,
+        order_data: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Process inventory changes for a WooCommerce order sale.
 
         - If order is processing/completed and not yet processed: decrement stock
         - If order was processed but now cancelled/refunded: restore stock
+        - WC-P3-013: If order has partial refunds, log and restore refunded items
+
+        NOTE: WooCommerce may retry webhooks with different delivery IDs.
+        The sale_processed flag prevents double-processing:
+        - First delivery: sale_processed=False -> process sale -> set True
+        - Retry delivery: sale_processed=True -> skip (no double decrement)
 
         NOTE: This method duplicates some logic from OrderSaleProcessor.
         Both implementations exist because:
@@ -933,6 +883,26 @@ class WooCommerceService:
             # WC-P3-027: Propagate restored quantity to other platforms
             await self._propagate_quantity_to_other_platforms(product)
 
+        # WC-P3-013: Detect partial refunds (order still processing/completed but has refunds)
+        if (
+            order_data
+            and order.sale_processed
+            and current_status in self._SALE_STATUSES
+        ):
+            refunds = order_data.get("refunds", [])
+            if refunds:
+                total_refunded_qty = 0
+                for refund in refunds:
+                    for item in refund.get("line_items", []):
+                        total_refunded_qty += abs(int(item.get("quantity", 0)))
+                if total_refunded_qty > 0:
+                    wc_logger.log_warning(
+                        f"Order {order.wc_order_id} has partial refund: "
+                        f"{total_refunded_qty} items refunded across {len(refunds)} refund(s). "
+                        f"Manual stock review may be needed.",
+                        operation="process_order_sale",
+                    )
+
     async def _propagate_quantity_to_other_platforms(self, product: Product) -> None:
         """WC-P3-027: Propagate quantity change to other platforms after a WC sale.
 
@@ -995,13 +965,22 @@ class WooCommerceService:
                 )
                 product = result.scalar_one_or_none()
 
+            # WC-P3-010: Warn when product_id is 0 (deleted WC product)
+            wc_pid = item.get("product_id", 0)
+            if wc_pid == 0:
+                wc_logger.log_warning(
+                    f"Order {order.wc_order_id}: line item SKU '{item.get('sku', '')}' "
+                    f"has product_id=0 (product may have been deleted from WooCommerce)",
+                    operation="link_order_to_product",
+                )
+
             # Strategy 2: Match by WC product_id → WooCommerceListing
             if not product:
-                wc_pid = str(item.get("product_id", ""))
-                if wc_pid:
+                wc_pid_str = str(wc_pid) if wc_pid else ""
+                if wc_pid_str and wc_pid_str != "0":
                     result = await self.db.execute(
                         select(WooCommerceListing).where(
-                            WooCommerceListing.wc_product_id == wc_pid
+                            WooCommerceListing.wc_product_id == wc_pid_str
                         )
                     )
                     wc_listing = result.scalar_one_or_none()
@@ -1055,8 +1034,61 @@ class WooCommerceService:
                 return  # Link to first match only
 
     # ------------------------------------------------------------------
+    # Order field builder
+    # ------------------------------------------------------------------
+
+    def _build_order_fields(self, order_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Build order fields dict from WC order data, using _safe_float for all numeric fields."""
+        wc_order_id = str(order_data["id"])
+        billing = order_data.get("billing", {})
+        shipping = order_data.get("shipping", {})
+
+        return {
+            "wc_order_id": wc_order_id,
+            "order_number": str(order_data.get("number", "")),
+            "order_key": order_data.get("order_key"),
+            "status": order_data.get("status"),
+            "payment_method": order_data.get("payment_method"),
+            "payment_method_title": order_data.get("payment_method_title"),
+            "customer_id": str(order_data.get("customer_id", "")),
+            "customer_name": f"{billing.get('first_name', '')} {billing.get('last_name', '')}".strip(),
+            "customer_email": billing.get("email"),
+            "shipping_name": f"{shipping.get('first_name', '')} {shipping.get('last_name', '')}".strip(),
+            "shipping_address_1": shipping.get("address_1"),
+            "shipping_address_2": shipping.get("address_2"),
+            "shipping_city": shipping.get("city"),
+            "shipping_state": shipping.get("state"),
+            "shipping_postcode": shipping.get("postcode"),
+            "shipping_country": shipping.get("country"),
+            # WC-P3-011: Use _safe_float to handle empty strings and None
+            "total": self._safe_float(order_data.get("total")),
+            "subtotal": sum(
+                self._safe_float(li.get("subtotal"))
+                for li in order_data.get("line_items", [])
+            ),
+            "shipping_total": self._safe_float(order_data.get("shipping_total")),
+            "tax_total": self._safe_float(order_data.get("total_tax")),
+            "discount_total": self._safe_float(order_data.get("discount_total")),
+            "currency": order_data.get("currency"),
+            "line_items": order_data.get("line_items"),
+            "raw_payload": order_data,
+            "wc_created_at": self._parse_datetime(order_data.get("date_created")),
+            "wc_modified_at": self._parse_datetime(order_data.get("date_modified")),
+        }
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _safe_float(value, default=0.0):
+        """WC-P3-011: Safely convert a value to float, handling empty strings and None."""
+        if value is None or value == "":
+            return default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
 
     @staticmethod
     def _safe_int_id(value, label: str = "WC product ID") -> int:

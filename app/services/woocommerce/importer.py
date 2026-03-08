@@ -217,14 +217,30 @@ class WooCommerceImporter:
         """
         Process a single WooCommerce product into the database.
 
-        Returns one of: 'created', 'updated', 'sku_matched'
+        Returns one of: 'created', 'updated', 'sku_matched', 'skipped'
         """
         wc_product_id = str(wc_data["id"])
         wc_sku = wc_data.get("sku", "")
+
+        # WC-P3-005: Skip auto-draft and inherit (variation parent placeholders)
+        product_status = wc_data.get("status", "publish")
+        if product_status in ("auto-draft", "inherit"):
+            wc_logger.debug(
+                f"Skipping product {wc_product_id} with status '{product_status}'"
+            )
+            return "skipped"
+
+        # WC-P3-007: Skip variation products (children of variable products)
+        product_type = wc_data.get("type", "simple")
+        if product_type == "variation":
+            wc_logger.debug(
+                f"Skipping variation product {wc_product_id} — variations not supported"
+            )
+            return "skipped"
+
         self._processed_wc_ids.add(wc_product_id)
 
         # Warn about unsupported product types
-        product_type = wc_data.get("type", "simple")
         if product_type in ("variable", "grouped", "external"):
             logger.warning(
                 f"WooCommerce product {wc_product_id} is type '{product_type}' "
@@ -300,9 +316,15 @@ class WooCommerceImporter:
 
     def _extract_product_data(self, wc_data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract RIFF Product fields from WooCommerce data."""
+        # WC-P3-009: Sort images by position to ensure featured image is first
         images = wc_data.get("images", [])
-        primary_image = images[0]["src"] if images else None
-        additional_images = [img["src"] for img in images[1:]] if len(images) > 1 else []
+        if images:
+            sorted_images = sorted(images, key=lambda img: img.get("position", 0))
+            primary_image = sorted_images[0].get("src", "")
+            additional_images = [img.get("src", "") for img in sorted_images[1:] if img.get("src")]
+        else:
+            primary_image = None
+            additional_images = []
 
         # Extract brand from attributes or meta
         brand = ""
@@ -345,7 +367,7 @@ class WooCommerceImporter:
             "model": model_name,
             "description": wc_data.get("description", ""),
             "base_price": price,
-            "quantity": wc_data.get("stock_quantity") if wc_data.get("stock_quantity") is not None else 1,
+            "quantity": self._extract_quantity(wc_data),
             "primary_image": primary_image,
             "additional_images": additional_images,
             "category": self._extract_category_name(wc_data),
@@ -433,6 +455,21 @@ class WooCommerceImporter:
         if categories:
             return categories[0].get("name", "Uncategorised")
         return "Uncategorised"
+
+    def _extract_quantity(self, wc_data: Dict[str, Any]) -> int:
+        """WC-P3-004: Extract quantity respecting manage_stock setting."""
+        manage_stock = wc_data.get("manage_stock", False)
+        if manage_stock:
+            stock_qty = wc_data.get("stock_quantity")
+            return stock_qty if stock_qty is not None else 0
+        # Stock not managed by WooCommerce — use stock_status as indicator
+        stock_status = wc_data.get("stock_status", "instock")
+        quantity = 1 if stock_status == "instock" else 0
+        wc_logger.debug(
+            f"Product {wc_data.get('id')}: manage_stock=False, "
+            f"using stock_status '{stock_status}' -> quantity={quantity}"
+        )
+        return quantity
 
     def _parse_wc_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
         """Parse WooCommerce datetime string to naive UTC datetime."""

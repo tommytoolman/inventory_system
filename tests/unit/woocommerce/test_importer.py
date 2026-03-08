@@ -22,17 +22,41 @@ class TestStockQuantityZero:
             product_data = importer._extract_product_data(MOCK_WC_PRODUCT_ZERO_STOCK)
             assert product_data["quantity"] == 0, "stock_quantity=0 should not default to 1"
 
-    def test_none_stock_defaults_to_1(self):
-        """stock_quantity=None should default to 1."""
+    def test_none_stock_managed_defaults_to_0(self):
+        """WC-P3-004: manage_stock=True + stock_quantity=None should default to 0."""
         with patch("app.services.woocommerce.importer.WooCommerceClient"):
             from app.services.woocommerce.importer import WooCommerceImporter
             importer = WooCommerceImporter.__new__(WooCommerceImporter)
             importer.session = MagicMock()
             importer.client = MagicMock()
 
-            product = {**MOCK_WC_PRODUCT, "stock_quantity": None}
+            product = {**MOCK_WC_PRODUCT, "stock_quantity": None, "manage_stock": True}
+            product_data = importer._extract_product_data(product)
+            assert product_data["quantity"] == 0
+
+    def test_unmanaged_stock_instock_defaults_to_1(self):
+        """WC-P3-004: manage_stock=False + stock_status=instock should default to 1."""
+        with patch("app.services.woocommerce.importer.WooCommerceClient"):
+            from app.services.woocommerce.importer import WooCommerceImporter
+            importer = WooCommerceImporter.__new__(WooCommerceImporter)
+            importer.session = MagicMock()
+            importer.client = MagicMock()
+
+            product = {**MOCK_WC_PRODUCT, "manage_stock": False, "stock_status": "instock"}
             product_data = importer._extract_product_data(product)
             assert product_data["quantity"] == 1
+
+    def test_unmanaged_stock_outofstock_defaults_to_0(self):
+        """WC-P3-004: manage_stock=False + stock_status=outofstock should default to 0."""
+        with patch("app.services.woocommerce.importer.WooCommerceClient"):
+            from app.services.woocommerce.importer import WooCommerceImporter
+            importer = WooCommerceImporter.__new__(WooCommerceImporter)
+            importer.session = MagicMock()
+            importer.client = MagicMock()
+
+            product = {**MOCK_WC_PRODUCT, "manage_stock": False, "stock_status": "outofstock"}
+            product_data = importer._extract_product_data(product)
+            assert product_data["quantity"] == 0
 
     def test_positive_stock_preserved(self):
         """stock_quantity=5 should be preserved."""
@@ -172,3 +196,101 @@ class TestSkuGeneration:
             product = {**MOCK_WC_PRODUCT, "sku": ""}
             product_data = importer._extract_product_data(product)
             assert product_data["sku"] == "WC-42"
+
+
+# ===================================================================
+# Phase 1 fixes: API contract compliance
+# ===================================================================
+
+class TestSkipStatuses:
+    """WC-P3-005: auto-draft and inherit statuses should be skipped."""
+
+    @pytest.mark.asyncio
+    async def test_auto_draft_skipped(self):
+        """auto-draft status products should return 'skipped'."""
+        with patch("app.services.woocommerce.importer.WooCommerceClient"):
+            from app.services.woocommerce.importer import WooCommerceImporter
+            importer = WooCommerceImporter.__new__(WooCommerceImporter)
+            importer.session = AsyncMock()
+            importer.client = MagicMock()
+            importer._sync_run_id = uuid.uuid4()
+            importer._processed_wc_ids = set()
+
+            product = {**MOCK_WC_PRODUCT, "status": "auto-draft"}
+            result = await importer._process_single_product(product)
+            assert result == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_inherit_skipped(self):
+        """inherit status products should return 'skipped'."""
+        with patch("app.services.woocommerce.importer.WooCommerceClient"):
+            from app.services.woocommerce.importer import WooCommerceImporter
+            importer = WooCommerceImporter.__new__(WooCommerceImporter)
+            importer.session = AsyncMock()
+            importer.client = MagicMock()
+            importer._sync_run_id = uuid.uuid4()
+            importer._processed_wc_ids = set()
+
+            product = {**MOCK_WC_PRODUCT, "status": "inherit"}
+            result = await importer._process_single_product(product)
+            assert result == "skipped"
+
+
+class TestSkipVariationType:
+    """WC-P3-007: variation type should be skipped."""
+
+    @pytest.mark.asyncio
+    async def test_variation_type_skipped(self):
+        """variation type products should return 'skipped'."""
+        with patch("app.services.woocommerce.importer.WooCommerceClient"):
+            from app.services.woocommerce.importer import WooCommerceImporter
+            importer = WooCommerceImporter.__new__(WooCommerceImporter)
+            importer.session = AsyncMock()
+            importer.client = MagicMock()
+            importer._sync_run_id = uuid.uuid4()
+            importer._processed_wc_ids = set()
+
+            product = {**MOCK_WC_PRODUCT, "type": "variation"}
+            result = await importer._process_single_product(product)
+            assert result == "skipped"
+
+
+class TestImageOrdering:
+    """WC-P3-009: Image ordering should use position field."""
+
+    def test_images_sorted_by_position(self):
+        """Featured image should be determined by position, not array index."""
+        with patch("app.services.woocommerce.importer.WooCommerceClient"):
+            from app.services.woocommerce.importer import WooCommerceImporter
+            importer = WooCommerceImporter.__new__(WooCommerceImporter)
+            importer.session = MagicMock()
+            importer.client = MagicMock()
+
+            product = {
+                **MOCK_WC_PRODUCT,
+                "images": [
+                    {"id": 1, "src": "https://example.com/second.jpg", "position": 1},
+                    {"id": 2, "src": "https://example.com/featured.jpg", "position": 0},
+                    {"id": 3, "src": "https://example.com/third.jpg", "position": 2},
+                ],
+            }
+            product_data = importer._extract_product_data(product)
+            assert product_data["primary_image"] == "https://example.com/featured.jpg"
+            assert product_data["additional_images"][0] == "https://example.com/second.jpg"
+
+
+class TestSafeFloat:
+    """WC-P3-011: _safe_float should handle empty strings and None."""
+
+    def test_safe_float_empty_string(self):
+        with patch("app.services.woocommerce_service.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                WC_STORE_URL="https://test.example.com",
+                WC_CONSUMER_KEY="ck_test", WC_CONSUMER_SECRET="cs_test",
+                WC_SANDBOX_MODE=True, WC_WEBHOOK_SECRET="", WC_PRICE_MARKUP_PERCENT=0.0,
+            )
+            from app.services.woocommerce_service import WooCommerceService
+            assert WooCommerceService._safe_float("") == 0.0
+            assert WooCommerceService._safe_float(None) == 0.0
+            assert WooCommerceService._safe_float("12.50") == 12.50
+            assert WooCommerceService._safe_float("invalid", 5.0) == 5.0

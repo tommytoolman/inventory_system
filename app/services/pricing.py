@@ -81,6 +81,7 @@ def calculate_platform_price(
             "vr": settings.VR_PRICE_MARKUP_PERCENT,
             "reverb": settings.REVERB_PRICE_MARKUP_PERCENT,
             "shopify": settings.SHOPIFY_PRICE_MARKUP_PERCENT,
+            "woocommerce": settings.WC_PRICE_MARKUP_PERCENT,
         }
         markup_percent = markup_map.get(platform.lower(), 0.0)
 

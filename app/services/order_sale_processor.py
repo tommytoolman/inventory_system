@@ -94,6 +94,16 @@ class OrderSaleProcessor:
             self._shopify_service = ShopifyService(self.db, self.settings)
         return self._shopify_service
 
+    def _get_woocommerce_service(self):
+        """Lazy load WooCommerceService."""
+        if not hasattr(self, '_wc_service') or self._wc_service is None:
+            if self.settings:
+                from app.services.woocommerce_service import WooCommerceService
+                self._wc_service = WooCommerceService(self.db, self.settings)
+            else:
+                self._wc_service = None
+        return self._wc_service
+
     async def _send_sale_alert(
         self,
         product: Product,
@@ -117,6 +127,9 @@ class OrderSaleProcessor:
         elif platform == "shopify":
             sale_price = float(order.total_price) if getattr(order, "total_price", None) else None
             external_ref = getattr(order, "shopify_order_id", None)
+        elif platform == "woocommerce":
+            sale_price = float(order.total) if getattr(order, "total", None) else None
+            external_ref = getattr(order, "wc_order_id", None)
 
         try:
             await self._email_service.send_sale_alert(
@@ -252,14 +265,16 @@ class OrderSaleProcessor:
                         actions.append("Shopify: service unavailable (no settings)")
 
                 elif platform == "woocommerce" and listing.external_id:
-                    try:
-                        from app.services.woocommerce_service import WooCommerceService
-                        wc_service = WooCommerceService(self.db)
-                        await wc_service.update_inventory(listing.external_id, new_qty)
-                        actions.append(f"WooCommerce: qty updated to {new_qty}")
-                    except Exception as e:
-                        actions.append(f"WooCommerce: qty update failed - {str(e)[:50]}")
-                        logger.warning(f"Failed to update WooCommerce qty: {e}")
+                    wc_service = self._get_woocommerce_service()
+                    if wc_service:
+                        try:
+                            await wc_service.update_inventory(listing.external_id, new_qty)
+                            actions.append(f"WooCommerce: qty updated to {new_qty}")
+                        except Exception as e:
+                            actions.append(f"WooCommerce: qty update failed - {str(e)[:50]}")
+                            logger.warning(f"Failed to update WooCommerce qty: {e}")
+                    else:
+                        actions.append("WooCommerce: service unavailable (no settings)")
 
                 elif platform == "vr":
                     # VR doesn't support multi-qty, only end if qty=0
@@ -388,7 +403,7 @@ class OrderSaleProcessor:
 
     async def process_order(
         self,
-        order: Union[ReverbOrder, EbayOrder, ShopifyOrder],
+        order: Union[ReverbOrder, EbayOrder, ShopifyOrder, WooCommerceOrder],
         platform: str,
         dry_run: bool = False,
     ) -> Dict:

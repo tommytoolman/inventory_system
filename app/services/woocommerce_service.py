@@ -801,7 +801,13 @@ class WooCommerceService:
                         qty_sold = item.get("quantity", 1)
                         break
 
-            product.quantity = max(0, (product.quantity or 0) - qty_sold)
+            # Atomic SQL-level stock decrement to avoid read-modify-write races
+            await self.db.execute(
+                text("UPDATE products SET quantity = GREATEST(0, COALESCE(quantity, 0) - :qty) WHERE id = :id"),
+                {"qty": qty_sold, "id": product.id},
+            )
+            await self.db.refresh(product)
+
             if product.quantity == 0:
                 product.status = ProductStatus.SOLD.value
 

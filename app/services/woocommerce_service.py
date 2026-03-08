@@ -286,7 +286,7 @@ class WooCommerceService:
             await self.db.rollback()
             # Attempt to clean up the orphaned WC product
             try:
-                await self.client.delete_product(int(wc_product_id), force=True)
+                await self.client.delete_product(self._safe_int_id(wc_product_id), force=True)
                 wc_logger.log_warning(
                     f"Cleaned up orphaned WC product {wc_product_id} after DB failure",
                     operation="publish_product",
@@ -318,7 +318,7 @@ class WooCommerceService:
         """Update stock quantity for a WooCommerce product."""
         try:
             stock_status = "instock" if quantity > 0 else "outofstock"
-            await self.client.update_product(int(wc_product_id), {
+            await self.client.update_product(self._safe_int_id(wc_product_id), {
                 "stock_quantity": quantity,
                 "stock_status": stock_status,
             })
@@ -380,7 +380,7 @@ class WooCommerceService:
                 product_id=product_id,
             )
 
-        wc_product_id = int(pc.external_id)
+        wc_product_id = self._safe_int_id(pc.external_id)
 
         # Push update to WooCommerce
         wc_data = await self.client.update_product(wc_product_id, fields)
@@ -453,7 +453,7 @@ class WooCommerceService:
                 product_id=product_id,
             )
 
-        wc_product_id = int(pc.external_id)
+        wc_product_id = self._safe_int_id(pc.external_id)
 
         # Set to draft on WooCommerce (safer than delete)
         await self.client.update_product(wc_product_id, {"status": "draft"})
@@ -521,7 +521,7 @@ class WooCommerceService:
                 product_id=product_id,
             )
 
-        wc_product_id = int(pc.external_id)
+        wc_product_id = self._safe_int_id(pc.external_id)
 
         # Delete from WooCommerce
         await self.client.delete_product(wc_product_id, force=force)
@@ -760,7 +760,7 @@ class WooCommerceService:
 
     async def get_product(self, wc_product_id: str) -> Dict[str, Any]:
         """Get product details from WooCommerce."""
-        return await self.client.get_product(int(wc_product_id))
+        return await self.client.get_product(self._safe_int_id(wc_product_id))
 
     # ------------------------------------------------------------------
     # Cross-platform inventory propagation
@@ -773,11 +773,19 @@ class WooCommerceService:
     async def _process_order_sale(
         self, order: WooCommerceOrder, old_status: Optional[str] = None
     ) -> None:
-        """
-        Process inventory changes for a WooCommerce order sale.
+        """Process inventory changes for a WooCommerce order sale.
 
         - If order is processing/completed and not yet processed: decrement stock
         - If order was processed but now cancelled/refunded: restore stock
+
+        NOTE: This method duplicates some logic from OrderSaleProcessor.
+        Both implementations exist because:
+        1. This method handles WC-specific order data structures and is called
+           during WC order import (both webhook and polling).
+        2. OrderSaleProcessor handles cross-platform propagation generically
+           and is called from the scheduled sync pipeline.
+        Both check sale_processed to prevent double-processing.
+        Future improvement: unify into OrderSaleProcessor with WC-specific adapter.
         """
         current_status = order.status
 
@@ -1002,6 +1010,17 @@ class WooCommerceService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _safe_int_id(value, label: str = "WC product ID") -> int:
+        """Safely convert a value to int, raising WCValidationError on failure."""
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            raise WCValidationError(
+                f"Non-numeric {label}: {value!r}",
+                operation="id_conversion",
+            )
 
     def _parse_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
         """Parse WooCommerce datetime to naive UTC."""

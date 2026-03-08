@@ -135,6 +135,13 @@ class WCErrorLogger:
 
     Manages rotating log files under ``logs/woocommerce/``.
     Thread-safe via Python's logging module.
+
+    Note: Uses standard Python logging with RotatingFileHandler, which performs
+    blocking file I/O. In the async FastAPI context, this can briefly block the
+    event loop during log rotation or slow disk I/O. This is acceptable for the
+    current single-worker deployment but should be reconsidered if logging volume
+    increases significantly. Consider aiologger or ThreadPoolExecutor for
+    high-throughput scenarios.
     """
 
     _instance: Optional["WCErrorLogger"] = None

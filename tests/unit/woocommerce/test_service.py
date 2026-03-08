@@ -156,6 +156,12 @@ class TestOrderImport:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute = AsyncMock(return_value=mock_result)
 
+        # Mock begin_nested() as an async context manager (savepoint)
+        mock_nested = AsyncMock()
+        mock_nested.__aenter__ = AsyncMock(return_value=None)
+        mock_nested.__aexit__ = AsyncMock(return_value=False)
+        mock_db.begin_nested = MagicMock(return_value=mock_nested)
+
         result = await service.import_orders()
         assert result["created"] == 1
         assert result["total"] == 1

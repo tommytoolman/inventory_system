@@ -581,67 +581,68 @@ class WooCommerceService:
 
         for order_data in orders:
             try:
-                wc_order_id = str(order_data["id"])
+                async with self.db.begin_nested():  # Savepoint per order
+                    wc_order_id = str(order_data["id"])
 
-                # Check if already exists
-                result = await self.db.execute(
-                    select(WooCommerceOrder).where(
-                        WooCommerceOrder.wc_order_id == wc_order_id
+                    # Check if already exists
+                    result = await self.db.execute(
+                        select(WooCommerceOrder).where(
+                            WooCommerceOrder.wc_order_id == wc_order_id
+                        )
                     )
-                )
-                existing = result.scalar_one_or_none()
+                    existing = result.scalar_one_or_none()
 
-                billing = order_data.get("billing", {})
-                shipping = order_data.get("shipping", {})
+                    billing = order_data.get("billing", {})
+                    shipping = order_data.get("shipping", {})
 
-                order_fields = {
-                    "wc_order_id": wc_order_id,
-                    "order_number": str(order_data.get("number", "")),
-                    "order_key": order_data.get("order_key"),
-                    "status": order_data.get("status"),
-                    "payment_method": order_data.get("payment_method"),
-                    "payment_method_title": order_data.get("payment_method_title"),
-                    "customer_id": str(order_data.get("customer_id", "")),
-                    "customer_name": f"{billing.get('first_name', '')} {billing.get('last_name', '')}".strip(),
-                    "customer_email": billing.get("email"),
-                    "shipping_name": f"{shipping.get('first_name', '')} {shipping.get('last_name', '')}".strip(),
-                    "shipping_address_1": shipping.get("address_1"),
-                    "shipping_address_2": shipping.get("address_2"),
-                    "shipping_city": shipping.get("city"),
-                    "shipping_state": shipping.get("state"),
-                    "shipping_postcode": shipping.get("postcode"),
-                    "shipping_country": shipping.get("country"),
-                    "total": float(order_data.get("total", 0)),
-                    "subtotal": sum(float(li.get("subtotal", 0)) for li in order_data.get("line_items", [])),
-                    "shipping_total": float(order_data.get("shipping_total", 0)),
-                    "tax_total": float(order_data.get("total_tax", 0)),
-                    "discount_total": float(order_data.get("discount_total", 0)),
-                    "currency": order_data.get("currency"),
-                    "line_items": order_data.get("line_items"),
-                    "raw_payload": order_data,
-                    "wc_created_at": self._parse_datetime(order_data.get("date_created")),
-                    "wc_modified_at": self._parse_datetime(order_data.get("date_modified")),
-                }
+                    order_fields = {
+                        "wc_order_id": wc_order_id,
+                        "order_number": str(order_data.get("number", "")),
+                        "order_key": order_data.get("order_key"),
+                        "status": order_data.get("status"),
+                        "payment_method": order_data.get("payment_method"),
+                        "payment_method_title": order_data.get("payment_method_title"),
+                        "customer_id": str(order_data.get("customer_id", "")),
+                        "customer_name": f"{billing.get('first_name', '')} {billing.get('last_name', '')}".strip(),
+                        "customer_email": billing.get("email"),
+                        "shipping_name": f"{shipping.get('first_name', '')} {shipping.get('last_name', '')}".strip(),
+                        "shipping_address_1": shipping.get("address_1"),
+                        "shipping_address_2": shipping.get("address_2"),
+                        "shipping_city": shipping.get("city"),
+                        "shipping_state": shipping.get("state"),
+                        "shipping_postcode": shipping.get("postcode"),
+                        "shipping_country": shipping.get("country"),
+                        "total": float(order_data.get("total", 0)),
+                        "subtotal": sum(float(li.get("subtotal", 0)) for li in order_data.get("line_items", [])),
+                        "shipping_total": float(order_data.get("shipping_total", 0)),
+                        "tax_total": float(order_data.get("total_tax", 0)),
+                        "discount_total": float(order_data.get("discount_total", 0)),
+                        "currency": order_data.get("currency"),
+                        "line_items": order_data.get("line_items"),
+                        "raw_payload": order_data,
+                        "wc_created_at": self._parse_datetime(order_data.get("date_created")),
+                        "wc_modified_at": self._parse_datetime(order_data.get("date_modified")),
+                    }
 
-                if existing:
-                    old_status = existing.status
-                    for key, value in order_fields.items():
-                        setattr(existing, key, value)
-                    # Link to RIFF product if not already linked
-                    if not existing.product_id:
-                        await self._link_order_to_product(existing, order_data)
-                    # Process sale or handle cancellation/refund
-                    await self._process_order_sale(existing, old_status)
-                    updated += 1
-                else:
-                    new_order = WooCommerceOrder(**order_fields)
-                    self.db.add(new_order)
-                    await self.db.flush()
-                    # Link the new order to a RIFF product
-                    await self._link_order_to_product(new_order, order_data)
-                    # Process sale for new orders
-                    await self._process_order_sale(new_order)
-                    created += 1
+                    if existing:
+                        old_status = existing.status
+                        for key, value in order_fields.items():
+                            setattr(existing, key, value)
+                        # Link to RIFF product if not already linked
+                        if not existing.product_id:
+                            await self._link_order_to_product(existing, order_data)
+                        # Process sale or handle cancellation/refund
+                        await self._process_order_sale(existing, old_status)
+                        updated += 1
+                    else:
+                        new_order = WooCommerceOrder(**order_fields)
+                        self.db.add(new_order)
+                        await self.db.flush()
+                        # Link the new order to a RIFF product
+                        await self._link_order_to_product(new_order, order_data)
+                        # Process sale for new orders
+                        await self._process_order_sale(new_order)
+                        created += 1
 
             except Exception as e:
                 order_error = WCOrderImportError(
@@ -653,8 +654,9 @@ class WooCommerceService:
                 wc_logger.log_error(order_error)
                 logger.error(f"Error processing WC order {order_data.get('id')}: {e}")
                 errors += 1
+                continue
 
-        await self.db.commit()
+        await self.db.commit()  # Commit all successful savepoints
 
         result = {
             "total": len(orders),
@@ -778,6 +780,13 @@ class WooCommerceService:
         - If order was processed but now cancelled/refunded: restore stock
         """
         current_status = order.status
+
+        # Log all status transitions for audit/debugging
+        wc_logger.sync_progress(
+            f"Order {order.wc_order_id} status transition: "
+            f"{old_status or '(new)'} -> {current_status} "
+            f"(sale_processed={order.sale_processed})"
+        )
 
         # Case 1: New sale — decrement inventory
         if current_status in self._SALE_STATUSES and not order.sale_processed:

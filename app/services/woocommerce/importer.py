@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.enums import SyncStatus, ListingStatus
 from app.models.woocommerce import WooCommerceListing
@@ -225,12 +226,28 @@ class WooCommerceImporter:
             return "updated"
 
         # Check if a Product with matching SKU already exists (cross-platform link)
+        # NOTE: IntegrityError handling covers the race condition where a concurrent
+        # webhook + sync both try to create a listing for the same WC product.
+        # A proper UNIQUE constraint on woocommerce_listings.wc_product_id should
+        # be added via Alembic migration as a follow-up.
         if wc_sku:
             existing_product = await self._find_product_by_sku(wc_sku)
             if existing_product:
-                await self._create_listing_for_existing_product(
-                    existing_product, listing_info, platform_info, wc_data
-                )
+                try:
+                    await self._create_listing_for_existing_product(
+                        existing_product, listing_info, platform_info, wc_data
+                    )
+                    await self.session.flush()
+                except IntegrityError:
+                    await self.session.rollback()
+                    logger.warning(
+                        f"IntegrityError for WC product {wc_product_id} (SKU match) — "
+                        f"concurrent process likely created it; falling back to update"
+                    )
+                    refetched = await self._find_existing_listing(wc_product_id)
+                    if refetched:
+                        await self._update_existing(refetched, listing_info, platform_info, wc_data)
+                        return "updated"
                 # Create SyncEvent for new listing (SKU match)
                 await self._create_sync_event(
                     product_id=existing_product.id,
@@ -242,8 +259,18 @@ class WooCommerceImporter:
                 return "sku_matched"
 
         # CREATE new Product + PlatformCommon + WooCommerceListing
-        await self._create_new(product_info, listing_info, platform_info, wc_data)
-        # SyncEvent for brand new listing — product_id not yet known, flush provides it
+        try:
+            await self._create_new(product_info, listing_info, platform_info, wc_data)
+        except IntegrityError:
+            await self.session.rollback()
+            logger.warning(
+                f"IntegrityError for WC product {wc_product_id} — "
+                f"concurrent process likely created it; falling back to update"
+            )
+            refetched = await self._find_existing_listing(wc_product_id)
+            if refetched:
+                await self._update_existing(refetched, listing_info, platform_info, wc_data)
+                return "updated"
         return "created"
 
     # ------------------------------------------------------------------
@@ -269,7 +296,16 @@ class WooCommerceImporter:
                 model_name = options[0] if options else ""
 
         # Use effective price first (reflects sale price when active), then regular_price
-        price_str = wc_data.get("price") or wc_data.get("regular_price") or "0"
+        price_str = wc_data.get("price") or wc_data.get("regular_price") or ""
+        if not price_str or str(price_str).strip() == "":
+            wc_logger.log_warning(
+                f"WooCommerce product {wc_data.get('id')} has no price set — "
+                f"defaulting to 0.00. This product may need manual pricing "
+                f"before publishing to other platforms.",
+                operation="import_product",
+                wc_product_id=str(wc_data.get("id", "")),
+            )
+            price_str = "0"
         try:
             price = float(price_str)
         except (ValueError, TypeError):

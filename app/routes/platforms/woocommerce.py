@@ -410,7 +410,19 @@ webhook_router = APIRouter(tags=["woocommerce-webhooks"])
 # -- Delivery ID deduplication (in-memory, TTL-based) ---------------
 
 class _DeliveryIdCache:
-    """Simple in-memory cache for webhook delivery IDs with TTL eviction."""
+    """In-memory cache for WooCommerce webhook delivery ID deduplication.
+
+    Limitations:
+    - Cache is lost on application restart — webhooks received before restart
+      may be re-processed after restart.
+    - Cache is per-process — in multi-worker deployments (multiple Uvicorn
+      workers), duplicate webhooks landing on different workers are not
+      deduplicated.
+    - For multi-worker deployments, consider migrating to Redis-based
+      deduplication.
+
+    Current capacity: 1,000 delivery IDs with TTL-based eviction (24h).
+    """
 
     def __init__(self, max_size: int = 1000, ttl_seconds: int = 86400):
         self._cache: OrderedDict[str, float] = OrderedDict()

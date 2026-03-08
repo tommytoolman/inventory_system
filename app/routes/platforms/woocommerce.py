@@ -10,12 +10,18 @@ Provides endpoints for:
 - Testing connectivity
 """
 
+import hashlib
+import hmac
+import base64
+import json
 import logging
+import time
 import uuid
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Header
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +32,7 @@ from app.database import async_session
 from app.dependencies import get_db
 from app.core.config import Settings, get_settings
 from app.core.exceptions import WooCommerceAPIError
+from app.models.platform_common import PlatformCommon, ListingStatus
 from app.services.woocommerce.errors import (
     WCAuthenticationError, WCConnectionError, WCProductNotFoundError,
     WCValidationError, WCInventoryUpdateError,
@@ -316,4 +323,287 @@ async def test_woocommerce_connection(
         else:
             return {"status": "failed", "message": "Could not connect to WooCommerce API"}
     except Exception as e:
+        # NOTE: test-connection intentionally returns a dict with status/error rather than
+        # raising HTTPException, as this is a diagnostic endpoint — the "error" IS the response.
         return {"status": "error", "message": str(e)}
+
+
+# ==================================================================
+# Webhook endpoints (WooCommerce → RIFF, no auth — signature verified)
+# ==================================================================
+
+webhook_router = APIRouter(tags=["woocommerce-webhooks"])
+
+
+# -- Delivery ID deduplication (in-memory, TTL-based) ---------------
+
+class _DeliveryIdCache:
+    """Simple in-memory cache for webhook delivery IDs with TTL eviction."""
+
+    def __init__(self, max_size: int = 1000, ttl_seconds: int = 86400):
+        self._cache: OrderedDict[str, float] = OrderedDict()
+        self._max_size = max_size
+        self._ttl = ttl_seconds
+
+    def seen(self, delivery_id: str) -> bool:
+        """Return True if this delivery ID has already been processed."""
+        self._evict_expired()
+        if delivery_id in self._cache:
+            return True
+        self._cache[delivery_id] = time.time()
+        if len(self._cache) > self._max_size:
+            self._cache.popitem(last=False)
+        return False
+
+    def _evict_expired(self):
+        cutoff = time.time() - self._ttl
+        while self._cache:
+            oldest_key = next(iter(self._cache))
+            if self._cache[oldest_key] < cutoff:
+                self._cache.pop(oldest_key)
+            else:
+                break
+
+
+_delivery_cache = _DeliveryIdCache()
+
+
+# -- Signature verification ----------------------------------------
+
+def verify_wc_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """
+    Verify a WooCommerce webhook signature (HMAC-SHA256, base64-encoded).
+
+    Args:
+        payload: Raw request body bytes
+        signature: Value of X-WC-Webhook-Signature header
+        secret: WC_WEBHOOK_SECRET from configuration
+
+    Returns:
+        True if the signature is valid
+    """
+    if not signature or not secret:
+        return False
+    expected = base64.b64encode(
+        hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
+    ).decode("utf-8")
+    return hmac.compare_digest(expected, signature)
+
+
+# -- Product webhook -----------------------------------------------
+
+@webhook_router.post("/webhooks/woocommerce/product")
+async def handle_wc_product_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings),
+):
+    """
+    Handle WooCommerce product webhooks.
+
+    Topics: product.created, product.updated, product.deleted, product.restored
+    """
+    body = await request.body()
+
+    # Extract headers
+    signature = request.headers.get("X-WC-Webhook-Signature", "")
+    topic = request.headers.get("X-WC-Webhook-Topic", "")
+    delivery_id = request.headers.get("X-WC-Webhook-Delivery-ID", "")
+    source = request.headers.get("X-WC-Webhook-Source", "")
+
+    # Verify signature
+    if not verify_wc_webhook_signature(body, signature, settings.WC_WEBHOOK_SECRET):
+        logger.warning(f"Invalid WC product webhook signature from {source}")
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    # Deduplicate
+    if delivery_id and _delivery_cache.seen(delivery_id):
+        logger.info(f"Duplicate WC webhook delivery {delivery_id} — skipping")
+        return {"status": "duplicate"}
+
+    # Parse payload
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    logger.info(f"WC product webhook: topic={topic}, product_id={payload.get('id')}")
+
+    # Process in background
+    background_tasks.add_task(
+        _process_product_webhook_background,
+        topic,
+        payload,
+        settings,
+    )
+
+    return {"status": "accepted"}
+
+
+async def _process_product_webhook_background(
+    topic: str,
+    payload: Dict[str, Any],
+    settings: Settings,
+):
+    """Process a WooCommerce product webhook in the background."""
+    async with async_session() as db:
+        try:
+            service = WooCommerceService(db, settings)
+            wc_product_id = str(payload.get("id", ""))
+
+            if topic == "product.created":
+                from app.services.woocommerce.importer import WooCommerceImporter
+                importer = WooCommerceImporter(db)
+                await importer._process_single_product(payload)
+                await db.commit()
+                logger.info(f"Webhook: imported new WC product {wc_product_id}")
+
+            elif topic == "product.updated":
+                from app.services.woocommerce.importer import WooCommerceImporter
+                importer = WooCommerceImporter(db)
+                await importer._process_single_product(payload)
+                await db.commit()
+                logger.info(f"Webhook: updated WC product {wc_product_id}")
+
+            elif topic == "product.deleted":
+                from app.models.woocommerce import WooCommerceListing
+                from app.models.sync_event import SyncEvent
+                from sqlalchemy import select
+
+                result = await db.execute(
+                    select(WooCommerceListing).where(
+                        WooCommerceListing.wc_product_id == wc_product_id
+                    )
+                )
+                listing = result.scalar_one_or_none()
+                if listing:
+                    listing.status = "trash"
+                    if listing.platform_id:
+                        pc_result = await db.execute(
+                            select(PlatformCommon).where(
+                                PlatformCommon.id == listing.platform_id
+                            )
+                        )
+                        pc = pc_result.scalar_one_or_none()
+                        if pc:
+                            pc.status = ListingStatus.DELETED.value
+                            event = SyncEvent(
+                                sync_run_id=uuid.uuid4(),
+                                platform_name="woocommerce",
+                                product_id=pc.product_id,
+                                platform_common_id=pc.id,
+                                external_id=wc_product_id,
+                                change_type="listing_deleted",
+                                change_data={"source": "webhook", "topic": topic},
+                                status="pending",
+                            )
+                            db.add(event)
+                    await db.commit()
+                    logger.info(f"Webhook: marked WC product {wc_product_id} as deleted")
+
+            elif topic == "product.restored":
+                from app.models.woocommerce import WooCommerceListing
+                from app.models.sync_event import SyncEvent
+                from sqlalchemy import select
+
+                result = await db.execute(
+                    select(WooCommerceListing).where(
+                        WooCommerceListing.wc_product_id == wc_product_id
+                    )
+                )
+                listing = result.scalar_one_or_none()
+                if listing:
+                    listing.status = "draft"
+                    if listing.platform_id:
+                        pc_result = await db.execute(
+                            select(PlatformCommon).where(
+                                PlatformCommon.id == listing.platform_id
+                            )
+                        )
+                        pc = pc_result.scalar_one_or_none()
+                        if pc:
+                            pc.status = ListingStatus.DRAFT.value
+                            event = SyncEvent(
+                                sync_run_id=uuid.uuid4(),
+                                platform_name="woocommerce",
+                                product_id=pc.product_id,
+                                platform_common_id=pc.id,
+                                external_id=wc_product_id,
+                                change_type="listing_restored",
+                                change_data={"source": "webhook", "topic": topic},
+                                status="pending",
+                            )
+                            db.add(event)
+                    await db.commit()
+                    logger.info(f"Webhook: restored WC product {wc_product_id}")
+
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Error processing WC product webhook ({topic}): {e}", exc_info=True)
+
+
+# -- Order webhook -------------------------------------------------
+
+@webhook_router.post("/webhooks/woocommerce/order")
+async def handle_wc_order_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings),
+):
+    """
+    Handle WooCommerce order webhooks.
+
+    Topics: order.created, order.updated
+    """
+    body = await request.body()
+
+    signature = request.headers.get("X-WC-Webhook-Signature", "")
+    topic = request.headers.get("X-WC-Webhook-Topic", "")
+    delivery_id = request.headers.get("X-WC-Webhook-Delivery-ID", "")
+    source = request.headers.get("X-WC-Webhook-Source", "")
+
+    if not verify_wc_webhook_signature(body, signature, settings.WC_WEBHOOK_SECRET):
+        logger.warning(f"Invalid WC order webhook signature from {source}")
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    if delivery_id and _delivery_cache.seen(delivery_id):
+        logger.info(f"Duplicate WC webhook delivery {delivery_id} — skipping")
+        return {"status": "duplicate"}
+
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    logger.info(f"WC order webhook: topic={topic}, order_id={payload.get('id')}")
+
+    background_tasks.add_task(
+        _process_order_webhook_background,
+        topic,
+        payload,
+        settings,
+    )
+
+    return {"status": "accepted"}
+
+
+async def _process_order_webhook_background(
+    topic: str,
+    payload: Dict[str, Any],
+    settings: Settings,
+):
+    """Process a WooCommerce order webhook in the background."""
+    async with async_session() as db:
+        try:
+            service = WooCommerceService(db, settings)
+
+            if topic in ("order.created", "order.updated"):
+                # Import/update the order using the existing import_orders logic
+                # but for a single order
+                await service.import_orders()
+                await db.commit()
+                logger.info(f"Webhook: processed WC order {payload.get('id')} ({topic})")
+
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Error processing WC order webhook ({topic}): {e}", exc_info=True)

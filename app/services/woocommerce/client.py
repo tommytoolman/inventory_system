@@ -323,6 +323,27 @@ class WooCommerceClient:
             page += 1
         return all_products
 
+    async def get_all_products_batched(self, per_page: int = 100, **params):
+        """WC-P3-044: Yield products in batches to avoid loading entire catalogue into memory.
+
+        Use this for large catalogues (10K+ products). Each yielded item is a
+        list of product dicts (one page).
+        """
+        page = 1
+        # Default status filter excludes auto-draft/inherit
+        if "status" not in params:
+            params["status"] = "publish,draft,pending,private"
+        while True:
+            batch = await self.get_products(
+                per_page=min(per_page, 100), page=page, **params
+            )
+            if not batch:
+                break
+            yield batch
+            if len(batch) < per_page:
+                break
+            page += 1
+
     async def get_product(self, product_id: int) -> Dict[str, Any]:
         """Fetch a single product by its WooCommerce ID."""
         return await self._request("GET", f"products/{product_id}")

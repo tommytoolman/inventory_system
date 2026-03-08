@@ -8,7 +8,7 @@ Coordinates between WooCommerceClient, WooCommerceImporter, and the database.
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -546,6 +546,149 @@ class WooCommerceService:
         return True
 
     # ------------------------------------------------------------------
+    # SyncEvent cleanup (WC-P3-037)
+    # ------------------------------------------------------------------
+
+    async def cleanup_old_sync_events(self, retention_days: int = 90) -> int:
+        """WC-P3-037: Remove completed WooCommerce SyncEvents older than retention period."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        result = await self.db.execute(
+            text("""
+                DELETE FROM sync_events
+                WHERE platform_name = 'woocommerce'
+                AND created_at < :cutoff
+                AND status = 'completed'
+            """),
+            {"cutoff": cutoff},
+        )
+        deleted = result.rowcount
+        await self.db.commit()
+        wc_logger.sync_progress(
+            f"Cleaned up {deleted} old WC sync events (retention: {retention_days} days)"
+        )
+        return deleted
+
+    # ------------------------------------------------------------------
+    # Force sync (WC-P3-057)
+    # ------------------------------------------------------------------
+
+    async def force_sync_product(self, product_id: int) -> Dict[str, Any]:
+        """WC-P3-057: Force-overwrite WooCommerce product data from RIFF hub."""
+        result = await self.db.execute(
+            select(Product).where(Product.id == product_id)
+        )
+        product = result.scalar_one_or_none()
+        if not product:
+            raise WooCommerceAPIError(f"Product {product_id} not found")
+
+        pc_result = await self.db.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "woocommerce",
+            )
+        )
+        pc = pc_result.scalar_one_or_none()
+        if not pc:
+            raise WCValidationError(
+                f"No WooCommerce listing found for product {product_id}",
+                operation="force_sync_product",
+            )
+
+        wc_product_id = self._safe_int_id(pc.external_id)
+
+        # Build full update payload from RIFF product
+        fields = {
+            "name": product.title or f"{product.brand} {product.model}",
+            "regular_price": str(
+                calculate_platform_price(
+                    "woocommerce",
+                    product.base_price or 0,
+                    markup_override=self.price_markup,
+                )
+            ),
+            "stock_quantity": product.quantity if product.quantity is not None else 0,
+            "stock_status": "instock" if (product.quantity or 0) > 0 else "outofstock",
+            "manage_stock": True,
+            "meta_data": [
+                {"key": "_riff_last_sync", "value": datetime.now(timezone.utc).isoformat()},
+            ],
+        }
+
+        wc_data = await self.client.update_product(wc_product_id, fields)
+
+        # Update local records
+        listing_result = await self.db.execute(
+            select(WooCommerceListing).where(
+                WooCommerceListing.wc_product_id == str(wc_product_id)
+            )
+        )
+        listing = listing_result.scalar_one_or_none()
+        if listing:
+            listing.stock_quantity = product.quantity
+            listing.stock_status = fields["stock_status"]
+            listing.price = float(fields["regular_price"])
+            listing.regular_price = float(fields["regular_price"])
+            listing.last_synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        pc.last_sync = datetime.now(timezone.utc).replace(tzinfo=None)
+        pc.sync_status = SyncStatus.SYNCED.value
+        await self.db.commit()
+
+        logger.info(f"Force-synced product {product_id} to WooCommerce (WC#{wc_product_id})")
+        return {"success": True, "wc_product_id": str(wc_product_id)}
+
+    # ------------------------------------------------------------------
+    # SKU-based relink after WC backup restore (WC-P3-064)
+    # ------------------------------------------------------------------
+
+    async def relink_products_by_sku(self) -> Dict[str, Any]:
+        """WC-P3-064: Re-link WooCommerce products to RIFF by SKU match.
+
+        Used after a WC backup restore where product IDs may have changed.
+        """
+        # Fetch all current WC products
+        wc_products = await self.client.get_all_products()
+        relinked = 0
+        not_found = 0
+
+        for wc_prod in wc_products:
+            wc_sku = wc_prod.get("sku", "")
+            wc_pid = str(wc_prod["id"])
+            if not wc_sku:
+                continue
+
+            # Find local listing by SKU
+            result = await self.db.execute(
+                select(WooCommerceListing).where(WooCommerceListing.sku == wc_sku)
+            )
+            listing = result.scalar_one_or_none()
+
+            if listing and listing.wc_product_id != wc_pid:
+                old_id = listing.wc_product_id
+                listing.wc_product_id = wc_pid
+                listing.permalink = wc_prod.get("permalink")
+                listing.last_synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+                # Update PlatformCommon external_id
+                if listing.platform_id:
+                    pc_result = await self.db.execute(
+                        select(PlatformCommon).where(PlatformCommon.id == listing.platform_id)
+                    )
+                    pc = pc_result.scalar_one_or_none()
+                    if pc:
+                        pc.external_id = wc_pid
+
+                logger.info(
+                    f"Relinked SKU {wc_sku}: WC product ID {old_id} -> {wc_pid}"
+                )
+                relinked += 1
+            elif not listing:
+                not_found += 1
+
+        await self.db.commit()
+        return {"relinked": relinked, "not_found": not_found, "total_checked": len(wc_products)}
+
+    # ------------------------------------------------------------------
     # Product delete with DB cleanup
     # ------------------------------------------------------------------
 
@@ -632,6 +775,35 @@ class WooCommerceService:
 
         wc_logger.sync_start("orders", "Order Import")
 
+        # WC-P3-040: Pre-load lookup maps to avoid N+1 queries during order linking
+        all_skus = set()
+        all_wc_pids = set()
+        for od in orders:
+            for li in od.get("line_items", []):
+                sku = li.get("sku")
+                if sku:
+                    all_skus.add(sku)
+                wc_pid = str(li.get("product_id", ""))
+                if wc_pid and wc_pid != "0":
+                    all_wc_pids.add(wc_pid)
+
+        self._sku_product_map: Dict[str, Product] = {}
+        self._wc_pid_listing_map: Dict[str, WooCommerceListing] = {}
+        if all_skus:
+            sku_result = await self.db.execute(
+                select(Product).where(Product.sku.in_(all_skus))
+            )
+            self._sku_product_map = {p.sku: p for p in sku_result.scalars().all()}
+        if all_wc_pids:
+            wc_pid_result = await self.db.execute(
+                select(WooCommerceListing).where(
+                    WooCommerceListing.wc_product_id.in_(all_wc_pids)
+                )
+            )
+            self._wc_pid_listing_map = {
+                l.wc_product_id: l for l in wc_pid_result.scalars().all()
+            }
+
         for order_data in orders:
             try:
                 async with self.db.begin_nested():  # Savepoint per order
@@ -644,9 +816,6 @@ class WooCommerceService:
                         )
                     )
                     existing = result.scalar_one_or_none()
-
-                    billing = order_data.get("billing", {})
-                    shipping = order_data.get("shipping", {})
 
                     order_fields = self._build_order_fields(order_data)
 
@@ -992,13 +1161,17 @@ class WooCommerceService:
             product = None
             platform_common = None
 
-            # Strategy 1: Match by SKU
+            # Strategy 1: Match by SKU (use pre-loaded map if available)
             item_sku = item.get("sku")
             if item_sku:
-                result = await self.db.execute(
-                    select(Product).where(Product.sku == item_sku)
-                )
-                product = result.scalar_one_or_none()
+                sku_map = getattr(self, "_sku_product_map", None)
+                if sku_map is not None:
+                    product = sku_map.get(item_sku)
+                else:
+                    result = await self.db.execute(
+                        select(Product).where(Product.sku == item_sku)
+                    )
+                    product = result.scalar_one_or_none()
 
             # WC-P3-010: Warn when product_id is 0 (deleted WC product)
             wc_pid = item.get("product_id", 0)
@@ -1009,16 +1182,20 @@ class WooCommerceService:
                     operation="link_order_to_product",
                 )
 
-            # Strategy 2: Match by WC product_id → WooCommerceListing
+            # Strategy 2: Match by WC product_id → WooCommerceListing (use pre-loaded map if available)
             if not product:
                 wc_pid_str = str(wc_pid) if wc_pid else ""
                 if wc_pid_str and wc_pid_str != "0":
-                    result = await self.db.execute(
-                        select(WooCommerceListing).where(
-                            WooCommerceListing.wc_product_id == wc_pid_str
+                    listing_map = getattr(self, "_wc_pid_listing_map", None)
+                    if listing_map is not None:
+                        wc_listing = listing_map.get(wc_pid_str)
+                    else:
+                        result = await self.db.execute(
+                            select(WooCommerceListing).where(
+                                WooCommerceListing.wc_product_id == wc_pid_str
+                            )
                         )
-                    )
-                    wc_listing = result.scalar_one_or_none()
+                        wc_listing = result.scalar_one_or_none()
                     if wc_listing and wc_listing.platform_id:
                         pc_result = await self.db.execute(
                             select(PlatformCommon).where(

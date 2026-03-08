@@ -540,19 +540,28 @@ class WooCommerceImporter:
             )
 
     async def _detect_removed_listings(self) -> None:
-        """Find WC listings in DB that were not in the API response and create SyncEvents."""
+        """WC-P3-039: Find WC listings in DB that were not in the API response.
+
+        Uses server-side filtering instead of loading all listings into memory.
+        Creates SyncEvents and optionally auto-drafts orphaned WC products (WC-P3-058).
+        """
         if not self._processed_wc_ids:
             return
 
-        result = await self.session.execute(
-            select(WooCommerceListing).where(
-                WooCommerceListing.status != "trash",
-            )
+        # WC-P3-039: Use server-side NOT IN query instead of loading all into memory
+        imported_wc_ids = list(self._processed_wc_ids)
+        stmt = select(WooCommerceListing).where(
+            WooCommerceListing.status != "trash",
+            WooCommerceListing.wc_product_id.not_in(imported_wc_ids),
         )
+        store_id = getattr(self, "_wc_store_id", None)
+        if store_id is not None:
+            stmt = stmt.where(WooCommerceListing.wc_store_id == store_id)
+        result = await self.session.execute(stmt)
         all_listings = result.scalars().all()
 
         for listing in all_listings:
-            if listing.wc_product_id and listing.wc_product_id not in self._processed_wc_ids:
+            if listing.wc_product_id:
                 product_id = None
                 platform_common_id = None
                 if listing.platform_id:
@@ -572,6 +581,19 @@ class WooCommerceImporter:
                     change_data={"title": listing.title, "sku": listing.sku},
                     notes="Listing exists in DB but was not returned by WooCommerce API",
                 )
+
+                # WC-P3-058: Auto-draft orphaned WC products
+                try:
+                    await self.client.update_product(
+                        int(listing.wc_product_id), {"status": "draft"}
+                    )
+                    wc_logger.sync_progress(
+                        f"Auto-drafted orphaned WC product {listing.wc_product_id}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to auto-draft WC product {listing.wc_product_id}: {e}"
+                    )
 
     async def _create_sync_event(
         self,

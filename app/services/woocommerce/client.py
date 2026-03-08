@@ -37,6 +37,13 @@ class WooCommerceClient:
 
     def __init__(self, store_url: Optional[str] = None, consumer_key: Optional[str] = None,
                  consumer_secret: Optional[str] = None):
+        """Create a WooCommerce API client.
+
+        Args:
+            store_url: WooCommerce store URL. Falls back to WC_STORE_URL env var.
+            consumer_key: API consumer key. Falls back to WC_CONSUMER_KEY env var.
+            consumer_secret: API secret. Falls back to WC_CONSUMER_SECRET env var.
+        """
         settings = get_settings()
         self.store_url = (store_url or settings.WC_STORE_URL or "").rstrip("/")
         self.consumer_key = consumer_key or settings.WC_CONSUMER_KEY or ""
@@ -45,9 +52,11 @@ class WooCommerceClient:
         self.sandbox_mode = settings.WC_SANDBOX_MODE
 
         if not self.store_url or not self.consumer_key or not self.consumer_secret:
-            raise ValueError(
+            raise WCAuthenticationError(
                 "WooCommerce credentials not configured. "
-                "Set WC_STORE_URL, WC_CONSUMER_KEY, WC_CONSUMER_SECRET in .env"
+                "Set WC_STORE_URL, WC_CONSUMER_KEY, and WC_CONSUMER_SECRET "
+                "or connect a WooCommerce store via the dashboard.",
+                operation="client_init",
             )
 
         # Persistent connection pool — avoids creating a new client per request

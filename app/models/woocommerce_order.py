@@ -7,6 +7,7 @@ as ReverbOrder and ShopifyOrder.
 """
 
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, text, TIMESTAMP
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from ..database import Base
@@ -20,6 +21,9 @@ class WooCommerceOrder(Base):
     __tablename__ = "woocommerce_orders"
 
     id = Column(Integer, primary_key=True)
+
+    # Multi-tenant: optional link to WooCommerceStore (nullable for backward compat)
+    wc_store_id = Column(Integer, ForeignKey("woocommerce_stores.id"), nullable=True, index=True)
 
     # WooCommerce order identifiers
     wc_order_id = Column(String(50), unique=True, nullable=False, index=True)
@@ -81,3 +85,6 @@ class WooCommerceOrder(Base):
         onupdate=text("timezone('utc', now())"),
         nullable=False
     )
+
+    # Relationships
+    wc_store = relationship("WooCommerceStore", back_populates="orders")

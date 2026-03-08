@@ -6,6 +6,7 @@ from .reverb import ReverbListing
 from .vr import VRListing
 from .shopify import ShopifyListing
 from .woocommerce import WooCommerceListing
+from .woocommerce_store import WooCommerceStore
 from .sale import Sale
 from .category_mapping import CategoryMapping 
 from .product_mapping import ProductMapping   
@@ -59,6 +60,7 @@ __all__ = [
     'InventoryHealthSnapshot',
     'PlatformPreference',
     'WooCommerceOrder',
+    'WooCommerceStore',
     # 'User',
 ]
 from .ebay_order import EbayOrder

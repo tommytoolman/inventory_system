@@ -32,14 +32,31 @@ class WooCommerceImporter:
     """
     WooCommerce importer service that handles bulk import of WooCommerce products.
     Populates: woocommerce_listings, platform_common, and products tables.
+
+    Accepts an optional ``wc_store`` for multi-tenant operation.
+    When omitted, falls back to global env-var credentials (single-tenant).
     """
 
-    def __init__(self, db_session: AsyncSession):
-        """Initialize with database session."""
+    def __init__(self, db_session: AsyncSession, wc_store=None):
+        """Initialize with database session and optional store context."""
         self.session = db_session
-        self.client = WooCommerceClient()
+        self.wc_store = wc_store
+        self._wc_store_id = wc_store.id if wc_store else None
+
+        # Build client from store credentials or fall back to env vars
+        if wc_store:
+            self.client = WooCommerceClient(
+                store_url=wc_store.store_url,
+                consumer_key=wc_store.consumer_key,
+                consumer_secret=wc_store.consumer_secret,
+            )
+        else:
+            self.client = WooCommerceClient()
+
         self._sync_run_id: Optional[uuid_mod.UUID] = None
         self._processed_wc_ids: set = set()
+        # Batch-loaded existing listings lookup (WC-P3-038: N+1 fix)
+        self._existing_listings: Optional[Dict[str, WooCommerceListing]] = None
 
     async def close(self):
         """Close the underlying HTTP client."""
@@ -88,6 +105,10 @@ class WooCommerceImporter:
         error_tracker = WCErrorTracker(sync_run_id=run_id)
 
         try:
+            # WC-P3-038: Pre-load all existing WC listings into memory to avoid N+1 queries
+            wc_logger.sync_progress("Pre-loading existing WC listings from database...")
+            await self._batch_load_existing_listings()
+
             # Fetch all products from WooCommerce
             wc_logger.sync_progress("Fetching products from WooCommerce API...")
             wc_products = await self.client.get_all_products()
@@ -542,8 +563,32 @@ class WooCommerceImporter:
     # Database operations
     # ------------------------------------------------------------------
 
+    async def _batch_load_existing_listings(self) -> None:
+        """Pre-load all existing WC listings into a lookup dict (WC-P3-038).
+
+        Reduces N+1 queries (1 SELECT per product) to a single query.
+        """
+        stmt = select(WooCommerceListing)
+        store_id = getattr(self, "_wc_store_id", None)
+        if store_id is not None:
+            stmt = stmt.where(WooCommerceListing.wc_store_id == store_id)
+        result = await self.session.execute(stmt)
+        all_listings = result.scalars().all()
+        self._existing_listings = {
+            listing.wc_product_id: listing
+            for listing in all_listings
+            if listing.wc_product_id
+        }
+        logger.info(f"Pre-loaded {len(self._existing_listings)} existing WC listings")
+
     async def _find_existing_listing(self, wc_product_id: str) -> Optional[WooCommerceListing]:
-        """Find existing WooCommerceListing by WC product ID."""
+        """Find existing WooCommerceListing by WC product ID.
+
+        Uses the pre-loaded dict if available (bulk import), otherwise
+        falls back to a single SELECT (webhook / single-product import).
+        """
+        if getattr(self, "_existing_listings", None) is not None:
+            return self._existing_listings.get(wc_product_id)
         result = await self.session.execute(
             select(WooCommerceListing).where(
                 WooCommerceListing.wc_product_id == wc_product_id
@@ -618,6 +663,7 @@ class WooCommerceImporter:
         # Create WooCommerceListing
         wc_listing = WooCommerceListing(
             platform_id=platform_common.id,
+            wc_store_id=getattr(self, "_wc_store_id", None),
             extended_attributes=wc_data,
             last_synced_at=datetime.now(timezone.utc).replace(tzinfo=None),
             **listing_info,
@@ -655,6 +701,7 @@ class WooCommerceImporter:
         # Create WooCommerceListing
         wc_listing = WooCommerceListing(
             platform_id=platform_common.id,
+            wc_store_id=getattr(self, "_wc_store_id", None),
             extended_attributes=wc_data,
             last_synced_at=datetime.now(timezone.utc).replace(tzinfo=None),
             **listing_info,

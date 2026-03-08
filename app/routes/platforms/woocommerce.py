@@ -412,6 +412,9 @@ webhook_router = APIRouter(tags=["woocommerce-webhooks"])
 class _DeliveryIdCache:
     """In-memory cache for WooCommerce webhook delivery ID deduplication.
 
+    WC-P3-072: Namespaced by store identifier so different WooCommerce
+    stores do not collide with each other's delivery IDs.
+
     Limitations:
     - Cache is lost on application restart — webhooks received before restart
       may be re-processed after restart.
@@ -421,30 +424,33 @@ class _DeliveryIdCache:
     - For multi-worker deployments, consider migrating to Redis-based
       deduplication.
 
-    Current capacity: 1,000 delivery IDs with TTL-based eviction (24h).
+    Current capacity: 1,000 delivery IDs per store with TTL-based eviction (24h).
     """
 
     def __init__(self, max_size: int = 1000, ttl_seconds: int = 86400):
-        self._cache: OrderedDict[str, float] = OrderedDict()
+        self._caches: Dict[str, OrderedDict] = {}
         self._max_size = max_size
         self._ttl = ttl_seconds
 
-    def seen(self, delivery_id: str) -> bool:
-        """Return True if this delivery ID has already been processed."""
-        self._evict_expired()
-        if delivery_id in self._cache:
+    def seen(self, delivery_id: str, store_id: str = "global") -> bool:
+        """Return True if this delivery ID has already been processed for this store."""
+        if store_id not in self._caches:
+            self._caches[store_id] = OrderedDict()
+        cache = self._caches[store_id]
+        self._evict_expired(cache)
+        if delivery_id in cache:
             return True
-        self._cache[delivery_id] = time.time()
-        if len(self._cache) > self._max_size:
-            self._cache.popitem(last=False)
+        cache[delivery_id] = time.time()
+        if len(cache) > self._max_size:
+            cache.popitem(last=False)
         return False
 
-    def _evict_expired(self):
+    def _evict_expired(self, cache: OrderedDict):
         cutoff = time.time() - self._ttl
-        while self._cache:
-            oldest_key = next(iter(self._cache))
-            if self._cache[oldest_key] < cutoff:
-                self._cache.pop(oldest_key)
+        while cache:
+            oldest_key = next(iter(cache))
+            if cache[oldest_key] < cutoff:
+                cache.pop(oldest_key)
             else:
                 break
 
@@ -551,6 +557,24 @@ def _validate_webhook_order_payload(payload: dict) -> dict:
     return validated
 
 
+# -- Ping detection helper (WC-P3-015) --------------------------------
+
+def _is_webhook_ping(payload: dict) -> bool:
+    """Detect WooCommerce webhook ping payloads.
+
+    WooCommerce sends an empty/minimal payload when a webhook is first
+    created to verify the delivery URL is reachable.  These payloads
+    lack a real ``id`` field and should be acknowledged with 200 rather
+    than rejected by validation.
+    """
+    if not payload:
+        return True
+    # Ping payloads typically have webhook_id but no product/order id
+    if payload.get("webhook_id") and not payload.get("id"):
+        return True
+    return False
+
+
 # -- Product webhook -----------------------------------------------
 
 @webhook_router.post("/webhooks/woocommerce/product")
@@ -590,6 +614,11 @@ async def handle_wc_product_webhook(
 
     logger.info(f"WC product webhook: topic={topic}, product_id={payload.get('id')}")
 
+    # WC-P3-015: Detect and acknowledge ping payloads before validation
+    if _is_webhook_ping(payload):
+        logger.info("WC product webhook ping received — acknowledging")
+        return {"status": "pong"}
+
     # Validate payload before passing to background task
     try:
         validated_payload = _validate_webhook_product_payload(payload)
@@ -612,23 +641,24 @@ async def _process_product_webhook_background(
     topic: str,
     payload: Dict[str, Any],
     settings: Settings,
+    wc_store=None,
 ):
     """Process a WooCommerce product webhook in the background."""
     async with async_session() as db:
         try:
-            service = WooCommerceService(db, settings)
+            service = WooCommerceService(db, settings, wc_store=wc_store)
             wc_product_id = str(payload.get("id", ""))
 
             if topic == "product.created":
                 from app.services.woocommerce.importer import WooCommerceImporter
-                importer = WooCommerceImporter(db)
+                importer = WooCommerceImporter(db, wc_store=wc_store)
                 await importer._process_single_product(payload)
                 await db.commit()
                 logger.info(f"Webhook: imported new WC product {wc_product_id}")
 
             elif topic == "product.updated":
                 from app.services.woocommerce.importer import WooCommerceImporter
-                importer = WooCommerceImporter(db)
+                importer = WooCommerceImporter(db, wc_store=wc_store)
                 await importer._process_single_product(payload)
                 await db.commit()
                 logger.info(f"Webhook: updated WC product {wc_product_id}")
@@ -745,6 +775,11 @@ async def handle_wc_order_webhook(
 
     logger.info(f"WC order webhook: topic={topic}, order_id={payload.get('id')}")
 
+    # WC-P3-015: Detect and acknowledge ping payloads before validation
+    if _is_webhook_ping(payload):
+        logger.info("WC order webhook ping received — acknowledging")
+        return {"status": "pong"}
+
     # Validate payload before passing to background task
     try:
         validated_payload = _validate_webhook_order_payload(payload)
@@ -766,11 +801,12 @@ async def _process_order_webhook_background(
     topic: str,
     payload: Dict[str, Any],
     settings: Settings,
+    wc_store=None,
 ):
     """Process a WooCommerce order webhook in the background."""
     async with async_session() as db:
         try:
-            service = WooCommerceService(db, settings)
+            service = WooCommerceService(db, settings, wc_store=wc_store)
 
             if topic in ("order.created", "order.updated"):
                 # Process the single order from the webhook payload directly
@@ -780,3 +816,291 @@ async def _process_order_webhook_background(
         except Exception as e:
             await db.rollback()
             logger.error(f"Error processing WC order webhook ({topic}): {e}", exc_info=True)
+
+
+# ==================================================================
+# Per-tenant webhook endpoints (WC-P3-069)
+# ==================================================================
+
+@webhook_router.post("/webhooks/woocommerce/{store_id}/product")
+async def handle_wc_product_webhook_tenant(
+    store_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings),
+):
+    """Handle WooCommerce product webhooks for a specific store."""
+    from sqlalchemy import select as sa_select
+    from app.models.woocommerce_store import WooCommerceStore
+
+    body = await request.body()
+
+    signature = request.headers.get("X-WC-Webhook-Signature", "")
+    topic = request.headers.get("X-WC-Webhook-Topic", "")
+    delivery_id = request.headers.get("X-WC-Webhook-Delivery-ID", "")
+
+    # Load store
+    async with async_session() as db:
+        result = await db.execute(
+            sa_select(WooCommerceStore).where(
+                WooCommerceStore.id == store_id,
+                WooCommerceStore.is_active == True,
+            )
+        )
+        wc_store = result.scalar_one_or_none()
+
+    if not wc_store:
+        raise HTTPException(status_code=404, detail="WooCommerce store not found")
+
+    # Verify signature with per-store secret
+    if not verify_wc_webhook_signature(body, signature, wc_store.webhook_secret or ""):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    # Deduplicate per-store
+    cache_key = str(store_id)
+    if delivery_id and _delivery_cache.seen(delivery_id, store_id=cache_key):
+        return {"status": "duplicate"}
+
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    if _is_webhook_ping(payload):
+        logger.info(f"WC product webhook ping for store {store_id}")
+        return {"status": "pong"}
+
+    try:
+        validated_payload = _validate_webhook_product_payload(payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    background_tasks.add_task(
+        _process_product_webhook_background, topic, validated_payload, settings, wc_store,
+    )
+    return {"status": "accepted"}
+
+
+@webhook_router.post("/webhooks/woocommerce/{store_id}/order")
+async def handle_wc_order_webhook_tenant(
+    store_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Settings = Depends(get_settings),
+):
+    """Handle WooCommerce order webhooks for a specific store."""
+    from sqlalchemy import select as sa_select
+    from app.models.woocommerce_store import WooCommerceStore
+
+    body = await request.body()
+
+    signature = request.headers.get("X-WC-Webhook-Signature", "")
+    topic = request.headers.get("X-WC-Webhook-Topic", "")
+    delivery_id = request.headers.get("X-WC-Webhook-Delivery-ID", "")
+
+    # Load store
+    async with async_session() as db:
+        result = await db.execute(
+            sa_select(WooCommerceStore).where(
+                WooCommerceStore.id == store_id,
+                WooCommerceStore.is_active == True,
+            )
+        )
+        wc_store = result.scalar_one_or_none()
+
+    if not wc_store:
+        raise HTTPException(status_code=404, detail="WooCommerce store not found")
+
+    if not verify_wc_webhook_signature(body, signature, wc_store.webhook_secret or ""):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    cache_key = str(store_id)
+    if delivery_id and _delivery_cache.seen(delivery_id, store_id=cache_key):
+        return {"status": "duplicate"}
+
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    if _is_webhook_ping(payload):
+        logger.info(f"WC order webhook ping for store {store_id}")
+        return {"status": "pong"}
+
+    try:
+        validated_payload = _validate_webhook_order_payload(payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    background_tasks.add_task(
+        _process_order_webhook_background, topic, validated_payload, settings, wc_store,
+    )
+    return {"status": "accepted"}
+
+
+# ==================================================================
+# WooCommerce Store CRUD endpoints (WC-P3-066)
+# ==================================================================
+
+store_router = APIRouter(prefix="/api/woocommerce/stores", tags=["woocommerce-stores"])
+
+
+@store_router.post("")
+async def create_wc_store(
+    name: str,
+    store_url: str,
+    consumer_key: str,
+    consumer_secret: str,
+    webhook_secret: str = "",
+    price_markup_percent: float = 0.0,
+    db: AsyncSession = Depends(get_db),
+):
+    """Connect a new WooCommerce store."""
+    from app.models.woocommerce_store import WooCommerceStore
+
+    # Validate credentials by testing connection
+    try:
+        client = WooCommerceClient(
+            store_url=store_url,
+            consumer_key=consumer_key,
+            consumer_secret=consumer_secret,
+        )
+        connected = await client.test_connection()
+        await client.close()
+        if not connected:
+            raise HTTPException(status_code=400, detail="Could not connect to WooCommerce API")
+    except WCAuthenticationError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Connection test failed: {e}")
+
+    store = WooCommerceStore(
+        name=name,
+        store_url=store_url.rstrip("/"),
+        consumer_key=consumer_key,
+        consumer_secret=consumer_secret,
+        webhook_secret=webhook_secret,
+        price_markup_percent=price_markup_percent,
+    )
+    db.add(store)
+    await db.commit()
+    await db.refresh(store)
+
+    return {
+        "id": store.id,
+        "name": store.name,
+        "store_url": store.store_url,
+        "is_active": store.is_active,
+        "price_markup_percent": store.price_markup_percent,
+    }
+
+
+@store_router.get("")
+async def list_wc_stores(db: AsyncSession = Depends(get_db)):
+    """List all connected WooCommerce stores."""
+    from sqlalchemy import select as sa_select
+    from app.models.woocommerce_store import WooCommerceStore
+
+    result = await db.execute(sa_select(WooCommerceStore).order_by(WooCommerceStore.id))
+    stores = result.scalars().all()
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "store_url": s.store_url,
+            "is_active": s.is_active,
+            "sync_status": s.sync_status,
+            "last_sync_at": s.last_sync_at.isoformat() if s.last_sync_at else None,
+            "price_markup_percent": s.price_markup_percent,
+        }
+        for s in stores
+    ]
+
+
+@store_router.get("/{store_id}")
+async def get_wc_store(store_id: int, db: AsyncSession = Depends(get_db)):
+    """Get a WooCommerce store by ID."""
+    from app.models.woocommerce_store import WooCommerceStore
+
+    store = await db.get(WooCommerceStore, store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+    return {
+        "id": store.id,
+        "name": store.name,
+        "store_url": store.store_url,
+        "is_active": store.is_active,
+        "sync_status": store.sync_status,
+        "last_sync_at": store.last_sync_at.isoformat() if store.last_sync_at else None,
+        "price_markup_percent": store.price_markup_percent,
+        "webhook_url_product": f"/webhooks/woocommerce/{store.id}/product",
+        "webhook_url_order": f"/webhooks/woocommerce/{store.id}/order",
+    }
+
+
+@store_router.put("/{store_id}")
+async def update_wc_store(
+    store_id: int,
+    fields: Dict[str, Any],
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a WooCommerce store's settings."""
+    from app.models.woocommerce_store import WooCommerceStore
+
+    store = await db.get(WooCommerceStore, store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+
+    allowed = {"name", "store_url", "consumer_key", "consumer_secret",
+               "webhook_secret", "price_markup_percent", "is_active"}
+    for key, value in fields.items():
+        if key in allowed:
+            setattr(store, key, value)
+
+    await db.commit()
+    return {"success": True, "id": store.id}
+
+
+@store_router.delete("/{store_id}")
+async def disconnect_wc_store(store_id: int, db: AsyncSession = Depends(get_db)):
+    """Disconnect a WooCommerce store (soft delete via is_active=False)."""
+    from app.models.woocommerce_store import WooCommerceStore
+
+    store = await db.get(WooCommerceStore, store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+
+    store.is_active = False
+    store.sync_status = "disconnected"
+    await db.commit()
+    return {"success": True, "id": store.id, "status": "disconnected"}
+
+
+@store_router.post("/{store_id}/test")
+async def test_wc_store_connection(store_id: int, db: AsyncSession = Depends(get_db)):
+    """Test connection for a specific WooCommerce store."""
+    from app.models.woocommerce_store import WooCommerceStore
+
+    store = await db.get(WooCommerceStore, store_id)
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+
+    try:
+        async with WooCommerceClient(
+            store_url=store.store_url,
+            consumer_key=store.consumer_key,
+            consumer_secret=store.consumer_secret,
+        ) as client:
+            connected = await client.test_connection()
+            if connected:
+                store.sync_status = "healthy"
+                await db.commit()
+                return {"status": "connected", "store_url": store.store_url}
+            else:
+                store.sync_status = "error"
+                await db.commit()
+                return {"status": "failed", "message": "Could not connect"}
+    except Exception as e:
+        store.sync_status = "error"
+        await db.commit()
+        return {"status": "error", "message": str(e)}

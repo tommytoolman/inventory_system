@@ -68,6 +68,29 @@ class WooCommerceProductDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class WooCommerceStoreDTO(BaseModel):
+    """Schema for WooCommerce store CRUD responses."""
+    id: int
+    name: str
+    store_url: str
+    is_active: bool = True
+    sync_status: str = "healthy"
+    last_sync_at: Optional[datetime] = None
+    price_markup_percent: float = 0.0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WooCommerceStoreCreateDTO(BaseModel):
+    """Schema for connecting a new WooCommerce store."""
+    name: str
+    store_url: str
+    consumer_key: str
+    consumer_secret: str
+    webhook_secret: Optional[str] = ""
+    price_markup_percent: float = 0.0
+
+
 class WooCommerceOrderDTO(BaseModel):
     """Schema representing a WooCommerce order from the API."""
     id: int

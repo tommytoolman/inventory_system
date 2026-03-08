@@ -1438,7 +1438,15 @@ async def _process_price_change(
                 try:
                     settings = get_settings()
                     wc_service = WooCommerceService(session, settings)
-                    await wc_service.update_product(product.id, {"regular_price": str(new_price)})
+                    # WC-P3-030: Apply platform markup instead of passing raw base_price
+                    from app.services.pricing import calculate_platform_price
+                    wc_price = calculate_platform_price(
+                        "woocommerce", float(new_price),
+                        markup_override=wc_service.price_markup,
+                    )
+                    await wc_service.update_product(
+                        product.id, {"regular_price": str(round(wc_price, 2))}
+                    )
                     result.platforms_created.append("woocommerce")
                     logger.info(f"Propagated price change to WooCommerce for product {product.id}")
                 except Exception as e:

@@ -44,12 +44,30 @@ class WooCommerceService:
     - Product push (RIFF → WooCommerce)
     - Inventory updates
     - Order import
+
+    Accepts an optional ``wc_store`` for multi-tenant operation.
+    When omitted, falls back to global env-var credentials (single-tenant).
     """
 
-    def __init__(self, db: AsyncSession, settings: Optional[Settings] = None):
+    def __init__(self, db: AsyncSession, settings: Optional[Settings] = None,
+                 wc_store=None):
         self.db = db
         self.settings = settings or get_settings()
-        self.client = WooCommerceClient()
+        self.wc_store = wc_store
+
+        # Build client from store credentials or fall back to env vars
+        if wc_store:
+            self.client = WooCommerceClient(
+                store_url=wc_store.store_url,
+                consumer_key=wc_store.consumer_key,
+                consumer_secret=wc_store.consumer_secret,
+            )
+            self.webhook_secret = wc_store.webhook_secret or ""
+            self.price_markup = wc_store.price_markup_percent
+        else:
+            self.client = WooCommerceClient()
+            self.webhook_secret = self.settings.WC_WEBHOOK_SECRET
+            self.price_markup = self.settings.WC_PRICE_MARKUP_PERCENT
 
     async def close(self):
         """Close the underlying HTTP client."""
@@ -82,7 +100,7 @@ class WooCommerceService:
         logger.info(f"Starting WooCommerce import process (sync_run_id={sync_run_id})")
 
         try:
-            importer = WooCommerceImporter(self.db)
+            importer = WooCommerceImporter(self.db, wc_store=self.wc_store)
             try:
                 stats = await importer.import_all_listings(
                     sync_run_id=str(sync_run_id)
@@ -183,7 +201,7 @@ class WooCommerceService:
                 calculate_platform_price(
                     "woocommerce",
                     product.base_price or 0,
-                    markup_override=self.settings.WC_PRICE_MARKUP_PERCENT,
+                    markup_override=self.price_markup,
                 )
             ),
             "description": product.description or "",
@@ -854,6 +872,9 @@ class WooCommerceService:
                 f"by {qty_sold} (new qty: {product.quantity})"
             )
 
+            # WC-P3-027: Trigger immediate cross-platform propagation
+            await self._propagate_quantity_to_other_platforms(product)
+
         # Case 2: Cancellation/refund — restore inventory
         elif (
             current_status in self._CANCELLED_STATUSES
@@ -907,6 +928,32 @@ class WooCommerceService:
             logger.info(
                 f"WC order {order.wc_order_id} cancelled/refunded: restored "
                 f"{qty_to_restore} to product {product.id} (new qty: {product.quantity})"
+            )
+
+            # WC-P3-027: Propagate restored quantity to other platforms
+            await self._propagate_quantity_to_other_platforms(product)
+
+    async def _propagate_quantity_to_other_platforms(self, product: Product) -> None:
+        """WC-P3-027: Propagate quantity change to other platforms after a WC sale.
+
+        Creates per-platform SyncEvents so the EventProcessor picks them up,
+        and also directly calls platform APIs for immediate sync.
+        """
+        try:
+            from app.services.order_sale_processor import OrderSaleProcessor
+            processor = OrderSaleProcessor(self.db, self.settings)
+            actions = await processor._propagate_quantity_to_platforms(
+                product, source_platform="woocommerce"
+            )
+            if actions:
+                logger.info(
+                    f"Cross-platform propagation for product {product.id}: "
+                    f"{'; '.join(actions)}"
+                )
+        except Exception as e:
+            logger.error(
+                f"Failed to propagate quantity for product {product.id}: {e}",
+                exc_info=True,
             )
 
     # ------------------------------------------------------------------

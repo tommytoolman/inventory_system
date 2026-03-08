@@ -29,6 +29,9 @@ class WooCommerceListing(Base):
     id = Column(Integer, primary_key=True)
     platform_id = Column(Integer, ForeignKey("platform_common.id"), index=True)
 
+    # Multi-tenant: optional link to WooCommerceStore (nullable for backward compat)
+    wc_store_id = Column(Integer, ForeignKey("woocommerce_stores.id"), nullable=True, index=True)
+
     # Core WooCommerce identifiers
     wc_product_id = Column(String(50), nullable=True, index=True)  # WooCommerce product ID
     slug = Column(String(255), nullable=True, index=True)  # URL slug
@@ -84,3 +87,4 @@ class WooCommerceListing(Base):
 
     # Relationships
     platform_listing = relationship("PlatformCommon", back_populates="woocommerce_listing")
+    wc_store = relationship("WooCommerceStore", back_populates="listings")

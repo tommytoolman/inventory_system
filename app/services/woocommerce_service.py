@@ -187,6 +187,31 @@ class WooCommerceService:
             ],
         }
 
+        # Map RIFF category to WooCommerce category
+        if product.category:
+            try:
+                categories = await self.client.get_categories()
+                matched_cat = next(
+                    (c for c in categories if c.get("name", "").lower() == product.category.lower()),
+                    None,
+                )
+                if matched_cat:
+                    wc_payload["categories"] = [{"id": matched_cat["id"]}]
+                else:
+                    # Create the category on WooCommerce
+                    try:
+                        new_cat = await self.client._request(
+                            "POST", "products/categories",
+                            json={"name": product.category},
+                        )
+                        wc_payload["categories"] = [{"id": new_cat["id"]}]
+                    except Exception as cat_err:
+                        logger.warning(
+                            f"Could not create WC category '{product.category}': {cat_err}"
+                        )
+            except Exception as cat_err:
+                logger.warning(f"Category mapping failed for product {product_id}: {cat_err}")
+
         # Merge any extra data, protecting meta_data from being overwritten
         if extra_data:
             extra_meta = extra_data.pop("meta_data", [])

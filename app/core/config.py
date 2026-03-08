@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     WC_AUTH_METHOD: str = "basic"  # "basic" for sandbox, "oauth" for production
     WC_SANDBOX_MODE: bool = True
     WC_PRICE_MARKUP_PERCENT: float = 0.0
+    WC_WEBHOOK_SECRET: str = ""
 
     # Shopify API (Optional)
     SHOPIFY_SHOP_URL: Optional[str] = None
@@ -251,4 +252,4 @@ def get_test_settings_v2():
 
 def get_webhook_secret():
     """Get the webhook secret for authentication"""
-    return get_settings().WEBSITE_WEBHOOK_SECRET
+    return get_settings().WEBHOOK_SECRET

@@ -16,6 +16,11 @@ from app.models.woocommerce import WooCommerceListing
 from app.models.platform_common import PlatformCommon
 from app.models.product import Product
 from app.services.woocommerce.client import WooCommerceClient
+from app.services.woocommerce.errors import (
+    WCAuthenticationError, WCConnectionError, WCDataTransformError, WCAPIError,
+)
+from app.services.woocommerce.error_logger import wc_logger
+from app.services.woocommerce.error_tracker import WCErrorTracker
 
 logger = logging.getLogger(__name__)
 
@@ -32,21 +37,25 @@ class WooCommerceImporter:
         self.client = WooCommerceClient()
 
     async def import_all_listings(self, status_filter: Optional[str] = None,
-                                  limit: Optional[int] = None) -> Dict[str, int]:
+                                  limit: Optional[int] = None,
+                                  sync_run_id: str = None) -> Dict[str, Any]:
         """
         Import all WooCommerce products from API to database.
 
         Args:
             status_filter: Only import products with this status (publish, draft, etc.)
             limit: Max number of products to import
+            sync_run_id: UUID string to correlate logs for this run
 
         Returns:
-            Statistics dictionary with counts
+            Statistics dict with counts and optional error_summary
         """
+        run_id = sync_run_id or "manual"
         logger.info("Starting WooCommerce product import")
+        wc_logger.sync_start(run_id, "Product Import")
         start_time = datetime.now()
 
-        stats = {
+        stats: Dict[str, Any] = {
             "total": 0,
             "created": 0,
             "updated": 0,
@@ -54,22 +63,27 @@ class WooCommerceImporter:
             "errors": 0,
             "skipped": 0,
         }
+        error_tracker = WCErrorTracker(sync_run_id=run_id)
 
         try:
             # Fetch all products from WooCommerce
-            logger.info("Fetching all products from WooCommerce API...")
+            wc_logger.sync_progress("Fetching products from WooCommerce API...")
             wc_products = await self.client.get_all_products()
 
             if limit:
                 wc_products = wc_products[:limit]
 
-            logger.info(f"Retrieved {len(wc_products)} products from WooCommerce API")
+            wc_logger.sync_progress(
+                f"Retrieved {len(wc_products)} products from API"
+            )
             stats["total"] = len(wc_products)
 
             for i, product_data in enumerate(wc_products, 1):
                 try:
                     if i % 50 == 0:
-                        logger.info(f"Processing product {i}/{len(wc_products)}")
+                        wc_logger.sync_progress(
+                            f"Progress: {i}/{len(wc_products)} processed"
+                        )
 
                     # Apply status filter
                     product_status = product_data.get("status", "")
@@ -80,13 +94,53 @@ class WooCommerceImporter:
                     result = await self._process_single_product(product_data)
                     stats[result] += 1
 
+                except (WCAuthenticationError, WCConnectionError) as e:
+                    # Critical -- abort entire import
+                    error_tracker.record(e)
+                    wc_logger.log_error(e)
+                    wc_logger.sync_error(run_id, e)
+                    await self.session.rollback()
+                    raise
+
                 except Exception as e:
-                    logger.error(f"Error processing WooCommerce product {product_data.get('id')}: {e}")
+                    # Non-critical -- log and continue with next product
+                    wc_id = str(product_data.get("id", "?"))
+                    wc_sku = product_data.get("sku", "")
+
+                    if hasattr(e, "to_dict"):
+                        # Already a structured WC exception
+                        error_tracker.record(e)
+                        wc_logger.log_error(e)
+                    else:
+                        # Wrap generic exception with product context
+                        wrapped = WCDataTransformError(
+                            str(e),
+                            operation="import_product",
+                            wc_product_id=wc_id,
+                            sku=wc_sku,
+                        )
+                        error_tracker.record(wrapped)
+                        wc_logger.log_error(wrapped)
+
+                    wc_logger.sync_warning(
+                        f"WC#{wc_id} ({wc_sku}): {str(e)[:120]}"
+                    )
                     stats["errors"] += 1
 
             await self.session.commit()
 
             elapsed = (datetime.now() - start_time).total_seconds()
+            error_summary = (
+                error_tracker.get_summary()
+                if error_tracker.error_count > 0
+                else None
+            )
+
+            wc_logger.sync_complete(
+                run_id, stats,
+                error_summary=error_summary,
+                duration_seconds=elapsed,
+            )
             logger.info(
                 f"WooCommerce import completed in {elapsed:.1f}s - "
                 f"Total: {stats['total']}, Created: {stats['created']}, "
@@ -94,10 +148,22 @@ class WooCommerceImporter:
                 f"Errors: {stats['errors']}"
             )
 
+        except (WCAuthenticationError, WCConnectionError):
+            raise  # Already logged above
+
         except Exception as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
+            wc_logger.log_error(
+                WCAPIError(str(e), operation="import_all_listings")
+            )
+            wc_logger.sync_error(run_id, e)
             logger.error(f"WooCommerce import failed: {e}", exc_info=True)
             await self.session.rollback()
             raise
+
+        # Attach error summary to stats for the caller
+        if error_tracker.error_count > 0:
+            stats["error_summary"] = error_tracker.get_summary()
 
         return stats
 
@@ -164,6 +230,12 @@ class WooCommerceImporter:
             price = float(price_str)
         except (ValueError, TypeError):
             price = 0.0
+            wc_logger.log_warning(
+                f"Could not parse price '{price_str}' for WC product "
+                f"{wc_data.get('id')} -- defaulted to 0",
+                operation="import_product",
+                wc_product_id=str(wc_data.get("id", "")),
+            )
 
         return {
             "sku": wc_data.get("sku") or f"WC-{wc_data['id']}",
@@ -172,7 +244,7 @@ class WooCommerceImporter:
             "model": model_name,
             "description": wc_data.get("description", ""),
             "base_price": price,
-            "quantity": wc_data.get("stock_quantity") or 1,
+            "quantity": wc_data.get("stock_quantity") if wc_data.get("stock_quantity") is not None else 1,
             "primary_image": primary_image,
             "additional_images": additional_images,
             "category": self._extract_category_name(wc_data),

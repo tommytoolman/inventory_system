@@ -17,12 +17,19 @@ from sqlalchemy import select, text
 from app.core.config import Settings, get_settings
 from app.core.enums import SyncStatus, ListingStatus
 from app.core.exceptions import WooCommerceAPIError
+from app.services.pricing import calculate_platform_price
 from app.models.product import Product
 from app.models.platform_common import PlatformCommon
 from app.models.woocommerce import WooCommerceListing
 from app.models.woocommerce_order import WooCommerceOrder
 from app.services.woocommerce.client import WooCommerceClient
 from app.services.woocommerce.importer import WooCommerceImporter
+from app.services.woocommerce.errors import (
+    WCAuthenticationError, WCConnectionError, WCOrderImportError,
+    WCInventoryUpdateError, WCAPIError, WCValidationError,
+)
+from app.services.woocommerce.error_logger import wc_logger
+from app.services.woocommerce.error_tracker import WCErrorTracker
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +72,9 @@ class WooCommerceService:
 
         try:
             importer = WooCommerceImporter(self.db)
-            stats = await importer.import_all_listings()
+            stats = await importer.import_all_listings(
+                sync_run_id=str(sync_run_id)
+            )
 
             result = {
                 "status": "success",
@@ -77,15 +86,39 @@ class WooCommerceService:
                 "errors": stats.get("errors", 0),
                 "skipped": stats.get("skipped", 0),
             }
+
+            # Attach error summary if there were non-fatal errors
+            if stats.get("error_summary"):
+                result["error_summary"] = stats["error_summary"]
+
             logger.info(f"WooCommerce import completed: {result}")
             return result
 
+        except (WCAuthenticationError, WCConnectionError) as e:
+            # Critical errors -- already logged by importer/client
+            logger.error(f"WooCommerce import aborted: {e}")
+            return {
+                "status": "error",
+                "sync_run_id": str(sync_run_id),
+                "message": str(e),
+                "error_type": type(e).__name__,
+                "action_required": (
+                    "Check WC API credentials in .env"
+                    if isinstance(e, WCAuthenticationError)
+                    else "Check WC store URL is reachable"
+                ),
+            }
+
         except Exception as e:
+            wc_logger.log_error(
+                WCAPIError(str(e), operation="run_import_process")
+            )
             logger.error(f"WooCommerce import process failed: {e}", exc_info=True)
             return {
                 "status": "error",
                 "sync_run_id": str(sync_run_id),
                 "message": str(e),
+                "error_type": type(e).__name__,
             }
 
     # ------------------------------------------------------------------
@@ -99,6 +132,20 @@ class WooCommerceService:
 
         Creates a new WooCommerce product from the local Product record.
         """
+        # Check for existing WooCommerce listing to prevent duplicates
+        existing_pc = await self.db.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "woocommerce",
+            )
+        )
+        if existing_pc.scalar_one_or_none():
+            raise WCValidationError(
+                f"Product {product_id} already has a WooCommerce listing",
+                operation="publish_product",
+                product_id=product_id,
+            )
+
         # Fetch the local product
         result = await self.db.execute(
             select(Product).where(Product.id == product_id)
@@ -118,26 +165,43 @@ class WooCommerceService:
         wc_payload = {
             "name": product.title or f"{product.brand} {product.model}",
             "type": "simple",
-            "regular_price": str(product.base_price or 0),
+            "regular_price": str(
+                calculate_platform_price(
+                    "woocommerce",
+                    product.base_price or 0,
+                    markup_override=self.settings.WC_PRICE_MARKUP_PERCENT,
+                )
+            ),
             "description": product.description or "",
             "short_description": product.title or "",
             "sku": product.sku,
             "manage_stock": True,
-            "stock_quantity": product.quantity or 1,
+            "stock_quantity": product.quantity if product.quantity is not None else 1,
             "stock_status": "instock" if (product.quantity or 0) > 0 else "outofstock",
             "images": images,
             "meta_data": [
-                {"key": "_riff_product_id", "value": str(product.id)},
+                {"key": "_riff_id", "value": str(product.id)},
                 {"key": "_synced_from_riff", "value": "true"},
+                {"key": "_riff_last_sync", "value": datetime.now(timezone.utc).isoformat()},
             ],
         }
 
-        # Merge any extra data
+        # Merge any extra data, protecting meta_data from being overwritten
         if extra_data:
+            extra_meta = extra_data.pop("meta_data", [])
             wc_payload.update(extra_data)
+            if extra_meta:
+                wc_payload["meta_data"].extend(extra_meta)
 
-        # Create in WooCommerce
-        wc_product = await self.client.create_product(wc_payload)
+        # Create in WooCommerce -- enrich any API error with product context
+        try:
+            wc_product = await self.client.create_product(wc_payload)
+        except WooCommerceAPIError as e:
+            if hasattr(e, "product_id"):
+                e.product_id = product_id
+                e.sku = product.sku
+                e.operation = "publish_product"
+            raise
         wc_product_id = str(wc_product["id"])
 
         # Create PlatformCommon + WooCommerceListing locally
@@ -216,8 +280,15 @@ class WooCommerceService:
             return True
 
         except WooCommerceAPIError as e:
+            inv_error = WCInventoryUpdateError(
+                f"Failed to update inventory for WC#{wc_product_id}: {e}",
+                operation="update_inventory",
+                wc_product_id=wc_product_id,
+                http_status=getattr(e, "http_status", None),
+            )
+            wc_logger.log_error(inv_error)
             logger.error(f"Failed to update WC inventory for {wc_product_id}: {e}")
-            raise
+            raise inv_error from e
 
     # ------------------------------------------------------------------
     # Order import
@@ -239,6 +310,9 @@ class WooCommerceService:
         created = 0
         updated = 0
         errors = 0
+        error_tracker = WCErrorTracker(sync_run_id="orders")
+
+        wc_logger.sync_start("orders", "Order Import")
 
         for order_data in orders:
             try:
@@ -294,6 +368,13 @@ class WooCommerceService:
                     created += 1
 
             except Exception as e:
+                order_error = WCOrderImportError(
+                    f"Failed to process order {order_data.get('id')}: {e}",
+                    operation="import_order",
+                    wc_product_id=str(order_data.get("id", "")),
+                )
+                error_tracker.record(order_error)
+                wc_logger.log_error(order_error)
                 logger.error(f"Error processing WC order {order_data.get('id')}: {e}")
                 errors += 1
 
@@ -305,6 +386,18 @@ class WooCommerceService:
             "updated": updated,
             "errors": errors,
         }
+
+        error_summary = (
+            error_tracker.get_summary()
+            if error_tracker.error_count > 0
+            else None
+        )
+        if error_summary:
+            result["error_summary"] = error_summary
+
+        wc_logger.sync_complete(
+            "orders", result, error_summary=error_summary
+        )
         logger.info(f"WooCommerce order import completed: {result}")
         return result
 

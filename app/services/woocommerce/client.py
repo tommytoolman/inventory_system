@@ -11,12 +11,18 @@ import logging
 import asyncio
 import time
 from typing import Dict, List, Optional, Any
+from urllib.parse import urlparse, urlunparse
 
 import httpx
-from requests.auth import HTTPBasicAuth
 
 from app.core.config import get_settings
 from app.core.exceptions import WooCommerceAPIError
+from app.services.woocommerce.errors import (
+    WCAuthenticationError, WCConnectionError, WCRateLimitError,
+    WCProductNotFoundError, WCValidationError, WCImageUploadError,
+    WCAPIError,
+)
+from app.services.woocommerce.error_logger import wc_logger
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +50,41 @@ class WooCommerceClient:
                 "Set WC_STORE_URL, WC_CONSUMER_KEY, WC_CONSUMER_SECRET in .env"
             )
 
+        # Persistent connection pool — avoids creating a new client per request
+        self._client = httpx.AsyncClient(
+            timeout=30,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
+
         logger.info(f"WooCommerceClient initialised for {self.store_url} (sandbox={self.sandbox_mode})")
+
+    async def close(self):
+        """Close the underlying HTTP client and release connections."""
+        await self._client.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
 
     # ------------------------------------------------------------------
     # Low-level request helpers
     # ------------------------------------------------------------------
 
+    @property
+    def _uses_https(self) -> bool:
+        """Check if the store URL uses HTTPS."""
+        return self.store_url.startswith("https")
+
+    @staticmethod
+    def _strip_query(url: str) -> str:
+        """Strip query parameters from a URL to avoid logging credentials."""
+        parsed = urlparse(url)
+        return urlunparse(parsed._replace(query=""))
+
     def _auth_params(self) -> Dict[str, str]:
-        """Return query-string auth params (fallback if header auth fails)."""
+        """Return query-string auth params (fallback for HTTP connections)."""
         return {
             "consumer_key": self.consumer_key,
             "consumer_secret": self.consumer_secret,
@@ -61,43 +94,188 @@ class WooCommerceClient:
         """
         Make an authenticated request to the WooCommerce API.
 
-        Tries Basic Auth header first. Falls back to query-string auth
-        if the server cannot parse the header (common on some hosts).
+        For HTTPS connections, uses HTTP Basic Auth (credentials in header).
+        For HTTP connections, falls back to query string auth as WooCommerce requires.
+
+        Includes automatic retry with exponential backoff for:
+        - Connection timeouts and network errors
+        - 429 rate limiting
+        - 5xx server errors
+
+        Client errors (4xx except 429) are NOT retried.
+        Raises specific WC exception types based on HTTP status code.
         """
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
 
-        # Merge auth params into query string (most reliable method)
         params = kwargs.pop("params", {})
-        params.update(self._auth_params())
+
+        # HTTPS: use Basic Auth header (secure). HTTP: query string (WC requirement).
+        auth = None
+        if self._uses_https:
+            auth = (self.consumer_key, self.consumer_secret)
+        else:
+            params.update(self._auth_params())
 
         timeout = kwargs.pop("timeout", 30)
+        max_retries = kwargs.pop("max_retries", 3)
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        last_error = None
+
+        for attempt in range(max_retries + 1):
+            is_last = (attempt == max_retries)
+
+            # -- Make the request -----------------------------------------
             try:
-                response = await client.request(method, url, params=params, **kwargs)
-            except httpx.TimeoutException as exc:
-                raise WooCommerceAPIError(f"Request timed out: {url}") from exc
+                response = await self._client.request(
+                    method, url, params=params, auth=auth, timeout=timeout, **kwargs
+                )
+            except httpx.TimeoutException:
+                last_error = WCConnectionError(
+                    f"Request timed out after {timeout}s: {method} {endpoint}",
+                    operation=f"api_{endpoint.split('/')[0]}",
+                    request_method=method,
+                    request_url=self._strip_query(url),
+                    retry_count=attempt,
+                )
+                if not is_last:
+                    wait = min(2 ** attempt, 10)
+                    logger.warning(
+                        f"Timeout on {method} {endpoint}, "
+                        f"retry {attempt + 1}/{max_retries} in {wait}s"
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                wc_logger.log_error(last_error)
+                raise last_error
+
             except httpx.RequestError as exc:
-                raise WooCommerceAPIError(f"Request failed: {exc}") from exc
+                last_error = WCConnectionError(
+                    f"Network error: {exc}",
+                    operation=f"api_{endpoint.split('/')[0]}",
+                    request_method=method,
+                    request_url=self._strip_query(url),
+                    retry_count=attempt,
+                )
+                if not is_last:
+                    wait = min(2 ** attempt, 10)
+                    logger.warning(
+                        f"Network error on {method} {endpoint}, "
+                        f"retry {attempt + 1}/{max_retries} in {wait}s"
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                wc_logger.log_error(last_error)
+                raise last_error
 
-        if response.status_code == 429:
-            retry_after = int(response.headers.get("Retry-After", 60))
-            logger.warning(f"WooCommerce rate limit hit, retrying after {retry_after}s")
-            await asyncio.sleep(retry_after)
-            return await self._request(method, endpoint, params=params, **kwargs)
+            # -- Handle response ------------------------------------------
 
-        if response.status_code >= 400:
-            error_body = response.text
-            try:
-                error_json = response.json()
-                error_body = error_json.get("message", error_body)
-            except Exception:
-                pass
-            raise WooCommerceAPIError(
-                f"WooCommerce API error {response.status_code} on {method} {endpoint}: {error_body}"
+            # Rate limiting -- always retry
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", 60))
+                if not is_last:
+                    logger.warning(
+                        f"Rate limited on {method} {endpoint}, "
+                        f"retry after {retry_after}s"
+                    )
+                    await asyncio.sleep(retry_after)
+                    continue
+                error = WCRateLimitError(
+                    f"Rate limited after {max_retries} retries: "
+                    f"{method} {endpoint}",
+                    retry_after=retry_after,
+                    request_method=method,
+                    request_url=self._strip_query(url),
+                    http_status=429,
+                    retry_count=attempt,
+                )
+                wc_logger.log_error(error)
+                raise error
+
+            # Server errors (5xx) -- retry
+            if response.status_code >= 500:
+                error = self._classify_error(response, method, endpoint, attempt)
+                if not is_last:
+                    wait = min(2 ** attempt, 10)
+                    logger.warning(
+                        f"Server error {response.status_code} on "
+                        f"{method} {endpoint}, "
+                        f"retry {attempt + 1}/{max_retries} in {wait}s"
+                    )
+                    await asyncio.sleep(wait)
+                    last_error = error
+                    continue
+                wc_logger.log_error(error)
+                raise error
+
+            # Client errors (4xx) -- do NOT retry
+            if response.status_code >= 400:
+                error = self._classify_error(response, method, endpoint, attempt)
+                wc_logger.log_error(error)
+                raise error
+
+            # -- Success --------------------------------------------------
+            return response.json()
+
+        # Safety net (should not reach here)
+        if last_error:
+            wc_logger.log_error(last_error)
+            raise last_error
+        raise WCAPIError(
+            f"Request failed after {max_retries} retries: {method} {endpoint}"
+        )
+
+    def _classify_error(self, response, method: str, endpoint: str,
+                        attempt: int = 0):
+        """Map an HTTP error response to a specific WC exception type."""
+        status = response.status_code
+        body_text = response.text
+
+        # Try to extract message from JSON response body
+        message = body_text
+        try:
+            body_json = response.json()
+            message = body_json.get("message", body_text)
+        except Exception:
+            pass
+
+        clean_url = self._strip_query(f"{self.base_url}/{endpoint.lstrip('/')}")
+        common = {
+            "http_status": status,
+            "request_method": method,
+            "request_url": clean_url,
+            "response_body": body_text[:2000],
+            "retry_count": attempt,
+            "operation": f"api_{method.lower()}_{endpoint.split('/')[0]}",
+        }
+
+        if status in (401, 403):
+            return WCAuthenticationError(
+                f"Authentication failed ({status}): {message}", **common
             )
 
-        return response.json()
+        if status == 404:
+            return WCProductNotFoundError(
+                f"Not found: {method} {endpoint} -- {message}", **common
+            )
+
+        if status in (400, 422):
+            msg_lower = message.lower() if isinstance(message, str) else ""
+            if "image" in msg_lower:
+                return WCImageUploadError(
+                    f"Image error: {message}", **common
+                )
+            if any(kw in msg_lower for kw in ("sku", "duplicate", "already exists")):
+                return WCValidationError(
+                    f"Duplicate / invalid SKU: {message}", **common
+                )
+            return WCValidationError(
+                f"Validation error ({status}): {message}", **common
+            )
+
+        # 5xx and anything else
+        return WCAPIError(
+            f"API error {status} on {method} {endpoint}: {message}", **common
+        )
 
     # ------------------------------------------------------------------
     # Product endpoints

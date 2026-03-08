@@ -670,10 +670,8 @@ async def _process_order_webhook_background(
             service = WooCommerceService(db, settings)
 
             if topic in ("order.created", "order.updated"):
-                # Import/update the order using the existing import_orders logic
-                # but for a single order
-                await service.import_orders()
-                await db.commit()
+                # Process the single order from the webhook payload directly
+                await service.import_single_order(payload)
                 logger.info(f"Webhook: processed WC order {payload.get('id')} ({topic})")
 
         except Exception as e:

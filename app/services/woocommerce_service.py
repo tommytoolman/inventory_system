@@ -243,43 +243,64 @@ class WooCommerceService:
             raise
         wc_product_id = str(wc_product["id"])
 
-        # Create PlatformCommon + WooCommerceListing locally
-        platform_common = PlatformCommon(
-            product_id=product.id,
-            platform_name="woocommerce",
-            external_id=wc_product_id,
-            status=ListingStatus.ACTIVE.value,
-            sync_status=SyncStatus.SYNCED.value,
-            listing_url=wc_product.get("permalink"),
-            platform_specific_data={
-                "price": wc_product.get("price"),
-                "currency": "GBP",
-                "stock_quantity": wc_product.get("stock_quantity"),
-            },
-            last_sync=datetime.now(timezone.utc).replace(tzinfo=None),
-        )
-        self.db.add(platform_common)
-        await self.db.flush()
+        # Create PlatformCommon + WooCommerceListing locally.
+        # If DB operations fail, attempt to delete the orphaned WC product.
+        try:
+            platform_common = PlatformCommon(
+                product_id=product.id,
+                platform_name="woocommerce",
+                external_id=wc_product_id,
+                status=ListingStatus.ACTIVE.value,
+                sync_status=SyncStatus.SYNCED.value,
+                listing_url=wc_product.get("permalink"),
+                platform_specific_data={
+                    "price": wc_product.get("price"),
+                    "currency": "GBP",
+                    "stock_quantity": wc_product.get("stock_quantity"),
+                },
+                last_sync=datetime.now(timezone.utc).replace(tzinfo=None),
+            )
+            self.db.add(platform_common)
+            await self.db.flush()
 
-        wc_listing = WooCommerceListing(
-            platform_id=platform_common.id,
-            wc_product_id=wc_product_id,
-            slug=wc_product.get("slug"),
-            permalink=wc_product.get("permalink"),
-            title=wc_product.get("name"),
-            status=wc_product.get("status"),
-            product_type=wc_product.get("type"),
-            sku=wc_product.get("sku"),
-            price=float(wc_product.get("price") or 0),
-            regular_price=float(wc_product.get("regular_price") or 0),
-            manage_stock=wc_product.get("manage_stock", True),
-            stock_quantity=wc_product.get("stock_quantity"),
-            stock_status=wc_product.get("stock_status"),
-            extended_attributes=wc_product,
-            last_synced_at=datetime.now(timezone.utc).replace(tzinfo=None),
-        )
-        self.db.add(wc_listing)
-        await self.db.commit()
+            wc_listing = WooCommerceListing(
+                platform_id=platform_common.id,
+                wc_product_id=wc_product_id,
+                slug=wc_product.get("slug"),
+                permalink=wc_product.get("permalink"),
+                title=wc_product.get("name"),
+                status=wc_product.get("status"),
+                product_type=wc_product.get("type"),
+                sku=wc_product.get("sku"),
+                price=float(wc_product.get("price") or 0),
+                regular_price=float(wc_product.get("regular_price") or 0),
+                manage_stock=wc_product.get("manage_stock", True),
+                stock_quantity=wc_product.get("stock_quantity"),
+                stock_status=wc_product.get("stock_status"),
+                extended_attributes=wc_product,
+                last_synced_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            )
+            self.db.add(wc_listing)
+            await self.db.commit()
+        except Exception as db_err:
+            await self.db.rollback()
+            # Attempt to clean up the orphaned WC product
+            try:
+                await self.client.delete_product(int(wc_product_id), force=True)
+                wc_logger.log_warning(
+                    f"Cleaned up orphaned WC product {wc_product_id} after DB failure",
+                    operation="publish_product",
+                    wc_product_id=wc_product_id,
+                )
+            except Exception as cleanup_err:
+                wc_logger.log_error(
+                    WCAPIError(
+                        f"CRITICAL: Failed to clean up orphaned WC product {wc_product_id}: {cleanup_err}",
+                        operation="publish_product_cleanup",
+                        wc_product_id=wc_product_id,
+                    )
+                )
+            raise db_err
 
         logger.info(f"Published product {product_id} to WooCommerce as WC#{wc_product_id}")
 

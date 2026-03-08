@@ -533,14 +533,32 @@ class WooCommerceImporter:
                                                    platform_info: Dict,
                                                    wc_data: Dict) -> None:
         """Create WooCommerceListing + PlatformCommon for an existing Product (SKU match)."""
-        # Create PlatformCommon
-        platform_common = PlatformCommon(
-            product_id=product.id,
-            last_sync=datetime.now(timezone.utc).replace(tzinfo=None),
-            **platform_info,
+        # Check if PlatformCommon already exists for this product+platform (prevent duplicates)
+        existing_pc = await self.session.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product.id,
+                PlatformCommon.platform_name == "woocommerce",
+            )
         )
-        self.session.add(platform_common)
-        await self.session.flush()
+        platform_common = existing_pc.scalar_one_or_none()
+
+        if platform_common:
+            # Update existing PlatformCommon instead of creating new
+            platform_common.external_id = platform_info["external_id"]
+            platform_common.status = platform_info["status"]
+            platform_common.sync_status = platform_info["sync_status"]
+            platform_common.listing_url = platform_info.get("listing_url")
+            platform_common.platform_specific_data = platform_info.get("platform_specific_data", {})
+            platform_common.last_sync = datetime.now(timezone.utc).replace(tzinfo=None)
+        else:
+            # Create new PlatformCommon
+            platform_common = PlatformCommon(
+                product_id=product.id,
+                last_sync=datetime.now(timezone.utc).replace(tzinfo=None),
+                **platform_info,
+            )
+            self.session.add(platform_common)
+            await self.session.flush()
 
         # Create WooCommerceListing
         wc_listing = WooCommerceListing(

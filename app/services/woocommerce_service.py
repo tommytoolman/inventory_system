@@ -292,6 +292,148 @@ class WooCommerceService:
             raise inv_error from e
 
     # ------------------------------------------------------------------
+    # Product update (RIFF → WooCommerce)
+    # ------------------------------------------------------------------
+
+    async def update_product(self, product_id: int, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Push updated fields from RIFF to WooCommerce.
+
+        Args:
+            product_id: Local RIFF product ID
+            fields: Dict of WooCommerce-compatible fields to update
+
+        Returns:
+            Updated WC product data
+        """
+        # Find the WooCommerce listing for this product
+        result = await self.db.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "woocommerce",
+            )
+        )
+        pc = result.scalar_one_or_none()
+        if not pc:
+            raise WCValidationError(
+                f"No WooCommerce listing found for product {product_id}",
+                operation="update_product",
+                product_id=product_id,
+            )
+
+        wc_product_id = int(pc.external_id)
+
+        # Push update to WooCommerce
+        wc_data = await self.client.update_product(wc_product_id, fields)
+
+        # Update local WooCommerceListing
+        listing_result = await self.db.execute(
+            select(WooCommerceListing).where(
+                WooCommerceListing.wc_product_id == str(wc_product_id)
+            )
+        )
+        listing = listing_result.scalar_one_or_none()
+        if listing:
+            for key in ("price", "regular_price", "sale_price", "stock_quantity",
+                        "stock_status", "status", "title", "sku"):
+                if key in fields:
+                    if hasattr(listing, key):
+                        setattr(listing, key, wc_data.get(key))
+            listing.last_synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            listing.extended_attributes = wc_data
+
+        # Update PlatformCommon
+        pc.last_sync = datetime.now(timezone.utc).replace(tzinfo=None)
+        pc.sync_status = SyncStatus.SYNCED.value
+
+        # Create SyncEvent
+        sync_event = SyncEvent(
+            sync_run_id=uuid.uuid4(),
+            platform_name="woocommerce",
+            product_id=product_id,
+            platform_common_id=pc.id,
+            external_id=str(wc_product_id),
+            change_type="product_update",
+            change_data={"fields_updated": list(fields.keys()), "source": "riff_push"},
+            status="processed",
+        )
+        self.db.add(sync_event)
+        await self.db.commit()
+
+        logger.info(f"Updated WC product {wc_product_id} for RIFF product {product_id}")
+        return wc_data
+
+    # ------------------------------------------------------------------
+    # Product end/deactivate (RIFF → WooCommerce)
+    # ------------------------------------------------------------------
+
+    async def end_listing(self, product_id: int, reason: str = "sold") -> bool:
+        """
+        Deactivate a WooCommerce listing by setting it to draft status.
+
+        Safer than deletion — preserves the product on WooCommerce.
+
+        Args:
+            product_id: Local RIFF product ID
+            reason: Reason for ending (sold, ended, etc.)
+
+        Returns:
+            True if successful
+        """
+        result = await self.db.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product_id,
+                PlatformCommon.platform_name == "woocommerce",
+            )
+        )
+        pc = result.scalar_one_or_none()
+        if not pc:
+            raise WCValidationError(
+                f"No WooCommerce listing found for product {product_id}",
+                operation="end_listing",
+                product_id=product_id,
+            )
+
+        wc_product_id = int(pc.external_id)
+
+        # Set to draft on WooCommerce (safer than delete)
+        await self.client.update_product(wc_product_id, {"status": "draft"})
+
+        # Update PlatformCommon
+        ended_status = ListingStatus.SOLD.value if reason == "sold" else ListingStatus.ENDED.value
+        pc.status = ended_status
+        pc.sync_status = SyncStatus.SYNCED.value
+        pc.last_sync = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        # Update WooCommerceListing
+        listing_result = await self.db.execute(
+            select(WooCommerceListing).where(
+                WooCommerceListing.wc_product_id == str(wc_product_id)
+            )
+        )
+        listing = listing_result.scalar_one_or_none()
+        if listing:
+            listing.status = "draft"
+            listing.last_synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        # Create SyncEvent
+        sync_event = SyncEvent(
+            sync_run_id=uuid.uuid4(),
+            platform_name="woocommerce",
+            product_id=product_id,
+            platform_common_id=pc.id,
+            external_id=str(wc_product_id),
+            change_type="listing_ended",
+            change_data={"reason": reason, "new_status": "draft"},
+            status="processed",
+        )
+        self.db.add(sync_event)
+        await self.db.commit()
+
+        logger.info(f"Ended WC listing for product {product_id} (reason: {reason})")
+        return True
+
+    # ------------------------------------------------------------------
     # Order import
     # ------------------------------------------------------------------
 

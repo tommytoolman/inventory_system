@@ -224,6 +224,60 @@ async def publish_to_woocommerce(
 
 
 # ------------------------------------------------------------------
+# Product update (RIFF → WooCommerce)
+# ------------------------------------------------------------------
+
+@router.put("/products/{product_id}/woocommerce")
+async def update_woocommerce_product(
+    product_id: int,
+    fields: Dict[str, Any],
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """Update a WooCommerce product with the given fields."""
+    try:
+        service = WooCommerceService(db, settings)
+        result = await service.update_product(product_id, fields)
+        return {"success": True, "data": result}
+    except WCValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except WCProductNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except WooCommerceAPIError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error updating WooCommerce product: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------------------------------------
+# Product end/deactivate
+# ------------------------------------------------------------------
+
+@router.post("/products/{product_id}/woocommerce/end")
+async def end_woocommerce_listing(
+    product_id: int,
+    reason: str = "sold",
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """End/deactivate a WooCommerce listing (sets to draft, does not delete)."""
+    try:
+        service = WooCommerceService(db, settings)
+        success = await service.end_listing(product_id, reason=reason)
+        return {"success": success}
+    except WCValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except WCProductNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except WooCommerceAPIError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error ending WooCommerce listing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------------------------------------
 # Inventory update
 # ------------------------------------------------------------------
 

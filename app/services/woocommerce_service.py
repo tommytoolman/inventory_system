@@ -18,10 +18,11 @@ from app.core.config import Settings, get_settings
 from app.core.enums import SyncStatus, ListingStatus
 from app.core.exceptions import WooCommerceAPIError
 from app.services.pricing import calculate_platform_price
-from app.models.product import Product
+from app.models.product import Product, ProductStatus
 from app.models.platform_common import PlatformCommon
 from app.models.woocommerce import WooCommerceListing
 from app.models.woocommerce_order import WooCommerceOrder
+from app.models.sync_event import SyncEvent
 from app.services.woocommerce.client import WooCommerceClient
 from app.services.woocommerce.importer import WooCommerceImporter
 from app.services.woocommerce.errors import (
@@ -359,11 +360,14 @@ class WooCommerceService:
                 }
 
                 if existing:
+                    old_status = existing.status
                     for key, value in order_fields.items():
                         setattr(existing, key, value)
                     # Link to RIFF product if not already linked
                     if not existing.product_id:
                         await self._link_order_to_product(existing, order_data)
+                    # Process sale or handle cancellation/refund
+                    await self._process_order_sale(existing, old_status)
                     updated += 1
                 else:
                     new_order = WooCommerceOrder(**order_fields)
@@ -371,6 +375,8 @@ class WooCommerceService:
                     await self.db.flush()
                     # Link the new order to a RIFF product
                     await self._link_order_to_product(new_order, order_data)
+                    # Process sale for new orders
+                    await self._process_order_sale(new_order)
                     created += 1
 
             except Exception as e:
@@ -414,6 +420,132 @@ class WooCommerceService:
     async def get_product(self, wc_product_id: str) -> Dict[str, Any]:
         """Get product details from WooCommerce."""
         return await self.client.get_product(int(wc_product_id))
+
+    # ------------------------------------------------------------------
+    # Cross-platform inventory propagation
+    # ------------------------------------------------------------------
+
+    # WooCommerce order statuses that indicate a confirmed sale
+    _SALE_STATUSES = {"processing", "completed"}
+    _CANCELLED_STATUSES = {"cancelled", "refunded", "failed"}
+
+    async def _process_order_sale(
+        self, order: WooCommerceOrder, old_status: Optional[str] = None
+    ) -> None:
+        """
+        Process inventory changes for a WooCommerce order sale.
+
+        - If order is processing/completed and not yet processed: decrement stock
+        - If order was processed but now cancelled/refunded: restore stock
+        """
+        current_status = order.status
+
+        # Case 1: New sale — decrement inventory
+        if current_status in self._SALE_STATUSES and not order.sale_processed:
+            if not order.product_id:
+                return
+
+            result = await self.db.execute(
+                select(Product).where(Product.id == order.product_id)
+            )
+            product = result.scalar_one_or_none()
+            if not product:
+                return
+
+            # Determine quantity from line items
+            qty_sold = 1
+            if order.line_items:
+                for item in order.line_items:
+                    if str(item.get("product_id", "")) == str(
+                        getattr(order, "_matched_wc_product_id", "")
+                    ) or item.get("sku") == product.sku:
+                        qty_sold = item.get("quantity", 1)
+                        break
+
+            product.quantity = max(0, (product.quantity or 0) - qty_sold)
+            if product.quantity == 0:
+                product.status = ProductStatus.SOLD.value
+
+            order.sale_processed = True
+            self.db.add(product)
+
+            # Create SyncEvent for the sale
+            sync_event = SyncEvent(
+                sync_run_id=uuid.uuid4(),
+                platform_name="woocommerce",
+                product_id=product.id,
+                platform_common_id=order.platform_listing_id,
+                external_id=order.wc_order_id,
+                change_type="order_sale",
+                change_data={
+                    "order_id": order.wc_order_id,
+                    "quantity_sold": qty_sold,
+                    "new_quantity": product.quantity,
+                    "order_status": current_status,
+                },
+                status="pending",
+            )
+            self.db.add(sync_event)
+
+            logger.info(
+                f"WC order {order.wc_order_id}: decremented product {product.id} "
+                f"by {qty_sold} (new qty: {product.quantity})"
+            )
+
+        # Case 2: Cancellation/refund — restore inventory
+        elif (
+            current_status in self._CANCELLED_STATUSES
+            and order.sale_processed
+            and old_status in self._SALE_STATUSES
+        ):
+            if not order.product_id:
+                return
+
+            result = await self.db.execute(
+                select(Product).where(Product.id == order.product_id)
+            )
+            product = result.scalar_one_or_none()
+            if not product:
+                return
+
+            # Restore quantity
+            qty_to_restore = 1
+            if order.line_items:
+                for item in order.line_items:
+                    if item.get("sku") == product.sku:
+                        qty_to_restore = item.get("quantity", 1)
+                        break
+
+            product.quantity = (product.quantity or 0) + qty_to_restore
+            if product.status == ProductStatus.SOLD.value:
+                product.status = ProductStatus.ACTIVE.value
+
+            order.sale_processed = False
+            self.db.add(product)
+
+            # Create SyncEvent for cancellation
+            sync_event = SyncEvent(
+                sync_run_id=uuid.uuid4(),
+                platform_name="woocommerce",
+                product_id=product.id,
+                platform_common_id=order.platform_listing_id,
+                external_id=order.wc_order_id,
+                change_type="order_cancelled",
+                change_data={
+                    "order_id": order.wc_order_id,
+                    "quantity_restored": qty_to_restore,
+                    "new_quantity": product.quantity,
+                    "old_status": old_status,
+                    "new_status": current_status,
+                },
+                status="pending",
+            )
+            self.db.add(sync_event)
+
+            logger.info(
+                f"WC order {order.wc_order_id} cancelled/refunded: restored "
+                f"{qty_to_restore} to product {product.id} (new qty: {product.quantity})"
+            )
 
     # ------------------------------------------------------------------
     # Order-product linking

@@ -20,6 +20,7 @@ from app.models.platform_common import PlatformCommon, ListingStatus
 from app.models.reverb_order import ReverbOrder
 from app.models.ebay_order import EbayOrder
 from app.models.shopify_order import ShopifyOrder
+from app.models.woocommerce_order import WooCommerceOrder
 
 from app.services.notification_service import EmailNotificationService
 
@@ -46,6 +47,11 @@ SALE_STATUSES = {
         # Shopify financial statuses that indicate payment received
         "statuses": {"PAID", "PARTIALLY_PAID", "PARTIALLY_REFUNDED"},
         "status_field": "financial_status",
+    },
+    "woocommerce": {
+        # WooCommerce order statuses that indicate a confirmed sale
+        "statuses": {"processing", "completed"},
+        "status_field": "status",
     },
 }
 
@@ -245,6 +251,16 @@ class OrderSaleProcessor:
                     else:
                         actions.append("Shopify: service unavailable (no settings)")
 
+                elif platform == "woocommerce" and listing.external_id:
+                    try:
+                        from app.services.woocommerce_service import WooCommerceService
+                        wc_service = WooCommerceService(self.db)
+                        await wc_service.update_inventory(listing.external_id, new_qty)
+                        actions.append(f"WooCommerce: qty updated to {new_qty}")
+                    except Exception as e:
+                        actions.append(f"WooCommerce: qty update failed - {str(e)[:50]}")
+                        logger.warning(f"Failed to update WooCommerce qty: {e}")
+
                 elif platform == "vr":
                     # VR doesn't support multi-qty, only end if qty=0
                     if new_qty == 0:
@@ -386,6 +402,8 @@ class OrderSaleProcessor:
             result["order_id"] = order.order_id
         elif platform == "shopify":
             result["order_id"] = order.shopify_order_id
+        elif platform == "woocommerce":
+            result["order_id"] = order.wc_order_id
 
         # Check if already processed
         if order.sale_processed:
@@ -425,6 +443,12 @@ class OrderSaleProcessor:
                 quantity_to_decrement = order.quantity_purchased
             elif platform == "shopify" and order.primary_quantity:
                 quantity_to_decrement = order.primary_quantity
+            elif platform == "woocommerce" and order.line_items:
+                # Sum quantities from line items for the linked product
+                for li in order.line_items:
+                    if li.get("sku") == getattr(product, "sku", None):
+                        quantity_to_decrement = li.get("quantity", 1)
+                        break
 
             if product.quantity >= quantity_to_decrement:
                 if not dry_run:
@@ -514,6 +538,8 @@ class OrderSaleProcessor:
             model = EbayOrder
         elif platform == "shopify":
             model = ShopifyOrder
+        elif platform == "woocommerce":
+            model = WooCommerceOrder
         else:
             raise ValueError(f"Unknown platform: {platform}")
 

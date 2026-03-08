@@ -10,6 +10,7 @@ Provides endpoints for:
 - Testing connectivity
 """
 
+import asyncio
 import hashlib
 import hmac
 import base64
@@ -39,6 +40,9 @@ from app.services.woocommerce.errors import (
 )
 
 router = APIRouter(prefix="/api", tags=["woocommerce"])
+
+# WC-P3-033: Per-platform sync lock to prevent concurrent imports
+_wc_sync_lock = asyncio.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +88,20 @@ async def run_woocommerce_sync_background(
             (called from sync_all). If None, creates its own session
             (called from the standalone sync endpoint).
     """
-    logger.info(f"Starting WooCommerce sync background task for run_id: {sync_run_id}")
-
-    if db is not None:
-        await _run_woocommerce_sync_with_session(db, settings, sync_run_id)
+    # WC-P3-033: Prevent concurrent sync runs
+    if _wc_sync_lock.locked():
+        logger.warning("WooCommerce sync already in progress — skipping")
         return
 
-    async with async_session() as db:
-        await _run_woocommerce_sync_with_session(db, settings, sync_run_id)
+    async with _wc_sync_lock:
+        logger.info(f"Starting WooCommerce sync background task for run_id: {sync_run_id}")
+
+        if db is not None:
+            await _run_woocommerce_sync_with_session(db, settings, sync_run_id)
+            return
+
+        async with async_session() as db:
+            await _run_woocommerce_sync_with_session(db, settings, sync_run_id)
 
 
 async def _run_woocommerce_sync_with_session(
@@ -154,6 +164,24 @@ async def _run_woocommerce_sync_with_session(
                 broadcast_data["error_summary"] = result["error_summary"]
             await manager.broadcast(broadcast_data)
 
+            # WC-P3-060 / WC-P3-061: Update WooCommerceStore health status
+            try:
+                from app.models.woocommerce_store import WooCommerceStore
+                store_result = await db.execute(
+                    text("SELECT id FROM woocommerce_stores WHERE is_active = true LIMIT 1")
+                )
+                store_row = store_result.scalar_one_or_none()
+                if store_row:
+                    await db.execute(
+                        text("""
+                            UPDATE woocommerce_stores
+                            SET last_sync_at = :now, sync_status = 'healthy'
+                            WHERE id = :store_id
+                        """).bindparams(now=datetime.now(timezone.utc), store_id=store_row)
+                    )
+            except Exception as store_err:
+                logger.warning(f"Could not update WooCommerceStore sync status: {store_err}")
+
             logger.info(f"WooCommerce import result: {result}")
 
         else:
@@ -178,6 +206,23 @@ async def _run_woocommerce_sync_with_session(
             })
 
             logger.error(f"WooCommerce sync error: {result.get('message')}")
+
+            # WC-P3-060: Mark store as error on failed sync
+            try:
+                store_result = await db.execute(
+                    text("SELECT id FROM woocommerce_stores WHERE is_active = true LIMIT 1")
+                )
+                store_row = store_result.scalar_one_or_none()
+                if store_row:
+                    await db.execute(
+                        text("""
+                            UPDATE woocommerce_stores
+                            SET sync_status = 'error'
+                            WHERE id = :store_id
+                        """).bindparams(store_id=store_row)
+                    )
+            except Exception:
+                pass
 
         await db.commit()
 
@@ -596,8 +641,17 @@ async def handle_wc_product_webhook(
     delivery_id = request.headers.get("X-WC-Webhook-Delivery-ID", "")
     source = request.headers.get("X-WC-Webhook-Source", "")
 
+    # WC-P3-054: Explicit check for empty webhook secret
+    webhook_secret = settings.WC_WEBHOOK_SECRET
+    if not webhook_secret:
+        logger.error(
+            "WC_WEBHOOK_SECRET is not configured. All webhooks will be rejected. "
+            "Set the webhook secret in your store configuration or WC_WEBHOOK_SECRET env var."
+        )
+        raise HTTPException(status_code=503, detail="Webhook secret not configured")
+
     # Verify signature
-    if not verify_wc_webhook_signature(body, signature, settings.WC_WEBHOOK_SECRET):
+    if not verify_wc_webhook_signature(body, signature, webhook_secret):
         logger.warning(f"Invalid WC product webhook signature from {source}")
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
@@ -784,7 +838,16 @@ async def handle_wc_order_webhook(
     delivery_id = request.headers.get("X-WC-Webhook-Delivery-ID", "")
     source = request.headers.get("X-WC-Webhook-Source", "")
 
-    if not verify_wc_webhook_signature(body, signature, settings.WC_WEBHOOK_SECRET):
+    # WC-P3-054: Explicit check for empty webhook secret
+    webhook_secret = settings.WC_WEBHOOK_SECRET
+    if not webhook_secret:
+        logger.error(
+            "WC_WEBHOOK_SECRET is not configured. All webhooks will be rejected. "
+            "Set the webhook secret in your store configuration or WC_WEBHOOK_SECRET env var."
+        )
+        raise HTTPException(status_code=503, detail="Webhook secret not configured")
+
+    if not verify_wc_webhook_signature(body, signature, webhook_secret):
         logger.warning(f"Invalid WC order webhook signature from {source}")
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
@@ -992,6 +1055,113 @@ async def handle_wc_order_webhook_tenant(
         _process_order_webhook_background, topic, validated_payload, settings, wc_store,
     )
     return {"status": "accepted"}
+
+
+# ==================================================================
+# Operational / diagnostic endpoints
+# ==================================================================
+
+@router.get("/woocommerce/health")
+async def woocommerce_health(db: AsyncSession = Depends(get_db)):
+    """WC-P3-035: Return WooCommerce connection health status for all active stores."""
+    from sqlalchemy import select as sa_select
+    from app.models.woocommerce_store import WooCommerceStore
+    from app.services.woocommerce.client import WooCommerceClient
+
+    result = await db.execute(
+        sa_select(WooCommerceStore).where(WooCommerceStore.is_active == True)
+    )
+    stores = result.scalars().all()
+    results = []
+
+    for store in stores:
+        try:
+            client = WooCommerceClient(store.store_url, store.consumer_key, store.consumer_secret)
+            connected = await client.test_connection()
+            await client.close()
+            store.sync_status = "healthy" if connected else "error"
+            results.append({"store_id": store.id, "name": store.name, "status": store.sync_status})
+        except Exception as e:
+            store.sync_status = "error"
+            results.append({"store_id": store.id, "name": store.name, "status": "error", "detail": str(e)})
+
+    if stores:
+        await db.commit()
+
+    # Also check single-tenant connection if no stores configured
+    if not stores:
+        try:
+            settings = get_settings()
+            from app.services.woocommerce.client import WooCommerceClient
+            async with WooCommerceClient() as client:
+                connected = await client.test_connection()
+                results.append({
+                    "store_id": None,
+                    "name": "Default (env vars)",
+                    "status": "healthy" if connected else "error",
+                })
+        except Exception as e:
+            results.append({"store_id": None, "name": "Default (env vars)", "status": "error", "detail": str(e)})
+
+    return {"stores": results}
+
+
+@router.get("/woocommerce/diagnostics/duplicates")
+async def check_wc_duplicates(db: AsyncSession = Depends(get_db)):
+    """WC-P3-056: Check for duplicate WooCommerce listings."""
+    result = await db.execute(text("""
+        SELECT wc_product_id, COUNT(*) as count
+        FROM woocommerce_listings
+        GROUP BY wc_product_id
+        HAVING COUNT(*) > 1
+    """))
+    duplicates = [{"wc_product_id": row[0], "count": row[1]} for row in result]
+    return {"duplicates": duplicates, "total": len(duplicates)}
+
+
+@router.post("/woocommerce/products/{product_id}/force-sync")
+async def force_sync_wc_product(
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """WC-P3-057: Force-overwrite WooCommerce product data from RIFF hub."""
+    try:
+        service = WooCommerceService(db, settings)
+        result = await service.force_sync_product(product_id)
+        return result
+    except WCValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except WCProductNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except WooCommerceAPIError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error force-syncing WC product: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/woocommerce/maintenance/cleanup-events")
+async def cleanup_wc_sync_events(
+    retention_days: int = 90,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """WC-P3-037: Remove old completed WooCommerce SyncEvents."""
+    service = WooCommerceService(db, settings)
+    deleted = await service.cleanup_old_sync_events(retention_days)
+    return {"deleted": deleted, "retention_days": retention_days}
+
+
+@router.post("/woocommerce/maintenance/relink-by-sku")
+async def relink_wc_products_by_sku(
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """WC-P3-064: Re-link WooCommerce products to RIFF by SKU match after backup restore."""
+    service = WooCommerceService(db, settings)
+    result = await service.relink_products_by_sku()
+    return result
 
 
 # ==================================================================

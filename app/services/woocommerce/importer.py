@@ -222,11 +222,14 @@ class WooCommerceImporter:
         wc_product_id = str(wc_data["id"])
         wc_sku = wc_data.get("sku", "")
 
+        # WC-P3-047: Generate per-product trace ID for debugging
+        trace_id = f"wc-import-{wc_product_id}-{uuid_mod.uuid4().hex[:8]}"
+
         # WC-P3-005: Skip auto-draft and inherit (variation parent placeholders)
         product_status = wc_data.get("status", "publish")
         if product_status in ("auto-draft", "inherit"):
             wc_logger.debug(
-                f"Skipping product {wc_product_id} with status '{product_status}'"
+                f"[{trace_id}] Skipping product {wc_product_id} with status '{product_status}'"
             )
             return "skipped"
 
@@ -234,16 +237,17 @@ class WooCommerceImporter:
         product_type = wc_data.get("type", "simple")
         if product_type == "variation":
             wc_logger.debug(
-                f"Skipping variation product {wc_product_id} — variations not supported"
+                f"[{trace_id}] Skipping variation product {wc_product_id} — variations not supported"
             )
             return "skipped"
 
         self._processed_wc_ids.add(wc_product_id)
+        wc_logger.debug(f"[{trace_id}] Processing WC product {wc_product_id} (SKU: {wc_sku})")
 
         # Warn about unsupported product types
         if product_type in ("variable", "grouped", "external"):
             logger.warning(
-                f"WooCommerce product {wc_product_id} is type '{product_type}' "
+                f"[{trace_id}] WooCommerce product {wc_product_id} is type '{product_type}' "
                 f"— imported as simple product. Variations not supported."
             )
 

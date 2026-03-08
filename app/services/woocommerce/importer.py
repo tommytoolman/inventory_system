@@ -5,6 +5,7 @@ Follows the same pattern as ShopifyImporter.
 """
 
 import logging
+import uuid as uuid_mod
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
@@ -15,6 +16,7 @@ from app.core.enums import SyncStatus, ListingStatus
 from app.models.woocommerce import WooCommerceListing
 from app.models.platform_common import PlatformCommon
 from app.models.product import Product
+from app.models.sync_event import SyncEvent
 from app.services.woocommerce.client import WooCommerceClient
 from app.services.woocommerce.errors import (
     WCAuthenticationError, WCConnectionError, WCDataTransformError, WCAPIError,
@@ -35,6 +37,8 @@ class WooCommerceImporter:
         """Initialize with database session."""
         self.session = db_session
         self.client = WooCommerceClient()
+        self._sync_run_id: Optional[uuid_mod.UUID] = None
+        self._processed_wc_ids: set = set()
 
     async def import_all_listings(self, status_filter: Optional[str] = None,
                                   limit: Optional[int] = None,
@@ -51,6 +55,13 @@ class WooCommerceImporter:
             Statistics dict with counts and optional error_summary
         """
         run_id = sync_run_id or "manual"
+        # Store sync_run_id as UUID for SyncEvent creation
+        try:
+            self._sync_run_id = uuid_mod.UUID(run_id) if run_id != "manual" else uuid_mod.uuid4()
+        except (ValueError, AttributeError):
+            self._sync_run_id = uuid_mod.uuid4()
+        self._processed_wc_ids = set()
+
         logger.info("Starting WooCommerce product import")
         wc_logger.sync_start(run_id, "Product Import")
         start_time = datetime.now()
@@ -127,6 +138,9 @@ class WooCommerceImporter:
                     )
                     stats["errors"] += 1
 
+            # Detect removed listings: products in DB but not in API response
+            await self._detect_removed_listings()
+
             await self.session.commit()
 
             elapsed = (datetime.now() - start_time).total_seconds()
@@ -175,6 +189,7 @@ class WooCommerceImporter:
         """
         wc_product_id = str(wc_data["id"])
         wc_sku = wc_data.get("sku", "")
+        self._processed_wc_ids.add(wc_product_id)
 
         # Extract data for our tables
         product_info = self._extract_product_data(wc_data)
@@ -185,6 +200,8 @@ class WooCommerceImporter:
         existing_listing = await self._find_existing_listing(wc_product_id)
 
         if existing_listing:
+            # Detect changes before updating
+            await self._detect_and_record_changes(existing_listing, listing_info, wc_product_id)
             # UPDATE existing listing
             await self._update_existing(existing_listing, listing_info, platform_info, wc_data)
             return "updated"
@@ -196,11 +213,19 @@ class WooCommerceImporter:
                 await self._create_listing_for_existing_product(
                     existing_product, listing_info, platform_info, wc_data
                 )
+                # Create SyncEvent for new listing (SKU match)
+                await self._create_sync_event(
+                    product_id=existing_product.id,
+                    external_id=wc_product_id,
+                    change_type="new_listing",
+                    change_data={"source": "sku_match", "sku": wc_sku},
+                )
                 logger.info(f"SKU MATCH: WC product {wc_product_id} → existing product SKU {wc_sku}")
                 return "sku_matched"
 
         # CREATE new Product + PlatformCommon + WooCommerceListing
         await self._create_new(product_info, listing_info, platform_info, wc_data)
+        # SyncEvent for brand new listing — product_id not yet known, flush provides it
         return "created"
 
     # ------------------------------------------------------------------
@@ -345,6 +370,118 @@ class WooCommerceImporter:
             return dt
         except (ValueError, TypeError):
             return None
+
+    # ------------------------------------------------------------------
+    # Change detection and SyncEvent creation
+    # ------------------------------------------------------------------
+
+    async def _detect_and_record_changes(
+        self, existing: WooCommerceListing, new_data: Dict, wc_product_id: str
+    ) -> None:
+        """Compare existing listing against new data and create SyncEvents for changes."""
+        product_id = None
+        platform_common_id = None
+        if existing.platform_id:
+            pc_result = await self.session.execute(
+                select(PlatformCommon).where(PlatformCommon.id == existing.platform_id)
+            )
+            pc = pc_result.scalar_one_or_none()
+            if pc:
+                product_id = pc.product_id
+                platform_common_id = pc.id
+
+        # Price change
+        old_price = existing.price or 0.0
+        new_price = new_data.get("price", 0.0)
+        if abs(old_price - new_price) > 0.01:
+            await self._create_sync_event(
+                product_id=product_id,
+                platform_common_id=platform_common_id,
+                external_id=wc_product_id,
+                change_type="price_change",
+                change_data={"old": str(old_price), "new": str(new_price)},
+            )
+
+        # Quantity change
+        old_qty = existing.stock_quantity
+        new_qty = new_data.get("stock_quantity")
+        if old_qty != new_qty and new_qty is not None:
+            await self._create_sync_event(
+                product_id=product_id,
+                platform_common_id=platform_common_id,
+                external_id=wc_product_id,
+                change_type="quantity_change",
+                change_data={"old": str(old_qty), "new": str(new_qty)},
+            )
+
+        # Status change
+        old_status = existing.status
+        new_status = new_data.get("status")
+        if old_status != new_status and new_status is not None:
+            await self._create_sync_event(
+                product_id=product_id,
+                platform_common_id=platform_common_id,
+                external_id=wc_product_id,
+                change_type="status_change",
+                change_data={"old": old_status, "new": new_status},
+            )
+
+    async def _detect_removed_listings(self) -> None:
+        """Find WC listings in DB that were not in the API response and create SyncEvents."""
+        if not self._processed_wc_ids:
+            return
+
+        result = await self.session.execute(
+            select(WooCommerceListing).where(
+                WooCommerceListing.status != "trash",
+            )
+        )
+        all_listings = result.scalars().all()
+
+        for listing in all_listings:
+            if listing.wc_product_id and listing.wc_product_id not in self._processed_wc_ids:
+                product_id = None
+                platform_common_id = None
+                if listing.platform_id:
+                    pc_result = await self.session.execute(
+                        select(PlatformCommon).where(PlatformCommon.id == listing.platform_id)
+                    )
+                    pc = pc_result.scalar_one_or_none()
+                    if pc:
+                        product_id = pc.product_id
+                        platform_common_id = pc.id
+
+                await self._create_sync_event(
+                    product_id=product_id,
+                    platform_common_id=platform_common_id,
+                    external_id=listing.wc_product_id,
+                    change_type="removed_listing",
+                    change_data={"title": listing.title, "sku": listing.sku},
+                    notes="Listing exists in DB but was not returned by WooCommerce API",
+                )
+
+    async def _create_sync_event(
+        self,
+        external_id: str,
+        change_type: str,
+        change_data: Dict[str, Any],
+        product_id: Optional[int] = None,
+        platform_common_id: Optional[int] = None,
+        notes: Optional[str] = None,
+    ) -> None:
+        """Create a SyncEvent record for a detected change."""
+        event = SyncEvent(
+            sync_run_id=self._sync_run_id,
+            platform_name="woocommerce",
+            product_id=product_id,
+            platform_common_id=platform_common_id,
+            external_id=external_id,
+            change_type=change_type,
+            change_data=change_data,
+            status="pending",
+            notes=notes,
+        )
+        self.session.add(event)
 
     # ------------------------------------------------------------------
     # Database operations

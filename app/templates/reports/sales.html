@@ -12,7 +12,7 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-lg shadow p-6 mb-6">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
+        <form id="sales-filter-form" method="get" class="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
             <div class="w-full">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Platform</label>
                 <select name="platform" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -249,16 +249,33 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endif %}
 
 <script>
+// Intercept form submission to omit empty params (prevents days= empty string causing 422)
+document.getElementById('sales-filter-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const params = new URLSearchParams();
+    for (const [key, value] of formData.entries()) {
+        if (value !== '') params.append(key, value);
+    }
+    const qs = params.toString();
+    window.location.href = window.location.pathname + (qs ? '?' + qs : '');
+});
+
 function exportToCSV() {
     // Get current filters from URL
     const urlParams = new URLSearchParams(window.location.search);
     const params = [];
-    
-    if (urlParams.has('platform')) params.push(`platform=${urlParams.get('platform')}`);
-    if (urlParams.has('days')) params.push(`days=${urlParams.get('days')}`);
-    if (urlParams.has('sort')) params.push(`sort=${urlParams.get('sort')}`);
-    if (urlParams.has('order')) params.push(`order=${urlParams.get('order')}`);
-    
+
+    const platform = urlParams.get('platform');
+    const days = urlParams.get('days');
+    const sort = urlParams.get('sort');
+    const order = urlParams.get('order');
+
+    if (platform) params.push(`platform=${platform}`);
+    if (days) params.push(`days=${days}`);
+    if (sort) params.push(`sort=${sort}`);
+    if (order) params.push(`order=${order}`);
+
     const queryString = params.length > 0 ? '?' + params.join('&') : '';
     window.location.href = `/reports/sales/export/csv${queryString}`;
 }
@@ -267,10 +284,13 @@ function exportToPDF() {
     // Get current filters from URL
     const urlParams = new URLSearchParams(window.location.search);
     const params = [];
-    
-    if (urlParams.has('platform')) params.push(`platform=${urlParams.get('platform')}`);
-    if (urlParams.has('days')) params.push(`days=${urlParams.get('days')}`);
-    
+
+    const platform = urlParams.get('platform');
+    const days = urlParams.get('days');
+
+    if (platform) params.push(`platform=${platform}`);
+    if (days) params.push(`days=${days}`);
+
     const queryString = params.length > 0 ? '?' + params.join('&') : '';
     window.location.href = `/reports/sales/export/pdf${queryString}`;
 }

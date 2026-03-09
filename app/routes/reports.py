@@ -2001,16 +2001,19 @@ async def sync_stats_report(
 async def sales_report(
     request: Request,
     platform_filter: Optional[str] = Query(None, alias="platform"),
-    days_filter: Optional[int] = Query(30, alias="days"),
+    days_filter: Optional[str] = Query(None, alias="days"),
     sort_by: Optional[str] = Query("sale_date", alias="sort"),
     sort_order: Optional[str] = Query("desc", alias="order")
 ):
     """
     Sales & Ended Listings Report: Track sold items and intelligently determine sale platforms.
     """
+    # Parse days_filter: empty string or absent = all time, otherwise convert to int
+    days_filter = int(days_filter) if days_filter and days_filter.strip() else None
+
     async with get_session() as db:
         from datetime import datetime, timedelta
-        
+
         # Calculate cutoff date
         cutoff_date = datetime.now() - timedelta(days=days_filter) if days_filter else None
         
@@ -2189,7 +2192,7 @@ async def sales_report(
 @router.get("/sales/export/csv")
 async def export_sales_csv(
     platform_filter: Optional[str] = Query(None, alias="platform"),
-    days_filter: Optional[int] = Query(30, alias="days"),
+    days_filter: Optional[str] = Query(None, alias="days"),
     sort_by: Optional[str] = Query("sale_date", alias="sort"),
     sort_order: Optional[str] = Query("desc", alias="order")
 ):
@@ -2199,10 +2202,13 @@ async def export_sales_csv(
     import csv
     import io
     from fastapi.responses import StreamingResponse
-    
+
+    # Parse days_filter: empty string or absent = all time, otherwise convert to int
+    days_filter = int(days_filter) if days_filter and days_filter.strip() else None
+
     async with get_session() as db:
         from datetime import datetime, timedelta
-        
+
         # Calculate cutoff date
         cutoff_date = datetime.now() - timedelta(days=days_filter) if days_filter else None
         
@@ -2362,10 +2368,10 @@ async def export_sales_csv(
         )
 
 
-@router.get("/sales/export/pdf") 
+@router.get("/sales/export/pdf")
 async def export_sales_pdf(
     platform_filter: Optional[str] = Query(None, alias="platform"),
-    days_filter: Optional[int] = Query(30, alias="days")
+    days_filter: Optional[str] = Query(None, alias="days")
 ):
     """
     Export sales report data as a simple PDF.
@@ -2374,13 +2380,16 @@ async def export_sales_pdf(
     # TODO: Implement proper PDF export using reportlab or weasyprint
     # For now, redirect to CSV which can be opened in Excel and saved as PDF
     from fastapi.responses import RedirectResponse
-    
+
+    # Parse days_filter: empty string or absent = all time, otherwise convert to int
+    days_int = int(days_filter) if days_filter and days_filter.strip() else None
+
     # Build query params for CSV export
     params = []
     if platform_filter:
         params.append(f"platform={platform_filter}")
-    if days_filter:
-        params.append(f"days={days_filter}")
+    if days_int:
+        params.append(f"days={days_int}")
     
     query_string = "&".join(params) if params else ""
     redirect_url = f"/reports/sales/export/csv?{query_string}" if query_string else "/reports/sales/export/csv"

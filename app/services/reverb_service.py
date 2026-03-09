@@ -664,11 +664,19 @@ class ReverbService:
 
     async def create_sync_events_for_stocked_orders(self, sync_run_id: uuid.UUID) -> Dict[str, int]:
         """
-        Create sync_events for unprocessed orders on stocked (inventoried) items.
+        REDUNDANT — disabled March 2026. Safe to remove after testing confirms no impact.
 
+        This was part of a sync event pipeline (System B) for stocked-item sales. It creates
+        order_sale sync events which are then processed by SyncService._handle_order_sale().
+        However, OrderSaleProcessor (System A) already handles the same work directly — it runs
+        first in the scheduler, marks orders sale_processed=True, so this method always finds
+        zero unprocessed orders. The scheduler call to this method has been commented out in
+        scripts/run_sync_scheduler.py.
+
+        Original docstring:
+        Create sync_events for unprocessed orders on stocked (inventoried) items.
         This handles the case where a stocked item sells - the listing stays live
         but quantity needs to be decremented across all platforms.
-
         Returns a summary dict with counts.
         """
         summary = {"events_created": 0, "skipped_existing": 0, "skipped_non_stocked": 0, "skipped_no_product": 0, "errors": 0}

@@ -12,10 +12,9 @@ This service coordinates:
 import asyncio
 import logging
 
-from typing import Dict, List, Any, Optional, Set, NamedTuple, Tuple, Union, Sequence
+from typing import Dict, List, Any, Optional, Set, Tuple, Union, Sequence
 from datetime import datetime, timezone
 from dataclasses import dataclass
-from enum import Enum
 from sqlalchemy import select, text, update, cast, or_, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -364,8 +363,11 @@ class SyncService:
                 success = await self._handle_removed_listing(event, summary, actions, dry_run)
             elif event.change_type == 'quantity_change':
                 success = await self._handle_quantity_change(event, summary, actions, dry_run)
-            elif event.change_type == 'order_sale':
-                success = await self._handle_order_sale(event, summary, actions, dry_run)
+            # REDUNDANT — disabled March 2026. order_sale events are handled by
+            # OrderSaleProcessor (app/services/order_sale_processor.py) which runs first
+            # in the scheduler. This dispatch and _handle_order_sale() below are unreachable.
+            # elif event.change_type == 'order_sale':
+            #     success = await self._handle_order_sale(event, summary, actions, dry_run)
 
             if success:
                 event.status = 'processed'
@@ -1042,54 +1044,14 @@ class SyncService:
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("Failed to queue sale alert email for product %s: %s", product.id, exc, exc_info=True)
 
-    async def _handle_price_change_old(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool):
-        """Handles a 'price_change' event by updating the master product and propagating the change."""
-        logger.info(f"Handling 'price_change' event for {event.platform_name} item {event.external_id}")
-        
-        if not event.product_id:
-            event.notes = "Event is missing product_id, cannot process price change."
-            summary["errors"] += 1
-            return
-
-        product = await self.db.get(Product, event.product_id)
-        if not product:
-            event.notes = f"Product with ID {event.product_id} not found."
-            summary["errors"] += 1
-            return
-
-        try:
-            new_price = float(event.change_data.get('new', 0.0))
-            old_price = float(product.base_price)
-
-            # Step 1: Update the Master Product's base_price
-            product.base_price = new_price
-            self.db.add(product)
-            
-            action_desc = f"Updated master price for Product #{product.id} (SKU: {product.sku}) from £{old_price} to £{new_price}."
-            actions.append(action_desc)
-            logger.info(action_desc)
-
-            # Auto propagate is currently disabled to avoid unintended price changes. Review later.
-            # Step 2: Propagate the price change to other active platforms
-            # successful_platforms, action_log, failed_count = await self._propagate_price_update(product, event.platform_name, new_price, dry_run)
-            # actions.extend(action_log)
-
-            # if failed_count > 0:
-            #     summary["errors"] += failed_count
-            #     event.notes = f"Failed to propagate price update to {failed_count} platform(s)."
-            
-            # summary["actions_taken"] += 1 + len(action_log)
-            summary["actions_taken"] += 1
-
-        except (ValueError, TypeError) as e:
-            logger.error(f"Could not parse price from event data: {event.change_data}. Error: {e}")
-            event.notes = f"Invalid price data in event: {e}"
-            summary["errors"] += 1
-
     async def _handle_price_change(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool):
         """
         Handles a 'price_change' event by updating the specialist table to log the anomaly for review.
         This does NOT change the master product.base_price.
+
+        Note: Previously (_handle_price_change_old) this method wrote platform price changes
+        back to product.base_price, treating platforms as the price authority. We retired that
+        approach — RIFF is the price authority, and platform discrepancies are flagged for review.
         """
         logger.info(f"Handling 'price_change' event for {event.platform_name} item {event.external_id}")
 
@@ -1597,8 +1559,15 @@ class SyncService:
 
     async def _handle_order_sale(self, event: SyncEvent, summary: Dict, actions: List, dry_run: bool) -> bool:
         """
-        Handle an order_sale event for stocked (inventoried) items.
+        REDUNDANT — disabled March 2026. Safe to remove after testing confirms no impact.
 
+        This was part of a sync event pipeline (System B) for stocked-item sales. The dispatch
+        to this method has been commented out above. OrderSaleProcessor (System A) at
+        app/services/order_sale_processor.py handles the same work directly — it runs first
+        in the scheduler, so order_sale sync events are never created.
+
+        Original docstring:
+        Handle an order_sale event for stocked (inventoried) items.
         This decrements quantity on RIFF and propagates to other platforms:
         - eBay: Update quantity
         - Shopify: Update inventory

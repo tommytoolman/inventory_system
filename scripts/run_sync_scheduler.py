@@ -232,26 +232,31 @@ async def main():
                 sale_summary = await processor.process_unprocessed_orders("reverb", dry_run=False)
                 logger.info("Reverb sale processing: %s", sale_summary)
 
-                # Create order_sale sync events for stocked items, then auto-process
-                # (propagates to eBay/Shopify/VR + sends email notification)
-                reverb_service = ReverbService(db, settings)
-                event_result = await reverb_service.create_sync_events_for_stocked_orders(sync_run_id)
-                events_created = event_result.get("events_created", 0)
-                logger.info("Reverb order_sale sync events: %s", event_result)
-
-                if events_created > 0:
-                    await db.commit()  # commit events before processing
-                    recon_report = await process_reconciliation(
-                        db=db,
-                        sync_run_id=str(sync_run_id),
-                        event_type="order_sale",
-                        dry_run=False,
-                    )
-                    logger.info(
-                        "Auto-processed %s order_sale events (errors: %s)",
-                        recon_report.summary.get("processed", 0),
-                        recon_report.summary.get("errors", 0),
-                    )
+                # REDUNDANT PIPELINE — disabled March 2026
+                # OrderSaleProcessor (System A, above) already handles stocked-item sales
+                # by finding orders where sale_processed=False, decrementing qty, propagating,
+                # and setting sale_processed=True. This pipeline (System B) runs after System A
+                # and looks for the same sale_processed=False orders — but finds none because
+                # System A already processed them. Safe to remove after testing confirms no impact.
+                #
+                # reverb_service = ReverbService(db, settings)
+                # event_result = await reverb_service.create_sync_events_for_stocked_orders(sync_run_id)
+                # events_created = event_result.get("events_created", 0)
+                # logger.info("Reverb order_sale sync events: %s", event_result)
+                #
+                # if events_created > 0:
+                #     await db.commit()  # commit events before processing
+                #     recon_report = await process_reconciliation(
+                #         db=db,
+                #         sync_run_id=str(sync_run_id),
+                #         event_type="order_sale",
+                #         dry_run=False,
+                #     )
+                #     logger.info(
+                #         "Auto-processed %s order_sale events (errors: %s)",
+                #         recon_report.summary.get("processed", 0),
+                #         recon_report.summary.get("errors", 0),
+                #     )
 
                 await activity_logger.log_activity(
                     action="orders_sync",

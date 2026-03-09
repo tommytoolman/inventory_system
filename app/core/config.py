@@ -177,7 +177,12 @@ class Settings(BaseSettings):
 
     FDX_USERNAME: str = ""
     FDX_PWD: str = ""
-    
+
+    # Discord notifications
+    DISCORD_WEBHOOK_URL: str = ""
+    DISCORD_SERVICE_NAME: str = "RIFF"
+    DISCORD_LOGGING_ENABLED: bool = False
+
     model_config = ConfigDict(
         env_file=os.environ.get('ENV_FILE', '.env') if os.path.exists('.env') else None,
         case_sensitive=True

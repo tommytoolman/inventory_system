@@ -52,6 +52,7 @@ from app.core.enums import (
 )
 from app.core.events import StockUpdateEvent
 from app.core.exceptions import ProductCreationError, PlatformIntegrationError
+from app.core.utils import _clean_ebay_description_html
 from app.database import async_session
 from app.dependencies import get_db, templates
 from app.models.product import Product
@@ -1978,56 +1979,6 @@ def _summarize_differences(results: List[Dict]) -> List[str]:
             lines.append(base)
     return lines
 
-
-def _clean_ebay_description_html(html: str) -> str:
-    """Apply corrective formatting to product description HTML for eBay template.
-
-    Fixes common issues from Reverb/CMS imports:
-    - Empty paragraphs (<p>&nbsp;</p>) that create unwanted gaps
-    - Fragmented bold tags (<strong>Word</strong>&nbsp;<strong>Word</strong>)
-    - Missing bold on the first paragraph (product title line)
-    """
-    if not html or html == "No description available.":
-        return html
-
-    # 1. Merge fragmented bold: </strong>&nbsp;<strong> → single space inside bold
-    html = re.sub(r'</strong>(\s|&nbsp;)+<strong>', ' ', html)
-
-    # 2. Remove empty paragraphs: <p>&nbsp;</p>, <p> </p>, <p></p>
-    html = re.sub(r'<p>\s*(?:&nbsp;)*\s*</p>', '', html)
-
-    # 3. Ensure first <p> content is wrapped in <strong> if not already
-    def _bold_first_paragraph(match: re.Match) -> str:
-        tag = match.group(1)       # opening <p ...>
-        content = match.group(2)   # inner content
-        closing = match.group(3)   # </p>
-        stripped = content.strip()
-        if not stripped:
-            return match.group(0)
-        # Already bold — leave it alone
-        if stripped.startswith('<strong>') and stripped.endswith('</strong>'):
-            return match.group(0)
-        return f'{tag}<strong>{stripped}</strong>{closing}'
-
-    html = re.sub(
-        r'(<p[^>]*>)(.*?)(</p>)',
-        _bold_first_paragraph,
-        html,
-        count=1,
-        flags=re.DOTALL,
-    )
-
-    # 4. Add divider before EU footer block
-    html = re.sub(
-        r'(<p><strong>ALL EU PURCHASES)',
-        r'<hr style="border:none;border-top:1px solid #ccc;margin:2em 0;">\1',
-        html,
-    )
-
-    # 5. Collapse runs of whitespace (but not inside tags)
-    html = re.sub(r'(?<=>)\s{2,}(?=<)', '\n', html)
-
-    return html
 
 
 @router.get("/product/{product_id}/ebay-template-preview", response_class=HTMLResponse)

@@ -392,6 +392,79 @@ class EbayService:
         return any(marker in haystack for marker in markers)
 
     @staticmethod
+    def _strip_html_tags(html_text: str) -> str:
+        """Strip all HTML tags from text for plain-text fallback."""
+        import re as _re
+        return _re.sub(r'<[^>]+>', '', html_text).strip()
+
+    async def _render_ebay_template(self, product: "Product") -> str:
+        """
+        Render the eBay listing template HTML for a product.
+
+        The template includes:
+        - Product description (HTML-formatted)
+        - Image gallery with CSS-only lightbox
+        - Artist Owned badge (if applicable)
+        - Payment/Shipping/Returns information tabs
+        - Schema.org structured data
+
+        Args:
+            product: Product instance to render
+
+        Returns:
+            Rendered HTML string ready for eBay Description field
+
+        Raises:
+            TemplateNotFound: If listing_template.html is missing
+        """
+        from jinja2 import Environment, FileSystemLoader, TemplateNotFound
+        import os
+        from app.core.utils import _clean_ebay_description_html
+
+        # Resolve templates directory
+        templates_dir = os.path.join(
+            os.path.dirname(__file__), "..", "templates"
+        )
+        env = Environment(
+            loader=FileSystemLoader(templates_dir),
+            autoescape=False  # eBay description is pre-sanitised
+        )
+
+        try:
+            template = env.get_template("ebay/listing_template.html")
+        except TemplateNotFound:
+            # Fallback: return plain text if template not found
+            logger.warning(
+                "ebay/listing_template.html not found for product %s; "
+                "falling back to plain text description",
+                product.id,
+            )
+            return product.description or "No description available."
+
+        # Build image list
+        images = []
+        if product.primary_image:
+            images.append(product.primary_image)
+        if product.additional_images:
+            images.extend(product.additional_images)
+
+        # Clean and prepare description
+        description_raw = product.description or ""
+        description_html = _clean_ebay_description_html(description_raw)
+
+        # Render template
+        rendered = template.render(
+            product=product,
+            images=images,
+            description_html=description_html,
+            description_plain=self._strip_html_tags(description_html),
+            preview_mode=False,
+            artist_badge_url="",  # TODO: Fill in with public URL or base64 data URI
+        )
+
+        return rendered
+
+    @staticmethod
     def _extract_picture_urls_from_payload(item_payload: Dict[str, Any]) -> List[str]:
         """Return the ordered list of PictureURL values from a GetItem payload."""
         picture_urls: List[str] = []
@@ -1986,14 +2059,14 @@ class EbayService:
             logger.info(f"  Listing price: £{price_str}")
 
             # 7. Build the complete item_data payload for the eBay API
-            description_text = product.description or "No description available."
-            description_text = self._sanitize_description_for_ebay(description_text)
+            # Render the full eBay listing template (includes description, styling, tabs)
+            description_html = await self._render_ebay_template(product)
 
             title = (product.title or f"{product.year or ''} {product.brand} {product.model}".strip())[:80]
             title = self._sanitize_description_for_ebay(title) or title
             item_data = {
                 "Title": title,
-                "Description": description_text,
+                "Description": description_html,
                 "CategoryID": ebay_category_info['CategoryID'],
                 "Price": price_str,
                 "CurrencyID": "GBP",

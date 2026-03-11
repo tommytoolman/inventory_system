@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from typing import List
+from sqlalchemy import text, select
+from typing import List, Optional
 from app.database import get_session
+from app.core.config import Settings, get_settings
 from app.core.security import get_current_username
+from app.models.ebay import EbayListing
+from app.models.platform_common import PlatformCommon
+from app.models.product import Product
+from app.services.ebay_service import EbayService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -139,3 +144,74 @@ async def query_sync_events(
         return {"count": len(events), "events": events}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/apply-ebay-template")
+async def apply_ebay_template(
+    dry_run: bool = False,
+    limit: Optional[int] = None,
+    settings: Settings = Depends(get_settings),
+    current_user: str = Depends(get_current_username),
+):
+    """
+    Batch-apply the CrazyLister HTML template to active eBay listings missing it.
+
+    Query params:
+      dry_run=true   Preview what would be revised without making eBay API calls.
+      limit=N        Process at most N listings (useful for pilot runs).
+
+    Returns JSON with per-item results and a summary.
+    """
+    results = {
+        "dry_run": dry_run,
+        "limit": limit,
+        "found": 0,
+        "updated": 0,
+        "errors": 0,
+        "items": [],
+    }
+
+    async with get_session() as db:
+        service = EbayService(db, settings)
+
+        stmt = (
+            select(EbayListing, PlatformCommon, Product)
+            .join(PlatformCommon, EbayListing.platform_id == PlatformCommon.id)
+            .join(Product, PlatformCommon.product_id == Product.id)
+            .where(PlatformCommon.platform_name == "ebay")
+            .where(PlatformCommon.status == "ACTIVE")
+            .where(Product.status == "ACTIVE")
+            .where(EbayListing.listing_data["uses_crazylister"].astext == "false")
+        )
+
+        if limit:
+            stmt = stmt.limit(limit)
+
+        result = await db.execute(stmt)
+        rows = result.all()
+        results["found"] = len(rows)
+
+        if dry_run:
+            results["items"] = [
+                {"item_id": listing.ebay_item_id, "sku": product.sku, "action": "would_revise"}
+                for listing, pc, product in rows
+            ]
+            return results
+
+        for listing, pc, product in rows:
+            item_result = {"item_id": listing.ebay_item_id, "sku": product.sku}
+            try:
+                description_html = await service._render_ebay_template(product)
+                await service.trading_api.revise_fixed_price_item(
+                    item_id=listing.ebay_item_id,
+                    Description=description_html,
+                )
+                item_result["status"] = "success"
+                results["updated"] += 1
+            except Exception as e:
+                item_result["status"] = "error"
+                item_result["error"] = str(e)
+                results["errors"] += 1
+            results["items"].append(item_result)
+
+    return results

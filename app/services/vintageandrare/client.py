@@ -808,6 +808,13 @@ class VintageAndRareClient:
         fields = filtered_fields
         field_names = {name for name, _ in fields}
 
+        # Strip item_desc from the fields list unless description is explicitly being
+        # updated. V&R uses TinyMCE which does not populate the textarea in static HTML —
+        # re-submitting the empty field wipes the stored description on V&R.
+        if "description" not in updates:
+            fields = [(name, value) for name, value in fields if name not in {"item_desc", "description"}]
+            field_names = {name for name, _ in fields}
+
         logger.info(
             "V&R edit field summary for %s: kept=%d dropped=%d",
             item_id,

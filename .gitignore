@@ -71,3 +71,6 @@ htmlcov/
 
 # ─── Railway DB Audit (contains connection metadata) ──────
 inventory_system/railway_db_audit.json
+
+# ─── Large SQL Backup Files (>50MB — use external storage) ─
+inventory_system/scripts/backup/db/*.sql

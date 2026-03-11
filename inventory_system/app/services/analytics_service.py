@@ -139,7 +139,7 @@ class InventoryAnalyticsService:
                     COUNT(DISTINCT pc.platform_name) as platform_count,
                     array_agg(DISTINCT pc.platform_name) as platforms
                 FROM products p
-                LEFT JOIN platform_common pc ON pc.product_id = p.id AND pc.status = 'ACTIVE'
+                LEFT JOIN platform_common pc ON pc.product_id = p.id AND pc.status NOT IN ('sold', 'ended')
                 WHERE p.status = 'ACTIVE'
                 AND p.quantity > 0
                 GROUP BY p.id, p.sku, p.title, p.category, p.base_price, p.created_at

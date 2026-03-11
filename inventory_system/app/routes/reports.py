@@ -1285,8 +1285,12 @@ async def platform_coverage_report(
     Platform Coverage Report: Identify ACTIVE products missing from certain platforms.
     """
     async with get_session() as db:
-        # Only show ACTIVE products
-        status_clause = "WHERE p.status = 'ACTIVE'"
+        # Platform Coverage scope:
+        # - Active in-stock products only (quantity > 0)
+        # - Included statuses: ACTIVE, DRAFT, PENDING
+        # - Excluded: SOLD, ENDED
+        # This matches the dashboard definition of "active in-stock products"
+        status_clause = "WHERE p.status = 'ACTIVE' AND p.quantity > 0"
         params = {}
         
         # Map sort columns to SQL

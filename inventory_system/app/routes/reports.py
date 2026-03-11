@@ -295,9 +295,9 @@ async def listing_health_report(
 
     platform_defs = [
         ("shopify", "Shopify", "shopify_listing"),
-        ("reverb", "Reverb", "reverb_listing"),
-        ("ebay", "eBay", "ebay_listing"),
-        ("vr", "Vintage & Rare", "vr_listing"),
+        ("reverb", "Reverb", "reverb_listing_any"),   # unfiltered: includes draft/ended
+        ("ebay", "eBay", "ebay_listing_any"),          # unfiltered: includes ended/sold
+        ("vr", "Vintage & Rare", "vr_listing_any"),    # unfiltered: includes non-active
     ]
 
     def _determine_status(errors: List[str], warnings: List[str]) -> str:
@@ -385,12 +385,38 @@ async def listing_health_report(
         if listing is None:
             errors.append("No platform listing record")
         else:
-            if platform_name == "shopify" and not getattr(listing, "category_gid", None):
-                warnings.append("Category missing")
-            if platform_name == "ebay" and not getattr(listing, "listing_status", None):
-                warnings.append("eBay listing status unknown")
-            if platform_name == "reverb" and not getattr(listing, "reverb_state", None):
-                warnings.append("Reverb state missing")
+            # Report actual platform state as a warning rather than a hard error
+            if platform_name == "reverb":
+                state = (getattr(listing, "reverb_state", None) or "").lower()
+                if not state:
+                    warnings.append("Reverb state missing")
+                elif state not in {"live", "active"}:
+                    warnings.append(f"Reverb state: {state}")
+            elif platform_name == "ebay":
+                state = (getattr(listing, "listing_status", None) or "").lower()
+                if not state:
+                    warnings.append("eBay listing status unknown")
+                elif state not in {"active"}:
+                    warnings.append(f"eBay status: {state}")
+            elif platform_name == "vr":
+                state = (getattr(listing, "vr_state", None) or "").lower()
+                if not state:
+                    warnings.append("VR state missing")
+                elif state not in {"active"}:
+                    warnings.append(f"VR state: {state}")
+            elif platform_name == "shopify":
+                if not getattr(listing, "category_gid", None):
+                    warnings.append("Category missing")
+
+        # Image count check for eBay — picture_urls stored in DB, no API call needed
+        if platform_name == "ebay" and listing is not None:
+            riff_image_count = (1 if product.primary_image else 0) + len(product.additional_images or [])
+            ebay_images = getattr(listing, "picture_urls", None) or []
+            ebay_count = len(ebay_images)
+            if riff_image_count > 0 and ebay_count == 0:
+                warnings.append(f"No images on eBay (RIFF has {riff_image_count})")
+            elif riff_image_count > 0 and ebay_count != riff_image_count:
+                warnings.append(f"Image count mismatch: RIFF {riff_image_count}, eBay {ebay_count}")
 
         status_value = _determine_status(errors, warnings)
         issues = errors + warnings
@@ -410,11 +436,11 @@ async def listing_health_report(
                 selectinload(Product.platform_listings)
                 .selectinload(PlatformCommon.shopify_listing),
                 selectinload(Product.platform_listings)
-                .selectinload(PlatformCommon.reverb_listing),
+                .selectinload(PlatformCommon.reverb_listing_any),
                 selectinload(Product.platform_listings)
-                .selectinload(PlatformCommon.ebay_listing),
+                .selectinload(PlatformCommon.ebay_listing_any),
                 selectinload(Product.platform_listings)
-                .selectinload(PlatformCommon.vr_listing),
+                .selectinload(PlatformCommon.vr_listing_any),
             )
             .order_by(Product.created_at.desc())
         )

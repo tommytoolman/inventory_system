@@ -70,6 +70,33 @@ class PlatformCommon(Base):
     )
     shopify_listing = relationship("ShopifyListing", back_populates="platform_listing", uselist=False)
     woocommerce_listing = relationship("WooCommerceListing", back_populates="platform_listing", uselist=False)
+
+    # Unfiltered variants used by the Listing Health report — load any listing record
+    # regardless of its live/active state (the filtered variants above exclude drafts/ended).
+    reverb_listing_any = relationship(
+        "ReverbListing",
+        primaryjoin="PlatformCommon.id == ReverbListing.platform_id",
+        foreign_keys="ReverbListing.platform_id",
+        uselist=False,
+        viewonly=True,
+        overlaps="reverb_listing",
+    )
+    ebay_listing_any = relationship(
+        "EbayListing",
+        primaryjoin="PlatformCommon.id == EbayListing.platform_id",
+        foreign_keys="EbayListing.platform_id",
+        uselist=False,
+        viewonly=True,
+        overlaps="ebay_listing",
+    )
+    vr_listing_any = relationship(
+        "VRListing",
+        primaryjoin="PlatformCommon.id == VRListing.platform_id",
+        foreign_keys="VRListing.platform_id",
+        uselist=False,
+        viewonly=True,
+        overlaps="vr_listing",
+    )
     
     sale = relationship("Sale", back_populates="platform_listing", uselist=False)
     

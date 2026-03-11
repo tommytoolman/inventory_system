@@ -1,0 +1,46 @@
+{
+  "login_forms": [],
+  "login_buttons": [
+    {
+      "tag_name": "script",
+      "type": "text/javascript",
+      "name": null,
+      "id": "",
+      "class": "",
+      "text": null
+    },
+    {
+      "tag_name": "a",
+      "type": "",
+      "name": "",
+      "id": "",
+      "class": "txt_b",
+      "text": null
+    },
+    {
+      "tag_name": "script",
+      "type": "text/javascript",
+      "name": null,
+      "id": "",
+      "class": "",
+      "text": null
+    },
+    {
+      "tag_name": "a",
+      "type": "",
+      "name": "",
+      "id": "",
+      "class": "",
+      "text": "Login"
+    },
+    {
+      "tag_name": "a",
+      "type": "",
+      "name": "",
+      "id": "",
+      "class": "comming_soon txt_capitalize",
+      "text": "Login"
+    }
+  ],
+  "csrf_tokens": []
+}

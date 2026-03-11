@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 mb-16">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">Create Shipping Label</h1>
+            <p class="text-gray-600">
+                {{ platform|capitalize }} Order:
+                {% if platform == 'reverb' %}{{ order.order_number }}{% elif platform == 'ebay' %}{{ order.order_id }}{% else %}{{ order.order_name }}{% endif %}
+            </p>
+        </div>
+        <a href="/orders/{{ platform }}/{{ order.id }}" class="text-blue-600 hover:text-blue-800">
+            &larr; Back to Order
+        </a>
+    </div>
+
+    <!-- Destination Type Banner -->
+    <div class="mb-6 p-4 rounded-lg {% if dest_type == 'uk' %}bg-green-50 border border-green-200{% elif dest_type == 'eu' %}bg-blue-50 border border-blue-200{% else %}bg-amber-50 border border-amber-200{% endif %}">
+        <div class="flex items-center">
+            <svg class="w-6 h-6 mr-3 {% if dest_type == 'uk' %}text-green-600{% elif dest_type == 'eu' %}text-blue-600{% else %}text-amber-600{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+            </svg>
+            <div>
+                <span class="font-semibold {% if dest_type == 'uk' %}text-green-800{% elif dest_type == 'eu' %}text-blue-800{% else %}text-amber-800{% endif %}">
+                    {{ dest_type_label }}
+                </span>
+                <span class="text-sm ml-2 {% if dest_type == 'uk' %}text-green-600{% elif dest_type == 'eu' %}text-blue-600{% else %}text-amber-600{% endif %}">
+                    Product Code: {{ product_code }}
+                    {% if needs_customs %} | Customs Declaration Required{% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Sender (From) -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4 flex items-center">
+                <span class="w-8 h-8 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center text-sm font-bold mr-3">1</span>
+                From (Sender)
+            </h2>
+            <div class="space-y-2 text-sm">
+                <p class="font-medium">{{ shipper.contactInformation.companyName }}</p>
+                <p>{{ shipper.postalAddress.addressLine1 }}</p>
+                {% if shipper.postalAddress.addressLine2 %}
+                <p>{{ shipper.postalAddress.addressLine2 }}</p>
+                {% endif %}
+                <p>{{ shipper.postalAddress.cityName }}, {{ shipper.postalAddress.postalCode }}</p>
+                <p>{{ shipper.postalAddress.countryName }}</p>
+                <p class="text-gray-500">Tel: {{ shipper.contactInformation.phone or 'Not set' }}</p>
+                <p class="text-gray-500">Email: {{ shipper.contactInformation.email or 'Not set' }}</p>
+            </div>
+            {% if not shipper.postalAddress.addressLine1 or not shipper.contactInformation.phone %}
+            <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <strong>Warning:</strong> Shipper details incomplete. Please update your .env file with DHL_SHIPPER_* values.
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Receiver (To) -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4 flex items-center">
+                <span class="w-8 h-8 bg-green-100 text-green-800 rounded-full flex items-center justify-center text-sm font-bold mr-3">2</span>
+                To (Receiver)
+            </h2>
+            <div class="space-y-2 text-sm">
+                <p class="font-medium">{{ receiver.contactInformation.fullName }}</p>
+                <p>{{ receiver.postalAddress.addressLine1 }}</p>
+                {% if receiver.postalAddress.addressLine2 %}
+                <p>{{ receiver.postalAddress.addressLine2 }}</p>
+                {% endif %}
+                <p>
+                    {{ receiver.postalAddress.cityName }}
+                    {% if receiver.postalAddress.provinceCode %}, {{ receiver.postalAddress.provinceCode }}{% endif %}
+                    {{ receiver.postalAddress.postalCode }}
+                </p>
+                <p>{{ receiver.postalAddress.countryName }} ({{ receiver.postalAddress.countryCode }})</p>
+                <p class="text-gray-500">Tel: {{ receiver.contactInformation.phone or 'Not provided' }}</p>
+                {% if receiver.contactInformation.email %}
+                <p class="text-gray-500">Email: {{ receiver.contactInformation.email }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Package Details Form -->
+    <form action="/orders/{{ platform }}/{{ order.id }}/ship/create" method="POST" class="mt-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4 flex items-center">
+                <span class="w-8 h-8 bg-amber-100 text-amber-800 rounded-full flex items-center justify-center text-sm font-bold mr-3">3</span>
+                Package Details
+            </h2>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Weight (kg)</label>
+                    <input type="number" name="weight" value="5.0" step="0.1" min="0.1" max="70"
+                           class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Length (cm)</label>
+                    <input type="number" name="length" value="120" min="1" max="300"
+                           class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Width (cm)</label>
+                    <input type="number" name="width" value="50" min="1" max="300"
+                           class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Height (cm)</label>
+                    <input type="number" name="height" value="15" min="1" max="300"
+                           class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Package Description</label>
+                <input type="text" name="description"
+                       value="{% if platform == 'reverb' %}{{ order.title[:75] if order.title else 'Musical Instrument' }}{% else %}Vintage Musical Instrument{% endif %}"
+                       maxlength="75"
+                       class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                <p class="text-xs text-gray-500 mt-1">Max 75 characters for customs declaration</p>
+            </div>
+        </div>
+
+        {% if needs_customs %}
+        <!-- Customs Declaration -->
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 class="text-lg font-semibold mb-4 flex items-center">
+                <span class="w-8 h-8 bg-red-100 text-red-800 rounded-full flex items-center justify-center text-sm font-bold mr-3">4</span>
+                Customs Declaration
+            </h2>
+
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Declared Value</label>
+                    <input type="number" name="declared_value"
+                           value="{{ order.amount_product or order.total_amount or 0 }}"
+                           step="0.01" min="0"
+                           class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                    <select name="currency" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                        <option value="GBP" {% if (order.amount_product_currency or order.total_currency or 'GBP') == 'GBP' %}selected{% endif %}>GBP</option>
+                        <option value="EUR" {% if (order.amount_product_currency or order.total_currency) == 'EUR' %}selected{% endif %}>EUR</option>
+                        <option value="USD" {% if (order.amount_product_currency or order.total_currency) == 'USD' %}selected{% endif %}>USD</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">HS Code</label>
+                    <input type="text" name="hs_code" value="9202900030"
+                           class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                    <p class="text-xs text-gray-500 mt-1">9202900030 = String instruments</p>
+                </div>
+            </div>
+
+            <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
+                <strong>Note:</strong> Incoterm is set to DAP (Delivered at Place) - buyer pays any import duties/taxes.
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Options -->
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 class="text-lg font-semibold mb-4">Options</h2>
+
+            <div class="flex items-center gap-6">
+                <label class="flex items-center">
+                    <input type="checkbox" name="request_pickup" value="true" class="mr-2 rounded">
+                    <span class="text-sm">Request DHL Pickup</span>
+                </label>
+
+                <label class="flex items-center">
+                    <input type="checkbox" name="test_mode" value="true" checked class="mr-2 rounded">
+                    <span class="text-sm text-amber-600">Sandbox Mode (test only, no real shipment)</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="mt-6 flex gap-4">
+            <button type="submit"
+                    class="px-6 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2">
+                <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+                </svg>
+                Create Shipping Label
+            </button>
+
+            <a href="/orders" class="px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300">
+                Cancel
+            </a>
+        </div>
+    </form>
+
+    <!-- Order Summary -->
+    <div class="mt-6 bg-gray-50 rounded-lg p-4">
+        <h3 class="text-sm font-medium text-gray-700 mb-2">Order Summary</h3>
+        <div class="text-sm text-gray-600">
+            <p><strong>Platform:</strong> {{ platform|capitalize }}</p>
+            <p><strong>Order ID:</strong> {% if platform == 'reverb' %}{{ order.order_number }}{% elif platform == 'ebay' %}{{ order.order_id }}{% else %}{{ order.order_name }}{% endif %}</p>
+            <p><strong>SKU:</strong> {{ order.sku or order.primary_sku or 'N/A' }}</p>
+            <p><strong>Amount:</strong> &pound;{{ "{:,.2f}".format(order.total_amount or 0) }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

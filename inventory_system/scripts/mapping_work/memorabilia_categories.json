@@ -1,0 +1,992 @@
+{
+  "Category": [
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165215",
+      "CategoryLevel": "5",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "13588",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165217",
+      "CategoryLevel": "5",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "872",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165236",
+      "CategoryLevel": "5",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "10785",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165221",
+      "CategoryLevel": "5",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "10793",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "35656",
+      "CategoryLevel": "5",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "820"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "821",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Distillery Memorabilia",
+      "CategoryParentID": "35656",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165249",
+      "CategoryLevel": "4",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "39"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165250",
+      "CategoryLevel": "5",
+      "CategoryName": "Other Gas & Oil Memorabilia",
+      "CategoryParentID": "165249",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "35692",
+      "CategoryLevel": "4",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "36"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "37",
+      "CategoryLevel": "5",
+      "CategoryName": "Other Soda Memorabilia",
+      "CategoryParentID": "35692",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165265",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Soda Memorabilia",
+      "CategoryParentID": "36",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "13623",
+      "CategoryLevel": "3",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "34"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "35",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Merch & Memorabilia Ads",
+      "CategoryParentID": "13623",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "13651",
+      "CategoryLevel": "3",
+      "CategoryName": "Horses: Merch. & Memorabilia",
+      "CategoryParentID": "1335"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "103930",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Horse Memorabilia",
+      "CategoryParentID": "13651",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165326",
+      "CategoryLevel": "4",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "13715",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165329",
+      "CategoryLevel": "4",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "13720",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165330",
+      "CategoryLevel": "4",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "13724",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "66504",
+      "CategoryLevel": "3",
+      "CategoryName": "Casino Memorabilia",
+      "CategoryParentID": "898"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "66535",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Casino Memorabilia",
+      "CategoryParentID": "66504",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "63",
+      "CategoryLevel": "2",
+      "CategoryName": "Comic Books & Memorabilia",
+      "CategoryParentID": "1"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "259116",
+      "CategoryLevel": "3",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "63"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "259126",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Merchandise & Memorabilia",
+      "CategoryParentID": "259116",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "151093",
+      "CategoryLevel": "3",
+      "CategoryName": "Other Comic Books & Memorabilia",
+      "CategoryParentID": "63",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "86938",
+      "CategoryLevel": "4",
+      "CategoryName": "Magician Memorabilia, Ephemera",
+      "CategoryParentID": "14012",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "259135",
+      "CategoryLevel": "2",
+      "CategoryName": "Historical Memorabilia",
+      "CategoryParentID": "1"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "259137",
+      "CategoryLevel": "5",
+      "CategoryName": "Political Parties Memorabilia",
+      "CategoryParentID": "4100"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "259144",
+      "CategoryLevel": "3",
+      "CategoryName": "Other Historical Memorabilia",
+      "CategoryParentID": "259135",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165727",
+      "CategoryLevel": "3",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "3213",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165800",
+      "CategoryLevel": "2",
+      "CategoryName": "Souvenirs & Travel Memorabilia",
+      "CategoryParentID": "1"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165875",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Int'l Travel Memorabilia",
+      "CategoryParentID": "165855",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165876",
+      "CategoryLevel": "3",
+      "CategoryName": "Other Travel Memorabilia",
+      "CategoryParentID": "165800",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165748",
+      "CategoryLevel": "5",
+      "CategoryName": "Merchandise & Memorabilia",
+      "CategoryParentID": "805",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165776",
+      "CategoryLevel": "4",
+      "CategoryName": "Motorcycle Memorabilia",
+      "CategoryParentID": "10958"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "165787",
+      "CategoryLevel": "5",
+      "CategoryName": "Other Motorcycle Memorabilia",
+      "CategoryParentID": "165776",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "45100",
+      "CategoryLevel": "1",
+      "CategoryName": "Entertainment Memorabilia",
+      "CategoryParentID": "45100"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "196",
+      "CategoryLevel": "2",
+      "CategoryName": "Movie Memorabilia",
+      "CategoryParentID": "45100"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "197",
+      "CategoryLevel": "3",
+      "CategoryName": "Other Movie Memorabilia",
+      "CategoryParentID": "196",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "2329",
+      "CategoryLevel": "2",
+      "CategoryName": "Music Memorabilia",
+      "CategoryParentID": "45100"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "163950",
+      "CategoryLevel": "4",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "52462",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "108728",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Blues Memorabilia",
+      "CategoryParentID": "52462",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "163956",
+      "CategoryLevel": "4",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "2337"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "108745",
+      "CategoryLevel": "4",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "34292",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "108749",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Jazz Memorabilia",
+      "CategoryParentID": "34292",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "108752",
+      "CategoryLevel": "4",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "2335",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "108756",
+      "CategoryLevel": "4",
+      "CategoryName": "Other Rap, Hip Hop Memorabilia",
+      "CategoryParentID": "2335",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "108760",
+      "CategoryLevel": "4",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "2375",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "108764",
+      "CategoryLevel": "4",
+      "CategoryName": "Other R&B & Soul Memorabilia",
+      "CategoryParentID": "2375",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104662",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104660",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53252",
+      "CategoryLevel": "6",
+      "CategoryName": "Other AC/DC Memorabilia",
+      "CategoryParentID": "104660",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "32998",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Aerosmith Memorabilia",
+      "CategoryParentID": "104666",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "29930",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "29924",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "432",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Beatles Memorabilia",
+      "CategoryParentID": "29924",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104686",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Blondie Memorabilia",
+      "CategoryParentID": "108818",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104696",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104694",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "33000",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Bon Jovi Memorabilia",
+      "CategoryParentID": "104694",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104718",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104716",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53256",
+      "CategoryLevel": "6",
+      "CategoryName": "Other David Bowie Memorabilia",
+      "CategoryParentID": "104716",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53242",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Cher Memorabilia",
+      "CategoryParentID": "104707",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "85977",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Eric Clapton Memorabilia",
+      "CategoryParentID": "104736",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104725",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104723",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "33004",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Doors Memorabilia",
+      "CategoryParentID": "104723",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "15196",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Bob Dylan Memorabilia",
+      "CategoryParentID": "104687",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104682",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Bill Graham Memorabilia",
+      "CategoryParentID": "104678",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "29912",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "29904",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104750",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Green Day Memorabilia",
+      "CategoryParentID": "104747",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "33009",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Jimi Hendrix Memorabilia",
+      "CategoryParentID": "104766",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "33007",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Iron Maiden Memorabilia",
+      "CategoryParentID": "104759",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104959",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104957",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "29913",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "29906",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "434",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Kiss Memorabilia",
+      "CategoryParentID": "29906",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "33010",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Korn Memorabilia",
+      "CategoryParentID": "104934",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104941",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104939",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53265",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Led Zeppelin Memorabilia",
+      "CategoryParentID": "104939",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "33011",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Linkin Park Memorabilia",
+      "CategoryParentID": "104943",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "29884",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "29877",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "2353",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Madonna Memorabilia",
+      "CategoryParentID": "29877",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104954",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104952",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "33012",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Metallica Memorabilia",
+      "CategoryParentID": "104952",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104965",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104963",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "85987",
+      "CategoryLevel": "6",
+      "CategoryName": "Other M\u00c3\u00b6tley Cr\u00c3\u00bce Memorabilia",
+      "CategoryParentID": "104963",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104982",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104980",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "33014",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Nirvana Memorabilia",
+      "CategoryParentID": "104980",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104974",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104972",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "104989",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "104987",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53267",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Pearl Jam Memorabilia",
+      "CategoryParentID": "104987",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53269",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "29907",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "2354",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Pink Floyd Memorabilia",
+      "CategoryParentID": "29907",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "2009",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert & Movie Memorabilia",
+      "CategoryParentID": "4710",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53272",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Prince Memorabilia",
+      "CategoryParentID": "104991",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "105021",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "105019",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "2355",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Queen Memorabilia",
+      "CategoryParentID": "105019",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "29929",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "29923",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53276",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Rush Memorabilia",
+      "CategoryParentID": "105029",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53249",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Sex Pistols Memorabilia",
+      "CategoryParentID": "105034",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "86000",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Slipknot Memorabilia",
+      "CategoryParentID": "105039",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "105059",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "105057",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "2356",
+      "CategoryLevel": "6",
+      "CategoryName": "Other U2 Memorabilia",
+      "CategoryParentID": "105057",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "105067",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "105065",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "53283",
+      "CategoryLevel": "6",
+      "CategoryName": "Other Van Halen Memorabilia",
+      "CategoryParentID": "105065",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "105049",
+      "CategoryLevel": "6",
+      "CategoryName": "Concert Memorabilia",
+      "CategoryParentID": "105047",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "1423",
+      "CategoryLevel": "6",
+      "CategoryName": "Other The Who Memorabilia",
+      "CategoryParentID": "105047",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "108857",
+      "CategoryLevel": "3",
+      "CategoryName": "Other Music Memorabilia",
+      "CategoryParentID": "2329",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "1424",
+      "CategoryLevel": "2",
+      "CategoryName": "Television Memorabilia",
+      "CategoryParentID": "45100"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "201",
+      "CategoryLevel": "3",
+      "CategoryName": "Other Television Memorabilia",
+      "CategoryParentID": "1424",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "2362",
+      "CategoryLevel": "2",
+      "CategoryName": "Theater Memorabilia",
+      "CategoryParentID": "45100"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "778",
+      "CategoryLevel": "3",
+      "CategoryName": "Other Theater Memorabilia",
+      "CategoryParentID": "2362",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "45101",
+      "CategoryLevel": "2",
+      "CategoryName": "Video Game Memorabilia",
+      "CategoryParentID": "45100",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "50116",
+      "CategoryLevel": "2",
+      "CategoryName": "Game Used Memorabilia",
+      "CategoryParentID": "64482"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "50122",
+      "CategoryLevel": "3",
+      "CategoryName": "Other Game Used Memorabilia",
+      "CategoryParentID": "50116",
+      "LeafCategory": "true"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "50123",
+      "CategoryLevel": "2",
+      "CategoryName": "Vintage Sports Memorabilia",
+      "CategoryParentID": "64482"
+    },
+    {
+      "BestOfferEnabled": "true",
+      "AutoPayEnabled": "true",
+      "CategoryID": "179402",
+      "CategoryLevel": "3",
+      "CategoryName": "Memorabilia",
+      "CategoryParentID": "7898",
+      "LeafCategory": "true"
+    }
+  ]
+}

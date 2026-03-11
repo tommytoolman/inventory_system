@@ -1,0 +1,133 @@
+{
+  "fetch_date": "2025-09-07T12:33:52.819226",
+  "product_id": "12236710936916",
+  "sku": "REV-91978727",
+  "product": {
+    "id": "gid://shopify/Product/12236710936916",
+    "title": "Gibson Murphy Aged Custom Shop '59 Les Paul Standard Historic Reissue 2005 - Sunburst",
+    "handle": "gibson-murphy-aged-custom-shop-59-les-paul-standard-historic-reissue-2005-sunburst",
+    "description": "THE MURPHY \u201959We are happy to offer the following Gibson Les Paul \u201959 that has been sympathetically and personally aged by Gibson\u2019s own legendary Tom Murphy. Details as follows:History The following instrument was one of a small number of 59 Reissues that was personally hand aged and reliced by Tom Murphy so to have the look , feel and styling of an original 59 Burst Gibson 59 2005 Custom Shop Tom Murphy Aged (Personally) Cherry Sunburst Highly Figured Top Nickel hardware Brown Pink Lined Case Original Coa , Paperwork Etc Weight 8.5lbsCondition - Unplayed, Collector Grade Sound The instrument is the optimum in sound, tone, feel Comments The above instrument is the most desired of all Gibson 59 Reissue as it was one of a limited number that were personally aged by Gibsons own Tom Murphy WHY BUY FROM US We are one of the world's leading specialists in used and vintage gear with over 30 years of experience. Prior to shipping each item will be fully serviced and professionally packedSELL - TRADE - CONSIGN If you are looking to sell, trade or consign any of your classic gear please contact us by message.WORLDWIDE COLLECTION - DELIVERY We offer personal delivery and collection services worldwide with offices/locations in London, Amsterdam and Chicago.VALUATION SERVICE If you require a valuation of any of your classic year please forward a brief description and pictures and we will come back to your ASAP.",
+    "vendor": "Gibson",
+    "productType": "Electric Guitars / Solid Body",
+    "tags": [
+      "Condition:Excellent",
+      "Electric Guitars / Solid Body",
+      "Finish:Sunburst",
+      "Gibson",
+      "LONDO",
+      "Model:Murphy Aged Custom Shop '59 Les Paul Standard Hist",
+      "Source:DENMARK STREET GUITARS",
+      "Year:1993"
+    ],
+    "status": "ACTIVE",
+    "createdAt": "2025-09-06T08:56:55Z",
+    "updatedAt": "2025-09-06T20:57:04Z",
+    "publishedAt": "2025-09-06T08:56:58Z",
+    "onlineStoreUrl": null,
+    "totalInventory": 1,
+    "tracksInventory": true,
+    "seo": {
+      "title": null,
+      "description": null
+    },
+    "category": {
+      "id": "gid://shopify/TaxonomyCategory/ae-2-8-7-2-4",
+      "name": "Electric Guitars",
+      "fullName": "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments > Guitars > Electric Guitars"
+    },
+    "priceRange": {
+      "minVariantPrice": {
+        "amount": "969900.0",
+        "currencyCode": "GBP"
+      },
+      "maxVariantPrice": {
+        "amount": "969900.0",
+        "currencyCode": "GBP"
+      }
+    },
+    "featuredImage": {
+      "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/igyw8nd4rfc93crkv2ru.jpg?v=1757149020",
+      "altText": null
+    },
+    "images": {
+      "edges": [
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/igyw8nd4rfc93crkv2ru.jpg?v=1757149020",
+            "altText": ""
+          }
+        },
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/z9mtg4bdtrnvbev4qvht.jpg?v=1757149019",
+            "altText": ""
+          }
+        },
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/izaipnq50usezlfqjlq2.jpg?v=1757149020",
+            "altText": ""
+          }
+        },
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/nkpv5o9l1kgyxbhgobba.jpg?v=1757149019",
+            "altText": ""
+          }
+        },
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/ak0qtotxejkjquumn3vs.jpg?v=1757149019",
+            "altText": ""
+          }
+        },
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/nf2xr3tepkv3fyyauvcx.jpg?v=1757149019",
+            "altText": ""
+          }
+        },
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/ji9libedfsimujetk9a0.jpg?v=1757149019",
+            "altText": ""
+          }
+        },
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/rtwccp8ronp4oo1mqghj.jpg?v=1757149020",
+            "altText": ""
+          }
+        },
+        {
+          "node": {
+            "url": "https://cdn.shopify.com/s/files/1/0962/4613/7172/files/fwohbj7pravyww4qvgr6.jpg?v=1757149020",
+            "altText": ""
+          }
+        }
+      ]
+    },
+    "variants": {
+      "edges": [
+        {
+          "node": {
+            "id": "gid://shopify/ProductVariant/52551254933844",
+            "title": "Default Title",
+            "sku": "REV-91978727",
+            "price": "9699.00",
+            "compareAtPrice": null,
+            "availableForSale": true,
+            "inventoryQuantity": 1,
+            "barcode": null
+          }
+        }
+      ]
+    },
+    "metafields": {
+      "edges": []
+    },
+    "collections": {
+      "edges": []
+    }
+  }
+}

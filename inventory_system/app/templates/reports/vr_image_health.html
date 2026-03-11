@@ -1,0 +1,462 @@
+{% extends "base.html" %}
+
+{% block title %}VR Image Health - RIFF{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 mb-1">VR Image Health</h1>
+                <p class="text-gray-600">Compare Vintage &amp; Rare image counts against canonical gallery</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="scannedAt" class="text-xs text-gray-400"></span>
+                <a href="/reports" class="text-blue-600 hover:text-blue-800">&larr; Back to Reports</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Bar -->
+    <div id="summaryBar" class="bg-white rounded-lg shadow p-4 mb-6 hidden">
+        <div class="flex flex-wrap gap-6 items-center">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-gray-900" id="checkedCount">0</div>
+                <div class="text-xs text-gray-500 uppercase">Checked</div>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-green-600" id="matchCount">0</div>
+                <div class="text-xs text-gray-500 uppercase">Match</div>
+            </div>
+            <div class="text-center cursor-pointer hover:opacity-80" onclick="setFilter('mismatch')">
+                <div class="text-2xl font-bold text-red-600" id="mismatchCount">0</div>
+                <div class="text-xs text-gray-500 uppercase">Mismatch</div>
+            </div>
+            <div class="text-center cursor-pointer hover:opacity-80" onclick="setFilter('error')">
+                <div class="text-2xl font-bold text-yellow-600" id="errorCount">0</div>
+                <div class="text-xs text-gray-500 uppercase">Errors</div>
+            </div>
+            <!-- Filter + actions -->
+            <div class="ml-auto flex items-center gap-2 flex-wrap">
+                <label class="text-sm text-gray-600">Show:</label>
+                <select id="statusFilter" onchange="applyFilter()" class="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="all">All</option>
+                    <option value="problems">Mismatches &amp; Errors</option>
+                    <option value="mismatch">Mismatches only</option>
+                    <option value="error">Errors only</option>
+                    <option value="match">Matches only</option>
+                </select>
+                <button id="retryErrorsBtn" onclick="retryErrors()" class="hidden px-3 py-1.5 text-sm bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
+                    Retry Errors
+                </button>
+                <button id="regenerateBtn" onclick="confirmRegenerate()" class="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                    Regenerate Report
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Regenerate warning banner (hidden by default) -->
+    <div id="regenerateWarning" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 hidden">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <p class="text-sm text-amber-800">This will re-scan every VR listing from scratch. It typically takes <strong>2-5 minutes</strong> depending on how many listings you have. Continue?</p>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0 ml-4">
+                <button onclick="startRegenerate()" class="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Yes, regenerate</button>
+                <button onclick="document.getElementById('regenerateWarning').classList.add('hidden')" class="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State (for regenerate) -->
+    <div id="loadingState" class="bg-white rounded-lg shadow p-8 text-center hidden">
+        <svg class="animate-spin h-10 w-10 text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-gray-600 text-lg" id="progressText">Connecting...</p>
+        <div class="mt-4 max-w-md mx-auto">
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <p class="text-gray-400 text-sm mt-2" id="progressDetail">Waiting for server...</p>
+        </div>
+    </div>
+
+    <!-- No data state -->
+    <div id="noDataState" class="bg-white rounded-lg shadow p-12 text-center hidden">
+        <svg class="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <p class="text-gray-600 text-lg font-medium">No scan data yet</p>
+        <p class="text-gray-400 text-sm mt-1 mb-4">Run a full scan to check VR image counts against your canonical gallery.</p>
+        <button onclick="startRegenerate()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Scan VR Listings</button>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="bg-white rounded-lg shadow p-12 text-center hidden">
+        <p class="text-red-600 text-lg font-medium">Failed to load VR image data</p>
+        <p class="text-gray-500 text-sm mt-1" id="errorMessage"></p>
+        <button onclick="startRegenerate()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Retry</button>
+    </div>
+
+    <!-- Results Table -->
+    <div id="resultsTable" class="bg-white rounded-lg shadow hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Canonical</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">VR</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody" class="divide-y divide-gray-200">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Server-injected cache
+const CACHED_RESULTS = {{ cached_results | safe }};
+const CACHED_SUMMARY = {{ cached_summary | safe }};
+const SCANNED_AT = {{ ("'" + scanned_at + "'") | safe if scanned_at else "null" }};
+const HAS_CACHE = {{ "true" if has_cache else "false" }};
+
+let evtSource = null;
+let allResults = [];
+let total = 0;
+let checked = 0;
+let matches = 0;
+let mismatches = 0;
+let errors = 0;
+let currentFilter = 'all';
+let scanDone = false;
+let isRegenerating = false;
+
+function init() {
+    if (HAS_CACHE) {
+        loadFromCache();
+    } else {
+        document.getElementById('noDataState').classList.remove('hidden');
+    }
+}
+
+function loadFromCache() {
+    allResults = CACHED_RESULTS;
+    total = CACHED_SUMMARY.total || allResults.length;
+    checked = total;
+    matches = CACHED_SUMMARY.matches || 0;
+    mismatches = CACHED_SUMMARY.mismatches || 0;
+    errors = CACHED_SUMMARY.errors || 0;
+    scanDone = true;
+
+    document.getElementById('noDataState').classList.add('hidden');
+    document.getElementById('loadingState').classList.add('hidden');
+    document.getElementById('summaryBar').classList.remove('hidden');
+    document.getElementById('resultsTable').classList.remove('hidden');
+
+    updateCounters();
+    if (errors > 0) document.getElementById('retryErrorsBtn').classList.remove('hidden');
+    updateScannedAt(SCANNED_AT);
+
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+
+    // Sort: mismatches first, then errors, then matches
+    const order = { mismatch: 0, error: 1, match: 2 };
+    allResults.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    allResults.forEach(r => appendRow(r));
+}
+
+function confirmRegenerate() {
+    document.getElementById('regenerateWarning').classList.remove('hidden');
+}
+
+function startRegenerate() {
+    document.getElementById('regenerateWarning').classList.add('hidden');
+    document.getElementById('noDataState').classList.add('hidden');
+    document.getElementById('errorState').classList.add('hidden');
+    document.getElementById('loadingState').classList.remove('hidden');
+    document.getElementById('resultsTable').classList.remove('hidden');
+    document.getElementById('summaryBar').classList.remove('hidden');
+    document.getElementById('tableBody').innerHTML = '';
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressText').textContent = 'Connecting...';
+    document.getElementById('progressDetail').textContent = 'Waiting for server...';
+    document.getElementById('retryErrorsBtn').classList.add('hidden');
+    document.getElementById('regenerateBtn').disabled = true;
+    document.getElementById('regenerateBtn').classList.add('opacity-50');
+
+    total = 0; checked = 0; matches = 0; mismatches = 0; errors = 0;
+    allResults = [];
+    scanDone = false;
+    isRegenerating = true;
+
+    if (evtSource) evtSource.close();
+    evtSource = new EventSource('/reports/vr-image-health/data');
+
+    evtSource.addEventListener('total', function(e) {
+        const data = JSON.parse(e.data);
+        total = data.total;
+        document.getElementById('progressText').textContent = `Scanning ${total} VR listings...`;
+        document.getElementById('progressDetail').textContent = `0 / ${total} checked`;
+        document.getElementById('checkedCount').textContent = `0 / ${total}`;
+    });
+
+    evtSource.addEventListener('result', function(e) {
+        const r = JSON.parse(e.data);
+        allResults.push(r);
+        checked++;
+        if (r.status === 'match') matches++;
+        else if (r.status === 'mismatch') mismatches++;
+        else errors++;
+
+        updateCounters();
+        appendRow(r);
+    });
+
+    evtSource.addEventListener('done', function(e) {
+        evtSource.close();
+        evtSource = null;
+        scanDone = true;
+        isRegenerating = false;
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('checkedCount').textContent = checked;
+        document.getElementById('regenerateBtn').disabled = false;
+        document.getElementById('regenerateBtn').classList.remove('opacity-50');
+        if (errors > 0) document.getElementById('retryErrorsBtn').classList.remove('hidden');
+        updateScannedAt(new Date().toISOString());
+        sortTable();
+    });
+
+    evtSource.onerror = function(e) {
+        isRegenerating = false;
+        document.getElementById('regenerateBtn').disabled = false;
+        document.getElementById('regenerateBtn').classList.remove('opacity-50');
+        if (checked < total && total > 0) {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('errorMessage').textContent = 'Connection lost. Results so far are shown below.';
+            document.getElementById('errorState').classList.remove('hidden');
+            scanDone = true;
+            if (errors > 0) document.getElementById('retryErrorsBtn').classList.remove('hidden');
+        } else if (total === 0 && checked === 0) {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('errorMessage').textContent = 'Failed to connect to server.';
+            document.getElementById('errorState').classList.remove('hidden');
+        }
+        if (evtSource) { evtSource.close(); evtSource = null; }
+    };
+}
+
+function updateScannedAt(isoStr) {
+    if (!isoStr) return;
+    const el = document.getElementById('scannedAt');
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.round(diffMs / 60000);
+    let ago;
+    if (diffMins < 1) ago = 'just now';
+    else if (diffMins < 60) ago = `${diffMins}m ago`;
+    else if (diffMins < 1440) ago = `${Math.round(diffMins / 60)}h ago`;
+    else ago = `${Math.round(diffMins / 1440)}d ago`;
+    el.textContent = `Last scan: ${ago}`;
+    el.title = d.toLocaleString();
+}
+
+function updateCounters() {
+    const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
+    document.getElementById('checkedCount').textContent = scanDone ? checked : `${checked} / ${total}`;
+    document.getElementById('matchCount').textContent = matches;
+    document.getElementById('mismatchCount').textContent = mismatches;
+    document.getElementById('errorCount').textContent = errors;
+    if (!scanDone) {
+        document.getElementById('progressBar').style.width = pct + '%';
+        document.getElementById('progressText').textContent = `Scanning VR listings... ${pct}%`;
+        document.getElementById('progressDetail').textContent = `${checked} / ${total} checked`;
+    }
+}
+
+function appendRow(r) {
+    const tbody = document.getElementById('tableBody');
+    const row = document.createElement('tr');
+    row.dataset.status = r.status;
+    row.dataset.productId = r.product_id;
+    row.id = `row-${r.product_id}`;
+
+    if (r.status === 'mismatch') {
+        row.className = 'bg-red-50 hover:bg-red-100';
+    } else if (r.status === 'error') {
+        row.className = 'bg-yellow-50 hover:bg-yellow-100';
+    } else {
+        row.className = 'hover:bg-gray-50';
+    }
+
+    if (!shouldShow(r.status)) row.classList.add('hidden');
+
+    const imgHtml = r.primary_image
+        ? `<img src="${r.primary_image}" alt="" class="w-10 h-10 rounded object-cover mr-3">`
+        : `<div class="w-10 h-10 bg-gray-200 rounded mr-3"></div>`;
+
+    // Actions column: Recheck always available, Fix Images for mismatches, View on VR always
+    const btnClass = 'inline-flex items-center justify-center w-24 py-1.5 text-xs font-medium rounded transition-colors';
+    let actionButtons = `<button onclick="recheckSingle(${r.product_id}, this)" class="${btnClass} bg-gray-100 text-gray-700 hover:bg-gray-200" title="Recheck this product">Recheck</button>`;
+
+    if (r.status === 'mismatch') {
+        actionButtons += ` <button onclick="fixImages(${r.product_id}, this)" class="${btnClass} bg-blue-100 text-blue-800 hover:bg-blue-200">Fix Images</button>`;
+    }
+
+    actionButtons += ` <a href="${r.listing_url}" target="_blank" class="${btnClass} bg-purple-100 text-purple-800 hover:bg-purple-200">View on VR</a>`;
+
+    row.innerHTML = `
+        <td class="px-4 py-3">
+            <div class="flex items-center">
+                ${imgHtml}
+                <div>
+                    <a href="/inventory/product/${r.product_id}" class="text-sm font-medium text-blue-600 hover:text-blue-800">${r.brand} ${r.model}</a>
+                    <div class="text-xs text-gray-500">${r.sku}</div>
+                </div>
+            </div>
+        </td>
+        <td class="px-4 py-3 text-center text-sm font-medium">${r.canonical_count}</td>
+        <td class="px-4 py-3 text-center text-sm font-medium">${r.vr_count !== null ? r.vr_count : '\u2014'}</td>
+        <td class="px-4 py-3 text-center">${statusBadge(r.status)}</td>
+        <td class="px-4 py-3 text-center">
+            <div class="flex items-center justify-center gap-2">${actionButtons}</div>
+        </td>
+    `;
+    tbody.appendChild(row);
+}
+
+function statusBadge(status) {
+    if (status === 'match') return '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Match</span>';
+    if (status === 'mismatch') return '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Mismatch</span>';
+    return '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Error</span>';
+}
+
+function shouldShow(status) {
+    if (currentFilter === 'all') return true;
+    if (currentFilter === 'problems') return status === 'mismatch' || status === 'error';
+    return status === currentFilter;
+}
+
+function setFilter(f) {
+    document.getElementById('statusFilter').value = f === 'mismatch' || f === 'error' ? f : 'all';
+    currentFilter = f;
+    applyFilter();
+}
+
+function applyFilter() {
+    currentFilter = document.getElementById('statusFilter').value;
+    document.querySelectorAll('#tableBody tr').forEach(row => {
+        row.classList.toggle('hidden', !shouldShow(row.dataset.status));
+    });
+}
+
+function sortTable() {
+    const tbody = document.getElementById('tableBody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const order = { mismatch: 0, error: 1, match: 2 };
+    rows.sort((a, b) => (order[a.dataset.status] ?? 9) - (order[b.dataset.status] ?? 9));
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+function updateRowFromResult(productId, entry) {
+    const idx = allResults.findIndex(r => r.product_id === productId);
+    if (idx === -1) return;
+
+    const old = allResults[idx];
+    // Adjust counters
+    if (old.status === 'match') matches--;
+    else if (old.status === 'mismatch') mismatches--;
+    else errors--;
+
+    if (entry.status === 'match') matches++;
+    else if (entry.status === 'mismatch') mismatches++;
+    else errors++;
+
+    allResults[idx] = entry;
+    updateCounters();
+
+    if (errors > 0) document.getElementById('retryErrorsBtn').classList.remove('hidden');
+    else document.getElementById('retryErrorsBtn').classList.add('hidden');
+
+    const row = document.getElementById(`row-${productId}`);
+    if (row) row.remove();
+    appendRow(entry);
+    sortTable();
+}
+
+async function recheckSingle(productId, btnEl) {
+    const origText = btnEl.textContent;
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<svg class="animate-spin h-3 w-3 mr-1 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Checking...';
+
+    try {
+        const resp = await fetch(`/reports/vr-image-health/recheck/${productId}`, { method: 'POST' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        updateRowFromResult(productId, data.result);
+    } catch (err) {
+        btnEl.disabled = false;
+        btnEl.textContent = origText;
+    }
+}
+
+async function retryErrors() {
+    const errorItems = allResults.filter(r => r.status === 'error');
+    const btn = document.getElementById('retryErrorsBtn');
+    btn.disabled = true;
+    btn.textContent = `Retrying ${errorItems.length}...`;
+
+    for (const item of errorItems) {
+        try {
+            const resp = await fetch(`/reports/vr-image-health/recheck/${item.product_id}`, { method: 'POST' });
+            if (resp.ok) {
+                const data = await resp.json();
+                updateRowFromResult(item.product_id, data.result);
+            }
+        } catch (err) { /* skip */ }
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Retry Errors';
+    if (errors === 0) btn.classList.add('hidden');
+}
+
+async function fixImages(productId, btnEl) {
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<svg class="animate-spin h-3 w-3 mr-1 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Queuing...';
+
+    try {
+        const resp = await fetch(`/reports/vr-image-health/fix/${productId}`, { method: 'POST' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        if (data.status === 'queued') {
+            btnEl.textContent = 'Queued';
+            btnEl.classList.remove('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200');
+            btnEl.classList.add('bg-green-100', 'text-green-800');
+        } else {
+            btnEl.disabled = false;
+            btnEl.textContent = 'Fix Images';
+        }
+    } catch (err) {
+        btnEl.disabled = false;
+        btnEl.textContent = 'Fix Images';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+{% endblock %}

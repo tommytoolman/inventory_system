@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Inventory Management System{% endblock %}</title>
+    <link rel="icon" href="/static/images/riff_logo.png" type="image/png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    {% if tinymce_api_key %}
+    <script src="https://cdn.tiny.cloud/1/{{ tinymce_api_key }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+    {% endif %}
+
+    <style>
+        body {
+            background-image: url('/static/images/background.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            position: relative;
+            min-height: 100vh;
+        }
+    
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(243, 244, 246, 0.90); /* Tailwind's bg-gray-100 with 75% opacity */
+            z-index: -1;
+        }
+    </style>
+
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-white shadow-lg sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16 relative">
+                <div class="flex-shrink-0 flex items-center sm:relative">
+                    <a href="/inventory" class="flex items-center gap-3 text-xl font-bold text-gray-800">
+                        <img src="/static/images/riff_logo.png"
+                             alt="RIFF logo"
+                             class="h-9 w-auto object-contain sm:static absolute left-1/2 -translate-x-1/2 sm:translate-x-0 sm:left-auto"
+                        >
+                        <span class="hidden sm:inline">Realtime Inventory Fast Flow</span>
+                    </a>
+                </div>
+
+                <nav class="hidden sm:flex sm:items-center sm:space-x-8">
+                    <a href="/" 
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Dashboard
+                    </a>
+                    <a href="/inventory" 
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Products
+                    </a>
+                    <a href="/inventory/add" 
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Add Product
+                    </a>
+                    <a href="/reports/sales"
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Sales
+                    </a>
+                    <a href="/orders"
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Orders
+                    </a>
+                    <!-- <a href="/matching" 
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Match Products
+                    </a> -->
+                    <a href="/insights"
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Insights
+                    </a>
+                    <a href="/errors/sync"
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-red-600 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                        title="Sync Error Log">
+                        Errors
+                    </a>
+                    <a href="/settings"
+                        class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                        title="Settings">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </a>
+                    <div class="relative inline-block text-left" id="reportsDropdown">
+                        <a href="/reports"
+                                class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Reports
+                            <svg class="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </a>
+
+                        <div id="reportsMenu"
+                             class="origin-top-left absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50"
+                             role="menu"
+                             aria-orientation="vertical">
+                            <div class="py-1" role="none">
+                                <a href="/reports/sync-events"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Sync Events
+                                </a>
+                                <a href="/reports/inventory-reconciliation"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Inventory Reconciliation
+                                </a>
+                                <a href="/reports/non-performing-inventory"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Non-Performing Inventory
+                                </a>
+                                <a href="/reports/listing-engagement"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Listing Engagement
+                                </a>
+                                <a href="/reports/archive-status-sync"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Archive Manager
+                                </a>
+                                <a href="/reports/platform-coverage"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Platform Coverage
+                                </a>
+                                <div class="border-t border-gray-100 my-1"></div>
+                                <a href="/reports"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-500 hover:bg-gray-100">
+                                    View All Reports →
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative inline-block text-left" id="syncDropdown">
+                        <button type="button"
+                                class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                                onclick="toggleSyncMenu(event)"
+                                aria-expanded="false">
+                            Sync
+                            <svg class="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+
+                        <div id="syncMenu"
+                             class="origin-top-left absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50"
+                             role="menu"
+                             aria-orientation="vertical"
+                             aria-labelledby="menu-button">
+                            <div class="py-1" role="none">
+                                <a href="#" onclick="triggerSync('all'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <svg class="w-4 h-4 mr-2 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Sync All Platforms
+                                </a>
+                                <div class="border-t border-gray-100"></div>
+                                {% if not visible_platforms or 'reverb' in visible_platforms %}
+                                <a href="#" onclick="triggerSync('reverb'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2">
+                                    Sync Reverb
+                                </a>
+                                {% endif %}
+                                {% if not visible_platforms or 'ebay' in visible_platforms %}
+                                <a href="#" onclick="triggerSync('ebay'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2">
+                                    Sync eBay
+                                </a>
+                                {% endif %}
+                                {% if not visible_platforms or 'shopify' in visible_platforms %}
+                                <a href="#" onclick="triggerSync('shopify'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2">
+                                    Sync Shopify
+                                </a>
+                                {% endif %}
+                                {% if not visible_platforms or 'vr' in visible_platforms %}
+                                <a href="#" onclick="triggerSync('vr'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2">
+                                    Sync V&R
+                                </a>
+                                {% endif %}
+                                {% if not visible_platforms or 'woocommerce' in visible_platforms %}
+                                <a href="#" onclick="triggerSync('woocommerce'); return false;"
+                                   class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=woocommerce.com" class="mr-2">
+                                    Sync WooCommerce
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative inline-block text-left" id="platformDropdown">
+                        <button type="button"
+                                class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                                onclick="togglePlatformMenu(event)"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                        >
+                            Platforms
+                            <svg class="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    
+                        <div id="platformMenu" 
+                            class="hidden absolute left-0 mt-1 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
+                            role="menu"
+                            aria-orientation="vertical"
+                            aria-labelledby="platform-menu-button">
+                            <div class="py-1" role="none">
+                                <a href="https://www.ebay.com" target="_blank" 
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" style="margin-right: 8px;">
+                                    eBay
+                                </a>
+                                <a href="https://reverb.com" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <!-- <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path d="M9 18V5l12-2v13"/>
+                                        <circle cx="6" cy="18" r="3"/>
+                                        <circle cx="18" cy="16" r="3"/>
+                                    </svg> -->
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" style="margin-right: 8px;">
+                                    Reverb
+                                </a>
+                                <a href="https://www.vintageandrare.com" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" style="margin-right: 8px;">
+                                    Vintage & Rare
+                                </a>
+                                <a href="https://www.denmarkstreetguitars.co.uk/" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                     <img src="https://icons.duckduckgo.com/ip3/denmarkstreetguitars.co.uk.ico" style="margin-right: 8px; width: 16px; height: 16px;">
+                                    Hanks
+                                </a>
+                                <a href="https://admin.shopify.com/store/londonvintageguitars?ui_locales=en-GB" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                     <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" style="margin-right: 8px;">
+                                    Shopify Admin
+                                </a>
+                                <a href="https://railway.com/project/acc36520-166b-4569-8718-3cf1a9920bad" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                     <img src="https://www.google.com/s2/favicons?sz=16&domain=railway.app" style="margin-right: 8px;">
+                                    Railway
+                                </a>
+                                <a href="https://crazylister.com/application/user/dashboard" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=crazylister.com" style="margin-right: 8px;">
+                                    CrazyLister
+                                </a>
+                                <a href="https://www.dhl.com/gb-en/home/redirect/express/portal.html" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=dhl.com" style="margin-right: 8px;">
+                                    DHL
+                                </a>
+                                {% if settings and settings.WC_STORE_URL %}
+                                <a href="{{ settings.WC_STORE_URL }}/wp-admin/edit.php?post_type=product" target="_blank"
+                                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <img src="https://www.google.com/s2/favicons?sz=16&domain=woocommerce.com" style="margin-right: 8px;">
+                                    WooCommerce
+                                </a>
+                                {% endif %}
+
+                            </div>
+                        </div>
+                </div>
+            </nav>
+
+            <!-- Mobile hamburger button -->
+            <div class="flex items-center sm:hidden">
+                <button type="button" onclick="toggleMobileMenu()" class="text-gray-500 hover:text-gray-700 focus:outline-none p-2">
+                    <svg id="mobileMenuIconOpen" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <svg id="mobileMenuIconClose" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile menu -->
+    <div id="mobileMenu" class="hidden sm:hidden border-t border-gray-200 bg-white">
+        <div class="px-4 py-3 space-y-1">
+            <a href="/" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Dashboard</a>
+            <a href="/inventory" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Products</a>
+            <a href="/inventory/add" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Add Product</a>
+            <a href="/reports/sales" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Sales</a>
+            <a href="/orders" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Orders</a>
+            <a href="/insights" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Insights</a>
+            <a href="/settings" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">Settings</a>
+
+            <!-- Reports section (collapsible) -->
+            <div class="border-t border-gray-100 pt-2 mt-2">
+                <button onclick="toggleMobileSection('mobileReports')" class="w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-100 rounded-md">
+                    Reports
+                    <svg class="h-4 w-4 text-gray-400 transition-transform" id="mobileReportsChevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="mobileReports" class="hidden pl-3">
+                    <a href="/reports/sync-events" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Sync Events</a>
+                    <a href="/reports/inventory-reconciliation" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Inventory Reconciliation</a>
+                    <a href="/reports/non-performing-inventory" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Non-Performing Inventory</a>
+                    <a href="/reports/listing-engagement" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Listing Engagement</a>
+                    <a href="/reports/archive-status-sync" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Archive Manager</a>
+                    <a href="/reports/platform-coverage" class="block px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">Platform Coverage</a>
+                </div>
+            </div>
+
+            <!-- Sync section (collapsible) -->
+            <div class="border-t border-gray-100 pt-2 mt-2">
+                <button onclick="toggleMobileSection('mobileSync')" class="w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-100 rounded-md">
+                    Sync
+                    <svg class="h-4 w-4 text-gray-400 transition-transform" id="mobileSyncChevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="mobileSync" class="hidden pl-3">
+                    <a href="#" onclick="triggerSync('all'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <svg class="w-4 h-4 mr-2 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Sync All Platforms
+                    </a>
+                    {% if not visible_platforms or 'reverb' in visible_platforms %}
+                    <a href="#" onclick="triggerSync('reverb'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2 w-4 h-4"> Sync Reverb
+                    </a>
+                    {% endif %}
+                    {% if not visible_platforms or 'ebay' in visible_platforms %}
+                    <a href="#" onclick="triggerSync('ebay'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2 w-4 h-4"> Sync eBay
+                    </a>
+                    {% endif %}
+                    {% if not visible_platforms or 'shopify' in visible_platforms %}
+                    <a href="#" onclick="triggerSync('shopify'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2 w-4 h-4"> Sync Shopify
+                    </a>
+                    {% endif %}
+                    {% if not visible_platforms or 'vr' in visible_platforms %}
+                    <a href="#" onclick="triggerSync('vr'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2 w-4 h-4"> Sync V&R
+                    </a>
+                    {% endif %}
+                    {% if not visible_platforms or 'woocommerce' in visible_platforms %}
+                    <a href="#" onclick="triggerSync('woocommerce'); toggleMobileMenu(); return false;" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=woocommerce.com" class="mr-2 w-4 h-4"> Sync WooCommerce
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Platforms section (collapsible) -->
+            <div class="border-t border-gray-100 pt-2 mt-2">
+                <button onclick="toggleMobileSection('mobilePlatforms')" class="w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-100 rounded-md">
+                    Platforms
+                    <svg class="h-4 w-4 text-gray-400 transition-transform" id="mobilePlatformsChevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="mobilePlatforms" class="hidden pl-3">
+                    <a href="https://reverb.com/uk/my/selling/listings?state=live" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="mr-2 w-4 h-4"> Reverb
+                    </a>
+                    <a href="https://www.ebay.co.uk/sh/lst/active" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="mr-2 w-4 h-4"> eBay
+                    </a>
+                    <a href="https://admin.shopify.com/store/londonvintageguitars?ui_locales=en-GB" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="mr-2 w-4 h-4"> Shopify Admin
+                    </a>
+                    <a href="https://www.vintageandrare.com/account" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="mr-2 w-4 h-4"> Vintage & Rare
+                    </a>
+                    <a href="https://www.denmarkstreetguitars.co.uk/" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://icons.duckduckgo.com/ip3/denmarkstreetguitars.co.uk.ico" class="mr-2 w-4 h-4"> Hanks
+                    </a>
+                    <a href="https://railway.com/project/acc36520-166b-4569-8718-3cf1a9920bad" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=railway.app" class="mr-2 w-4 h-4"> Railway
+                    </a>
+                    <a href="https://www.dhl.com/gb-en/home/redirect/express/portal.html" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=dhl.com" class="mr-2 w-4 h-4"> DHL
+                    </a>
+                    {% if settings and settings.WC_STORE_URL %}
+                    <a href="{{ settings.WC_STORE_URL }}/wp-admin/edit.php?post_type=product" target="_blank" class="flex items-center px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-100">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=woocommerce.com" class="mr-2 w-4 h-4"> WooCommerce
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+
+    <footer class="bg-white shadow-lg mt-8">
+        <div class="max-w-7xl mx-auto py-4 px-4">
+            <div class="text-center text-gray-500 text-sm">
+                &copy; {{ now().year }} Realtime Inventory Fast Flow. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+
+    <script>
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            const iconOpen = document.getElementById('mobileMenuIconOpen');
+            const iconClose = document.getElementById('mobileMenuIconClose');
+            menu.classList.toggle('hidden');
+            iconOpen.classList.toggle('hidden');
+            iconClose.classList.toggle('hidden');
+        }
+
+        function toggleMobileSection(id) {
+            const section = document.getElementById(id);
+            const chevron = document.getElementById(id + 'Chevron');
+            section.classList.toggle('hidden');
+            if (chevron) {
+                chevron.style.transform = section.classList.contains('hidden') ? '' : 'rotate(180deg)';
+            }
+        }
+
+        function togglePlatformMenu(event) {
+            event.stopPropagation(); // Prevent immediate document click
+            const menu = document.getElementById('platformMenu');
+            const isHidden = menu.classList.contains('hidden');
+
+            // Close menu if it's open
+            if (!isHidden) {
+                menu.classList.add('hidden');
+                return;
+            }
+
+            // Open menu
+            menu.classList.remove('hidden');
+
+            // Close menu when clicking outside
+            function closeMenu(e) {
+                const dropdown = document.getElementById('platformDropdown');
+                if (!dropdown.contains(e.target)) {
+                    menu.classList.add('hidden');
+                    document.removeEventListener('click', closeMenu);
+                }
+            }
+
+            document.addEventListener('click', closeMenu);
+        }
+
+        function toggleSyncMenu(event) {
+            event.stopPropagation();
+            const menu = document.getElementById('syncMenu');
+            const isHidden = menu.classList.contains('hidden');
+
+            // Close menu if it's open
+            if (!isHidden) {
+                menu.classList.add('hidden');
+                return;
+            }
+
+            // Open menu
+            menu.classList.remove('hidden');
+
+            // Close menu when clicking outside
+            function closeMenu(e) {
+                if (!document.getElementById('syncDropdown').contains(e.target)) {
+                    menu.classList.add('hidden');
+                    document.removeEventListener('click', closeMenu);
+                }
+            }
+
+            document.addEventListener('click', closeMenu);
+        }
+
+        // Sync dropdown hover-to-open with 0.45s delay
+        let syncHoverTimer = null;
+        let syncCloseTimer = null;
+        const syncDropdown = document.getElementById('syncDropdown');
+        const syncMenu = document.getElementById('syncMenu');
+
+        if (syncDropdown && syncMenu) {
+            syncDropdown.addEventListener('mouseenter', function() {
+                if (syncCloseTimer) {
+                    clearTimeout(syncCloseTimer);
+                    syncCloseTimer = null;
+                }
+                syncHoverTimer = setTimeout(function() {
+                    syncMenu.classList.remove('hidden');
+                }, 450);
+            });
+
+            syncDropdown.addEventListener('mouseleave', function() {
+                if (syncHoverTimer) {
+                    clearTimeout(syncHoverTimer);
+                    syncHoverTimer = null;
+                }
+                syncCloseTimer = setTimeout(function() {
+                    syncMenu.classList.add('hidden');
+                }, 150);
+            });
+
+            syncMenu.addEventListener('mouseenter', function() {
+                if (syncCloseTimer) {
+                    clearTimeout(syncCloseTimer);
+                    syncCloseTimer = null;
+                }
+            });
+
+            syncMenu.addEventListener('mouseleave', function() {
+                syncCloseTimer = setTimeout(function() {
+                    syncMenu.classList.add('hidden');
+                }, 150);
+            });
+        }
+
+        // Platforms dropdown hover-to-open with 0.45s delay
+        let platformHoverTimer = null;
+        let platformCloseTimer = null;
+        const platformDropdown = document.getElementById('platformDropdown');
+        const platformMenu = document.getElementById('platformMenu');
+
+        if (platformDropdown && platformMenu) {
+            platformDropdown.addEventListener('mouseenter', function() {
+                if (platformCloseTimer) {
+                    clearTimeout(platformCloseTimer);
+                    platformCloseTimer = null;
+                }
+                platformHoverTimer = setTimeout(function() {
+                    platformMenu.classList.remove('hidden');
+                }, 450);
+            });
+
+            platformDropdown.addEventListener('mouseleave', function() {
+                if (platformHoverTimer) {
+                    clearTimeout(platformHoverTimer);
+                    platformHoverTimer = null;
+                }
+                platformCloseTimer = setTimeout(function() {
+                    platformMenu.classList.add('hidden');
+                }, 150);
+            });
+
+            platformMenu.addEventListener('mouseenter', function() {
+                if (platformCloseTimer) {
+                    clearTimeout(platformCloseTimer);
+                    platformCloseTimer = null;
+                }
+            });
+
+            platformMenu.addEventListener('mouseleave', function() {
+                platformCloseTimer = setTimeout(function() {
+                    platformMenu.classList.add('hidden');
+                }, 150);
+            });
+        }
+
+        // Reports dropdown hover-to-open with 0.45s delay
+        let reportsHoverTimer = null;
+        let reportsCloseTimer = null;
+        const reportsDropdown = document.getElementById('reportsDropdown');
+        const reportsMenu = document.getElementById('reportsMenu');
+
+        if (reportsDropdown && reportsMenu) {
+            reportsDropdown.addEventListener('mouseenter', function() {
+                // Cancel any pending close
+                if (reportsCloseTimer) {
+                    clearTimeout(reportsCloseTimer);
+                    reportsCloseTimer = null;
+                }
+                reportsHoverTimer = setTimeout(function() {
+                    reportsMenu.classList.remove('hidden');
+                }, 450);
+            });
+
+            reportsDropdown.addEventListener('mouseleave', function() {
+                if (reportsHoverTimer) {
+                    clearTimeout(reportsHoverTimer);
+                    reportsHoverTimer = null;
+                }
+                // Delay close to allow moving to menu
+                reportsCloseTimer = setTimeout(function() {
+                    reportsMenu.classList.add('hidden');
+                }, 150);
+            });
+
+            // Keep menu open when hovering over it
+            reportsMenu.addEventListener('mouseenter', function() {
+                if (reportsCloseTimer) {
+                    clearTimeout(reportsCloseTimer);
+                    reportsCloseTimer = null;
+                }
+            });
+
+            reportsMenu.addEventListener('mouseleave', function() {
+                reportsCloseTimer = setTimeout(function() {
+                    reportsMenu.classList.add('hidden');
+                }, 150);
+            });
+        }
+
+        // Sync functions
+        async function triggerSync(platform) {
+            // Close the sync menu
+            document.getElementById('syncMenu').classList.add('hidden');
+
+            // Show a notification
+            const message = platform === 'all' ? 'Starting sync for all platforms...' : `Starting ${platform} sync...`;
+            showNotification(message, 'info');
+
+            try {
+                const endpoint = platform === 'all' ? '/api/sync/all' : `/api/sync/${platform}`;
+                const response = await fetch(endpoint, { method: 'POST' });
+                const data = await response.json();
+
+                console.log('Sync response:', data); // DEBUG
+
+                if (data.status === 'success') {
+                    showNotification(data.message || `${platform} sync initiated successfully`, 'success');
+                } else {
+                    showNotification(data.message || `Failed to start ${platform} sync`, 'error');
+
+                    // If V&R sync failed, offer manual upload option
+                    console.log('Checking for VR upload prompt:', platform, data); // DEBUG
+                    if (platform === 'vr') {
+                        console.log('Showing VR upload prompt'); // DEBUG
+                        setTimeout(() => showVRManualUploadPrompt(), 500);
+                    }
+                }
+            } catch (error) {
+                console.error(`Error syncing ${platform}:`, error);
+                showNotification(`Error starting ${platform} sync`, 'error');
+
+                // If V&R sync failed, offer manual upload option
+                if (platform === 'vr') {
+                    console.log('Showing VR upload prompt (error path)'); // DEBUG
+                    setTimeout(() => showVRManualUploadPrompt(), 500);
+                }
+            }
+        }
+
+        function showVRManualUploadPrompt() {
+            const dialog = document.createElement('div');
+            dialog.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
+            dialog.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">V&R Sync Failed</h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Automated sync couldn't connect to V&R. Would you like to upload a CSV manually?
+                    </p>
+                    <div class="flex gap-3">
+                        <button onclick="openVRFileUpload()"
+                                class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            Upload CSV
+                        </button>
+                        <button onclick="this.closest('[class*=fixed]').remove()"
+                                class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(dialog);
+        }
+
+        function openVRFileUpload() {
+            // Remove the prompt dialog
+            document.querySelector('[class*="fixed inset-0"]')?.remove();
+
+            // Create hidden file input
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv,text/csv';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                showNotification('Uploading V&R CSV...', 'info');
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const response = await fetch('/api/vr/upload-csv', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showNotification(data.message || 'CSV processed successfully!', 'success');
+                    } else {
+                        showNotification(data.detail || 'Upload failed', 'error');
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    showNotification('Upload failed: ' + error.message, 'error');
+                }
+            };
+            input.click();
+        }
+
+        // Notification helper
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 px-4 py-2 text-sm rounded-md shadow-md z-50 transition-all duration-300 ${
+                type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
+                type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
+                'bg-gray-50 text-gray-800 border border-gray-200'
+            }`;
+            notification.style.maxWidth = '320px';
+            notification.innerHTML = message.replace('\n', '<br>');
+            document.body.appendChild(notification);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        </script>
+    </body>
+</html>

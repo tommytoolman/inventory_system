@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Settings - RIFF{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-3xl">
+
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
+        <p class="text-gray-600">Manage your dashboard preferences</p>
+    </div>
+
+    <!-- Platform Visibility -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b">
+            <h2 class="text-xl font-semibold text-gray-900">Platform Visibility</h2>
+            <p class="text-sm text-gray-500 mt-1">Choose which platforms appear in your dashboard, menus, and reports. Hidden platforms still sync in the background.</p>
+        </div>
+
+        <form method="post" action="/settings/platform-visibility">
+            <div class="p-6 space-y-4">
+
+                <!-- eBay -->
+                <label class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <div class="flex items-center space-x-3">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=ebay.com" class="w-5 h-5">
+                        <span class="text-sm font-medium text-gray-900">eBay</span>
+                    </div>
+                    <div class="relative">
+                        <input type="checkbox" name="show_ebay" value="1"
+                               {% if preferences.show_ebay %}checked{% endif %}
+                               class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                </label>
+
+                <!-- Reverb -->
+                <label class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <div class="flex items-center space-x-3">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=reverb.com" class="w-5 h-5">
+                        <span class="text-sm font-medium text-gray-900">Reverb</span>
+                    </div>
+                    <div class="relative">
+                        <input type="checkbox" name="show_reverb" value="1"
+                               {% if preferences.show_reverb %}checked{% endif %}
+                               class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                </label>
+
+                <!-- Shopify -->
+                <label class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <div class="flex items-center space-x-3">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=shopify.com" class="w-5 h-5">
+                        <span class="text-sm font-medium text-gray-900">Shopify</span>
+                    </div>
+                    <div class="relative">
+                        <input type="checkbox" name="show_shopify" value="1"
+                               {% if preferences.show_shopify %}checked{% endif %}
+                               class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                </label>
+
+                <!-- Vintage & Rare -->
+                <label class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <div class="flex items-center space-x-3">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=vintageandrare.com" class="w-5 h-5">
+                        <span class="text-sm font-medium text-gray-900">Vintage & Rare</span>
+                    </div>
+                    <div class="relative">
+                        <input type="checkbox" name="show_vintage_rare" value="1"
+                               {% if preferences.show_vintage_rare %}checked{% endif %}
+                               class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                </label>
+
+                <!-- WooCommerce -->
+                <label class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <div class="flex items-center space-x-3">
+                        <img src="https://www.google.com/s2/favicons?sz=16&domain=woocommerce.com" class="w-5 h-5">
+                        <span class="text-sm font-medium text-gray-900">WooCommerce</span>
+                    </div>
+                    <div class="relative">
+                        <input type="checkbox" name="show_woocommerce" value="1"
+                               {% if preferences.show_woocommerce %}checked{% endif %}
+                               class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                </label>
+
+            </div>
+
+            <div class="px-6 py-4 border-t bg-gray-50 rounded-b-lg flex items-center justify-between">
+                <p class="text-xs text-gray-400">Hidden platforms still sync in the background and data is accessible via API.</p>
+                <button type="submit"
+                        class="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

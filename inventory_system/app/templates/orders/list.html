@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 mb-16">
+    <h1 class="text-2xl font-bold mb-6">Orders</h1>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+        <div class="bg-white rounded-lg shadow p-4">
+            <h3 class="text-xs font-medium text-gray-500">Total Orders</h3>
+            <p class="text-xl font-bold text-gray-900">{{ total_count }}</p>
+            <p class="text-xs text-gray-500">Last {{ days }} days</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <h3 class="text-xs font-medium text-gray-500">Total Revenue</h3>
+            <p class="text-xl font-bold text-green-600">&pound;{{ "{:,.0f}".format(total_revenue) }}</p>
+            <p class="text-xs text-gray-500">Last {{ days }} days</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center gap-2 mb-2">
+                <img src="https://www.google.com/s2/favicons?domain=reverb.com&sz=24" alt="Reverb" class="w-6 h-6">
+                <h3 class="text-sm font-medium text-gray-500">Reverb</h3>
+            </div>
+            <p class="text-xl font-bold text-orange-600">{{ platform_stats.get('reverb', {}).get('count', 0) }} orders</p>
+            <p class="text-sm text-gray-500">&pound;{{ "{:,.0f}".format(platform_stats.get('reverb', {}).get('revenue', 0)) }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center gap-2 mb-2">
+                <img src="https://www.google.com/s2/favicons?domain=ebay.com&sz=24" alt="eBay" class="w-6 h-6">
+                <h3 class="text-sm font-medium text-gray-500">eBay</h3>
+            </div>
+            <p class="text-xl font-bold text-blue-600">{{ platform_stats.get('ebay', {}).get('count', 0) }} orders</p>
+            <p class="text-sm text-gray-500">&pound;{{ "{:,.0f}".format(platform_stats.get('ebay', {}).get('revenue', 0)) }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center gap-2 mb-2">
+                <img src="https://www.google.com/s2/favicons?domain=shopify.com&sz=24" alt="Shopify" class="w-6 h-6">
+                <h3 class="text-sm font-medium text-gray-500">Shopify</h3>
+            </div>
+            <p class="text-xl font-bold text-green-600">{{ platform_stats.get('shopify', {}).get('count', 0) }} orders</p>
+            <p class="text-sm text-gray-500">&pound;{{ "{:,.0f}".format(platform_stats.get('shopify', {}).get('revenue', 0)) }}</p>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="mb-8 bg-gray-50 p-4 rounded-lg shadow">
+        <form method="get" class="flex flex-wrap items-center gap-3" id="filterForm">
+            <!-- Platform Filter -->
+            <select name="platform" class="p-2 border rounded w-40" onchange="this.form.submit()">
+                {% for opt in platform_options %}
+                <option value="{{ opt.value }}" {% if opt.value == platform_filter %}selected{% endif %}>
+                    {{ opt.label }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <!-- Status Filter -->
+            <select name="status" class="p-2 border rounded w-40" onchange="this.form.submit()">
+                {% for opt in status_options %}
+                <option value="{{ opt.value }}" {% if opt.value == status_filter %}selected{% endif %}>
+                    {{ opt.label }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <!-- Days Filter -->
+            <select name="days" class="p-2 border rounded w-36" onchange="this.form.submit()">
+                {% for opt in days_options %}
+                <option value="{{ opt.value }}" {% if opt.value == days %}selected{% endif %}>
+                    {{ opt.label }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <!-- Items per page -->
+            <div class="flex items-center">
+                <span class="mr-2 text-sm text-blue-600">Show:</span>
+                <select name="per_page" class="p-2 border rounded" onchange="this.form.submit()">
+                    {% for count in [25, 50, 100, 200] %}
+                    <option value="{{ count }}" {% if count == per_page %}selected{% endif %}>{{ count }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Search Input -->
+            <input
+                type="text"
+                name="search"
+                value="{{ search_query }}"
+                placeholder="Search orders..."
+                class="p-2 border rounded flex-1 min-w-48"
+            >
+            <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Search
+            </button>
+        </form>
+    </div>
+
+    <!-- Orders Table -->
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+        <table class="w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    {% set base_url = "?platform=" ~ platform_filter ~ "&status=" ~ status_filter ~ "&days=" ~ days ~ "&per_page=" ~ per_page ~ "&search=" ~ search_query %}
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <a href="{{ base_url }}&sort_by=platform&sort_order={{ 'desc' if sort_by == 'platform' and sort_order == 'asc' else 'asc' }}"
+                           class="hover:text-blue-600 {% if sort_by == 'platform' %}text-blue-600 font-bold{% endif %}">
+                            Platform{% if sort_by == 'platform' %} {{ '▲' if sort_order == 'asc' else '▼' }}{% endif %}
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <a href="{{ base_url }}&sort_by=created_at&sort_order={{ 'desc' if sort_by == 'created_at' and sort_order == 'asc' else 'asc' }}"
+                           class="hover:text-blue-600 {% if sort_by == 'created_at' %}text-blue-600 font-bold{% endif %}">
+                            Date{% if sort_by == 'created_at' %} {{ '▲' if sort_order == 'asc' else '▼' }}{% endif %}
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <a href="{{ base_url }}&sort_by=status&sort_order={{ 'desc' if sort_by == 'status' and sort_order == 'asc' else 'asc' }}"
+                           class="hover:text-blue-600 {% if sort_by == 'status' %}text-blue-600 font-bold{% endif %}">
+                            Status{% if sort_by == 'status' %} {{ '▲' if sort_order == 'asc' else '▼' }}{% endif %}
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        <a href="{{ base_url }}&sort_by=customer_name&sort_order={{ 'desc' if sort_by == 'customer_name' and sort_order == 'asc' else 'asc' }}"
+                           class="hover:text-blue-600 {% if sort_by == 'customer_name' %}text-blue-600 font-bold{% endif %}">
+                            Customer{% if sort_by == 'customer_name' %} {{ '▲' if sort_order == 'asc' else '▼' }}{% endif %}
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        <a href="{{ base_url }}&sort_by=total_amount&sort_order={{ 'desc' if sort_by == 'total_amount' and sort_order == 'asc' else 'asc' }}"
+                           class="hover:text-blue-600 {% if sort_by == 'total_amount' %}text-blue-600 font-bold{% endif %}">
+                            Amount{% if sort_by == 'total_amount' %} {{ '▲' if sort_order == 'asc' else '▼' }}{% endif %}
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for order in orders %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        {% if order.platform == 'ebay' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            eBay
+                        </span>
+                        {% elif order.platform == 'reverb' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            Reverb
+                        </span>
+                        {% elif order.platform == 'shopify' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Shopify
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {{ order.external_order_id[:20] }}{% if order.external_order_id|length > 20 %}...{% endif %}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {% if order.created_at %}
+                        {{ order.created_at.strftime('%Y-%m-%d %H:%M') if order.created_at else 'N/A' }}
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        {% set status_lower = (order.status or '')|lower %}
+                        {% if 'complete' in status_lower or 'paid' in status_lower %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {{ order.status }}
+                        </span>
+                        {% elif 'cancel' in status_lower %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            {{ order.status }}
+                        </span>
+                        {% elif 'pending' in status_lower or 'unfulfilled' in status_lower %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            {{ order.status }}
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {{ order.status or 'Unknown' }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                        <div class="max-w-32 truncate" title="{{ order.customer_name or '' }}">
+                            {{ order.customer_name or 'Guest' }}
+                        </div>
+                        {% if order.shipping_city %}
+                        <div class="text-xs text-gray-500">{{ order.shipping_city }}{% if order.shipping_country_code %}, {{ order.shipping_country_code }}{% endif %}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                        <div class="max-w-xs truncate" title="{{ order.title or '' }}">
+                            {{ order.title[:70] if order.title else 'N/A' }}{% if order.title and order.title|length > 70 %}...{% endif %}
+                        </div>
+                        {% if order.quantity and order.quantity > 1 %}
+                        <div class="text-xs text-gray-500">Qty: {{ order.quantity }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-right font-medium text-gray-900">
+                        {% if order.total_amount %}
+                        &pound;{{ "{:,.2f}".format(order.total_amount|float) }}
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-center">
+                        <!-- Shipping Icon - Color coded by status -->
+                        {% set status_lower = (order.status or '')|lower %}
+                        {# Grey: cancelled, refunded, voided, pending #}
+                        {% set is_cancelled = 'cancel' in status_lower or 'refund' in status_lower or 'void' in status_lower %}
+                        {# Green: shipped, completed, fulfilled, received, or has tracking #}
+                        {% set is_shipped = 'shipped' in status_lower or 'completed' in status_lower or 'fulfilled' in status_lower or 'received' in status_lower or order.tracking_number %}
+                        {# Amber: paid, active - ready to ship #}
+                        {% set is_ready = 'paid' in status_lower or 'active' in status_lower %}
+
+                        {% if is_cancelled %}
+                        <span class="inline-flex items-center text-gray-300 cursor-not-allowed" title="Cancelled/Refunded">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+                            </svg>
+                        </span>
+                        {% elif is_shipped %}
+                        <span class="inline-flex items-center text-green-500" title="Shipped">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+                            </svg>
+                        </span>
+                        {% else %}
+                        <a href="/orders/{{ order.platform }}/{{ order.order_id }}/ship"
+                           class="inline-flex items-center text-amber-500 hover:text-amber-700" title="Create shipping label">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+                            </svg>
+                        </a>
+                        {% endif %}
+                        <span class="mx-1 text-gray-300">|</span>
+                        <a href="/orders/{{ order.platform }}/{{ order.order_id }}"
+                           class="text-blue-600 hover:text-blue-800 text-sm">
+                            View
+                        </a>
+                        <span class="mx-1 text-gray-300">|</span>
+                        {% if order.product_id %}
+                        <a href="/inventory/product/{{ order.product_id }}"
+                           class="text-green-600 hover:text-green-800 text-sm">
+                            Product
+                        </a>
+                        {% else %}
+                        <span class="text-gray-400 line-through text-sm cursor-not-allowed" title="No linked product (deposit/payment)">
+                            Product
+                        </span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                        No orders found for the selected filters.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="mt-6 flex justify-between items-center">
+        <div class="text-sm text-gray-500">
+            Showing {{ ((page - 1) * per_page) + 1 }} - {{ [page * per_page, total_orders]|min }} of {{ total_orders }} orders
+        </div>
+        <div class="flex gap-2">
+            {% set page_base = "?platform=" ~ platform_filter ~ "&status=" ~ status_filter ~ "&days=" ~ days ~ "&per_page=" ~ per_page ~ "&search=" ~ search_query ~ "&sort_by=" ~ sort_by ~ "&sort_order=" ~ sort_order %}
+            {% if page > 1 %}
+            <a href="{{ page_base }}&page={{ page - 1 }}"
+               class="px-3 py-1 border rounded hover:bg-gray-100">Previous</a>
+            {% endif %}
+
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == page %}
+                <span class="px-3 py-1 bg-blue-500 text-white rounded">{{ p }}</span>
+                {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+                <a href="{{ page_base }}&page={{ p }}"
+                   class="px-3 py-1 border rounded hover:bg-gray-100">{{ p }}</a>
+                {% elif p == 4 and page > 5 %}
+                <span class="px-2">...</span>
+                {% elif p == total_pages - 3 and page < total_pages - 4 %}
+                <span class="px-2">...</span>
+                {% endif %}
+            {% endfor %}
+
+            {% if page < total_pages %}
+            <a href="{{ page_base }}&page={{ page + 1 }}"
+               class="px-3 py-1 border rounded hover:bg-gray-100">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

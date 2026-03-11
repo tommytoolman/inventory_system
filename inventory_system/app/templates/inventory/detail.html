@@ -1,0 +1,1068 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+        <!-- Product Header -->
+        <div class="px-6 py-4 bg-gray-50 border-b">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center flex-1">
+                    <div class="h-16 w-16 rounded-full overflow-hidden mr-4">
+                        {% if product.primary_image %}
+                            <img src="{{ product.primary_image }}" alt="{{ product.brand }} {{ product.model }}" class="h-full w-full object-cover">
+                        {% else %}
+                            <div class="h-full w-full bg-gray-200 flex items-center justify-center">
+                                <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-start space-x-3">
+                            <div class="min-w-0">
+                                <h1 class="text-2xl font-bold text-gray-900">
+                                    {{ product.title or 'Untitled Product' }}
+                                </h1>
+                                <div class="mt-1 h-px bg-gray-200 w-full max-w-md"></div>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    {{ product.brand|title }} {{ product.model }}
+                                </p>
+                            </div>
+                            {% set status_val = product.status.value|upper if product.status else '' %}
+                            <div class="mt-1 text-center">
+                                {% if status_val == 'SOLD' %}
+                                    <span class="inline-flex justify-center w-24 px-3 py-1 text-sm font-semibold rounded-full bg-red-100 text-red-700 border border-red-300">Sold</span>
+                                    {% if sale_info %}
+                                    <div class="mt-2 px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded border border-gray-200">
+                                        {% if sale_info.is_private_sale %}
+                                            {% if sale_info.ended_platforms %}
+                                            Ended on {{ sale_info.ended_platforms[0].platform|capitalize }} on {{ sale_info.sold_date.strftime('%d-%m-%Y') if sale_info.sold_date else 'N/A' }} • Sold off-line
+                                            {% else %}
+                                            Sold off-line
+                                            {% endif %}
+                                        {% else %}
+                                            Sold on {{ sale_info.sold_platform|capitalize }} on {{ sale_info.sold_date.strftime('%d-%m-%Y') if sale_info.sold_date else 'N/A' }}
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                {% elif status_val == 'DRAFT' %}
+                                    <span class="inline-flex justify-center w-24 px-3 py-1 text-sm font-semibold rounded-full bg-amber-100 text-amber-700 border border-amber-300">Draft</span>
+                                {% elif status_val == 'ARCHIVED' %}
+                                    <span class="inline-flex justify-center w-24 px-3 py-1 text-sm font-semibold rounded-full bg-purple-100 text-purple-700 border border-purple-300">Archived</span>
+                                {% elif status_val == 'DELETED' %}
+                                    <span class="inline-flex justify-center w-24 px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-900 border border-blue-300">Deleted</span>
+                                {% elif status_val %}
+                                    <span class="inline-flex justify-center w-24 px-3 py-1 text-sm font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">{{ status_val|title }}</span>
+                                {% else %}
+                                    <span class="inline-flex justify-center w-24 px-3 py-1 text-sm font-semibold rounded-full bg-slate-100 text-slate-600 border border-slate-200">Status Unknown</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status badges moved next to title -->
+                    <div class="flex items-center space-x-3 mr-4">
+                        {% set active_platforms = [] %}
+
+                        <!-- End All Listings button - only show if there are active listings -->
+                        {% set active_platforms = [] %}
+                        {% for platform_entry in all_platforms_status %}
+                            {% if platform_entry.is_listed and platform_entry.details %}
+                                {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
+                                {% if platform_status in ['ACTIVE', 'LIVE'] %}
+                                    {% set _ = active_platforms.append(platform_entry) %}
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+
+
+                    </div>
+                </div>
+                
+                <!-- Back button and navigation arrows -->
+                <div class="ml-4 flex items-center space-x-3">
+                    <a href="{{ url_for('list_products') }}" class="text-blue-600 hover:text-blue-800 font-medium">
+                        ← Back to List
+                    </a>
+                    <div class="flex items-center space-x-2">
+                        {% if prev_product %}
+                            <a
+                                href="{{ url_for('product_detail', product_id=prev_product.id) }}"
+                                class="p-2 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                title="Previous: {{ prev_product.title or (prev_product.brand ~ ' ' ~ prev_product.model) }}"
+                            >
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </a>
+                        {% else %}
+                            <span class="p-2 rounded-full border border-gray-200 text-gray-300 cursor-not-allowed">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </span>
+                        {% endif %}
+
+                        {% if next_product %}
+                            <a
+                                href="{{ url_for('product_detail', product_id=next_product.id) }}"
+                                class="p-2 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                title="Next: {{ next_product.title or (next_product.brand ~ ' ' ~ next_product.model) }}"
+                            >
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </a>
+                        {% else %}
+                            <span class="p-2 rounded-full border border-gray-200 text-gray-300 cursor-not-allowed">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Platform Status Messages from Add Product -->
+        {% if platform_messages %}
+            <div class="px-6 py-4 bg-gray-50 border-b">
+                <div class="space-y-2">
+                    {% for msg in platform_messages %}
+                        <div id="platform-status-{{ msg.platform }}"
+                             class="flex items-center p-3 rounded-lg
+                                    {% if msg.status == 'success' %}bg-green-50 border border-green-200{% endif %}
+                                    {% if msg.status == 'error' %}bg-red-50 border border-red-200{% endif %}
+                                    {% if msg.status == 'info' %}bg-blue-50 border border-blue-200{% endif %}">
+
+                            <!-- Platform Icon -->
+                            <div class="flex-shrink-0 mr-3">
+                                {% if msg.status == 'success' %}
+                                    <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                {% elif msg.status == 'error' %}
+                                    <svg class="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                {% else %}
+                                    <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                {% endif %}
+                            </div>
+
+                            <!-- Message Content -->
+                            <div class="flex-1">
+                                <span class="font-semibold
+                                           {% if msg.status == 'success' %}text-green-800{% endif %}
+                                           {% if msg.status == 'error' %}text-red-800{% endif %}
+                                           {% if msg.status == 'info' %}text-blue-800{% endif %}">
+                                    {{ msg.platform }}:
+                                </span>
+                                <span class="ml-1
+                                           {% if msg.status == 'success' %}text-green-700{% endif %}
+                                           {% if msg.status == 'error' %}text-red-700{% endif %}
+                                           {% if msg.status == 'info' %}text-blue-700{% endif %}">
+                                    {{ msg.message }}
+                                </span>
+                            </div>
+
+                            <!-- Close button -->
+                            <button onclick="document.getElementById('platform-status-{{ msg.platform }}').remove()"
+                                    class="ml-3 flex-shrink-0
+                                           {% if msg.status == 'success' %}text-green-400 hover:text-green-600{% endif %}
+                                           {% if msg.status == 'error' %}text-red-400 hover:text-red-600{% endif %}
+                                           {% if msg.status == 'info' %}text-blue-400 hover:text-blue-600{% endif %}">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <script>
+                // Auto-hide success messages after 10 seconds
+                setTimeout(function() {
+                    {% for msg in platform_messages %}
+                        {% if msg.status == 'success' %}
+                            var elem = document.getElementById('platform-status-{{ msg.platform }}');
+                            if (elem) {
+                                elem.style.transition = 'opacity 0.5s';
+                                elem.style.opacity = '0';
+                                setTimeout(function() { elem.remove(); }, 500);
+                            }
+                        {% endif %}
+                    {% endfor %}
+                }, 10000);
+            </script>
+        {% endif %}
+
+        <!-- Product Details -->
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <!-- Left column: basic info + images -->
+            <div class="space-y-6">
+                <div class="border rounded p-4 bg-white">
+                    <div class="flex items-center justify-between pb-3 mb-4 border-b border-gray-300">
+                        <h2 class="text-lg font-semibold">Product Information</h2>
+                        {% set status_val = product.status.value|upper if product.status else '' %}
+                        {% if status_val in ['SOLD', 'ARCHIVED'] %}
+                            <button type="button" disabled
+                                    class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-400 cursor-not-allowed"
+                                    title="Editing disabled for {{ status_val|title }} products"
+                                    aria-disabled="true">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                </svg>
+                            </button>
+                        {% elif status_val == 'DRAFT' %}
+                            <a href="/inventory/add?draft_id={{ product.id }}"
+                               class="inline-flex items-center justify-center w-8 h-8 bg-indigo-100 hover:bg-indigo-200 rounded-full text-indigo-600 hover:text-indigo-700 transition-colors"
+                               title="Resume Draft">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                </svg>
+                            </a>
+                        {% else %}
+                            <a href="/inventory/products/{{ product.id }}/edit"
+                               class="inline-flex items-center justify-center w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full text-gray-600 hover:text-gray-800 transition-colors"
+                               title="Edit Product">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                </svg>
+                            </a>
+                        {% endif %}
+                    </div>
+                    <dl class="space-y-2">
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Category</dt>
+                            <dd class="text-right">{{ product.category or 'N/A' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Brand</dt>
+                            <dd class="text-right">{{ product.brand|title or 'N/A' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Model</dt>
+                            <dd class="text-right">{{ product.model or 'N/A' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Finish</dt>
+                            <dd class="text-right">{{ product.finish or 'N/A' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Year</dt>
+                            <dd class="text-right">
+                                {% if product.year %}
+                                    {{ product.year }}
+                                {% elif product.decade %}
+                                    {{ product.decade }}s
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Condition</dt>
+                            <dd class="text-right">{{ product.condition.value|title if product.condition else 'N/A' }}</dd>
+                        </div>
+                        {% if product.serial_number %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Serial Number</dt>
+                            <dd class="text-right">{{ product.serial_number }}</dd>
+                        </div>
+                        {% endif %}
+                        {% set body_type = (product.extra_attributes or {}).get('body_type') %}
+                        {% if body_type %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Body Type</dt>
+                            <dd class="text-right">{{ body_type }}</dd>
+                        </div>
+                        {% endif %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">L/R Handed</dt>
+                            <dd class="text-right">{{ product.handedness.value|replace('_', ' ')|title if product.handedness else 'Unspecified' }}</dd>
+                        </div>
+                        {% if product.artist_owned %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Artist Owned</dt>
+                            <dd class="text-right">Yes</dd>
+                        </div>
+                        {% endif %}
+                        {% if product.artist_names %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Artist(s)</dt>
+                            <dd class="text-right">{{ ', '.join(product.artist_names) }}</dd>
+                        </div>
+                        {% endif %}
+                        {% if is_handmade %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Handmade</dt>
+                            <dd class="text-right">Yes</dd>
+                        </div>
+                        {% endif %}
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Manufacturing Country</dt>
+                            <dd class="text-right">{{ product.manufacturing_country.value if product.manufacturing_country else 'N/A' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Base Price</dt>
+                            <dd class="text-right">
+                                {% if product.base_price and product.base_price > 0 %}
+                                    £{{ "{:,.0f}".format(product.base_price) }}
+                                {% else %}
+                                    <span class="text-gray-500">-</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">SKU</dt>
+                            <dd class="text-right">{{ product.sku or 'N/A' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Stocked Item?</dt>
+                            <dd class="text-right">{% if product.is_stocked_item %}Yes{% else %}No{% endif %}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-600">Quantity Available</dt>
+                            <dd class="text-right">{% if product.is_stocked_item %}{{ product.quantity or 0 }}{% else %}1{% endif %}</dd>
+                        </div>
+                        {% if extra_specs %}
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <h3 class="text-sm font-semibold text-gray-800 mb-3">Technical Specs</h3>
+                            <div class="space-y-2">
+                                {% for key, value in extra_specs.items() %}
+                                    {% if value %}
+                                    {% set label = spec_field_map.get(key, key|replace('_', ' ')|title) %}
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-600">{{ label }}</dt>
+                                        <dd class="text-right">{{ value }}</dd>
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {# Shipping options intentionally hidden from detail view #}
+                    </dl>
+                </div>
+
+                <div class="border rounded p-4 bg-white">
+                    <div class="flex items-end justify-between mb-4 pb-3 border-b border-gray-300">
+                        <h2 class="text-lg font-semibold leading-none pb-0">Images</h2>
+                        {% if has_image_platforms %}
+                            <button id="refresh-images-btn"
+                                    type="button"
+                                    data-refresh-url="{{ url_for('refresh_product_images', product_id=product.id) }}"
+                                    data-fix-url="{{ url_for('fix_product_images', product_id=product.id) }}"
+                                    data-check-label="Check Images"
+                                    data-fix-label="Fix Images"
+                                    class="inline-flex items-center px-3 py-1 text-xs rounded-full bg-blue-50 text-blue-600 hover:text-blue-800">
+                                Check Images
+                            </button>
+                        {% endif %}
+                    </div>
+                    {% if product.primary_image or product.additional_images %}
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {% if product.primary_image %}
+                                <div class="overflow-hidden rounded aspect-w-4 aspect-h-3 bg-white">
+                                    <img src="{{ product.primary_image }}" alt="Primary image" class="w-full h-full object-contain product-image clickable-image primary-image" data-full-url="{{ product.primary_image }}" title="Primary image - Click to view full size">
+                                </div>
+                            {% endif %}
+                            {% for image in product.additional_images %}
+                                <div class="overflow-hidden rounded aspect-w-4 aspect-h-3 bg-white">
+                                    <img src="{{ image }}" alt="Additional image" class="w-full h-full object-contain product-image clickable-image" data-full-url="{{ image }}" title="Click to view full size">
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-gray-500">No images are currently stored for this product.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Right column: platforms + description -->
+            <div class="space-y-6">
+                <div class="border rounded px-4 pt-3 pb-3 bg-white">
+                    <div class="flex items-center justify-between pb-3 mb-4 border-b border-gray-300">
+                        <h2 class="text-lg font-semibold">Platform Listings</h2>
+                        <div class="flex gap-2">
+                            {% set has_ended_listings = false %}
+                            {% for platform_entry in all_platforms_status %}
+                                {% if platform_entry.is_listed and platform_entry.details %}
+                                    {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
+                                    {% if platform_status in ['SOLD', 'ENDED', 'SOLD_OUT', 'ARCHIVED'] %}
+                                        {% set has_ended_listings = true %}
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if has_ended_listings or (all_platforms_status|selectattr('is_listed')|list|length > 0) %}
+                                <button onclick="relistAllListings()" class="inline-flex items-center px-3 py-1 text-sm rounded-full bg-green-100 text-green-700 hover:bg-green-200 focus:outline-none focus:ring-1 focus:ring-green-300">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Relist All
+                                </button>
+                            {% endif %}
+                            {# Flow 3: Stale Listing Refresh (Paid Feature) - only show if listing is stale #}
+                            {% if listing_is_stale and (all_platforms_status|selectattr('is_listed')|list|length > 0) %}
+                                <button onclick="refreshStaleListing()" class="inline-flex items-center px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 focus:outline-none focus:ring-1 focus:ring-purple-300" title="Listing is {{ listing_age_months }} months old (threshold: {{ stale_threshold_months }} months)">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Refresh ({{ listing_age_months }}mo)
+                                </button>
+                            {% endif %}
+                            {% if active_platforms|length > 0 %}
+                                <button onclick="endAllListings()" class="inline-flex items-center px-3 py-1 text-sm rounded-full bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-12.728 12.728m0-12.728l12.728 12.728" />
+                                    </svg>
+                                    End All Listings
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        {% if all_platforms_status %}
+                            {% for platform_entry in all_platforms_status %}
+                                <div class="border rounded p-3 bg-gray-50"
+                                     {% if platform_entry.is_listed and platform_entry.details %}
+                                     data-platform="{{ platform_entry.name|lower }}"
+                                     data-external-id="{{ platform_entry.details.external_id }}"
+                                     data-platform-active="{% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}{% if platform_status in ['ACTIVE', 'LIVE'] %}true{% else %}false{% endif %}"
+                                     {% endif %}>
+                                    {% if platform_entry.is_listed and platform_entry.details %}
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-medium">
+                                                {% if platform_entry.name|lower == 'ebay' and platform_entry.details.uses_crazylister %}
+                                                    <span class="inline-flex items-center mr-2" title="CrazyLister template detected">
+                                                        <img src="https://www.google.com/s2/favicons?sz=32&domain=crazylister.com" alt="CrazyLister" class="w-[18px] h-[18px]">
+                                                    </span>
+                                                {% endif %}
+                                                {% if platform_entry.name|lower == 'vr' %}
+                                                    Vintage & Rare
+                                                {% elif platform_entry.name|lower == 'ebay' %}
+                                                    <a href="/inventory/product/{{ product.id }}/ebay-template-preview" target="_blank" class="text-current no-underline hover:text-amber-700 cursor-pointer" title="CrazyLister Preview">Ebay</a>
+                                                {% else %}
+                                                    {{ platform_entry.name|title }}
+                                                {% endif %}
+                                            </span>
+                                            {% set platform_status = platform_entry.details.status|upper if platform_entry.details.status else 'UNKNOWN' %}
+                                            {% if platform_status in ['SOLD', 'ENDED', 'SOLD_OUT'] %}
+                                                <span class="inline-flex justify-center w-24 px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700 border border-red-300">Sold</span>
+                                            {% elif platform_status in ['DRAFT'] %}
+                                                <span class="inline-flex justify-center w-24 px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700 border border-amber-300">Draft</span>
+                                            {% elif platform_status in ['ARCHIVED'] %}
+                                                <span class="inline-flex justify-center w-24 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-700 border border-purple-300">Archived</span>
+                                            {% elif platform_status in ['DELETED'] %}
+                                                <span class="inline-flex justify-center w-24 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-900 border border-blue-300">Deleted</span>
+                                            {% elif platform_status in ['ACTIVE', 'LIVE'] %}
+                                                <span class="inline-flex justify-center w-24 px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">Active</span>
+                                            {% else %}
+                                                <span class="inline-flex justify-center w-24 px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 border border-gray-300">{{ platform_status|title }}</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="flex justify-between items-center text-sm text-gray-600 mb-1">
+                                            <span>ID: {{ platform_entry.details.external_id or 'N/A' }}</span>
+                                            <div class="flex gap-2">
+                                                {% if platform_entry.details.listing_url %}
+                                                    <a href="{{ platform_entry.details.listing_url }}" target="_blank" class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">Show Listing</a>
+                                                {% endif %}
+                                                {% if platform_status in ['ACTIVE', 'LIVE'] and platform_entry.details.external_id %}
+                                                    <button onclick="endListing('{{ platform_entry.name|lower }}', '{{ platform_entry.details.external_id }}', {{ product.id }})" class="px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300">End Listing</button>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="text-sm text-gray-600">Last Sync: {{ platform_entry.details.last_sync.strftime('%Y-%m-%d %H:%M') if platform_entry.details.last_sync else 'Never' }}</div>
+                                    {% else %}
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-medium">{% if platform_entry.name|lower == 'vr' %}Vintage & Rare{% else %}{{ platform_entry.name|title }}{% endif %}</span>
+                                            <span class="inline-flex justify-center w-24 px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-600 border border-gray-300">Not Listed</span>
+                                        </div>
+                                        <div class="flex justify-end">
+                                            {% set product_status = product.status.value|upper if product.status else '' %}
+                                            {% if product_status not in ['SOLD', 'ARCHIVED'] %}
+                                                <form action="{{ url_for('create_platform_listing_from_detail', product_id=product.id, platform_slug=platform_entry.slug) }}" method="POST" class="inline list-item-form" onsubmit="return handleListItemSubmit(this);">
+                                                    <button type="submit" class="list-item-btn px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-300">List Item</button>
+                                                </form>
+                                            {% else %}
+                                                <button disabled class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-400 cursor-not-allowed">List Item</button>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-gray-500 italic">No platform information available or platforms not configured.</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="border rounded p-4 bg-white">
+                    <h2 class="text-lg font-semibold mb-4 border-b border-gray-300 pb-3">Description</h2>
+                    {% if product.description %}
+                        <div class="border border-gray-200 rounded p-4 bg-gray-50 text-sm text-gray-700">
+                            {{ product.description|safe }}
+                        </div>
+                    {% else %}
+                        <div class="border border-gray-200 rounded p-4 bg-gray-50 text-sm text-gray-500">No description available.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+
+        </div>
+    </div>
+</div>
+
+<style>
+    .product-image {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    .clickable-image {
+        cursor: pointer;
+        transition: opacity 0.2s ease;
+    }
+    
+    .clickable-image:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* ✨ Primary image styling */
+    .primary-image {
+        border: 3px solid #fbbf24; /* Golden border */
+        box-shadow: 0 0 15px rgba(251, 191, 36, 0.4); /* Golden glow */
+        position: relative;
+    }
+    
+    .primary-image:hover {
+        border-color: #f59e0b; /* Darker gold on hover */
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);
+        transform: scale(1.08); /* Slightly bigger hover effect */
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check URL parameters for brand validation feedback
+        
+        // Add click handlers for images
+        const clickableImages = document.querySelectorAll('.clickable-image');
+        clickableImages.forEach(image => {
+            image.addEventListener('click', function() {
+                const fullUrl = this.getAttribute('data-full-url');
+                if (fullUrl) {
+                    // Open in new tab
+                    window.open(fullUrl, '_blank');
+                }
+            });
+        });
+
+        const storedImageFlash = sessionStorage.getItem('imageHealthFlash');
+        if (storedImageFlash) {
+            try {
+                const parsed = JSON.parse(storedImageFlash);
+                if (parsed && parsed.message) {
+                    displayMessage(parsed.message, parsed.type || 'info');
+                }
+            } catch (_) {
+                // ignore parsing errors
+            }
+            sessionStorage.removeItem('imageHealthFlash');
+        }
+
+        const refreshButton = document.getElementById('refresh-images-btn');
+        if (refreshButton) {
+            const checkLabel = refreshButton.dataset.checkLabel || '(Check Images)';
+            const fixLabel = refreshButton.dataset.fixLabel || 'Fix Images';
+
+            const setMode = (mode, tooltipText = '') => {
+                refreshButton.dataset.mode = mode;
+                if (mode === 'fix') {
+                    refreshButton.innerHTML = `<strong>${fixLabel}</strong>`;
+                } else {
+                    refreshButton.textContent = checkLabel;
+                }
+                refreshButton.title = tooltipText;
+            };
+
+            setMode('check');
+
+            refreshButton.addEventListener('click', async () => {
+                const mode = refreshButton.dataset.mode || 'check';
+                const targetUrl = mode === 'fix' ? refreshButton.dataset.fixUrl : refreshButton.dataset.refreshUrl;
+                if (!targetUrl) {
+                    return;
+                }
+
+                refreshButton.disabled = true;
+                if (mode === 'fix') {
+                    refreshButton.innerHTML = `<strong>${fixLabel}…</strong>`;
+                } else {
+                    refreshButton.textContent = 'Checking…';
+                }
+
+                try {
+                    const response = await fetch(targetUrl, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const data = await response.json();
+
+                    if (data.status !== 'success') {
+                        displayMessage(data.message || 'Unable to refresh images.', data.message_type || 'error');
+                        setMode('check');
+                        refreshButton.disabled = false;
+                        return;
+                    }
+
+                    if (data.message) {
+                        displayMessage(data.message, data.message_type || (data.needs_fix ? 'warning' : 'success'));
+                    }
+
+                    const summaryLines = (data.platform_results || [])
+                        .filter(res => res && res.needs_fix && !res.error && res.available)
+                        .map(res => `${res.platform.charAt(0).toUpperCase() + res.platform.slice(1)}: ${res.platform_count}/${res.canonical_count}`);
+
+                    if (data.needs_fix) {
+                        const tooltip = summaryLines.length ? `Needs sync – ${summaryLines.join(', ')}` : 'Needs sync';
+                        setMode('fix', tooltip);
+                    } else {
+                        const tooltip = summaryLines.length ? summaryLines.join(', ') : 'Images are in sync';
+                        setMode('check', tooltip);
+                    }
+
+                    if (data.canonical_updated && (mode === 'fix' || !data.needs_fix)) {
+                        if (data.message) {
+                            sessionStorage.setItem('imageHealthFlash', JSON.stringify({
+                                message: data.message,
+                                type: data.message_type || 'info'
+                            }));
+                        }
+                        window.location.reload();
+                        return;
+                    }
+
+                    refreshButton.disabled = false;
+                } catch (error) {
+                    console.error('Failed to refresh platform images', error);
+                    displayMessage('Unable to refresh images at this time.', 'error');
+                    setMode('check');
+                    refreshButton.disabled = false;
+                }
+            });
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const message = urlParams.get('message');
+        const messageType = urlParams.get('message_type');
+        const fallbackUrl = urlParams.get('fallback_url');
+        
+        // Display message if present
+        if (message) {
+            displayMessage(message, messageType);
+        }
+        
+        // Handle fallback brand confirmation
+        if (fallbackUrl && messageType === 'warning') {
+            // Show confirmation dialog for brand fallback
+            const confirmed = confirm(
+                `${message}\n\n` +
+                `Click OK to proceed with 'Justin' as the brand, or Cancel to go back.`
+            );
+            
+            if (confirmed) {
+                // User confirmed - redirect to fallback URL
+                window.location.href = fallbackUrl;
+            } else {
+                // User cancelled - clear the URL parameters to remove the message
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+        
+        function displayMessage(message, type) {
+            const containerId = 'image-health-toast-container';
+            let container = document.getElementById(containerId);
+            if (!container) {
+                container = document.createElement('div');
+                container.id = containerId;
+                container.style.position = 'fixed';
+                container.style.bottom = '1.5rem';
+                container.style.right = '1.5rem';
+                container.style.zIndex = '9999';
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column';
+                container.style.gap = '0.75rem';
+                document.body.appendChild(container);
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'rounded-md border px-4 py-3 text-sm shadow-lg flex items-start gap-3 max-w-md bg-white';
+
+            let toneClasses = 'border-blue-200 text-blue-800 bg-blue-50';
+            if (type === 'error') {
+                toneClasses = 'border-red-200 text-red-800 bg-red-50';
+            } else if (type === 'warning') {
+                toneClasses = 'border-yellow-200 text-yellow-800 bg-yellow-50';
+            } else if (type === 'success') {
+                toneClasses = 'border-green-200 text-green-800 bg-green-50';
+            }
+            messageDiv.className += ` ${toneClasses}`;
+
+            messageDiv.innerHTML = `
+                <span class="flex-1 leading-snug">${message.replace(/\+/g, ' ')}</span>
+                <button class="text-xl leading-none" aria-label="Dismiss" style="color: inherit;">&times;</button>
+            `;
+
+            const closeBtn = messageDiv.querySelector('button');
+            closeBtn.addEventListener('click', () => {
+                messageDiv.remove();
+                if (!container.hasChildNodes()) {
+                    container.remove();
+                }
+            });
+
+            container.appendChild(messageDiv);
+
+            if (type !== 'error') {
+                setTimeout(() => {
+                    if (messageDiv.parentElement) {
+                        messageDiv.remove();
+                    }
+                    if (!container.hasChildNodes()) {
+                        container.remove();
+                    }
+                }, 5000);
+            }
+        }
+
+        // Alias showMessage to displayMessage
+        function showMessage(type, message) {
+            displayMessage(message, type);
+        }
+
+        // Make endListing globally accessible
+        window.endListing = async function(platform, externalId, productId) {
+            let action = 'end';  // default action
+
+            // For V&R, offer choice between end and delete
+            if (platform === 'vr') {
+                const vrAction = confirm(
+                    'For Vintage & Rare listings, you can either:\n\n' +
+                    'Click OK to END the listing (mark as sold)\n' +
+                    'Click Cancel to DELETE the listing permanently\n\n' +
+                    'Which would you like to do?'
+                );
+                action = vrAction ? 'end' : 'delete';
+
+                // Confirm the chosen action
+                const confirmMessage = action === 'end'
+                    ? 'Are you sure you want to END this V&R listing (mark as sold)?'
+                    : 'Are you sure you want to DELETE this V&R listing permanently?';
+
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+            } else {
+                // For other platforms, just confirm ending
+                if (!confirm(`Are you sure you want to end this ${platform} listing?`)) {
+                    return;
+                }
+            }
+
+            showMessage('info', `${action === 'delete' ? 'Deleting' : 'Ending'} ${platform} listing...`);
+
+            try {
+                let endpoint;
+                let method = 'POST';
+                let body = {};
+
+                // Platform-specific endpoints
+                switch(platform) {
+                    case 'reverb':
+                        endpoint = `/api/reverb/listings/${externalId}/end`;
+                        body = { reason: 'not_sold' };
+                        break;
+                    case 'ebay':
+                        endpoint = `/api/ebay/listings/${externalId}/end`;
+                        body = { reason: 'NotAvailable' };
+                        break;
+                    case 'shopify':
+                        endpoint = `/api/shopify/products/${externalId}/archive`;
+                        break;
+                    case 'vr':
+                        // For V&R, we need to handle end vs delete differently
+                        if (action === 'delete') {
+                            endpoint = `/api/vr/listings/${externalId}/delete`;
+                        } else {
+                            endpoint = `/api/vr/listings/${externalId}/end`;
+                        }
+                        break;
+                    default:
+                        throw new Error(`Unsupported platform: ${platform}`);
+                }
+
+                const response = await fetch(endpoint, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error || `Failed to ${action} ${platform} listing`);
+                }
+
+                showMessage('success', `Successfully ${action === 'delete' ? 'deleted' : 'ended'} ${platform} listing`);
+
+                // Reload page after 2 seconds to show updated status
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+
+            } catch (error) {
+                console.error(`Error ${action}ing listing:`, error);
+                showMessage('error', `Failed to ${action} listing: ${error.message}`);
+            }
+        }
+
+        // Make endAllListings globally accessible
+        window.endAllListings = async function() {
+            // Get all active platforms
+            const activePlatforms = [];
+            const platformElements = document.querySelectorAll('[data-platform-active="true"]');
+
+            platformElements.forEach(elem => {
+                const platform = elem.getAttribute('data-platform');
+                const externalId = elem.getAttribute('data-external-id');
+                if (platform && externalId) {
+                    activePlatforms.push({ platform, externalId });
+                }
+            });
+
+            if (activePlatforms.length === 0) {
+                showMessage('warning', 'No active listings to end');
+                return;
+            }
+
+            // Check if V&R is among the platforms
+            const hasVR = activePlatforms.some(p => p.platform === 'vr');
+            let vrAction = 'end';
+
+            if (hasVR) {
+                const vrChoice = confirm(
+                    'You have a Vintage & Rare listing. Would you like to:\n\n' +
+                    'Click OK to END all listings (mark as sold)\n' +
+                    'Click Cancel to DELETE the V&R listing (and end others)\n\n' +
+                    'Which would you like to do?'
+                );
+                vrAction = vrChoice ? 'end' : 'delete';
+            }
+
+            // Build confirmation message
+            let confirmMessage = `Are you sure you want to end listings on the following platforms?\n\n`;
+            activePlatforms.forEach(p => {
+                if (p.platform === 'vr' && vrAction === 'delete') {
+                    confirmMessage += `• ${p.platform.toUpperCase()}: DELETE permanently\n`;
+                } else {
+                    confirmMessage += `• ${p.platform.toUpperCase()}: End listing\n`;
+                }
+            });
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            showMessage('info', 'Processing end requests for all platforms...');
+
+            // Process each platform
+            const productId = {{ product.id }};
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const { platform, externalId } of activePlatforms) {
+                try {
+                    const action = (platform === 'vr' && vrAction === 'delete') ? 'delete' : 'end';
+                    let endpoint;
+                    let method = 'POST';
+                    let body = {};
+
+                    // Platform-specific endpoints
+                    switch(platform) {
+                        case 'reverb':
+                            endpoint = `/api/reverb/listings/${externalId}/end`;
+                            body = { reason: 'not_sold' };
+                            break;
+                        case 'ebay':
+                            endpoint = `/api/ebay/listings/${externalId}/end`;
+                            body = { reason: 'NotAvailable' };
+                            break;
+                        case 'shopify':
+                            endpoint = `/api/shopify/products/${externalId}/archive`;
+                            break;
+                        case 'vr':
+                            // For V&R, we need to handle end vs delete differently
+                            if (action === 'delete') {
+                                endpoint = `/api/vr/listings/${externalId}/delete`;
+                            } else {
+                                endpoint = `/api/vr/listings/${externalId}/end`;
+                            }
+                            break;
+                        default:
+                            console.error(`Unsupported platform: ${platform}`);
+                            errorCount++;
+                            continue;
+                    }
+
+                    const response = await fetch(endpoint, {
+                        method: method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(body)
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                        const errorText = await response.text();
+                        console.error(`Failed to ${action} ${platform} listing:`, errorText);
+                    }
+                } catch (error) {
+                    console.error(`Error ending ${platform} listing:`, error);
+                    errorCount++;
+                }
+            }
+
+            if (successCount > 0 && errorCount === 0) {
+                showMessage('success', `Successfully ended all ${successCount} listings`);
+            } else if (successCount > 0 && errorCount > 0) {
+                showMessage('warning', `Ended ${successCount} listings, but ${errorCount} failed`);
+            } else {
+                showMessage('error', `Failed to end listings`);
+            }
+
+            // Reload page after 2 seconds
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        }
+
+        // Make relistAllListings globally accessible
+        window.relistAllListings = async function() {
+            const productId = {{ product.id }};
+
+            if (!confirm('Are you sure you want to relist this product on all platforms?\n\nThis will:\n• Reverb: Publish ended listing\n• eBay: Relist (creates new Item ID)\n• Shopify: Set to ACTIVE with inventory=1\n• V&R: Restore from sold')) {
+                return;
+            }
+
+            showMessage('info', 'Processing relist request for all platforms...');
+
+            try {
+                const response = await fetch(`/inventory/product/${productId}/relist`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showMessage('success', data.message);
+                } else if (data.status === 'partial') {
+                    showMessage('warning', data.message);
+                    // Show details of what failed
+                    const failed = data.platform_results.filter(r => !r.success);
+                    if (failed.length > 0) {
+                        console.log('Failed platforms:', failed);
+                    }
+                } else {
+                    showMessage('error', data.message || 'Relist failed');
+                }
+
+                // Reload page after 2 seconds
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } catch (error) {
+                console.error('Error relisting:', error);
+                showMessage('error', 'An error occurred while relisting');
+            }
+        }
+
+        // Flow 3: Stale Listing Refresh (Paid Feature)
+        window.refreshStaleListing = async function() {
+            const productId = {{ product.id }};
+            const listingAge = {{ listing_age_months or 0 }};
+
+            if (!confirm(`Are you sure you want to REFRESH this stale listing?\n\nThis listing is ${listingAge} months old.\n\nThis will:\n• END old listings on Reverb, eBay, V&R\n• CREATE brand NEW listings (new IDs)\n• Shopify kept unchanged (SEO)\n\n⚠️ This is different from Relist - all platform IDs will change!`)) {
+                return;
+            }
+
+            showMessage('info', 'Processing stale listing refresh...');
+
+            try {
+                const response = await fetch(`/inventory/product/${productId}/refresh`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showMessage('success', data.message);
+                } else if (data.status === 'partial') {
+                    showMessage('warning', data.message);
+                    const failed = data.platform_results.filter(r => !r.success && !r.skipped);
+                    if (failed.length > 0) {
+                        console.log('Failed platforms:', failed);
+                    }
+                } else {
+                    showMessage('error', data.message || 'Refresh failed');
+                }
+
+                // Reload page after 2 seconds
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } catch (error) {
+                console.error('Error refreshing stale listing:', error);
+                showMessage('error', 'An error occurred while refreshing');
+            }
+        }
+    });
+
+    // Prevent double-click on List Item buttons
+    function handleListItemSubmit(form) {
+        const btn = form.querySelector('.list-item-btn');
+        if (btn.disabled) {
+            return false; // Already submitted, block
+        }
+        // Disable button and show loading state
+        btn.disabled = true;
+        btn.textContent = 'Listing...';
+        btn.classList.remove('bg-blue-100', 'text-blue-700', 'hover:bg-blue-200');
+        btn.classList.add('bg-gray-200', 'text-gray-500', 'cursor-wait');
+        return true; // Allow form submission
+    }
+</script>
+
+{% endblock %}

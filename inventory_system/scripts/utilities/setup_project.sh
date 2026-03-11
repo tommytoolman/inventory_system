@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# 01 Project structure instructions. Sets up skeleton structure of project.
+
+# Create base project directory
+mkdir -p inventory_system
+cd inventory_system
+
+# Create main application structure
+mkdir -p {app,tests,docs,migrations,scripts}
+
+# Create app subdirectories
+cd app
+mkdir -p {templates,static,models,routes,services,utils}
+
+# Create platform-specific service directories
+cd services
+mkdir -p {ebay,reverb,vintageandrare,website_api}
+
+# Create specific directories for each platform
+for platform in ebay reverb vintageandrare website_api; do
+    cd $platform
+    touch __init__.py
+    touch client.py
+    touch schemas.py
+    touch sync.py
+    cd ..
+done
+
+# Create static assets structure
+cd ../static
+mkdir -p {css,js,images}
+
+# Create documentation structure
+cd ../../docs
+mkdir -p {api,deployment,user_guide}
+
+# Create initial files
+cd ..
+touch requirements.txt
+touch README.md
+touch .env.example
+touch .gitignore
+
+# Create main application files
+cd app
+touch __init__.py
+touch config.py
+touch database.py
+touch main.py
+
+echo "Project structure created successfully!"

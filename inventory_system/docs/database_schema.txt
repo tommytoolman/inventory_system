@@ -1,0 +1,284 @@
+# Database Schema Analysis
+
+## Tables Overview
+
+### alembic_version
+
+Columns:
+- version_num (VARCHAR(32)) NOT NULL
+
+Primary Keys:
+- version_num
+
+### reverb_listings
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('reverb_listings_id_seq'::regclass)
+- platform_id (INTEGER) NULL
+- reverb_category_uuid (VARCHAR) NULL
+- condition_rating (DOUBLE PRECISION) NULL
+- shipping_profile_id (VARCHAR) NULL
+- shop_policies_id (VARCHAR) NULL
+- handmade (BOOLEAN) NULL
+- offers_enabled (BOOLEAN) NULL
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- platform_id → platform_common(id)
+
+### vr_listings
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('vr_listings_id_seq'::regclass)
+- platform_id (INTEGER) NULL
+- in_collective (BOOLEAN) NULL
+- in_inventory (BOOLEAN) NULL
+- in_reseller (BOOLEAN) NULL
+- collective_discount (DOUBLE PRECISION) NULL
+- price_notax (DOUBLE PRECISION) NULL
+- show_vat (BOOLEAN) NULL
+- processing_time (INTEGER) NULL
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- platform_id → platform_common(id)
+
+### website_listings
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('website_listings_id_seq'::regclass)
+- platform_id (INTEGER) NULL
+- seo_title (VARCHAR) NULL
+- seo_description (VARCHAR) NULL
+- seo_keywords (JSONB) NULL
+- featured (BOOLEAN) NULL
+- custom_layout (VARCHAR) NULL
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- platform_id → platform_common(id)
+
+### csv_import_logs
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('csv_import_logs_id_seq'::regclass)
+- timestamp (TIMESTAMP) NULL
+- filename (VARCHAR) NULL
+- platform (VARCHAR) NULL
+- total_rows (INTEGER) NULL
+- successful_rows (INTEGER) NULL
+- failed_rows (INTEGER) NULL
+- error_log (JSONB) NULL
+
+Primary Keys:
+- id
+
+### ebay_listings
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('ebay_listings_id_seq'::regclass)
+- platform_id (INTEGER) NULL
+- ebay_item_id (VARCHAR) NULL
+- ebay_category_id (VARCHAR) NULL
+- ebay_second_category_id (VARCHAR) NULL
+- format (VARCHAR) NOT NULL DEFAULT 'Buy it Now'::character varying
+- price (NUMERIC) NOT NULL
+- quantity (INTEGER) NOT NULL DEFAULT 1
+- payment_policy_id (VARCHAR) NULL
+- return_policy_id (VARCHAR) NULL
+- shipping_policy_id (VARCHAR) NULL
+- item_specifics (JSONB) NULL DEFAULT '{}'::jsonb
+- package_weight (NUMERIC) NULL
+- package_dimensions (JSONB) NULL
+- listing_duration (VARCHAR) NULL
+- allow_offers (BOOLEAN) NULL DEFAULT false
+- min_offer_amount (NUMERIC) NULL
+- listing_status (VARCHAR) NULL DEFAULT 'draft'::character varying
+- created_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
+- updated_at (TIMESTAMP) NULL DEFAULT CURRENT_TIMESTAMP
+- last_synced_at (TIMESTAMP) NULL
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- platform_id → platform_common(id)
+
+### products
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('products_id_seq'::regclass)
+- created_at (TIMESTAMP) NULL
+- updated_at (TIMESTAMP) NULL
+- year (INTEGER) NULL
+- decade (INTEGER) NULL
+- finish (VARCHAR) NULL
+- description (VARCHAR) NULL
+- price (DOUBLE PRECISION) NULL
+- price_notax (DOUBLE PRECISION) NULL
+- collective_discount (DOUBLE PRECISION) NULL
+- offer_discount (DOUBLE PRECISION) NULL
+- is_sold (BOOLEAN) NULL
+- in_collective (BOOLEAN) NULL
+- in_inventory (BOOLEAN) NULL
+- in_reseller (BOOLEAN) NULL
+- free_shipping (BOOLEAN) NULL
+- buy_now (BOOLEAN) NULL
+- show_vat (BOOLEAN) NULL
+- local_pickup (BOOLEAN) NULL
+- available_for_shipment (BOOLEAN) NULL
+- image_url (VARCHAR) NULL
+- video_url (VARCHAR) NULL
+- external_link (VARCHAR) NULL
+- processing_time (INTEGER) NULL
+- platform_data (JSONB) NULL
+- sku (VARCHAR) NULL
+- brand (VARCHAR) NULL
+- model (VARCHAR) NULL
+- category (VARCHAR) NULL
+- condition (VARCHAR) NULL
+- base_price (DOUBLE PRECISION) NULL
+- cost_price (DOUBLE PRECISION) NULL
+- status (VARCHAR(8)) NULL
+- primary_image (VARCHAR) NULL
+- additional_images (JSONB) NULL
+
+Primary Keys:
+- id
+
+### platform_common
+
+Columns:
+- id (INTEGER) NOT NULL DEFAULT nextval('platform_common_id_seq'::regclass)
+- created_at (TIMESTAMP) NULL
+- updated_at (TIMESTAMP) NULL
+- product_id (INTEGER) NULL
+- platform_name (VARCHAR) NULL
+- external_id (VARCHAR) NULL
+- status (VARCHAR) NULL
+- last_sync (TIMESTAMP) NULL
+- sync_status (VARCHAR) NULL
+- listing_url (VARCHAR) NULL
+- platform_specific_data (JSONB) NULL DEFAULT '{}'::jsonb
+
+Primary Keys:
+- id
+
+Foreign Keys:
+- product_id → products(id)
+
+## Potential Column Duplications
+
+- id appears in:
+  - reverb_listings
+  - vr_listings
+  - website_listings
+  - csv_import_logs
+  - ebay_listings
+  - products
+  - platform_common
+
+- platform_id appears in:
+  - reverb_listings
+  - vr_listings
+  - website_listings
+  - ebay_listings
+
+- reverb_category_uuid appears in:
+  - reverb_listings
+
+- condition_rating appears in:
+  - reverb_listings
+
+- shipping_profile_id appears in:
+  - reverb_listings
+
+- shop_policies_id appears in:
+  - reverb_listings
+
+- price_notax appears in:
+  - vr_listings
+  - products
+
+- seo_description appears in:
+  - website_listings
+
+- platform appears in:
+  - csv_import_logs
+
+- ebay_item_id appears in:
+  - ebay_listings
+
+- ebay_category_id appears in:
+  - ebay_listings
+
+- ebay_second_category_id appears in:
+  - ebay_listings
+
+- price appears in:
+  - ebay_listings
+  - products
+
+- payment_policy_id appears in:
+  - ebay_listings
+
+- return_policy_id appears in:
+  - ebay_listings
+
+- shipping_policy_id appears in:
+  - ebay_listings
+
+- listing_status appears in:
+  - ebay_listings
+
+- last_synced_at appears in:
+  - ebay_listings
+
+- description appears in:
+  - products
+
+- video_url appears in:
+  - products
+
+- platform_data appears in:
+  - products
+
+- category appears in:
+  - products
+
+- condition appears in:
+  - products
+
+- base_price appears in:
+  - products
+
+- cost_price appears in:
+  - products
+
+- status appears in:
+  - products
+  - platform_common
+
+- product_id appears in:
+  - platform_common
+
+- platform_name appears in:
+  - platform_common
+
+- external_id appears in:
+  - platform_common
+
+- last_sync appears in:
+  - platform_common
+
+- sync_status appears in:
+  - platform_common
+
+- platform_specific_data appears in:
+  - platform_common

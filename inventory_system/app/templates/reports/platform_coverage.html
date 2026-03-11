@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Platform Coverage Report{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-4">Platform Coverage Report</h1>
+    <p class="text-gray-600 mb-6">
+        Active products listed on some platforms but missing from others. Identify opportunities to maximize sales reach.
+    </p>
+    
+    <table class="table-auto w-full bg-white shadow rounded-lg text-sm">
+        <thead>
+            <tr class="bg-gray-100 text-left">
+                <th class="px-4 py-2">
+                    <a href="/reports/platform-coverage?sort_by=sku&sort_order={% if sort_by == 'sku' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
+                       class="flex items-center hover:text-blue-600">
+                        SKU
+                        {% if sort_by == 'sku' %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
+                        {% endif %}
+                    </a>
+                </th>
+                <th class="px-4 py-2">
+                    <a href="/reports/platform-coverage?sort_by=brand&sort_order={% if sort_by == 'brand' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
+                       class="flex items-center hover:text-blue-600">
+                        Brand
+                        {% if sort_by == 'brand' %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
+                        {% endif %}
+                    </a>
+                </th>
+                <th class="px-4 py-2">
+                    <a href="/reports/platform-coverage?sort_by=model&sort_order={% if sort_by == 'model' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
+                       class="flex items-center hover:text-blue-600">
+                        Model
+                        {% if sort_by == 'model' %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
+                        {% endif %}
+                    </a>
+                </th>
+                <th class="px-4 py-2">
+                    <a href="/reports/platform-coverage?sort_by=base_price&sort_order={% if sort_by == 'base_price' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
+                       class="flex items-center hover:text-blue-600">
+                        Price
+                        {% if sort_by == 'base_price' %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
+                        {% endif %}
+                    </a>
+                </th>
+                <th class="px-4 py-2">Listed On</th>
+                <th class="px-4 py-2">
+                    <a href="/reports/platform-coverage?sort_by=missing_count&sort_order={% if sort_by == 'missing_count' and sort_order == 'asc' %}desc{% else %}asc{% endif %}"
+                       class="flex items-center hover:text-blue-600">
+                        Missing Platforms
+                        {% if sort_by == 'missing_count' %}
+                            <span class="ml-1">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>
+                        {% endif %}
+                    </a>
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for product in coverage_data %}
+            <tr class="border-t">
+                <td class="px-4 py-2 text-xs">
+                    <a href="{{ url_for('product_detail', product_id=product.product_id) }}" class="text-blue-600 hover:text-blue-800 underline">
+                        {{ product.sku }}
+                    </a>
+                </td>
+                <td class="px-4 py-2 text-xs">{{ product.brand }}</td>
+                <td class="px-4 py-2 text-xs">{{ product.model }}</td>
+                <td class="px-4 py-2 text-xs font-medium">£{{ "{:,.0f}".format(product.base_price if product.base_price else 0) }}</td>
+                <td class="px-4 py-2 text-xs">{{ product.platforms | join(", ") }}</td>
+                <td class="px-4 py-2 text-xs">{{ product.missing_platforms | join(", ") }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,81 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+*.cover
+*.log
+.pytest_cache/
+htmlcov/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+# Project specific
+*.db
+*.sqlite
+*.sqlite3
+logs/
+cache/
+downloads/
+temp/
+tmp/
+old/
+backup/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+docs/
+*.md
+LICENSE
+
+# Tests
+tests/
+test/
+testing/
+
+# Environment files (IMPORTANT - don't ship secrets!)
+.env
+.env.*
+!.env.example
+
+# Railway
+railway.json
+.railway/

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}RIFF - Sync Errors{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Sync Error Log</h1>
+            <p class="text-sm text-gray-500 mt-1">All platform sync/upload errors captured automatically</p>
+        </div>
+        {% if unresolved_count > 0 %}
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-700">
+            {{ unresolved_count }} unresolved
+        </span>
+        {% else %}
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
+            All clear
+        </span>
+        {% endif %}
+    </div>
+
+    <!-- Filters -->
+    <form method="get" class="flex flex-wrap gap-3 mb-6 bg-white rounded-lg shadow p-4">
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Platform</label>
+            <select name="platform" class="text-sm border-gray-300 rounded px-2 py-1">
+                <option value="">All</option>
+                {% for p in ["reverb", "ebay", "shopify", "vr", "woocommerce"] %}
+                <option value="{{ p }}" {% if filter_platform == p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Status</label>
+            <select name="resolved" class="text-sm border-gray-300 rounded px-2 py-1">
+                <option value="">All</option>
+                <option value="false" {% if filter_resolved == "false" %}selected{% endif %}>Unresolved</option>
+                <option value="true" {% if filter_resolved == "true" %}selected{% endif %}>Resolved</option>
+            </select>
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="text-sm bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-800">Filter</button>
+            <a href="/errors/sync" class="text-sm text-gray-500 ml-2 underline self-center">Reset</a>
+        </div>
+    </form>
+
+    <!-- Error Table -->
+    {% if errors %}
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Operation</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Error</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">When</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for err in errors %}
+                <tr class="hover:bg-gray-50 {% if not err.resolved %}bg-red-50{% endif %}">
+                    <td class="px-4 py-3 font-mono text-xs text-gray-500">
+                        <a href="/errors/sync/{{ err.id }}" class="text-blue-600 hover:underline">#{{ err.id }}</a>
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-0.5 rounded text-xs font-medium
+                            {% if err.platform == 'reverb' %}bg-orange-100 text-orange-700
+                            {% elif err.platform == 'ebay' %}bg-blue-100 text-blue-700
+                            {% elif err.platform == 'shopify' %}bg-green-100 text-green-700
+                            {% elif err.platform == 'vr' %}bg-purple-100 text-purple-700
+                            {% elif err.platform == 'woocommerce' %}bg-indigo-100 text-indigo-700
+                            {% else %}bg-gray-100 text-gray-700{% endif %}">
+                            {{ err.platform }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600">{{ err.operation }}</td>
+                    <td class="px-4 py-3 max-w-xs">
+                        <div class="text-xs text-red-600 font-medium">{{ err.error_type }}</div>
+                        <div class="text-gray-500 truncate" title="{{ err.error_message }}">{{ err.error_message[:80] }}{% if err.error_message|length > 80 %}…{% endif %}</div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-500">
+                        {% if err.product_id %}
+                        <a href="/inventory/product/{{ err.product_id }}" class="text-blue-600 hover:underline text-xs">#{{ err.product_id }}</a>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                        {{ err.created_at.strftime("%d/%m %H:%M") if err.created_at else "—" }}
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if err.resolved %}
+                        <span class="text-xs text-green-600">Resolved</span>
+                        {% else %}
+                        <span class="text-xs text-red-600 font-medium">Open</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow p-12 text-center text-gray-400">
+        <div class="text-4xl mb-3">✅</div>
+        <p class="text-lg font-medium">No errors found</p>
+        <p class="text-sm mt-1">All sync operations are running cleanly.</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

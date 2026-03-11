@@ -1,0 +1,22 @@
+4. Additional Documentation Structure
+docs/
+api/
+
+architecture.md: System architecture overview
+endpoints.md: API endpoint documentation
+models.md: Data model documentation
+platform_integration.md: Platform-specific API details
+
+deployment/
+
+setup.md: Initial setup guide
+configuration.md: Configuration options
+backup.md: Backup procedures
+monitoring.md: Monitoring setup
+
+user_guide/
+
+getting_started.md: Basic usage guide
+inventory_management.md: Stock management procedures
+troubleshooting.md: Common issues and solutions
+faq.md: Frequently asked questions

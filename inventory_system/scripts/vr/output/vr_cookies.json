@@ -1,0 +1,120 @@
+[
+  {
+    "domain": ".vintageandrare.com",
+    "expiry": 1764197509,
+    "httpOnly": false,
+    "name": "__utmb",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "58751146.2.10.1764195704"
+  },
+  {
+    "domain": ".vintageandrare.com",
+    "expiry": 1798755709,
+    "httpOnly": false,
+    "name": "_ga",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "GA1.1.535704338.1764195704"
+  },
+  {
+    "domain": ".vintageandrare.com",
+    "expiry": 1779963709,
+    "httpOnly": false,
+    "name": "__utmz",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "58751146.1764195704.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none)"
+  },
+  {
+    "domain": ".vintageandrare.com",
+    "httpOnly": false,
+    "name": "__utmc",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "58751146"
+  },
+  {
+    "domain": ".vintageandrare.com",
+    "expiry": 1798755709,
+    "httpOnly": false,
+    "name": "__utma",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "58751146.941628246.1764195704.1764195704.1764195704.1"
+  },
+  {
+    "domain": ".vintageandrare.com",
+    "expiry": 1764196304,
+    "httpOnly": false,
+    "name": "__utmt",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": "www.vintageandrare.com",
+    "expiry": 1764800502,
+    "httpOnly": false,
+    "name": "vr_currency",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "O%3A8%3A%22stdClass%22%3A6%3A%7Bs%3A11%3A%22currency_id%22%3Bs%3A1%3A%221%22%3Bs%3A12%3A%22country_name%22%3Bs%3A2%3A%22UK%22%3Bs%3A4%3A%22name%22%3Bs%3A22%3A%22British%20Pound%20Sterling%22%3Bs%3A12%3A%22abbreviation%22%3Bs%3A3%3A%22GBP%22%3Bs%3A8%3A%22priority%22%3Bs%3A1%3A%221%22%3Bs%3A11%3A%22per_hundred%22%3Bs%3A1%3A%220%22%3B%7D"
+  },
+  {
+    "domain": "www.vintageandrare.com",
+    "expiry": 1769552509,
+    "httpOnly": false,
+    "name": "cookie_consent_level",
+    "path": "/",
+    "sameSite": "Strict",
+    "secure": false,
+    "value": "%7B%22strictly-necessary%22%3Atrue%2C%22functionality%22%3Afalse%2C%22tracking%22%3Afalse%2C%22targeting%22%3Afalse%7D"
+  },
+  {
+    "domain": ".vintageandrare.com",
+    "expiry": 1798755709,
+    "httpOnly": false,
+    "name": "_ga_9VCSSY2PJY",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "GS2.1.s1764195704$o1$g1$t1764195709$j55$l0$h0"
+  },
+  {
+    "domain": ".vintageandrare.com",
+    "expiry": 1771971709,
+    "httpOnly": false,
+    "name": "_fbp",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "fb.1.1764195705174.65202980440715094"
+  },
+  {
+    "domain": ".vintageandrare.com",
+    "expiry": 1795731704,
+    "httpOnly": true,
+    "name": "cf_clearance",
+    "path": "/",
+    "sameSite": "None",
+    "secure": true,
+    "value": "CMEdAjuk4xtRlMFKG_gT2a3EZyJxJt8Y06t0n9Viu.c-1764195704-1.2.1.1-egFEydtde8ZnD_mSoqsAI5EOeVrGVtaTKD7fqJ7ucJKSdIHVqcfr0OYhqUw8hC9HyZIVkGokjqDy_NBWGpbFNpYBBJ4k3zJPL0H8U2mGBW.OFTc.aFaj72NA8mOj68BkvRpQDN9rEHyI5oafTqwbNCZU79FtB8h5lP9rSyXtySxY2S3NSoi75jNIE.oS1U9kBzgKisxsmXztQVszmX2tIt5twfqNxqIt1ixkurQ5ve36HOtnoH5mn.WogqvN7Hfr"
+  },
+  {
+    "domain": "www.vintageandrare.com",
+    "httpOnly": false,
+    "name": "PHPSESSID",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "f4h856qflhvrcqslouctkkv742"
+  }
+]

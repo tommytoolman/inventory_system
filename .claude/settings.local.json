@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(xargs wc:*)",
+      "Bash(for dir in unit integration test_routes)",
+      "Read(//c/Users/harry/Documents/ActionSmartAI/RIFF/WooCommerce-Integration/**)",
+      "Bash(done)",
+      "Bash(mkdir:*)",
+      "Bash(npm test:*)",
+      "Bash(cp -r \"C:/Users/harry/Documents/ActionSmartAI/RIFF/WooCommerce-Integration\" \"C:/Users/harry/Documents/ActionSmartAI/RIFF/backup-with-woo-commerce-integration-v1-2026-03-11T10-02-52\")",
+      "Bash(find \"C:\\\\Users\\\\harry\\\\Documents\\\\ActionSmartAI\\\\RIFF\\\\WooCommerce-Integration\\\\inventory_system\" -name \"*.html\" 2>/dev/null | head -20)",
+      "Bash(cd \"C:\\\\Users\\\\harry\\\\Documents\\\\ActionSmartAI\\\\RIFF\\\\WooCommerce-Integration\\\\inventory_system\" && source venv/bin/activate && alembic heads 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\harry\\\\Documents\\\\ActionSmartAI\\\\RIFF\\\\WooCommerce-Integration\\\\inventory_system\" && python -c \"import sys; sys.path.insert\\(0, '.'\\); from app.database import async_session\" 2>&1 | head -20)",
+      "Bash(pip list:*)",
+      "Bash(echo \"DATABASE_URL=${DATABASE_URL:-NOT_SET}\" | head -c 100)",
+      "Bash(find \"C:/Users/harry/Documents/ActionSmartAI/RIFF/WooCommerce-Integration\" -name \".env*\" -o -name \"*.env\" -o -name \"secrets*\" 2>/dev/null | grep -v \".claude\" | grep -v \"__pycache__\")"
+    ]
+  }
+}

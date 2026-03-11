@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Page Not Found{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full px-6 py-8">
+        <div class="text-center">
+            <h1 class="text-9xl font-bold text-gray-200">500</h1>
+            <p class="mt-4 text-xl text-gray-600">Internal server error</p>
+            <p class="mt-2 text-gray-500">There has been an internal server error. Ask your awesome dev to check the logs.</p>
+            <div class="mt-6">
+                <a href="/" class="text-blue-500 hover:text-blue-600 font-medium">
+                    Go back home
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

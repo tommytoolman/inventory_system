@@ -1,0 +1,171 @@
+{
+  "last_updated": "2025-12-04",
+  "categories": {
+    "29946": {
+      "name": "Microphones",
+      "required_aspects": {
+        "Form Factor": {
+          "field_name": "form_factor",
+          "options": [
+            "Channel Strip",
+            "Condenser Microphone",
+            "Desktop Microphone",
+            "Direct/DI Box",
+            "Dynamic Microphone",
+            "Earset Microphone",
+            "Gooseneck",
+            "Handheld/Stand-Held",
+            "Hanging Microphone",
+            "Headset",
+            "Lavalier/Lapel",
+            "Lectern Microphone",
+            "Microphone Preamp",
+            "Microphone Receiver",
+            "Modular Microphone System",
+            "Ribbon Microphone",
+            "Shotgun Microphone",
+            "Tabletop",
+            "Wireless System"
+          ]
+        }
+      }
+    },
+    "38072": {
+      "name": "Guitar Amplifiers",
+      "required_aspects": {
+        "Amplifier Type": {
+          "field_name": "amplifier_type",
+          "options": [
+            "Cabinet",
+            "Combo",
+            "Head",
+            "Stack"
+          ]
+        }
+      }
+    },
+    "4713": {
+      "name": "Bass Guitars",
+      "required_aspects": {
+        "Type": {
+          "field_name": "bass_type",
+          "options": [
+            "Acoustic Bass Guitar",
+            "Electric Bass Guitar",
+            "Electro-Acoustic Bass Guitar"
+          ]
+        }
+      }
+    },
+    "38071": {
+      "name": "Synthesizers",
+      "required_aspects": {
+        "Type": {
+          "field_name": "synth_type",
+          "options": [
+            "Desktop Synthesizer",
+            "Handheld Synthesizer",
+            "Keyboard Synthesizer",
+            "Keytar Synthesizer",
+            "Modular Synthesizer",
+            "Rackmount Synthesizer"
+          ]
+        }
+      }
+    },
+    "38088": {
+      "name": "Electronic Keyboards",
+      "required_aspects": {
+        "Type": {
+          "field_name": "keyboard_type",
+          "options": [
+            "Arranger Keyboard",
+            "Digital Piano",
+            "Organ",
+            "Portable Keyboard",
+            "Synthesizer Keyboard",
+            "Workstation Keyboard"
+          ]
+        }
+      }
+    },
+    "85860": {
+      "name": "Digital Pianos",
+      "required_aspects": {
+        "Type": {
+          "field_name": "piano_type",
+          "options": [
+            "Console Digital Piano",
+            "Grand Digital Piano",
+            "Portable Digital Piano",
+            "Stage Piano",
+            "Upright Digital Piano"
+          ]
+        },
+        "Keys": {
+          "field_name": "piano_keys",
+          "options": [
+            "25",
+            "44",
+            "61",
+            "76",
+            "88",
+            "Other"
+          ]
+        }
+      }
+    },
+    "14985": {
+      "name": "Headphones",
+      "required_aspects": {
+        "Connectivity": {
+          "field_name": "headphones_connectivity",
+          "options": [
+            "Bluetooth",
+            "USB",
+            "Wired",
+            "Wireless"
+          ]
+        },
+        "Earpiece Design": {
+          "field_name": "headphones_earpiece",
+          "options": [
+            "Ear-Pad (On the Ear)",
+            "Earbud (In Ear)",
+            "Headband",
+            "Over-Ear"
+          ]
+        },
+        "Form Factor": {
+          "field_name": "headphones_form_factor",
+          "options": [
+            "Ear-hook",
+            "Earbud (In Ear)",
+            "Headband",
+            "In-Ear only",
+            "Neckband",
+            "On-Ear",
+            "Over-Ear",
+            "True Wireless"
+          ]
+        },
+        "Features": {
+          "field_name": "headphones_features",
+          "options": [
+            "Active Noise Cancellation",
+            "Built-in Microphone",
+            "Closed Back",
+            "Foldable",
+            "Hi-Res Audio",
+            "Noise Isolation",
+            "Open Back",
+            "Sweat Resistant",
+            "Volume Control",
+            "Water-Resistant"
+          ]
+        }
+      }
+    }
+  },
+  "_comment": "This file caches eBay category-specific aspects. Values verified from eBay Taxonomy API. Can be refreshed via API endpoint."
+}

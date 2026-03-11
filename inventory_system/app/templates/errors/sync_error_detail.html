@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}RIFF - Error #{{ error.id }}{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+
+    <div class="flex items-center gap-3 mb-6">
+        <a href="/errors/sync" class="text-gray-500 hover:text-gray-700 text-sm">← Error Log</a>
+        <span class="text-gray-300">/</span>
+        <span class="font-mono text-sm text-gray-600">#{{ error.id }}</span>
+        {% if error.resolved %}
+        <span class="ml-auto px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Resolved</span>
+        {% else %}
+        <span class="ml-auto px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Open</span>
+        {% endif %}
+    </div>
+
+    <!-- Summary Card -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6 border-l-4 {% if error.resolved %}border-l-green-400{% else %}border-l-red-400{% endif %}">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div>
+                <div class="text-xs text-gray-400 uppercase mb-1">Error ID</div>
+                <div class="font-mono font-bold text-gray-800">#{{ error.id }}</div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-400 uppercase mb-1">Platform</div>
+                <span class="px-2 py-0.5 rounded text-xs font-medium
+                    {% if error.platform == 'reverb' %}bg-orange-100 text-orange-700
+                    {% elif error.platform == 'ebay' %}bg-blue-100 text-blue-700
+                    {% elif error.platform == 'shopify' %}bg-green-100 text-green-700
+                    {% elif error.platform == 'vr' %}bg-purple-100 text-purple-700
+                    {% elif error.platform == 'woocommerce' %}bg-indigo-100 text-indigo-700
+                    {% else %}bg-gray-100 text-gray-700{% endif %}">
+                    {{ error.platform }}
+                </span>
+            </div>
+            <div>
+                <div class="text-xs text-gray-400 uppercase mb-1">Operation</div>
+                <div class="text-gray-700 font-medium">{{ error.operation }}</div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-400 uppercase mb-1">When</div>
+                <div class="text-gray-600 text-sm">{{ error.created_at.strftime("%d/%m/%Y %H:%M:%S") if error.created_at else "—" }}</div>
+            </div>
+        </div>
+
+        {% if error.product_id %}
+        <div class="mb-4">
+            <div class="text-xs text-gray-400 uppercase mb-1">Affected Product</div>
+            <a href="/inventory/product/{{ error.product_id }}" class="text-blue-600 hover:underline text-sm">
+                Product #{{ error.product_id }}
+            </a>
+        </div>
+        {% endif %}
+
+        <div class="mb-2">
+            <div class="text-xs text-gray-400 uppercase mb-1">Error Type</div>
+            <div class="font-mono text-sm text-red-600">{{ error.error_type }}</div>
+        </div>
+        <div>
+            <div class="text-xs text-gray-400 uppercase mb-1">Error Message</div>
+            <div class="text-gray-700 text-sm bg-red-50 rounded p-3">{{ error.error_message }}</div>
+        </div>
+    </div>
+
+    <!-- Stack Trace -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold text-gray-700">Stack Trace</h2>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('stack-trace').textContent)"
+                    class="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded px-2 py-1">
+                Copy
+            </button>
+        </div>
+        <pre id="stack-trace" class="bg-gray-900 text-green-400 text-xs rounded p-4 overflow-x-auto whitespace-pre-wrap max-h-96">{{ error.stack_trace }}</pre>
+    </div>
+
+    <!-- Extra Context (if any) -->
+    {% if error.extra_context %}
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="font-semibold text-gray-700 mb-3">Extra Context</h2>
+        <pre class="bg-gray-50 text-xs rounded p-4 overflow-x-auto">{{ error.extra_context | tojson(indent=2) }}</pre>
+    </div>
+    {% endif %}
+
+    <!-- Resolution -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="font-semibold text-gray-700 mb-4">Resolution</h2>
+        {% if error.resolved %}
+        <div class="bg-green-50 rounded p-3 mb-3">
+            <p class="text-sm text-green-700 font-medium">Marked as resolved</p>
+            {% if error.resolution_notes %}
+            <p class="text-sm text-green-600 mt-1">{{ error.resolution_notes }}</p>
+            {% endif %}
+        </div>
+        {% else %}
+        <form id="resolveForm" class="flex gap-3">
+            <input type="text" id="resolutionNotes" placeholder="Resolution notes (optional)"
+                   class="flex-1 text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-blue-400">
+            <button type="button" onclick="markResolved()"
+                    class="bg-green-600 text-white text-sm px-4 py-2 rounded hover:bg-green-700">
+                Mark Resolved
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    <!-- Support copy block -->
+    <div class="mt-6 bg-gray-50 rounded border border-gray-200 p-4">
+        <p class="text-xs text-gray-500 mb-2 font-medium">Copy for support</p>
+        <div class="font-mono text-xs text-gray-600 select-all">
+            Error ID: #{{ error.id }} | {{ error.platform }} {{ error.operation }} | {{ error.error_type }} | {{ error.created_at.strftime("%d/%m/%Y %H:%M") if error.created_at else "" }}
+        </div>
+    </div>
+
+</div>
+
+<script>
+async function markResolved() {
+    const notes = document.getElementById('resolutionNotes').value;
+    const url = `/api/errors/sync/{{ error.id }}/resolve` + (notes ? `?notes=${encodeURIComponent(notes)}` : '');
+    const resp = await fetch(url, { method: 'POST' });
+    if (resp.ok) {
+        window.location.reload();
+    } else {
+        alert('Failed to mark as resolved');
+    }
+}
+</script>
+{% endblock %}

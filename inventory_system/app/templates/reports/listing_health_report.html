@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Listing Health Report{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-6 flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 mb-1">Listing Health</h1>
+            <p class="text-gray-600">Traffic-light overview of product health across RIFF and sales channels.</p>
+        </div>
+        <a href="/reports" class="text-blue-600 hover:text-blue-800">← Back to Reports</a>
+    </div>
+
+    <div class="mb-6 space-y-4 md:space-y-0 md:flex md:items-start md:space-x-4">
+        <form id="listing-health-filter" method="get" class="bg-white rounded-lg shadow p-4 md:flex-1">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:space-x-6 space-y-4 lg:space-y-0 w-full">
+                <div class="flex items-center space-x-2">
+                    <label for="status" class="text-sm font-medium text-gray-700">Product status:</label>
+                    <select id="status" name="status"
+                            class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm">
+                        {% for option in status_options %}
+                            <option value="{{ option }}" {% if status_filter == option %}selected{% endif %}>{{ option.title() if option != 'ALL' else 'All' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <label for="limit" class="text-sm font-medium text-gray-700">Max rows:</label>
+                    <select id="limit" name="limit"
+                            class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm">
+                        {% for option in ['25', '50', '100', 'ALL'] %}
+                            <option value="{{ option }}" {% if limit_param == option %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2 lg:ml-auto">
+                    <input id="issues_only" type="checkbox" name="issues_only" value="true"
+                           class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                           {% if issues_only %}checked{% endif %}>
+                    <label for="issues_only" class="text-sm text-gray-700 leading-none">Show only warnings and issues</label>
+                </div>
+            </div>
+        </form>
+
+        <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-3 sm:space-y-0">
+            {% if healthy_count > 0 %}
+                <div class="bg-white shadow rounded-lg p-4 flex items-center space-x-3">
+                    <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-green-100 text-green-800">Healthy</span>
+                    <span class="text-2xl font-semibold text-gray-900">{{ healthy_count }}</span>
+                </div>
+            {% endif %}
+            <div class="bg-white shadow rounded-lg p-4 flex items-center space-x-3">
+                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-yellow-100 text-yellow-800">Warning(s)</span>
+                <span class="text-2xl font-semibold text-gray-900">{{ warning_count }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                    <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Core</th>
+                    <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Media</th>
+                    {% for platform_name, platform_label, _ in platform_defs %}
+                        <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">{{ platform_label }}</th>
+                    {% endfor %}
+                    <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Overall</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+            {% for row in rows %}
+                {% set product = row.product %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 align-top w-64">
+                        {% set full_title = product.title or product.generate_title() or 'Untitled Product' %}
+                        {% set truncated_title = full_title[:40].rstrip() ~ (' …' if full_title|length > 40 else '') %}
+                        <div class="flex flex-col space-y-1">
+                            <span class="font-medium text-gray-900 truncate" title="{{ full_title }}">{{ truncated_title }}</span>
+                            {% set product_status_value = product.status.value if product.status else 'UNKNOWN' %}
+                            {% set product_status_key = product_status_value.upper() %}
+                            {% set product_status_label = product_status_value.replace('_', ' ').title() %}
+                            <div class="flex items-center space-x-2">
+                                <a href="/inventory/product/{{ product.id }}" target="_blank" rel="noopener"
+                                   class="text-sm text-blue-600 hover:text-blue-800 whitespace-nowrap">SKU: {{ product.sku }}</a>
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ product_status_classes.get(product_status_key, 'bg-gray-100 text-gray-600') }} whitespace-nowrap">
+                                    {{ product_status_label }}
+                                </span>
+                            </div>
+                        </div>
+                    </td>
+                    {% set core = row.core %}
+                    <td class="px-3 py-3 text-center align-top whitespace-nowrap">
+                        {% set issues_text = '; '.join(core.issues) %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(core.status, 'bg-gray-100 text-gray-600') }}" title="{{ issues_text }}">
+                            {{ status_labels.get(core.status, core.status.title()) }}
+                        </span>
+                        {% if issues_text %}
+                        <div class="mt-2 text-xs text-gray-500 text-center whitespace-nowrap">{{ issues_text }}</div>
+                        {% endif %}
+                    </td>
+                    {% set media = row.media %}
+                    <td class="px-3 py-3 text-center align-top whitespace-nowrap">
+                        {% set media_issues = '; '.join(media.issues) %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(media.status, 'bg-gray-100 text-gray-600') }}" title="{{ media_issues }}">
+                            {{ status_labels.get(media.status, media.status.title()) }}
+                        </span>
+                        {% if media_issues %}
+                        <div class="mt-2 text-xs text-gray-500 text-center whitespace-nowrap">{{ media_issues }}</div>
+                        {% endif %}
+                    </td>
+                    {% for platform_name, platform_label, _ in platform_defs %}
+                        {% set platform = row.platforms.get(platform_name) %}
+                        {% set platform_issues = '; '.join(platform.issues) %}
+                        <td class="px-3 py-3 text-center align-top whitespace-nowrap">
+                            <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {{ status_classes.get(platform.status, 'bg-gray-100 text-gray-600') }}" title="{{ platform_issues }}">
+                                {{ status_labels.get(platform.status, platform.status.title()) }}
+                            </span>
+                            {% if platform_issues %}
+                            <div class="mt-2 text-xs text-gray-500 text-center whitespace-nowrap">{{ platform_issues }}</div>
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                    <td class="px-3 py-3 text-center align-top">
+                        <span class="inline-flex px-3 py-1 text-xs font-semibold rounded-full {{ status_classes.get(row.overall_status, 'bg-gray-100 text-gray-600') }}">
+                            {{ status_labels.get(row.overall_status, row.overall_status.title()) }}
+                        </span>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+</table>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const filterForm = document.getElementById('listing-health-filter');
+        if (!filterForm) {
+            return;
+        }
+
+        const statusSelect = document.getElementById('status');
+        const issuesCheckbox = document.getElementById('issues_only');
+        const limitSelect = document.getElementById('limit');
+        let limitTimer = null;
+
+        if (statusSelect) {
+            statusSelect.addEventListener('change', () => filterForm.submit());
+        }
+
+        if (issuesCheckbox) {
+            issuesCheckbox.addEventListener('change', () => filterForm.submit());
+        }
+
+        if (limitSelect) {
+            limitSelect.addEventListener('change', function () {
+                if (limitTimer) {
+                    clearTimeout(limitTimer);
+                }
+                limitTimer = setTimeout(() => {
+                    filterForm.submit();
+                }, 2000);
+            });
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,72 @@
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.env
+.env.*
+.venv
+env/
+venv/
+ENV/
+.DS_Store
+*.log
+app/services/ebay/ebaysdk-python/
+app/services/vintageandrare/templates/vintageandrare_export_20250203_1032 2.csv
+app/services/ebay/tokens.json
+.Spotlight-V100
+.Trashes__pycache__/
+*.py[cod]
+.env
+# Jupyter Notebooks
+*.ipynb
+.ipynb_checkpoints/
+# YAML Files
+*.yml
+*.yaml
+# eBay tokens - NEVER commit these!
+app/services/ebay/tokens/
+ebay_tokens.json
+
+# Internal meeting documents — never commit
+Meeting-Prep/
+
+# Data Files
+*.csv
+*.xlsx
+*.jpg
+*.jpeg
+# Exception for background image
+!app/static/images/background.jpg
+# More Image Files
+*.png
+# Exception for RIFF logo icon
+!app/static/images/riff_logo.png
+# Exception for eBay listing badge images
+!app/static/ebay/*.png
+!app/static/ebay/*.jpeg
+
+# Cache files
+app/cache/
+*.cache
+cache.json
+sync_state.json
+temp_links.json
+
+data/app backups/
+data/reverb/
+scripts/ebay/output/
+scripts/reverb/output/
+
+# Logs
+logs/
+railway_status.json
+.vscode/.claude/settings.local.json
+
+# Onboarding PDF contains sensitive information
+docs/RIFF_Developer_Onboarding.pdf
+
+# Local scratch/audit files - not for version control
+_scratch/
+
+# Claude AI context files
+.claude/

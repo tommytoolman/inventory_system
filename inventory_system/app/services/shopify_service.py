@@ -1,0 +1,2400 @@
+# app/services/shopify_service.py
+import logging
+import math
+import re
+import uuid
+import json
+from datetime import datetime, timezone, timedelta
+from typing import Optional, Dict, List, Any, Tuple, Set, Union
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import select, or_
+from html.parser import HTMLParser
+
+from app.models.product import Product, ProductCondition, ProductStatus
+from app.models.platform_common import PlatformCommon, ListingStatus, SyncStatus
+from app.models.shopify import ShopifyListing
+from app.models.sync_event import SyncEvent
+from app.core.config import Settings, get_settings
+from app.core.exceptions import ShopifyAPIError
+from app.core.enums import ManufacturingCountry
+from app.services.shopify.client import ShopifyGraphQLClient  # You'll need to create this
+from app.services.reverb_service import ReverbService # We might need this for data mapping later
+from app.services.match_utils import suggest_product_match
+
+
+logger = logging.getLogger(__name__)
+
+
+class _PlainTextHTMLParser(HTMLParser):
+    """Simple HTML parser that collects text nodes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._chunks: List[str] = []
+
+    def handle_data(self, data: str) -> None:  # noqa: D401 (inherited docs)
+        if data and data.strip():
+            self._chunks.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._chunks)
+
+class ShopifyService:
+    """Service for managing Shopify products and synchronization."""
+
+    COUNTRY_OF_ORIGIN_NAMESPACE = "extra_info"
+    COUNTRY_OF_ORIGIN_KEY = "country_of_origin"
+    COUNTRY_METAFIELD_TYPE = "single_line_text_field"
+
+    # Artist metafield constants - must match existing Shopify definitions
+    ARTIST_OWNED_NAMESPACE = "guitar_specs"
+    ARTIST_OWNED_KEY = "artist_owned"
+    ARTIST_OWNED_METAFIELD_TYPE = "boolean"
+
+    ARTIST_NAMES_NAMESPACE = "custom"
+    ARTIST_NAMES_KEY = "artist_names"
+    ARTIST_NAMES_METAFIELD_TYPE = "multi_line_text_field"
+
+    # Handedness metafield constants
+    HANDEDNESS_NAMESPACE = "custom"
+    HANDEDNESS_KEY = "handedness"
+    HANDEDNESS_METAFIELD_TYPE = "single_line_text_field"
+
+    # Colour / Finish metafield constants - matches Shopify admin custom.colour_finish
+    COLOUR_FINISH_NAMESPACE = "custom"
+    COLOUR_FINISH_KEY = "colour_finish"
+    COLOUR_FINISH_METAFIELD_TYPE = "single_line_text_field"
+
+    # Year metafield constants
+    YEAR_NAMESPACE = "custom"
+    YEAR_KEY = "year"
+    YEAR_METAFIELD_TYPE = "single_line_text_field"
+
+    # Condition metafield constants
+    CONDITION_NAMESPACE = "custom"
+    CONDITION_KEY = "condition"
+    CONDITION_METAFIELD_TYPE = "single_line_text_field"
+
+
+    # =========================================================================
+    # 1. INITIALIZATION & HELPERS
+    # =========================================================================
+    def __init__(self, db: AsyncSession, settings: Settings = None):
+        logger.debug("ShopifyService.__init__ - Initializing.")
+        self.db = db
+        self.settings = settings
+        
+        # Initialize Shopify client - it loads settings internally
+        self.client = ShopifyGraphQLClient()
+        logger.debug(f"ShopifyService initialized")
+        self._country_metafield_definition_ready = False
+
+    @staticmethod
+    def strip_html_to_plain_text(value: Optional[str]) -> str:
+        """Return value with HTML removed and whitespace normalised."""
+        if not value:
+            return ""
+
+        parser = _PlainTextHTMLParser()
+        parser.feed(value)
+        parser.close()
+        text = parser.get_text()
+        return re.sub(r"\s+", " ", text).strip()
+
+    # ------------------------------------------------------------------
+    # Utility helpers reused by scripts and edit-propagation
+    # ------------------------------------------------------------------
+
+    def _resolve_product_gid(
+        self, platform_link: PlatformCommon, listing: ShopifyListing
+    ) -> Optional[str]:
+        raw_id = None
+        if listing and listing.extended_attributes:
+            raw_id = listing.extended_attributes.get("id")
+        if not raw_id:
+            raw_id = platform_link.external_id
+        if not raw_id:
+            return None
+        return raw_id if str(raw_id).startswith("gid://") else f"gid://shopify/Product/{raw_id}"
+
+    def _resolve_location_gid(self) -> str:
+        settings = self.settings or get_settings()
+        raw = getattr(settings, "SHOPIFY_LOCATION_GID", None)
+        if not raw:
+            raise ValueError("SHOPIFY_LOCATION_GID is not configured; update the environment settings")
+        return raw if str(raw).startswith("gid://") else f"gid://shopify/Location/{raw}"
+
+    async def _get_shopify_shipping_profile_gid(self, product: Product) -> Optional[str]:
+        """
+        Look up the Shopify delivery profile GID for a product based on its shipping profile.
+
+        Uses the product's shipping_profile_id to find the corresponding Shopify GID
+        from the shipping_profiles table.
+
+        Args:
+            product: The Product model instance
+
+        Returns:
+            The Shopify delivery profile GID or None if not found
+        """
+        if not hasattr(product, 'shipping_profile_id') or not product.shipping_profile_id:
+            logger.debug("Product %s has no shipping_profile_id set", product.sku)
+            return None
+
+        try:
+            result = await self.db.execute(
+                text("""
+                    SELECT shopify_profile_id
+                    FROM shipping_profiles
+                    WHERE id = :profile_id
+                      AND shopify_profile_id IS NOT NULL
+                """),
+                {"profile_id": product.shipping_profile_id}
+            )
+            row = result.fetchone()
+            if row and row[0]:
+                logger.debug(
+                    "Found Shopify shipping profile GID %s for product %s (profile_id=%s)",
+                    row[0], product.sku, product.shipping_profile_id
+                )
+                return row[0]
+            else:
+                logger.warning(
+                    "No Shopify shipping profile GID found for product %s (profile_id=%s)",
+                    product.sku, product.shipping_profile_id
+                )
+                return None
+        except Exception as e:
+            logger.error("Error looking up Shopify shipping profile: %s", e)
+            return None
+
+    @staticmethod
+    def _resolve_country_enum(country: Optional[Union[ManufacturingCountry, str]]) -> Optional[ManufacturingCountry]:
+        if not country:
+            return None
+        if isinstance(country, str):
+            value = country.strip()
+            if not value:
+                return None
+            upper = value.upper()
+            if len(upper) == 2:
+                for enum_value in ManufacturingCountry:
+                    if enum_value.value == upper:
+                        return enum_value
+            normalized = upper.replace("-", "_").replace(" ", "_")
+            try:
+                return ManufacturingCountry[normalized]
+            except KeyError:
+                return None
+        return country if isinstance(country, ManufacturingCountry) else None
+
+    def _country_display_name(self, country_input: Optional[Union[ManufacturingCountry, str]]) -> Optional[str]:
+        country = self._resolve_country_enum(country_input)
+        if not country:
+            return None
+        mapping = {
+            ManufacturingCountry.UNITED_KINGDOM: "United Kingdom",
+            ManufacturingCountry.UNITED_STATES: "United States",
+            ManufacturingCountry.CANADA: "Canada",
+            ManufacturingCountry.JAPAN: "Japan",
+            ManufacturingCountry.GERMANY: "Germany",
+            ManufacturingCountry.FRANCE: "France",
+            ManufacturingCountry.ITALY: "Italy",
+            ManufacturingCountry.SPAIN: "Spain",
+            ManufacturingCountry.SWEDEN: "Sweden",
+            ManufacturingCountry.NORWAY: "Norway",
+            ManufacturingCountry.DENMARK: "Denmark",
+            ManufacturingCountry.MEXICO: "Mexico",
+            ManufacturingCountry.INDONESIA: "Indonesia",
+            ManufacturingCountry.CHINA: "China",
+            ManufacturingCountry.KOREA: "South Korea",
+            ManufacturingCountry.AUSTRALIA: "Australia",
+            ManufacturingCountry.NEW_ZEALAND: "New Zealand",
+            ManufacturingCountry.BRAZIL: "Brazil",
+            ManufacturingCountry.CZECH_REPUBLIC: "Czech Republic",
+            ManufacturingCountry.RUSSIA: "Russia",
+            ManufacturingCountry.VIETNAM: "Vietnam",
+            ManufacturingCountry.OTHER: "Other",
+        }
+        return mapping.get(country)
+
+    def _country_code(self, country_input: Optional[Union[ManufacturingCountry, str]]) -> Optional[str]:
+        country = self._resolve_country_enum(country_input)
+        return country.value if country else None
+
+    def _ensure_country_metafield_definition(self) -> None:
+        if self._country_metafield_definition_ready:
+            return
+        try:
+            result = self.client.create_metafield_definition(
+                name="Country of Origin",
+                namespace=self.COUNTRY_OF_ORIGIN_NAMESPACE,
+                key=self.COUNTRY_OF_ORIGIN_KEY,
+                type_name=self.COUNTRY_METAFIELD_TYPE,
+                owner_type="PRODUCT",
+                description="Country where the product was manufactured",
+            )
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                non_blocking_codes = {"TAKEN"}
+                blocking_errors = []
+                for err in errors:
+                    message = err.get("message", "").lower()
+                    code = err.get("code")
+                    if (
+                        "already" in message
+                        or "in use" in message
+                        or code in non_blocking_codes
+                    ):
+                        continue
+                    blocking_errors.append(err)
+                if blocking_errors:
+                    logger.warning(
+                        "Failed to create Shopify country metafield definition: %s",
+                        blocking_errors,
+                    )
+                    return
+                logger.info(
+                    "Country of origin metafield definition already exists; continuing."
+                )
+            self._country_metafield_definition_ready = True
+        except Exception as exc:
+            logger.warning("Error ensuring Shopify country metafield definition: %s", exc)
+
+    # Note: Artist metafield definitions already exist in Shopify:
+    # - guitar_specs.artist_owned (boolean) - MetafieldDefinition/325576327508
+    # - custom.artist_names (multi_line_text_field) - MetafieldDefinition/331345756500
+    # No need to create them programmatically.
+
+    def _resolve_inventory_item_gids(self, product_gid: str) -> List[str]:
+        try:
+            snapshot = self.client.get_product_snapshot_by_id(product_gid, num_variants=5, num_images=0, num_metafields=0)
+        except Exception as exc:
+            logger.warning("Failed to fetch Shopify snapshot for inventory item lookup (%s): %s", product_gid, exc)
+            return []
+
+        variants = (snapshot or {}).get("variants", {}).get("edges") or []
+        inventory_ids: List[str] = []
+        for edge in variants:
+            node = edge.get("node") if isinstance(edge, dict) else {}
+            inventory_item = node.get("inventoryItem") if isinstance(node, dict) else None
+            if inventory_item and inventory_item.get("id"):
+                inventory_ids.append(inventory_item["id"])
+        return inventory_ids
+
+    def _update_inventory_item_country(self, product: Product, product_gid: str, country_code: Optional[str]) -> None:
+        if not country_code:
+            return
+        inventory_item_gids = self._resolve_inventory_item_gids(product_gid)
+        if not inventory_item_gids:
+            logger.info("No inventory item gids found for %s; skipping customs update", product.sku)
+            return
+        for inventory_item_gid in inventory_item_gids:
+            try:
+                result = self.client.update_inventory_item(inventory_item_gid, country_code=country_code)
+                errors = result.get("userErrors", []) if result else []
+                if errors:
+                    logger.warning("Shopify inventoryItemUpdate errors for %s: %s", product.sku, errors)
+            except Exception as exc:
+                logger.warning("Failed to update Shopify inventory item country for %s (inventory item %s): %s",
+                               product.sku,
+                               inventory_item_gid,
+                               exc)
+
+    def _sync_country_of_origin(self, product: Product, product_gid: str) -> None:
+        value = self._country_display_name(product.manufacturing_country)
+        if not value:
+            return
+        self._ensure_country_metafield_definition()
+        metafield_input = [{
+            "ownerId": product_gid,
+            "namespace": self.COUNTRY_OF_ORIGIN_NAMESPACE,
+            "key": self.COUNTRY_OF_ORIGIN_KEY,
+            "type": self.COUNTRY_METAFIELD_TYPE,
+            "value": value,
+        }]
+        try:
+            result = self.client.set_metafields(metafield_input)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify metafieldsSet returned errors for %s: %s", product.sku, errors)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify country metafield for %s: %s", product.sku, exc)
+
+        country_code = self._country_code(product.manufacturing_country)
+        if country_code:
+            self._update_inventory_item_country(product, product_gid, country_code)
+
+    def _sync_artist_info(self, product: Product, product_gid: str, clear_if_empty: bool = False) -> None:
+        """Sync artist_owned and artist_names to Shopify product metafields.
+
+        Args:
+            product: The product to sync
+            product_gid: Shopify product GID
+            clear_if_empty: If True, delete metafields when values are cleared
+        """
+        metafields_to_set = []
+        metafields_to_delete = []
+
+        # Artist Owned metafield (boolean type)
+        if product.artist_owned:
+            metafields_to_set.append({
+                "ownerId": product_gid,
+                "namespace": self.ARTIST_OWNED_NAMESPACE,
+                "key": self.ARTIST_OWNED_KEY,
+                "type": self.ARTIST_OWNED_METAFIELD_TYPE,
+                "value": "true",
+            })
+        elif clear_if_empty:
+            # Delete the metafield when artist_owned is unchecked
+            metafields_to_delete.append((self.ARTIST_OWNED_NAMESPACE, self.ARTIST_OWNED_KEY))
+
+        # Artist Names metafield (multi_line_text_field type)
+        if product.artist_names and len(product.artist_names) > 0:
+            # Join names with newlines for multi_line_text_field
+            names_value = "\n".join(product.artist_names)
+            metafields_to_set.append({
+                "ownerId": product_gid,
+                "namespace": self.ARTIST_NAMES_NAMESPACE,
+                "key": self.ARTIST_NAMES_KEY,
+                "type": self.ARTIST_NAMES_METAFIELD_TYPE,
+                "value": names_value,
+            })
+        elif clear_if_empty:
+            # Delete the metafield when artist_names is cleared
+            metafields_to_delete.append((self.ARTIST_NAMES_NAMESPACE, self.ARTIST_NAMES_KEY))
+
+        # Set any metafields that have values
+        if metafields_to_set:
+            try:
+                result = self.client.set_metafields(metafields_to_set)
+                errors = result.get("userErrors", []) if result else []
+                if errors:
+                    logger.warning("Shopify artist metafieldsSet returned errors for %s: %s", product.sku, errors)
+                else:
+                    logger.info("Synced artist info to Shopify for %s: owned=%s, names=%s",
+                               product.sku, product.artist_owned, product.artist_names)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify artist metafields for %s: %s", product.sku, exc)
+
+        # Delete any metafields that should be cleared
+        for namespace, key in metafields_to_delete:
+            try:
+                result = self.client.delete_metafield_by_key(product_gid, namespace, key)
+                if result.get("deleted"):
+                    logger.info("Deleted Shopify metafield %s.%s for %s", namespace, key, product.sku)
+                elif result.get("reason") == "not_found":
+                    logger.debug("Metafield %s.%s not found for %s - already cleared", namespace, key, product.sku)
+                else:
+                    logger.warning("Failed to delete metafield %s.%s for %s: %s", namespace, key, product.sku, result)
+            except Exception as exc:
+                logger.warning("Error deleting Shopify metafield %s.%s for %s: %s", namespace, key, product.sku, exc)
+
+    def _sync_handedness(self, product: Product, product_gid: str) -> None:
+        """Sync handedness to Shopify product metafield and tags."""
+        if not product.handedness:
+            return
+
+        handedness_value = 'Left' if product.handedness.name == 'LEFT' else 'Right'
+
+        # Set the metafield
+        metafields = [{
+            "ownerId": product_gid,
+            "namespace": self.HANDEDNESS_NAMESPACE,
+            "key": self.HANDEDNESS_KEY,
+            "type": self.HANDEDNESS_METAFIELD_TYPE,
+            "value": handedness_value,
+        }]
+
+        try:
+            result = self.client.set_metafields(metafields)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify handedness metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced handedness metafield to Shopify for %s: %s", product.sku, handedness_value)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify handedness metafield for %s: %s", product.sku, exc)
+
+        # Add Left-Handed tag if applicable
+        if product.handedness.name == 'LEFT':
+            try:
+                # Get current tags
+                query = """
+                query getProduct($id: ID!) {
+                  product(id: $id) {
+                    tags
+                  }
+                }
+                """
+                data = self.client.execute(query, {'id': product_gid})
+                current_tags = data.get('product', {}).get('tags', [])
+
+                if 'Left-Handed' not in current_tags:
+                    new_tags = current_tags + ['Left-Handed']
+                    self.client.update_product({
+                        'id': product_gid,
+                        'tags': new_tags
+                    })
+                    logger.info("Added Left-Handed tag to Shopify for %s", product.sku)
+            except Exception as exc:
+                logger.warning("Failed to add Left-Handed tag for %s: %s", product.sku, exc)
+
+    def _sync_colour_finish(self, product: Product, product_gid: str) -> None:
+        """Sync finish to Shopify Colour / Finish metafield."""
+        if not product.finish:
+            return
+
+        metafields = [{
+            "ownerId": product_gid,
+            "namespace": self.COLOUR_FINISH_NAMESPACE,
+            "key": self.COLOUR_FINISH_KEY,
+            "type": self.COLOUR_FINISH_METAFIELD_TYPE,
+            "value": product.finish,
+        }]
+
+        try:
+            result = self.client.set_metafields(metafields)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify colour_finish metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced colour_finish metafield to Shopify for %s: %s", product.sku, product.finish)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify colour_finish metafield for %s: %s", product.sku, exc)
+
+    def _sync_year(self, product: Product, product_gid: str) -> None:
+        """Sync year to Shopify custom metafield."""
+        if not product.year:
+            return
+
+        metafields = [{
+            "ownerId": product_gid,
+            "namespace": self.YEAR_NAMESPACE,
+            "key": self.YEAR_KEY,
+            "type": self.YEAR_METAFIELD_TYPE,
+            "value": str(product.year),
+        }]
+
+        try:
+            result = self.client.set_metafields(metafields)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify year metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced year metafield to Shopify for %s: %s", product.sku, product.year)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify year metafield for %s: %s", product.sku, exc)
+
+    def _format_condition_for_display(self, condition: str) -> str:
+        """Format condition value for Shopify display.
+
+        Converts internal values like 'verygood' to 'Very Good'.
+        Other single-word conditions become title case.
+        """
+        if not condition:
+            return ""
+
+        condition_lower = condition.lower().strip()
+
+        # Special case: verygood -> Very Good
+        if condition_lower == "verygood":
+            return "Very Good"
+
+        # Single word conditions: title case
+        return condition.strip().title()
+
+    def _sync_condition(self, product: Product, product_gid: str) -> None:
+        """Sync condition to Shopify custom metafield."""
+        if not product.condition:
+            return
+
+        formatted_condition = self._format_condition_for_display(product.condition)
+
+        metafields = [{
+            "ownerId": product_gid,
+            "namespace": self.CONDITION_NAMESPACE,
+            "key": self.CONDITION_KEY,
+            "type": self.CONDITION_METAFIELD_TYPE,
+            "value": formatted_condition,
+        }]
+
+        try:
+            result = self.client.set_metafields(metafields)
+            errors = result.get("userErrors", []) if result else []
+            if errors:
+                logger.warning("Shopify condition metafieldsSet returned errors for %s: %s", product.sku, errors)
+            else:
+                logger.info("Synced condition metafield to Shopify for %s: %s", product.sku, formatted_condition)
+        except Exception as exc:
+            logger.warning("Failed to sync Shopify condition metafield for %s: %s", product.sku, exc)
+
+    def _sync_product_tags(self, product: Product, product_gid: str) -> None:
+        """Sync year, finish, and condition as tags to Shopify."""
+        tags_to_add = []
+
+        # Add year as tag (e.g., "1965")
+        if product.year:
+            tags_to_add.append(str(product.year))
+
+        # Add finish as tag (e.g., "Sunburst")
+        if product.finish:
+            tags_to_add.append(product.finish)
+
+        # Add condition as tag (e.g., "Excellent")
+        if product.condition:
+            tags_to_add.append(product.condition)
+
+        if not tags_to_add:
+            return
+
+        try:
+            # Get current tags
+            query = """
+            query getProduct($id: ID!) {
+              product(id: $id) {
+                tags
+              }
+            }
+            """
+            data = self.client.execute(query, {'id': product_gid})
+            current_tags = data.get('product', {}).get('tags', [])
+
+            # Add new tags that don't already exist
+            new_tags = list(current_tags)
+            added = []
+            for tag in tags_to_add:
+                if tag not in current_tags:
+                    new_tags.append(tag)
+                    added.append(tag)
+
+            if added:
+                self.client.update_product({
+                    'id': product_gid,
+                    'tags': new_tags
+                })
+                logger.info("Added tags to Shopify for %s: %s", product.sku, added)
+        except Exception as exc:
+            logger.warning("Failed to sync product tags for %s: %s", product.sku, exc)
+
+    def _extract_variant_nodes(self, listing: ShopifyListing) -> List[Dict[str, Any]]:
+        variants = []
+        if listing and listing.extended_attributes:
+            variants = (
+                listing.extended_attributes.get("variants", {}).get("nodes", [])
+                if isinstance(listing.extended_attributes, dict)
+                else []
+            )
+        return variants if isinstance(variants, list) else []
+
+    def _fetch_fresh_variant_nodes(self, product_gid: str) -> List[Dict[str, Any]]:
+        try:
+            data = self.client.get_product_snapshot_by_id(product_gid, num_variants=50)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to fetch fresh Shopify variants for %s: %s", product_gid, exc)
+            return []
+
+        variants = data.get("variants", {}).get("edges") if data else None
+        if not variants:
+            return []
+        return [edge.get("node", {}) for edge in variants if isinstance(edge, dict)]
+
+    def _collect_inventory_adjustments(
+        self,
+        product: Product,
+        product_gid: str,
+        variants: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        adjustments: List[Dict[str, Any]] = []
+        fallback_map: Dict[str, Dict[str, Any]] = {}
+        missing_inventory_ids = any(
+            not ((variant or {}).get("inventoryItem") or {}).get("id")
+            and not (variant or {}).get("inventoryItemId")
+            for variant in variants
+        )
+
+        if missing_inventory_ids:
+            fresh_nodes = self._fetch_fresh_variant_nodes(product_gid)
+            fallback_map = {
+                (node.get("sku") or "").strip().lower(): node
+                for node in fresh_nodes
+                if node.get("sku")
+            }
+            if fallback_map:
+                logger.info("Refreshed Shopify variant data for %s", product.sku)
+
+        location_gid = self._resolve_location_gid()
+
+        for variant in variants:
+            variant = variant or {}
+            inventory_item = variant.get("inventoryItem") or {}
+            inventory_item_id = inventory_item.get("id") or variant.get("inventoryItemId")
+
+            if not inventory_item_id and fallback_map:
+                lookup = fallback_map.get((variant.get("sku") or "").strip().lower())
+                if lookup:
+                    inventory_item_id = (
+                        ((lookup.get("inventoryItem") or {}).get("id"))
+                        or lookup.get("inventoryItemId")
+                    )
+
+            if not inventory_item_id:
+                logger.warning(
+                    "Shopify variant for %s missing inventory item id; skipping adjustment", product.sku
+                )
+                continue
+
+            adjustments.append(
+                {
+                    "inventoryItemId": inventory_item_id,
+                    "locationId": location_gid,
+                    "quantity": int(product.quantity or 0),
+                }
+            )
+
+        return adjustments
+
+    def _push_inventory_update(
+        self,
+        product: Product,
+        product_gid: str,
+        adjustments: List[Dict[str, Any]],
+    ) -> None:
+        if not adjustments:
+            logger.warning("No Shopify adjustments generated for %s; skipping", product.sku)
+            return
+
+        mutation = """
+        mutation inventorySetOnHandQuantities($input: InventorySetOnHandQuantitiesInput!) {
+          inventorySetOnHandQuantities(input: $input) {
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        """
+
+        variables = {
+            "input": {
+                "reason": "correction",
+                "setQuantities": adjustments,
+            }
+        }
+
+        try:
+            response = self.client.execute(mutation, variables)
+        except Exception as exc:  # pragma: no cover
+            logger.error("Shopify inventory update failed for %s: %s", product.sku, exc)
+            raise
+
+        errors = (
+            response.get("data", {})
+            .get("inventorySetOnHandQuantities", {})
+            .get("userErrors", [])
+        )
+        if errors:
+            logger.error("Shopify inventory update errors for %s: %s", product.sku, errors)
+            raise ShopifyAPIError(f"Inventory update errors: {errors}")
+
+    async def apply_category_assignment(
+        self,
+        platform_link: PlatformCommon,
+        category_gid: str,
+        *,
+        category_full_name: Optional[str] = None,
+        category_name: Optional[str] = None,
+    ) -> bool:
+        """Assign a Shopify taxonomy category to an existing product.
+
+        Args:
+            platform_link: The Shopify ``PlatformCommon`` instance being updated.
+            category_gid: Shopify taxonomy GID (e.g. ``gid://shopify/TaxonomyCategory/ae-2-8-7-2-4``).
+            category_full_name: Optional full taxonomy path (e.g. ``Arts & Entertainment > …``).
+            category_name: Optional short label (e.g. ``Electric Guitars``). Falls back to
+                the trailing segment of ``category_full_name`` when omitted.
+
+        Returns:
+            ``True`` when Shopify confirmed the category change, ``False`` otherwise.
+
+        Example:
+            >>> await service.apply_category_assignment(
+            ...     platform_link,
+            ...     "gid://shopify/TaxonomyCategory/ae-2-8-7-2-4",
+            ...     category_full_name=(
+            ...         "Arts & Entertainment > Hobbies & Creative Arts > Musical Instruments > String Instruments"
+            ...         " > Electric Guitars"
+            ...     ),
+            ...     category_name="Electric Guitars",
+            ... )
+            True
+        """
+
+        listing = platform_link.shopify_listing
+        if not listing:
+            logger.warning(
+                "Shopify category assignment skipped: platform_common %s has no Shopify listing",
+                platform_link.id,
+            )
+            return False
+
+        if not category_gid:
+            logger.warning(
+                "Shopify category assignment skipped: no category GID provided for platform_common %s",
+                platform_link.id,
+            )
+            return False
+
+        product_gid = self._resolve_product_gid(platform_link, listing)
+        if not product_gid:
+            logger.warning(
+                "Unable to resolve Shopify product GID for platform_common %s; skipping category assignment",
+                platform_link.id,
+            )
+            return False
+
+        if (
+            listing.category_gid == category_gid
+            and (listing.category_assignment_status or "").upper() == "ASSIGNED"
+        ):
+            logger.info(
+                "Category %s already assigned to Shopify product %s; skipping API call.",
+                category_gid,
+                product_gid,
+            )
+            return True
+
+        logger.info(
+            "Assigning Shopify category %s to product %s (platform_common %s)",
+            category_gid,
+            product_gid,
+            platform_link.id,
+        )
+
+        try:
+            success = self.client.set_product_category(product_gid, category_gid)
+        except Exception as exc:  # pragma: no cover - network failure path
+            logger.error(
+                "Error assigning Shopify category %s to product %s: %s",
+                category_gid,
+                product_gid,
+                exc,
+            )
+            success = False
+
+        now = datetime.utcnow()
+
+        if success:
+            listing.category_gid = category_gid
+            if category_full_name is not None:
+                listing.category_full_name = category_full_name
+            if category_name is not None:
+                listing.category_name = category_name
+            elif category_full_name:
+                listing.category_name = category_full_name.split(" > ")[-1].strip()
+            listing.category_assigned_at = now
+            listing.category_assignment_status = "ASSIGNED"
+            platform_link.sync_status = SyncStatus.SYNCED.value
+        else:
+            listing.category_assignment_status = "FAILED"
+            listing.category_assigned_at = listing.category_assigned_at or now
+
+        await self.db.flush()
+        return success
+
+
+
+    # =========================================================================
+    # 2. MAIN SYNC ENTRY POINT (DETECTION PHASE)
+    # =========================================================================
+    async def run_import_process(self, sync_run_id: uuid.UUID, progress_callback=None) -> Dict[str, int]:
+        """The main entry point for the Shopify sync process."""
+        logger.info(f"=== ShopifyService: STARTING SHOPIFY SYNC (run_id: {sync_run_id}) ===")
+        
+        try:
+            # Fetch all products from Shopify
+            logger.info("Fetching all Shopify products...")
+            products_from_api = self.client.get_all_products_summary()
+            
+            if not products_from_api:
+                logger.error("No products fetched from Shopify API")
+                return {"status": "error", "message": "No Shopify products received"}
+            
+            logger.info(f"Total products fetched from API: {len(products_from_api)}")
+            
+            # Run the differential sync logic
+            sync_stats = await self.sync_shopify_inventory(products_from_api, sync_run_id)
+            
+            logger.info(f"=== ShopifyService: FINISHED SHOPIFY SYNC === Final Results: {sync_stats}")
+            return sync_stats
+            
+        except Exception as e:
+            logger.error(f"Error in Shopify sync: {e}", exc_info=True)
+            return {"status": "error", "message": str(e)}
+
+
+    # =========================================================================
+    # 3. DIFFERENTIAL SYNC LOGIC (Called by the main entry point)
+    # =========================================================================
+    async def sync_shopify_inventory(self, shopify_products: List[Dict], sync_run_id: uuid.UUID) -> Dict[str, Any]:
+        """Compares Shopify API data with the local DB and logs necessary changes."""
+        stats = {
+            "total_from_shopify": len(shopify_products), 
+            "events_logged": 0, 
+            "created": 0, 
+            "updated": 0, 
+            "removed": 0, 
+            "unchanged": 0, 
+            "errors": 0
+        }
+
+        try:
+            # Step 1: Fetch all existing Shopify data from our DB
+            existing_data = await self._fetch_existing_shopify_data()
+
+            # Step 2: Prepare data for comparison
+            api_items = self._prepare_api_data(shopify_products)
+            db_items = self._prepare_db_data(existing_data)
+
+            # Step 3: Calculate differences
+            changes = self._calculate_changes(api_items, db_items)
+            logger.info(f"Applying changes: {len(changes['create'])} new, {len(changes['update'])} updates, {len(changes['remove'])} removals")
+
+            # Step 4: Apply changes and log events
+            if changes['create']:
+                stats['created'], events_created = await self._batch_create_products(changes['create'], sync_run_id)
+                stats['events_logged'] += events_created
+            if changes['update']:
+                stats['updated'], events_updated = await self._batch_update_products(changes['update'], sync_run_id)
+                stats['events_logged'] += events_updated
+            if changes['remove']:
+                stats['removed'], events_removed = await self._batch_mark_removed(changes['remove'], sync_run_id)
+                stats['events_logged'] += events_removed
+
+            stats['unchanged'] = len(api_items) - stats['created'] - stats['updated']
+            await self.db.commit()
+            
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Sync failed during differential sync: {e}", exc_info=True)
+            stats['errors'] += 1
+        
+        return stats
+
+    # ------------------------------------------------------------------
+    # Manual propagation helpers (edit path, etc.)
+    # ------------------------------------------------------------------
+
+    async def apply_product_update(
+        self,
+        product: Product,
+        platform_link: PlatformCommon,
+        changed_fields: Set[str],
+    ) -> Dict[str, Any]:
+        listing_query = select(ShopifyListing).where(ShopifyListing.platform_id == platform_link.id)
+        listing_result = await self.db.execute(listing_query)
+        listing = listing_result.scalar_one_or_none()
+        if not listing:
+            return {"status": "skipped", "reason": "no_listing"}
+
+        product_gid = self._resolve_product_gid(platform_link, listing)
+        if not product_gid:
+            return {"status": "error", "message": "missing_product_gid"}
+
+        update_payload: Dict[str, Any] = {"id": product_gid}
+        pushed = False
+
+        if "title" in changed_fields and product.title:
+            update_payload["title"] = product.title
+            pushed = True
+
+        if "description" in changed_fields:
+            update_payload["descriptionHtml"] = product.description or ""
+            pushed = True
+
+        if pushed:
+            self.client.update_product(update_payload)
+
+        inventory_updated = False
+        if "quantity" in changed_fields and product.is_stocked_item:
+            variants = self._extract_variant_nodes(listing)
+            if not variants:
+                variants = self._fetch_fresh_variant_nodes(product_gid)
+            adjustments = self._collect_inventory_adjustments(product, product_gid, variants)
+            self._push_inventory_update(product, product_gid, adjustments)
+            inventory_updated = True
+
+            # Update local extended_attributes with new quantity
+            if listing.extended_attributes and isinstance(listing.extended_attributes, dict):
+                ext = dict(listing.extended_attributes)
+                # Update totalInventory
+                ext["totalInventory"] = product.quantity
+                # Update variants -> nodes[0] -> inventoryQuantity if present
+                if "variants" in ext and isinstance(ext["variants"], dict):
+                    nodes = ext["variants"].get("nodes", [])
+                    if nodes and len(nodes) > 0:
+                        nodes[0]["inventoryQuantity"] = product.quantity
+                        ext["variants"]["nodes"] = nodes
+                listing.extended_attributes = ext
+                listing.last_synced_at = datetime.utcnow()
+                self.db.add(listing)
+
+        if "manufacturing_country" in changed_fields:
+            try:
+                self._sync_country_of_origin(product, product_gid)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify country data on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync artist info if artist_owned or artist_names changed
+        artist_updated = False
+        if "artist_owned" in changed_fields or "artist_names" in changed_fields:
+            try:
+                # clear_if_empty=True to remove values when unticked/cleared
+                self._sync_artist_info(product, product_gid, clear_if_empty=True)
+                artist_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify artist data on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync handedness if changed
+        handedness_updated = False
+        if "handedness" in changed_fields:
+            try:
+                self._sync_handedness(product, product_gid)
+                handedness_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify handedness on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync finish (colour/finish) if changed
+        finish_updated = False
+        if "finish" in changed_fields:
+            try:
+                self._sync_colour_finish(product, product_gid)
+                finish_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify colour_finish on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync year if changed
+        year_updated = False
+        if "year" in changed_fields:
+            try:
+                self._sync_year(product, product_gid)
+                year_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify year on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync condition if changed
+        condition_updated = False
+        if "condition" in changed_fields:
+            try:
+                self._sync_condition(product, product_gid)
+                condition_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify condition on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        # Sync tags if year, finish, or condition changed
+        tags_updated = False
+        if {"year", "finish", "condition"} & changed_fields:
+            try:
+                self._sync_product_tags(product, product_gid)
+                tags_updated = True
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync Shopify tags on update for %s: %s",
+                    product.sku,
+                    exc,
+                )
+
+        any_updated = pushed or inventory_updated or artist_updated or handedness_updated or finish_updated or year_updated or condition_updated or tags_updated
+        return {
+            "status": "updated" if any_updated else "no_changes",
+            "inventory": inventory_updated,
+            "product": pushed,
+            "artist": artist_updated,
+            "handedness": handedness_updated,
+            "finish": finish_updated,
+            "year": year_updated,
+            "condition": condition_updated,
+            "tags": tags_updated,
+        }
+
+    def _calculate_changes(self, api_items: Dict, db_items: Dict) -> Dict[str, List]:
+        """Calculates create, update, and remove operations."""
+        changes = {'create': [], 'update': [], 'remove': []}
+        api_ids = set(api_items.keys())
+        db_ids = set(db_items.keys())
+
+        # logger.info(f"API items: {len(api_ids)}, DB items: {len(db_ids)}")
+        # logger.info(f"Sample API IDs: {list(api_ids)[:5]}")
+        # logger.info(f"Sample DB IDs: {list(db_ids)[:5]}")
+        # logger.info(f"Intersection: {len(api_ids & db_ids)} items")
+
+        for eid in api_ids - db_ids:
+            changes['create'].append(api_items[eid])
+        for eid in api_ids & db_ids:
+            if self._has_changed(api_items[eid], db_items[eid]):
+                changes['update'].append({'api_data': api_items[eid], 'db_data': db_items[eid]})
+        for eid in db_ids - api_ids:
+            changes['remove'].append(db_items[eid])
+        
+        logger.info(f"Changes calculated: {len(changes['create'])} create, {len(changes['update'])} update, {len(changes['remove'])} remove")
+        return changes
+
+    def _has_changed(self, api_item: Dict, db_item: Dict) -> bool:
+        """Compares API data against the correct fields and handles equivalent statuses."""
+        api_status = api_item.get('status')
+        db_status = db_item.get('platform_common_status')
+        
+        off_market_statuses = ['sold', 'ended', 'archived', 'removed', 'deleted']
+        statuses_match = (api_status in off_market_statuses and db_status in off_market_statuses) or \
+                            (api_status == db_status)
+
+        if not statuses_match:
+            # logger.info(f"--- [DEBUG] Change Detected for ID {api_item['external_id']}: STATUS MISMATCH ---")
+            # logger.info(f"    API Status: '{api_status}' vs DB Status: '{db_status}'")
+            return True
+        
+        # If the listing is not active, we don't care about price or URL changes.
+        if db_status != 'active':
+            return False
+            
+        db_price = float(db_item.get('base_price') or 0.0)
+        api_price = api_item.get('price', 0.0)
+        if abs(api_price - db_price) > 0.01:
+            logger.debug(f"--- [DEBUG] Change Detected for ID {api_item['external_id']}: PRICE MISMATCH ---")
+            logger.debug(f"    API Price: '{api_price}' vs DB Price: '{db_price}'")
+            return True
+
+        if api_item.get('listing_url') and api_item['listing_url'] != db_item.get('listing_url'):
+            logger.debug(f"--- [DEBUG] Change Detected for ID {api_item['external_id']}: URL MISMATCH ---")
+            return True
+
+        return False
+
+
+    # =========================================================================
+    # 4. BATCH PROCESSING / EVENT LOGGING (Called by differential sync)
+    # =========================================================================
+    async def _batch_create_products(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
+        """Log rogue listings to sync_events only - no database records created."""
+        created_count, events_logged = 0, 0
+
+        # Get existing sync events for these external_ids (any status - pending, skipped, etc.)
+        external_ids = [item['external_id'] for item in items]
+        existing_events_query = select(SyncEvent.external_id).where(
+            SyncEvent.platform_name == 'shopify',
+            SyncEvent.change_type == 'new_listing',
+            SyncEvent.external_id.in_(external_ids)
+        )
+        existing_result = await self.db.execute(existing_events_query)
+        existing_external_ids = {row[0] for row in existing_result.fetchall()}
+
+        # Prepare all events first, skipping those that already have an event
+        events_to_create = []
+        for item in items:
+            # Skip if there's already any sync event for this listing (pending, skipped, processed, etc.)
+            if item['external_id'] in existing_external_ids:
+                logger.debug(f"Skipping Shopify product {item['external_id']} - sync event already exists")
+                continue
+            try:
+                logger.warning(
+                    f"Rogue SKU Detected: Shopify product {item['external_id']} ('{item.get('title')}') "
+                    f"not found in local DB. Logging to sync_events for later processing."
+                )
+                
+                event_data = {
+                    'sync_run_id': sync_run_id,
+                    'platform_name': 'shopify',
+                    'product_id': None,
+                    'platform_common_id': None,
+                    'external_id': item['external_id'],
+                    'change_type': 'new_listing',
+                    'change_data': {
+                        'title': item['title'],
+                        'price': item['price'],
+                        'status': item['status'],
+                        'vendor': item.get('vendor'),
+                        'product_type': item.get('product_type'),
+                        'raw_data': item['_raw']
+                    },
+                    'status': 'pending'
+                }
+
+                match = await suggest_product_match(
+                    self.db,
+                    'shopify',
+                    {
+                        'title': item.get('title'),
+                        'price': item.get('price'),
+                        'status': item.get('status'),
+                        'vendor': item.get('vendor'),
+                        'product_type': item.get('product_type'),
+                        'raw_data': item.get('_raw'),
+                    },
+                )
+
+                if match:
+                    event_data['change_data']['match_candidate'] = {
+                        'product_id': match.product.id,
+                        'sku': match.product.sku,
+                        'title': match.product.title,
+                        'brand': match.product.brand,
+                        'model': match.product.model,
+                        'status': match.product.status.value if getattr(match.product.status, 'value', None) else str(match.product.status) if match.product.status else None,
+                        'base_price': match.product.base_price,
+                        'primary_image': match.product.primary_image,
+                        'confidence': match.confidence,
+                        'reason': match.reason,
+                        'existing_platforms': match.existing_platforms,
+                    }
+                    event_data['change_data']['suggested_action'] = 'match'
+
+                events_to_create.append(event_data)
+                created_count += 1
+            except Exception as e:
+                logger.error(f"Failed to prepare event for Shopify product {item['external_id']}: {e}", exc_info=True)
+        
+        # Bulk insert with ON CONFLICT DO NOTHING to handle duplicates gracefully
+        if events_to_create:
+            try:
+                stmt = insert(SyncEvent).values(events_to_create)
+                stmt = stmt.on_conflict_do_nothing(
+                    index_elements=['platform_name', 'external_id', 'change_type'],
+                    index_where=(SyncEvent.status == 'pending')
+                )
+                result = await self.db.execute(stmt)
+                events_logged = len(events_to_create)
+                logger.info(f"Attempted to log {len(events_to_create)} new listing events (duplicates ignored)")
+            except Exception as e:
+                logger.error(f"Failed to bulk insert new listing events: {e}", exc_info=True)
+        
+        return created_count, events_logged
+
+    async def _batch_update_products_old(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
+        """SYNC PHASE: Only log changes to sync_events - NO database table updates."""
+        updated_count, events_logged = 0, 0
+        
+        # Collect all events to insert
+        all_events = []
+        
+        for item in items:
+            try:
+                api_data, db_data = item['api_data'], item['db_data']
+                
+                # Price change event
+                db_price_for_compare = float(db_data.get('price') or 0.0)
+                if abs(api_data['price'] - db_price_for_compare) > 0.01:
+                    all_events.append({
+                        'sync_run_id': sync_run_id,
+                        'platform_name': 'shopify',
+                        'product_id': db_data['product_id'],
+                        'platform_common_id': db_data['platform_common_id'],
+                        'external_id': api_data['external_id'],
+                        'change_type': 'price',
+                        'change_data': {
+                            'old': db_data.get('price'),
+                            'new': api_data['price'],
+                            'shopify_id': api_data['external_id']
+                        },
+                        'status': 'pending'
+                    })
+                
+                # Status change event
+                if str(api_data.get('status', '')).lower() != str(db_data.get('shopify_status', '')).lower():
+                    is_archived = api_data.get('status') == 'archived'
+                    all_events.append({
+                        'sync_run_id': sync_run_id,
+                        'platform_name': 'shopify',
+                        'product_id': db_data['product_id'],
+                        'platform_common_id': db_data['platform_common_id'],
+                        'external_id': api_data['external_id'],
+                        'change_type': 'status_change',
+                        'change_data': {
+                            'old': db_data.get('shopify_status'),
+                            'new': api_data['status'],
+                            'shopify_id': api_data['external_id'],
+                            'is_archived': is_archived
+                        },
+                        'status': 'pending'
+                    })
+                
+                updated_count += 1
+                
+            except Exception as e:
+                logger.error(f"Failed to prepare events for Shopify product {item['api_data']['external_id']}: {e}", exc_info=True)
+        
+        # Bulk insert all events with duplicate handling
+        if all_events:
+            try:
+                stmt = insert(SyncEvent).values(all_events)
+                stmt = stmt.on_conflict_do_nothing(
+                    index_elements=['platform_name', 'external_id', 'change_type'],
+                    index_where=(SyncEvent.status == 'pending')
+                )
+                result = await self.db.execute(stmt)
+                events_logged = len(all_events)
+                logger.info(f"Attempted to log {len(all_events)} update events (duplicates ignored)")
+            except Exception as e:
+                logger.error(f"Failed to bulk insert update events: {e}", exc_info=True)
+        
+        return updated_count, events_logged
+
+    async def _batch_update_products(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
+        """Logs price and status changes to sync_events, using the correct data keys."""
+        updated_count, events_logged = 0, 0
+        all_events = []
+        
+        for item in items:
+            try:
+                api_data, db_data = item['api_data'], item['db_data']
+                
+                # Price change event check using the correct 'base_price' key
+                db_price_for_compare = float(db_data.get('base_price') or 0.0)
+                if abs(api_data['price'] - db_price_for_compare) > 0.01:
+                    all_events.append({
+                        'sync_run_id': sync_run_id,
+                        'platform_name': 'shopify',
+                        'product_id': db_data['product_id'],
+                        'platform_common_id': db_data['platform_common_id'],
+                        'external_id': api_data['external_id'],
+                        'change_type': 'price',
+                        'change_data': {
+                            'old': db_data.get('base_price'),
+                            'new': api_data['price'],
+                            'shopify_id': api_data['external_id']
+                        },
+                        'status': 'pending'
+                    })
+                
+                # Status change event check using the nuanced 'off-market' logic
+                api_status = (api_data.get('status') or '').lower()
+                db_status = (db_data.get('platform_common_status') or '').lower()
+                off_market_statuses = ['sold', 'ended', 'archived', 'removed', 'deleted']
+                statuses_match = (api_status in off_market_statuses and db_status in off_market_statuses) or \
+                                (api_status == db_status)
+
+                if not statuses_match:
+                    # Grace period: skip status changes for listings created in the last 5 minutes.
+                    # Prevents false "sold" signals when Shopify inventory hasn't propagated yet
+                    # after listing creation (totalInventory briefly reports 0).
+                    platform_created_at = db_data.get('platform_created_at')
+                    if platform_created_at and api_status == 'sold':
+                        created_utc = platform_created_at.replace(tzinfo=timezone.utc) if platform_created_at.tzinfo is None else platform_created_at
+                        age = datetime.now(timezone.utc) - created_utc
+                        if age < timedelta(minutes=5):
+                            logger.info(
+                                "Skipping status change for recently created Shopify listing %s "
+                                "(product %s, age %s) — inventory may not have propagated yet",
+                                api_data['external_id'], db_data['product_id'], age,
+                            )
+                            continue
+
+                    is_archived = api_data.get('status') == 'archived'
+                    all_events.append({
+                        'sync_run_id': sync_run_id,
+                        'platform_name': 'shopify',
+                        'product_id': db_data['product_id'],
+                        'platform_common_id': db_data['platform_common_id'],
+                        'external_id': api_data['external_id'],
+                        'change_type': 'status_change',
+                        'change_data': {
+                            'old': db_status,
+                            'new': api_status,
+                            'shopify_id': api_data['external_id'],
+                            'is_archived': is_archived
+                        },
+                        'status': 'pending'
+                    })
+                
+                updated_count += 1
+                
+            except Exception as e:
+                logger.error(f"Failed to prepare events for Shopify product {item['api_data']['external_id']}: {e}", exc_info=True)
+        
+        # Bulk insert logic
+        if all_events:
+            try:
+                stmt = insert(SyncEvent).values(all_events)
+                stmt = stmt.on_conflict_do_nothing(
+                    index_elements=['platform_name', 'external_id', 'change_type'],
+                    index_where=(SyncEvent.status == 'pending')
+                )
+                await self.db.execute(stmt)
+                events_logged = len(all_events)
+                logger.info(f"Attempted to log {len(all_events)} update events (duplicates ignored)")
+            except Exception as e:
+                logger.error(f"Failed to bulk insert update events: {e}", exc_info=True)
+        
+        return updated_count, events_logged
+
+    async def _batch_mark_removed(self, items: List[Dict], sync_run_id: uuid.UUID) -> Tuple[int, int]:
+        """SYNC PHASE: Only log removal events to sync_events - NO database table updates."""
+        removed_count, events_logged = 0, 0
+        
+        # Prepare all removal events
+        events_to_create = []
+        for item in items:
+            try:
+                events_to_create.append({
+                    'sync_run_id': sync_run_id,
+                    'platform_name': 'shopify',
+                    'product_id': item['product_id'],
+                    'platform_common_id': item['platform_common_id'],
+                    'external_id': item['external_id'],
+                    'change_type': 'removed_listing',
+                    'change_data': {
+                        'sku': item['sku'],
+                        'shopify_id': item['external_id'],
+                        'reason': 'not_found_in_api'
+                    },
+                    'status': 'pending'
+                })
+                removed_count += 1
+            except Exception as e:
+                logger.error(f"Failed to prepare removal event for Shopify product {item['external_id']}: {e}", exc_info=True)
+        
+        # Bulk insert with duplicate handling
+        if events_to_create:
+            try:
+                stmt = insert(SyncEvent).values(events_to_create)
+                stmt = stmt.on_conflict_do_nothing(
+                    index_elements=['platform_name', 'external_id', 'change_type'],
+                    index_where=(SyncEvent.status == 'pending')
+                )
+                result = await self.db.execute(stmt)
+                events_logged = len(events_to_create)
+                logger.info(f"Attempted to log {len(events_to_create)} removal events (duplicates ignored)")
+            except Exception as e:
+                logger.error(f"Failed to bulk insert removal events: {e}", exc_info=True)
+        
+        return removed_count, events_logged
+    
+    
+    # =========================================================================
+    # 5. OUTBOUND ACTIONS (Called by the Action Phase)
+    # =========================================================================
+    async def mark_item_as_sold(self, external_id: str) -> bool:
+        """Outbound action to mark a product as sold on Shopify because it sold elsewhere."""
+        logger.info(f"Received request to mark Shopify product {external_id} as sold.")
+        try:
+            # 1. Construct the GID from the legacy ID, as you suggested.
+            product_gid = f"gid://shopify/Product/{external_id}"
+
+            # 2. Call the existing, proven client method.
+            result = await self.client.mark_product_as_sold(product_gid)
+
+            success = result.get("success", False)
+            if success:
+                listing_stmt = select(ShopifyListing).where(ShopifyListing.shopify_legacy_id == str(external_id))
+                listing_result = await self.db.execute(listing_stmt)
+                listing = listing_result.scalar_one_or_none()
+                if listing:
+                    listing.status = 'archived'
+                    listing.last_synced_at = datetime.utcnow()
+                    listing.updated_at = datetime.utcnow()
+                    self.db.add(listing)
+
+            return success
+            
+        except Exception as e:
+            logger.error(f"Exception while updating Shopify product {external_id}: {e}", exc_info=True)
+            return False
+
+    async def update_listing_price(self, external_id: str, new_price: float) -> bool:
+        """Outbound action to update the price of a listing on Shopify."""
+        logger.info(f"Received request to update Shopify product {external_id} to price £{new_price:.2f}.")
+        try:
+            # The client needs the full GraphQL GID
+            product_gid = f"gid://shopify/Product/{external_id}"
+            
+            # Your client takes a simple dictionary for the update payload
+            update_payload = {"price": f"{new_price:.2f}"}
+            
+            result = await self.client.update_product_variant_price(product_gid, update_payload)
+            
+            # The client method returns a dictionary with a 'success' key
+            return result.get("success", False)
+        except Exception as e:
+            logger.error(f"Exception while updating price for Shopify product {external_id}: {e}", exc_info=True)
+            return False
+
+    async def relist_listing(self, external_id: str, days_since_sold: int = 0) -> Dict[str, Any]:
+        """Relist a Shopify product by setting it to ACTIVE status and inventory to 1.
+
+        Args:
+            external_id: Shopify product ID (numeric or GID format)
+            days_since_sold: Number of days since the item was sold.
+                - If <= 7 days: product may still be ACTIVE, just set inventory to 1
+                - If > 7 days: product is likely ARCHIVED, set status to ACTIVE AND inventory to 1
+
+        Returns:
+            Dict with status and details of the operation
+        """
+        logger.info(f"Relisting Shopify product {external_id} (days_since_sold={days_since_sold})")
+
+        try:
+            # Build product GID
+            if external_id.startswith("gid://"):
+                product_gid = external_id
+            else:
+                product_gid = f"gid://shopify/Product/{external_id}"
+
+            # Look up the listing to get current status
+            # Database may store as GID or numeric - try both
+            numeric_id = str(external_id).replace("gid://shopify/Product/", "")
+            gid_format = f"gid://shopify/Product/{numeric_id}"
+            listing_stmt = select(ShopifyListing).where(
+                or_(
+                    ShopifyListing.shopify_product_id == numeric_id,
+                    ShopifyListing.shopify_product_id == gid_format
+                )
+            )
+            listing_result = await self.db.execute(listing_stmt)
+            listing = listing_result.scalar_one_or_none()
+
+            current_status = listing.status if listing else None
+            needs_reactivation = current_status not in ('active', None) or days_since_sold >= 7
+
+            results = {"status_updated": False, "inventory_updated": False}
+
+            # Step 1: If not active (ended/archived/sold), update status to ACTIVE
+            if needs_reactivation:
+                logger.info(f"Setting Shopify product {external_id} status to ACTIVE (was: {current_status})")
+                update_payload = {
+                    "id": product_gid,
+                    "status": "ACTIVE"
+                }
+                update_result = self.client.update_product(update_payload)
+                if update_result and update_result.get("product"):
+                    results["status_updated"] = True
+                    logger.info(f"Shopify product {external_id} status set to ACTIVE")
+                else:
+                    logger.warning(f"Failed to update Shopify product {external_id} status")
+
+            # Step 2: Set inventory quantity to 1
+            # Need to get variant info to update inventory
+            if listing:
+                variant_nodes = self._extract_variant_nodes(listing)
+                if not variant_nodes:
+                    variant_nodes = self._fetch_fresh_variant_nodes(product_gid)
+
+                if variant_nodes:
+                    # Create a mock product object for the adjustment function
+                    class MockProduct:
+                        quantity = 1
+                        sku = external_id  # Use external_id as identifier
+
+                    mock_product = MockProduct()
+                    adjustments = self._collect_inventory_adjustments(mock_product, product_gid, variant_nodes)
+
+                    if adjustments:
+                        self._push_inventory_update(mock_product, product_gid, adjustments)
+                        results["inventory_updated"] = True
+                        logger.info(f"Shopify product {external_id} inventory set to 1")
+                    else:
+                        logger.warning(f"No inventory adjustments generated for {external_id}")
+                else:
+                    logger.warning(f"Could not find variant nodes for {external_id}")
+            else:
+                logger.warning(f"No ShopifyListing found for {external_id}, cannot update inventory")
+
+            # Step 3: Update local database
+            if listing and (results["status_updated"] or results["inventory_updated"]):
+                if results["status_updated"] or needs_reactivation:
+                    listing.status = 'active'
+                listing.last_synced_at = datetime.utcnow()
+                listing.updated_at = datetime.utcnow()
+                self.db.add(listing)
+
+                # Also update platform_common
+                if listing.platform_id:
+                    platform_common = await self.db.get(PlatformCommon, listing.platform_id)
+                    if platform_common:
+                        platform_common.status = ListingStatus.ACTIVE.value
+                        platform_common.last_sync = datetime.utcnow()
+                        self.db.add(platform_common)
+
+                await self.db.commit()
+
+            success = results["status_updated"] or results["inventory_updated"]
+            return {
+                "success": success,
+                "status": "success" if success else "partial",
+                "external_id": external_id,
+                **results
+            }
+
+        except Exception as e:
+            logger.error(f"Exception while relisting Shopify product {external_id}: {e}", exc_info=True)
+            return {"success": False, "status": "error", "message": str(e)}
+
+    async def create_listing_from_product(
+        self,
+        product: Product,
+        reverb_data: Dict[str, Any] = None,
+        platform_options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Creates a Shopify listing from a local master Product object.
+        This is called by the SyncService during the 'Action Phase'.
+        """
+        logger.info(f"Creating Shopify listing for Product ID: {product.id}, SKU: {product.sku}")
+        
+        try:
+            # Import image transformation utilities
+            from app.core.utils import ImageTransformer, ImageQuality
+            
+            final_price: Optional[float] = None
+
+            # 1. Prepare the data payload for the Shopify API
+            tags = []
+            
+            # Add brand
+            if product.brand:
+                tags.append(product.brand)
+            
+            # Add year
+            if product.year:
+                tags.append(f"Year:{product.year}")
+            
+            # Add finish if available (from product or reverb_data)
+            finish = product.finish if hasattr(product, 'finish') and product.finish else None
+            if not finish and reverb_data:
+                finish = reverb_data.get('finish')
+            if finish:
+                tags.append(f"Finish:{finish}")
+            
+            # Add condition from reverb_data
+            if reverb_data:
+                condition = reverb_data.get('condition')
+                if isinstance(condition, dict):
+                    condition_name = condition.get('display_name')
+                elif isinstance(condition, str):
+                    condition_name = condition
+                else:
+                    condition_name = None
+                if condition_name:
+                    tags.append(f"Condition:{condition_name}")
+                
+                # Add category from Reverb (more specific than product.category)
+                categories = reverb_data.get('categories', [])
+                if categories:
+                    category_name = categories[0].get('full_name')
+                    if category_name:
+                        tags.append(category_name)
+                
+                # Add model if available for search
+                model = reverb_data.get('model')
+                if model and len(model) > 2:  # Skip very short model names
+                    tags.append(f"Model:{model[:50]}")  # Limit length
+                
+                # Add shop name for provenance
+                shop_name = reverb_data.get('shop_name')
+                if shop_name:
+                    tags.append(f"Source:{shop_name[:30]}")  # Limit length
+            
+            # Add generic category as fallback
+            if product.category and product.category not in tags:
+                tags.append(product.category)
+            
+            # Remove duplicates and filter out None/empty values
+            tags = list(filter(None, set(tags)))
+            
+            # Extract and prioritise locally uploaded images first
+            all_images: List[str] = []
+
+            local_photos: List[str] = []
+            if reverb_data:
+                raw_local = reverb_data.get('local_photos') or []
+                if raw_local:
+                    local_photos = [url for url in raw_local if url]
+            if local_photos:
+                logger.info("Using %s local photos for Shopify payload", len(local_photos))
+                for image_url in local_photos:
+                    max_res_url = ImageTransformer.transform_reverb_url(image_url, ImageQuality.MAX_RES)
+                    if max_res_url and max_res_url not in all_images:
+                        all_images.append(max_res_url)
+                        logger.debug("Added local image: %s", max_res_url[:80])
+
+            # First try to get images from reverb_data if provided
+            if reverb_data:
+                cloudinary_photos = reverb_data.get('cloudinary_photos', [])
+                if cloudinary_photos:
+                    logger.info(f"Found {len(cloudinary_photos)} Cloudinary photos from Reverb for Shopify")
+                    for photo in cloudinary_photos[:10]:  # Shopify has a lower limit than VR
+                        image_url = None
+                        if 'preview_url' in photo:
+                            image_url = photo['preview_url']
+                        elif 'url' in photo:
+                            image_url = photo['url']
+                        
+                        if image_url:
+                            # Transform to MAX_RES for Shopify
+                            max_res_url = ImageTransformer.transform_reverb_url(image_url, ImageQuality.MAX_RES)
+                        if max_res_url:  # Only add non-None URLs
+                            all_images.append(max_res_url)
+                            logger.debug(f"Added Cloudinary image: {max_res_url[:80]}...")
+                
+                # Fallback to regular photos if no cloudinary photos
+                if not all_images:
+                    photos = reverb_data.get('photos', [])
+                    if photos:
+                        logger.info(f"Found {len(photos)} regular photos from Reverb for Shopify")
+                        for photo in photos[:10]:
+                            image_url = None
+                            if isinstance(photo, dict) and '_links' in photo:
+                                if 'large_crop' in photo['_links']:
+                                    image_url = photo['_links']['large_crop']['href']
+                                elif 'full' in photo['_links']:
+                                    image_url = photo['_links']['full']['href']
+                            elif isinstance(photo, str):
+                                image_url = photo
+                            
+                            if image_url:
+                                max_res_url = ImageTransformer.transform_reverb_url(image_url, ImageQuality.MAX_RES)
+                                if max_res_url:  # Only add non-None URLs
+                                    all_images.append(max_res_url)
+            
+            # Fallback to product's stored images if no Reverb data
+            product_image_urls: List[str] = []
+            if product.primary_image:
+                product_image_urls.append(product.primary_image)
+            if hasattr(product, 'additional_images') and product.additional_images:
+                product_image_urls.extend(product.additional_images)
+
+            logger.info(
+                "Shopify fallback images: primary=%s additional=%s (local already: %s)",
+                bool(product.primary_image),
+                len(product.additional_images or []) if hasattr(product, 'additional_images') and product.additional_images else 0,
+                len(local_photos),
+            )
+
+            if product_image_urls:
+                for img_url in product_image_urls:
+                    max_res_url = ImageTransformer.transform_reverb_url(img_url, ImageQuality.MAX_RES)
+                    if max_res_url and max_res_url not in all_images:
+                        all_images.append(max_res_url)
+            
+            logger.info(f"Prepared {len(all_images)} MAX_RES images for Shopify")
+
+            # Step 1: Create product shell (without variants and images - GraphQL doesn't accept them in ProductInput)
+            product_input = {
+                "title": product.title or f"{product.year or ''} {product.brand} {product.model}".strip(),
+                "vendor": product.brand,
+                "descriptionHtml": product.description,
+                "productType": product.category,
+                "status": "ACTIVE",
+                "tags": tags
+            }
+
+            # 2. Create the product shell
+            creation_result = self.client.create_product(product_input)
+
+            if not creation_result or not creation_result.get("product"):
+                logger.error(f"Failed to create Shopify product shell. Response: {creation_result}")
+                user_errors = creation_result.get('userErrors', []) if creation_result else []
+                error_message = user_errors[0]['message'] if user_errors else "Failed to create product shell"
+                return {"status": "error", "message": error_message}
+            
+            product_gid = creation_result["product"]["id"]
+            product_legacy_id = creation_result["product"].get("legacyResourceId")
+            logger.info(f"Created Shopify product shell with GID: {product_gid}")
+
+            try:
+                self._sync_country_of_origin(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify country data for %s: %s", product.sku, exc)
+
+            # Sync artist info if present
+            try:
+                if product.artist_owned or (product.artist_names and len(product.artist_names) > 0):
+                    self._sync_artist_info(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify artist data for %s: %s", product.sku, exc)
+
+            # Sync handedness if set
+            try:
+                if product.handedness:
+                    self._sync_handedness(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify handedness for %s: %s", product.sku, exc)
+
+            # Sync finish (colour/finish) if set
+            try:
+                if product.finish:
+                    self._sync_colour_finish(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify colour_finish for %s: %s", product.sku, exc)
+
+            # Sync year if set
+            try:
+                if product.year:
+                    self._sync_year(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify year for %s: %s", product.sku, exc)
+
+            # Sync condition if set
+            try:
+                if product.condition:
+                    self._sync_condition(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify condition for %s: %s", product.sku, exc)
+
+            # Sync tags for year, finish, condition
+            try:
+                self._sync_product_tags(product, product_gid)
+            except Exception as exc:
+                logger.warning("Failed to sync Shopify product tags for %s: %s", product.sku, exc)
+
+            # Step 3: Update the variant with price, SKU, and inventory
+            variant_gid = None  # Initialize for use in shipping profile assignment
+            try:
+                if creation_result["product"].get("variants", {}).get("edges"):
+                    variant_gid = creation_result["product"]["variants"]["edges"][0]["node"]["id"]
+                    
+                    # Get inventory quantity from Reverb data if available
+                    inventory_qty = 1  # Default to 1
+                    if reverb_data and reverb_data.get('inventory'):
+                        inventory_qty = int(reverb_data.get('inventory', 1))
+                    
+                    override_price = None
+                    if platform_options:
+                        override_price = platform_options.get("price") or platform_options.get("price_display")
+                    local_final_price = None
+                    if override_price is not None:
+                        try:
+                            local_final_price = float(str(override_price).replace(",", ""))
+                        except ValueError:
+                            logger.warning("Invalid Shopify override price '%s'", override_price)
+
+                    if local_final_price is None:
+                        source_price = product.base_price
+                        if source_price is None:
+                            raise ValueError("Product base_price is required for Shopify listings")
+                        local_final_price = float(source_price)
+
+                    final_price = local_final_price
+
+                    variant_update = {
+                        "price": str(local_final_price),
+                        "sku": product.sku,
+                        "inventory": inventory_qty,
+                        "inventoryPolicy": "DENY",  # Don't allow purchase when out of stock
+                        "inventoryItem": {"tracked": True}  # Track inventory
+                    }
+                    
+                    # Add inventory location if configured
+                    location_gid = None
+                    try:
+                        location_gid = self._resolve_location_gid()
+                    except ValueError as location_error:
+                        logger.warning(
+                            "Shopify location GID not configured; skipping inventory sync: %s",
+                            location_error,
+                        )
+
+                    if location_gid:
+                        variant_update["inventoryQuantities"] = [{
+                            "availableQuantity": max(int(inventory_qty), 0),
+                            "locationId": location_gid
+                        }]
+                    
+                    self.client.update_variant_rest(variant_gid, variant_update)
+                    logger.info(f"Updated variant with price, SKU, and inventory tracking (qty: {inventory_qty})")
+            except Exception as e:
+                logger.warning(f"Failed to update variant: {e}")
+            
+            # Step 4: Add images if available
+            created_images: List[str] = []
+            if all_images:
+                try:
+                    # Filter out any None values and use the validated format
+                    valid_images = [url for url in all_images if url]
+                    if valid_images:
+                        logger.info("Shopify image payload (first 3): %s", valid_images[:3])
+                        # Use the same format as the validated script for consistency
+                        media_input = [{"src": url} for url in valid_images]
+                        logger.debug("Shopify media_input: %s", media_input)
+                        media_result = self.client.create_product_images(product_gid, media_input)
+                        media_errors = []
+                        if media_result:
+                            media_errors.extend(media_result.get("mediaUserErrors") or [])
+                            media_errors.extend(media_result.get("userErrors") or [])
+                            created_media = media_result.get("media") or []
+                            logger.info(
+                                "Shopify media response: %s created, %s requested",
+                                len(created_media),
+                                len(valid_images),
+                            )
+                        else:
+                            created_media = []
+
+                        if media_errors:
+                            logger.warning(
+                                "Shopify reported media errors: %s",
+                                media_errors,
+                            )
+
+                        logger.info(f"Added {len(valid_images)} images (best quality available) to product")
+                        created_images = valid_images
+                    else:
+                        logger.warning("No valid image URLs after filtering")
+                except Exception as e:
+                    logger.warning(f"Failed to add images: {e}")
+            
+            # Step 5: Set category if we have Reverb category mapping or platform override
+            category_gid_override = None
+            category_gid_assigned = None
+            category_name_assigned = None
+            category_full_name_assigned = None
+            if platform_options:
+                category_gid_override = platform_options.get("category_gid") or platform_options.get("category")
+
+            if category_gid_override:
+                try:
+                    category_result = self.client.set_product_category(product_gid, category_gid_override)
+                    if category_result:
+                        logger.info("✅ Category set using platform override")
+                        category_gid_assigned = category_gid_override
+                        category_full_name_assigned = None
+                        category_name_assigned = None
+                except Exception as e:
+                    logger.warning(f"Failed to set category via override: {e}")
+            elif reverb_data:
+                try:
+                    categories = reverb_data.get('categories', [])
+                    if categories and categories[0].get('uuid'):
+                        category_uuid = categories[0]['uuid']
+                        logger.info(f"Looking up category mapping for Reverb UUID: {category_uuid}")
+                        
+                        # Load category mappings
+                        import json
+                        mapping_file = "app/services/category_mappings/reverb_to_shopify.json"
+                        try:
+                            with open(mapping_file, 'r') as f:
+                                mappings_data = json.load(f)
+                                mappings = mappings_data.get('mappings', {})
+                        except Exception as e:
+                            logger.warning(f"Could not load category mappings: {e}")
+                            mappings = {}
+
+                        if category_uuid in mappings:
+                            category_gid = mappings[category_uuid].get('shopify_gid')
+                            if category_gid:
+                                logger.info(f"Setting Shopify category to: {category_gid}")
+                                category_result = self.client.set_product_category(product_gid, category_gid)
+                                if category_result:
+                                    logger.info("✅ Category set successfully")
+                                    category_gid_assigned = category_gid
+                                    category_full_name_assigned = mappings[category_uuid].get('shopify_category')
+                                    if category_full_name_assigned:
+                                        category_name_assigned = category_full_name_assigned.split(' > ')[-1]
+                                else:
+                                    logger.warning("Failed to set product category")
+                        else:
+                            logger.info(f"No category mapping found for UUID: {category_uuid}")
+                except Exception as e:
+                    logger.warning(f"Failed to set category: {e}")
+            
+            # Step 6: Publish to Online Store
+            try:
+                logger.info("Publishing product to Online Store...")
+                online_store_gid = self.client.get_online_store_publication_id()
+                if online_store_gid:
+                    publish_result = self.client.publish_product_to_sales_channel(product_gid, online_store_gid)
+                    if publish_result:
+                        logger.info("✅ Product published to Online Store")
+                    else:
+                        logger.warning("Failed to publish product to Online Store")
+                else:
+                    logger.warning("Could not find Online Store publication GID")
+            except Exception as e:
+                logger.warning(f"Failed to publish product: {e}")
+
+            # Step 7: Assign shipping profile if product has one configured
+            shipping_profile_gid_assigned = None
+            try:
+                shopify_shipping_gid = await self._get_shopify_shipping_profile_gid(product)
+                if shopify_shipping_gid and variant_gid:
+                    logger.info(
+                        "Assigning shipping profile %s to variant %s for product %s",
+                        shopify_shipping_gid, variant_gid, product.sku
+                    )
+                    profile_result = self.client.assign_variants_to_delivery_profile(
+                        shopify_shipping_gid,
+                        [variant_gid]
+                    )
+                    if profile_result and not profile_result.get("userErrors"):
+                        shipping_profile_gid_assigned = shopify_shipping_gid
+                        logger.info("✅ Shipping profile assigned successfully")
+                    else:
+                        errors = profile_result.get("userErrors", []) if profile_result else []
+                        logger.warning("Failed to assign shipping profile: %s", errors)
+                elif not shopify_shipping_gid:
+                    logger.debug("No shipping profile to assign for product %s", product.sku)
+            except Exception as e:
+                logger.warning(f"Failed to assign shipping profile: {e}")
+
+            if not product_legacy_id:
+                return {"status": "error", "message": "No legacy ID returned"}
+
+            logger.info(f"Successfully created Shopify product with ID: {product_legacy_id}")
+
+            snapshot = None
+            try:
+                snapshot = self.client.get_product_snapshot_by_id(
+                    product_gid,
+                    num_variants=10,
+                    num_images=20,
+                    num_metafields=0,
+                )
+                if snapshot:
+                    logger.info(
+                        "Shopify snapshot for %s contains %s images (first 2: %s)",
+                        product_gid,
+                        len(snapshot.get("images", {}).get("edges", [])),
+                        snapshot.get("images", {}).get("edges", [])[:2],
+                    )
+            except Exception as snapshot_error:
+                logger.warning(f"Failed to fetch Shopify snapshot for {product_gid}: {snapshot_error}")
+
+            # ── Persist platform_common + shopify_listings rows ──────────
+            try:
+                await self._persist_listing_rows(
+                    product=product,
+                    external_id=str(product_legacy_id),
+                    product_gid=product_gid,
+                    snapshot=snapshot,
+                    final_price=final_price,
+                    category_gid=category_gid_assigned,
+                    category_name=category_name_assigned,
+                    category_full_name=category_full_name_assigned,
+                    shipping_profile_gid=shipping_profile_gid_assigned,
+                    platform_options=platform_options,
+                )
+            except Exception as persist_err:
+                logger.error(
+                    "DB persistence failed for Shopify product %s (API product was created): %s",
+                    product_legacy_id, persist_err, exc_info=True,
+                )
+                # Don't fail the whole call — the Shopify product exists
+
+            return {
+                "status": "success",
+                "external_id": product_legacy_id,
+                "shopify_product_id": product_legacy_id,
+                "product_gid": product_gid,
+                "price": final_price,
+                "images": created_images,
+                "category_gid": category_gid_assigned,
+                "category_name": category_name_assigned,
+                "category_full_name": category_full_name_assigned,
+                "shipping_profile_gid": shipping_profile_gid_assigned,
+                "snapshot": snapshot,
+            }
+
+        except Exception as e:
+            logger.error(f"Exception while creating Shopify listing for SKU {product.sku}: {e}", exc_info=True)
+            return {"status": "error", "message": str(e)}
+
+    # ------------------------------------------------------------------
+    # DB persistence helper — mirrors pattern used by vr_service / ebay
+    # ------------------------------------------------------------------
+    async def _persist_listing_rows(
+        self,
+        product: Product,
+        external_id: str,
+        product_gid: str,
+        snapshot: Optional[Dict[str, Any]],
+        final_price: Optional[float],
+        category_gid: Optional[str],
+        category_name: Optional[str],
+        category_full_name: Optional[str],
+        shipping_profile_gid: Optional[str],
+        platform_options: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Upsert platform_common + shopify_listings after a successful Shopify API create."""
+        snapshot = snapshot or {}
+        platform_options = platform_options or {}
+
+        # ── Derive fields ────────────────────────────────────────────
+        product_title = snapshot.get("title") or product.title or product.generate_title() or ""
+
+        # Handle
+        handle = snapshot.get("handle")
+        if not handle and product_title:
+            normalized = re.sub(r"[^a-zA-Z0-9\s-]", "", product_title)
+            normalized = re.sub(r"\s+", "-", normalized.strip())
+            handle = normalized.lower()
+
+        # Listing URL
+        listing_url = (
+            snapshot.get("onlineStoreUrl")
+            or snapshot.get("onlineStorePreviewUrl")
+        )
+        if not listing_url and handle:
+            listing_url = f"https://londonvintageguitars.myshopify.com/products/{handle}"
+
+        # Platform payload stored in platform_specific_data / extended_attributes
+        platform_payload = snapshot or {}
+
+        # Sync status
+        sync_status_value = SyncStatus.SYNCED.value.upper()
+
+        # Category
+        category_assignment_status = None
+        category_assigned_at = None
+        if not category_gid:
+            # Try from snapshot
+            cat_node = snapshot.get("category") if isinstance(snapshot, dict) else None
+            if isinstance(cat_node, dict):
+                category_gid = cat_node.get("id")
+                category_name = category_name or cat_node.get("name")
+                category_full_name = category_full_name or cat_node.get("fullName")
+            prod_cat = snapshot.get("productCategory")
+            if isinstance(prod_cat, dict):
+                tax_node = prod_cat.get("productTaxonomyNode") or {}
+                category_gid = category_gid or tax_node.get("id")
+                category_name = category_name or tax_node.get("name")
+                category_full_name = category_full_name or tax_node.get("fullName")
+        if category_gid:
+            category_assignment_status = "assigned"
+            category_assigned_at = datetime.utcnow()
+
+        # SEO
+        seo_data = snapshot.get("seo") if isinstance(snapshot.get("seo"), dict) else {}
+        seo_title = seo_data.get("title") or (product_title[:255] if product_title else None)
+        seo_description = seo_data.get("description")
+
+        # Price
+        price_float = float(final_price) if final_price is not None else (
+            float(product.base_price) if product.base_price else None
+        )
+
+        # Tags as keywords
+        snapshot_tags = snapshot.get("tags") if isinstance(snapshot.get("tags"), list) else None
+
+        # ── Upsert platform_common ───────────────────────────────────
+        existing = await self.db.execute(
+            select(PlatformCommon).where(
+                PlatformCommon.product_id == product.id,
+                PlatformCommon.platform_name == "shopify",
+            )
+        )
+        platform_common = existing.scalar_one_or_none()
+
+        if platform_common:
+            platform_common.external_id = external_id
+            platform_common.status = "active"
+            platform_common.listing_url = listing_url or platform_common.listing_url
+            platform_common.sync_status = sync_status_value
+            platform_common.last_sync = datetime.utcnow()
+            platform_common.platform_specific_data = platform_payload
+        else:
+            platform_common = PlatformCommon(
+                product_id=product.id,
+                platform_name="shopify",
+                external_id=external_id,
+                status="active",
+                listing_url=listing_url,
+                sync_status=sync_status_value,
+                last_sync=datetime.utcnow(),
+                platform_specific_data=platform_payload,
+            )
+            self.db.add(platform_common)
+
+        await self.db.flush()
+
+        # ── Upsert shopify_listings ──────────────────────────────────
+        listing_stmt = select(ShopifyListing).where(ShopifyListing.platform_id == platform_common.id)
+        existing_listing = await self.db.execute(listing_stmt)
+        shopify_listing = existing_listing.scalar_one_or_none()
+
+        listing_payload = {
+            "platform_id": platform_common.id,
+            "shopify_product_id": product_gid,
+            "shopify_legacy_id": external_id,
+            "handle": handle,
+            "title": product_title,
+            "status": "active",
+            "vendor": snapshot.get("vendor") or product.brand,
+            "price": price_float,
+            "category_gid": category_gid,
+            "category_name": category_name,
+            "category_full_name": category_full_name,
+            "category_assigned_at": category_assigned_at,
+            "category_assignment_status": category_assignment_status,
+            "seo_title": seo_title,
+            "seo_description": seo_description,
+            "seo_keywords": snapshot_tags,
+            "shipping_profile_id": shipping_profile_gid,
+            "extended_attributes": platform_payload,
+            "last_synced_at": datetime.utcnow(),
+        }
+
+        if shopify_listing:
+            for field, value in listing_payload.items():
+                setattr(shopify_listing, field, value)
+        else:
+            shopify_listing = ShopifyListing(**listing_payload)
+            self.db.add(shopify_listing)
+
+        await self.db.commit()
+        logger.info(
+            "Persisted platform_common (id=%s) + shopify_listings (id=%s) for product %s",
+            platform_common.id, shopify_listing.id, product.id,
+        )
+
+    async def create_gallery_listing_from_product(self, product: Product) -> Dict[str, Any]:
+        """
+        Creates a Shopify listing as ARCHIVED and tags it for gallery/collection purposes.
+        """
+        logger.info(f"Creating Shopify GALLERY listing for Product ID: {product.id}, SKU: {product.sku}")
+        
+        try:
+            # Prepare tags, including our new 'gallery-item' tag
+            tags = [product.brand, product.category]
+            if product.year:
+                tags.append(f"Year:{product.year}")
+            
+            # --- KEY CHANGE 1: ADD THE GALLERY TAG ---
+            tags.append("gallery-item")
+
+            images = []
+            if product.primary_image:
+                images.append({'src': product.primary_image})
+
+            product_input = {
+                "title": product.title or f"{product.year or ''} {product.brand} {product.model}".strip(),
+                "vendor": product.brand,
+                "descriptionHtml": product.description,
+                "productType": product.category,
+                # --- KEY CHANGE 2: SET STATUS TO ARCHIVED ---
+                "status": "ARCHIVED",
+                "tags": tags,
+                "variants": [{
+                    "price": str(product.base_price),
+                    "sku": product.sku
+                }],
+                "images": images
+            }
+
+            # Call the existing, powerful client method to create the product
+            creation_result = self.client.create_product(product_input)
+
+            if (creation_result and creation_result.get("product") and 
+                    creation_result["product"].get("legacyResourceId")):
+                
+                new_shopify_id = creation_result["product"]["legacyResourceId"]
+                logger.info(f"Successfully created Shopify GALLERY product with ID: {new_shopify_id}")
+                return {"status": "success", "external_id": new_shopify_id}
+            else:
+                logger.error(f"Shopify API call did not return a valid product ID for gallery item. Response: {creation_result}")
+                user_errors = creation_result.get('userErrors', [])
+                error_message = user_errors[0]['message'] if user_errors else "Unknown API error."
+                return {"status": "error", "message": error_message}
+
+        except Exception as e:
+            logger.error(f"Exception while creating Shopify gallery listing for SKU {product.sku}: {e}", exc_info=True)
+            return {"status": "error", "message": str(e)}
+    
+    
+    # =========================================================================
+    # 6. DATA PREPARATION & FETCHING HELPERS
+    # =========================================================================
+    async def _fetch_existing_shopify_data(self) -> List[Dict]:
+        """Fetches all Shopify-related data from the local database, focusing on the source of truth."""
+        query = text("""
+            SELECT
+                p.id as product_id,
+                p.sku,
+                p.base_price, -- For price comparison
+                pc.id as platform_common_id,
+                pc.external_id,
+                pc.status as platform_common_status, -- This is our source of truth
+                pc.listing_url,
+                pc.created_at as platform_created_at, -- For grace period on new listings
+                sl.shopify_legacy_id -- Keep for matching
+            FROM platform_common pc
+            LEFT JOIN products p ON p.id = pc.product_id
+            LEFT JOIN shopify_listings sl ON pc.id = sl.platform_id
+            WHERE pc.platform_name = 'shopify'
+              AND pc.status NOT IN ('refreshed', 'deleted', 'removed')
+        """)
+        result = await self.db.execute(query)
+        rows = [row._asdict() for row in result.fetchall()]
+
+        # logger.info(f"--- [DEBUG] Fetched {len(rows)} total records from the database.")
+        # if rows:
+        #     logger.info(f"--- [DEBUG] Sample DB Row: {rows[0]}")
+
+        return rows
+    
+    def _prepare_api_data(self, shopify_products: List[Dict]) -> Dict[str, Dict]:
+        """Prepares Shopify API data into a standardized lookup dictionary."""
+        logger.debug("--- [DEBUG] Entering _prepare_api_data ---")
+        prepared_items = {}
+        for product in shopify_products:
+            product_gid = str(product.get('id', ''))
+            if not product_gid:
+                continue
+
+            product_id = product.get('legacyResourceId')
+            if not product_id:
+                continue
+            
+            # --- NEW SMARTER TRANSLATOR LOGIC ---
+            api_status = str(product.get('status', 'active')).lower()
+            inventory_quantity = product.get('totalInventory') # Can be None
+
+            universal_status = api_status
+            # If a product is 'active' but has no stock, it's functionally 'sold' for our system.
+            if api_status == 'active' and inventory_quantity is not None and inventory_quantity <= 0:
+                universal_status = 'sold'
+            # --- END NEW LOGIC ---
+
+            price = 0.0
+            variants = product.get('variants', {}).get('nodes', [])
+            if variants:
+                raw_price = variants[0].get('price', 0)
+                try:
+                    price = float(raw_price) if raw_price else 0.0
+                except (ValueError, TypeError):
+                    price = 0.0
+            
+            prepared_items[product_id] = {
+                'external_id': product_id,
+                'full_gid': product_gid,
+                'status': universal_status, # Use the smarter status
+                'price': price,
+                'title': product.get('title', ''),
+                'listing_url': product.get('onlineStoreUrl'),
+                '_raw': product
+            }
+        
+        # if prepared_items:
+        #     sample_key = next(iter(prepared_items))
+        #     logger.info(f"--- [DEBUG] Sample Prepared API Item (ID: {sample_key}): {prepared_items[sample_key]}")
+
+        return prepared_items
+
+    def _prepare_db_data(self, existing_data: List[Dict]) -> Dict[str, Dict]:
+        """Prepares local DB data into a lookup dictionary keyed by external_id."""
+        db_items = {str(row['external_id']): row for row in existing_data if row.get('external_id')}
+        logger.debug(f"Prepared {len(db_items)} DB items for comparison")
+        if db_items:
+            sample_keys = list(db_items.keys())[:5]
+            logger.debug(f"Sample DB keys: {sample_keys}")
+        return db_items
+
+
+    # =========================================================================
+    # (Optional) 7. WEBHOOK PROCESSING
+    # =========================================================================
+    async def process_order_webhook(self, payload: dict):
+        """Process an incoming order webhook from Shopify."""
+        # logger.info("Processing Shopify order webhook")
+        # This would create sync_events for sold items
+        # Implementation depends on your webhook structure
+        # 1. Validate webhook signature (important!)
+        # 2. Parse payload
+        # 3. Check if order already processed
+        # 4. Create/update local Sale/Order record
+        # 5. Update local product stock/status
+        # 6. Trigger StockUpdateEvent for StockManager
+        # Example:
+        # event = StockUpdateEvent(product_id=..., platform='shopify', new_quantity=..., ...)
+        # await stock_manager.update_queue.put(event) # Assuming access to stock_manager instance
+        pass
+    @staticmethod
+    def _extract_source_price(product: Product, reverb_data: Optional[Dict[str, Any]]) -> Optional[float]:
+        """Determine the price that should seed the Shopify calculation."""
+
+        # Prefer explicit Reverb pricing when available
+        if reverb_data:
+            price_info = reverb_data.get("price") or reverb_data.get("listing_price")
+            if isinstance(price_info, dict):
+                amount = price_info.get("amount") or price_info.get("value") or price_info.get("display")
+                if amount:
+                    try:
+                        return float(amount)
+                    except (TypeError, ValueError):
+                        pass
+            elif isinstance(price_info, (int, float, str)):
+                try:
+                    return float(price_info)
+                except (TypeError, ValueError):
+                    pass
+
+        # Fallback to any platform data captured on the product
+        platform_data = getattr(product, "package_dimensions", {}) or {}
+        if isinstance(platform_data, dict):
+            reverb_payload = platform_data.get("platform_data", {}).get("reverb", {})
+            amount = reverb_payload.get("price")
+            if amount:
+                try:
+                    return float(amount)
+                except (TypeError, ValueError):
+                    pass
+
+        # Finally fall back to the product's base price
+        for attr in ("base_price", "price", "price_notax"):
+            value = getattr(product, attr, None)
+            if value not in (None, 0, 0.0):
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    continue
+
+        return None
+
+    @staticmethod
+    def _calculate_shopify_price(source_price: float) -> int:
+        """Apply a 5% discount and round up to the nearest price ending in 999."""
+
+        if source_price <= 0:
+            raise ValueError("Source price must be positive to calculate Shopify price")
+
+        discounted = source_price * 0.95
+
+        if discounted <= 999:
+            rounded = 999
+        else:
+            thousands = math.floor(discounted / 1000)
+            rounded = thousands * 1000 + 999
+            if rounded < discounted:
+                rounded += 1000
+
+        if rounded >= source_price:
+            lower_thousands = max(math.floor(source_price / 1000) - 1, 0)
+            candidate = lower_thousands * 1000 + 999
+            if candidate >= source_price or candidate < 0:
+                candidate = max(int(source_price) - 1, 1)
+            rounded = candidate
+
+        return int(rounded)

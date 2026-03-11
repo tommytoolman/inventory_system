@@ -1,0 +1,148 @@
+{
+    "media": {
+      "photos": {
+        "max_count": 24,
+        "required": true
+      },
+      "video": {
+        "max_duration_seconds": 60,
+        "required": false
+      }
+    },
+    "sections": {
+        "title": {
+        "fields": {
+            "item_title": {
+            "type": "string",
+            "max_length": 80,
+            "required": true
+            },
+            "subtitle": {
+            "type": "string",
+            "max_length": 55,
+            "required": false,
+            "fee": 2.40,
+            "fee_currency": "GBP"
+            },
+            "sku": {
+            "type": "string",
+            "max_length": 50,
+            "required": false
+            }
+        }
+        },
+        "categories": {
+        "fields": {
+            "primary_category": {
+            "type": "category",
+            "required": true
+            },
+            "secondary_category": {
+            "type": "category",
+            "required": false
+            },
+            "shop_category_primary": {
+            "type": "shop_category",
+            "required": false,
+            "condition": "has_shop"
+            },
+            "shop_category_secondary": {
+            "type": "shop_category",
+            "required": false
+            }
+        }
+        },
+        "item_specifics": {
+        "required_fields": {
+            "brand": {
+            "type": "string",
+            "required": true
+            }
+        },
+        "optional_fields": {
+            "model": {
+            "type": "string",
+            "suggested_values": ["Custom", "Fender Player Stratocaster", "Plus"]
+            },
+            "handedness": {
+            "type": "enum",
+            "suggested_values": ["Right-Handed"]
+            }
+        }
+        },
+        "condition": {
+        "type": "enum",
+        "required": true,
+        "values": ["New", "Opened (Never Used)", "Used", "For parts or not working"],
+        "description": {
+            "type": "string",
+            "max_length": 1000,
+            "required": false
+        }
+        },
+        "pricing": {
+            "format": {
+            "type": "enum",
+            "required": true,
+            "values": ["Auction", "Buy it Now"]
+            },
+            "price": {
+            "type": "decimal",
+            "required": true,
+            "includes_vat": true
+            },
+            "offers": {
+            "enabled": {
+                "type": "boolean",
+                "required": true
+            },
+            "min_offer": {
+                "type": "decimal",
+                "required": false
+            },
+            "auto_accept": {
+                "type": "decimal",
+                "required": false
+            }
+            },
+            "quantity": {
+            "type": "integer",
+            "required": true,
+            "min": 1
+            },
+            "payment_policy_id": {
+            "type": "string",
+            "required": true
+            }
+        },
+        "delivery": {
+            "postage_policy_id": {
+            "type": "string",
+            "required": true
+            },
+            "package": {
+            "weight": {
+                "type": "decimal",
+                "required": true,
+                "unit": ["kg", "g"]
+            },
+            "dimensions": {
+                "required": false,
+                "length": {"type": "decimal", "unit": "cm"},
+                "width": {"type": "decimal", "unit": "cm"},
+                "height": {"type": "decimal", "unit": "cm"}
+            },
+            "irregular": {
+                "type": "boolean",
+                "default": false
+            }
+            },
+            "international": {
+            "us_canada_visible": {
+                "type": "boolean",
+                "default": false
+            }
+            }
+        }
+    }
+}

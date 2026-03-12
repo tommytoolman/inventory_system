@@ -1243,60 +1243,46 @@ def fill_item_form(driver, item_data, test_mode=True, db_session=None, is_remote
                 print(f"Setting TinyMCE content: {processed_description[:100]}...")
 
                 # Method 1: Use TinyMCE API to set HTML content
-                # Pre-escape backticks outside f-string (Python 3.11 doesn't allow backslashes in f-string expressions)
-                escaped_desc = processed_description.replace('`', '\\`')
+                # Pass description as a Selenium argument to avoid JS template literal escaping issues
+                # (backticks, ${}, backslashes etc. in HTML would break f-string/template literal injection)
                 try:
-                    driver.execute_script(f"""
+                    driver.execute_script("""
                         var editor = tinymce.get('item_desc');
-                        if (editor) {{
-                            editor.setContent(`{escaped_desc}`);
+                        if (editor) {
+                            editor.setContent(arguments[0]);
                             console.log('TinyMCE content set via API');
-                        }} else {{
+                        } else {
                             console.log('TinyMCE editor not found, trying iframe method');
                             throw new Error('Editor not found');
-                        }}
-                    """)
+                        }
+                    """, processed_description)
                     print("✅ Description set via TinyMCE API with line breaks")
-                    
+
                 except Exception as api_error:
                     print(f"TinyMCE API method failed: {api_error}, trying iframe method...")
-                    
+
                     # Fallback to iframe method
                     iframe = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#item_desc_ifr")))
                     driver.switch_to.frame(iframe)
-                    
-                    driver.execute_script(f"""
-                        document.getElementById('tinymce').innerHTML = `{escaped_desc}`;
-                    """)
-                    
+
+                    driver.execute_script("""
+                        document.getElementById('tinymce').innerHTML = arguments[0];
+                    """, processed_description)
+
                     driver.switch_to.default_content()
                     print("✅ Description set via iframe innerHTML method with line breaks")
                     
-                # ADD THIS DEBUG BLOCK RIGHT HERE (after line 1089)
-                # After setting TinyMCE content, verify what was actually set:
+                # Verify what was actually set in TinyMCE
                 try:
-                    # Get the actual content from TinyMCE
                     actual_content = driver.execute_script("return tinymce.get('item_desc').getContent();")
-                    print(f"🔍 DEBUG: Actual TinyMCE content after setting:")
-                    print(f"   First 200 chars: {actual_content[:200]}...")
-                    
-                    # Check if our <br> tags are present
-                    br_count = actual_content.count('<br>')
-                    print(f"   Number of <br> tags found: {br_count}")
-                    
-                    # Check for our specific patterns (updated for TinyMCE's HTML conversion)
-                    if '</strong></strong></p><p>&nbsp;</p>' in actual_content:
-                        print("   ✅ Found line breaks AFTER headers")
-                    else:
-                        print("   ❌ Missing line breaks AFTER headers")
-
-                    if '<p>&nbsp;</p><p><strong><strong>' in actual_content:
-                        print("   ✅ Found line breaks BEFORE headers")  
-                    else:
-                        print("   ❌ Missing line breaks BEFORE headers")
-                        
+                    actual_len = len(actual_content)
+                    input_len = len(processed_description)
+                    p_count = actual_content.count('</p>')
+                    print(f"📏 TinyMCE description verification: input={input_len} chars, actual={actual_len} chars, paragraphs={p_count}")
+                    if actual_len < input_len * 0.5:
+                        print(f"⚠️ WARNING: TinyMCE content significantly shorter than input! First 300 chars: {actual_content[:300]}")
                 except Exception as e:
-                    print(f"TinyMCE debug error: {str(e)}")
+                    print(f"TinyMCE verification error: {str(e)}")
                     
             except Exception as e:
                 print(f"❌ Error filling description: {str(e)}")

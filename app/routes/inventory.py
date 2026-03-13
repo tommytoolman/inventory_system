@@ -4173,6 +4173,23 @@ async def add_product(
                                 "Reverb rejected SKU %s because it already exists. Prompting user to resolve conflict.",
                                 product.sku,
                             )
+                            # Roll back the orphaned product so the user can retry with the same SKU.
+                            # No other platform data exists at this point (all platforms are skipped
+                            # when Reverb fails first), so it is safe to delete.
+                            try:
+                                await db.delete(product)
+                                await db.commit()
+                                logger.warning(
+                                    "Deleted orphaned product %s (SKU: %s) after Reverb SKU conflict",
+                                    product.id,
+                                    product.sku,
+                                )
+                            except Exception as del_exc:
+                                logger.error(
+                                    "Failed to delete orphaned product %s after Reverb SKU conflict: %s",
+                                    product.id,
+                                    del_exc,
+                                )
                             return JSONResponse(
                                 status_code=400,
                                 content={

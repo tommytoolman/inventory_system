@@ -21,7 +21,7 @@ async def generate_next_riff_sku(db: AsyncSession) -> str:
         next_num = 10000001
     else:
         try:
-            numeric_part = highest_sku.replace("RIFF-", "")
+            numeric_part = highest_sku.replace("RIFF-", "").split("-")[0]
             next_num = int(numeric_part) + 1
             if next_num >= 20000000:
                 next_num = 10000001

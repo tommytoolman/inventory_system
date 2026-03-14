@@ -381,7 +381,8 @@ async def _create_product_from_reverb(session: AsyncSession, reverb_data: dict) 
 
     # Map condition - matching the original script and actual enum values
     condition_map = {
-        'new': ProductCondition.NEW,
+        'brand-new': ProductCondition.NEW,    # Reverb's actual slug for Brand New
+        'new': ProductCondition.NEW,          # Safety alias
         'excellent': ProductCondition.EXCELLENT,
         'very_good': ProductCondition.VERYGOOD,  # Fixed: VERYGOOD not VERY_GOOD
         'good': ProductCondition.GOOD,

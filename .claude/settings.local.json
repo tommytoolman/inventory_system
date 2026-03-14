@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(grep -rn \"2nd hand\\\\|Used\\\\|Second Hand\" \"C:/Users/harry/Documents/ActionSmartAI/RIFF/WooCommerce-Integration/inventory_system\" --include=\"*.py\" 2>/dev/null | head -30)",
+      "Bash(find:*)"
+    ]
+  },
   "claudeCode": {
     "model": "claude-opus-4-20250805",
     "autoApprove": {

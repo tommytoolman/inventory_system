@@ -4677,8 +4677,11 @@ async def inspect_payload(
         if mapping:
             reverb_condition_uuid = mapping.platform_condition_id
 
-    if not reverb_condition_uuid:
-        reverb_condition_uuid = "df268ad1-c462-4ba6-b6db-e007e23922ea"
+    if not reverb_condition_uuid and condition_enum:
+        from app.services.reverb_service import _REVERB_CONDITION_UUID, _REVERB_CONDITION_DEFAULT_UUID
+        reverb_condition_uuid = _REVERB_CONDITION_UUID.get(condition_enum, _REVERB_CONDITION_DEFAULT_UUID)
+    elif not reverb_condition_uuid:
+        reverb_condition_uuid = "f7a3f48c-972a-44c6-b01a-0cd27488d3f6"  # Good — safe neutral fallback
     
     # Build response with payloads for each platform
     payloads = {}

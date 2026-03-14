@@ -34,6 +34,19 @@ from app.services.condition_mapping_service import ConditionMappingService
 
 logger = logging.getLogger(__name__)
 
+# Static condition → Reverb UUID fallback (mirrors platform_condition_mappings migration).
+# Used when the DB table is empty or unavailable.
+_REVERB_CONDITION_UUID: Dict[str, str] = {
+    ProductCondition.NEW:       "7c3f45de-2ae0-4c81-8400-fdb6b1d74890",  # Brand New
+    ProductCondition.EXCELLENT: "df268ad1-c462-4ba6-b6db-e007e23922ea",  # Excellent
+    ProductCondition.VERYGOOD:  "ae4d9114-1bd7-4ec5-a4ba-6653af5ac84d",  # Very Good
+    ProductCondition.GOOD:      "f7a3f48c-972a-44c6-b01a-0cd27488d3f6",  # Good
+    ProductCondition.FAIR:      "98777886-76d0-44c8-865e-bb40e669e934",  # Fair
+    ProductCondition.POOR:      "6a9dfcad-600b-46c8-9e08-ce6e5057921e",  # Poor
+}
+_REVERB_CONDITION_DEFAULT_UUID = "f7a3f48c-972a-44c6-b01a-0cd27488d3f6"  # Good — safe neutral fallback
+
+
 class ReverbService:
     """
     Service for interacting with Reverb marketplace.
@@ -973,11 +986,15 @@ class ReverbService:
                     )
 
             if not condition_uuid:
-                logger.warning(
-                    "Falling back to Excellent condition for product %s due to missing mapping",
-                    product.sku,
+                condition_uuid = _REVERB_CONDITION_UUID.get(
+                    product.condition, _REVERB_CONDITION_DEFAULT_UUID
                 )
-                condition_uuid = "df268ad1-c462-4ba6-b6db-e007e23922ea"  # Excellent
+                logger.warning(
+                    "Falling back to static condition UUID for product %s (condition=%s) → %s",
+                    product.sku,
+                    product.condition,
+                    condition_uuid,
+                )
 
             # Determine category UUID
             category_uuid = (
@@ -1546,6 +1563,20 @@ class ReverbService:
                     product.sku,
                 )
 
+        if "condition" in changed_fields and product.condition:
+            condition_uuid = None
+            mapping = await self.condition_mapping_service.get_mapping(
+                PlatformName.REVERB,
+                product.condition,
+            )
+            if mapping:
+                condition_uuid = mapping.platform_condition_id
+            if not condition_uuid:
+                condition_uuid = _REVERB_CONDITION_UUID.get(
+                    product.condition, _REVERB_CONDITION_DEFAULT_UUID
+                )
+            payload["condition"] = {"uuid": condition_uuid}
+
         if "quantity" in changed_fields:
             payload["has_inventory"] = bool(product.is_stocked_item)
             payload["inventory"] = int(product.quantity or 0) if product.is_stocked_item else 1
@@ -1807,11 +1838,15 @@ class ReverbService:
                 condition_uuid = mapping.platform_condition_id
 
         if not condition_uuid:
-            logger.warning(
-                "Falling back to Excellent condition while preparing Reverb payload for product %s",
-                product.id,
+            condition_uuid = _REVERB_CONDITION_UUID.get(
+                product.condition, _REVERB_CONDITION_DEFAULT_UUID
             )
-            condition_uuid = "df268ad1-c462-4ba6-b6db-e007e23922ea"
+            logger.warning(
+                "Falling back to static condition UUID while preparing Reverb payload for product %s (condition=%s) → %s",
+                product.id,
+                product.condition,
+                condition_uuid,
+            )
 
         data = {
             "title": product.title or f"{product.brand} {product.model}",

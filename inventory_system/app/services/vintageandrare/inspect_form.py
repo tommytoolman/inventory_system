@@ -1811,6 +1811,16 @@ def submit_form_and_capture_response(driver, db_session=None, is_remote=False):
                 # driver.save_screenshot("03_before_vr_publish_click.png")
                 # print("📸 Screenshot saved: before V&R publish click")
                 
+                # Flush TinyMCE content to underlying textarea before submitting.
+                # V&R's publish button is an <a> tag, not a real form submit, so
+                # TinyMCE's auto-save hook never fires — the textarea stays empty
+                # unless we call triggerSave() explicitly.
+                try:
+                    driver.execute_script("if (typeof tinymce !== 'undefined') { tinymce.triggerSave(); }")
+                    print("✅ TinyMCE content flushed to textarea via triggerSave()")
+                except Exception as tce:
+                    print(f"⚠️ tinymce.triggerSave() failed (non-fatal): {tce}")
+
                 # Click the V&R publish button
                 print("🖱️  Clicking V&R 'Publish item' button...")
                 submit_button.click()

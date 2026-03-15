@@ -1,29 +1,17 @@
 #!/usr/bin/env python3
 """
-Sync stocked item orders from Reverb and create sync_events.
+Sync stocked item orders from Reverb.
 
-This script:
-1. Imports orders from Reverb (upserts to reverb_orders) - SAME AS SCHEDULER
-2. Creates order_sale sync_events for unprocessed stocked item orders
-
-These sync_events then appear in the Sync Events Report with a "Record Sale"
-button that triggers quantity decrements across all platforms.
+Imports orders from Reverb API and upserts to reverb_orders table.
+Order processing is handled by OrderSaleProcessor in the scheduler.
 
 Usage:
     python scripts/reverb/sync_stocked_orders.py [--dry-run]
-
-Examples:
-    # Run the sync
-    python scripts/reverb/sync_stocked_orders.py
-
-    # Dry run - just show what would be created
-    python scripts/reverb/sync_stocked_orders.py --dry-run
 """
 
 import argparse
 import asyncio
 import sys
-import uuid
 from pathlib import Path
 
 # Add project root to path
@@ -31,7 +19,6 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from sqlalchemy import select
 from app.database import async_session
-from app.services.reverb_service import ReverbService
 from app.services.reverb.client import ReverbClient
 from app.models.reverb_order import ReverbOrder
 from app.core.config import get_settings
@@ -122,24 +109,8 @@ async def main():
         else:
             print("  [DRY RUN] Would import orders from Reverb API")
 
-        # Step 2: Create sync_events for stocked item orders
-        print("\n[2/2] Creating sync_events for stocked item sales...")
-        service = ReverbService(db, settings)
-        if not args.dry_run:
-            event_result = await service.create_sync_events_for_stocked_orders(sync_run_id)
-            print(f"  Events created: {event_result.get('events_created', 0)}")
-            print(f"  Skipped (already pending): {event_result.get('skipped_existing', 0)}")
-            print(f"  Errors: {event_result.get('errors', 0)}")
-            await db.commit()
-        else:
-            print("  [DRY RUN] Would check for unprocessed stocked item orders")
-            print("  [DRY RUN] Would create order_sale sync_events")
-
     print("\n" + "=" * 60)
     print("DONE")
-    if not args.dry_run:
-        print(f"Sync run ID: {sync_run_id}")
-        print("Check /reports/sync-events to see pending order_sale events")
     print("=" * 60)
 
 

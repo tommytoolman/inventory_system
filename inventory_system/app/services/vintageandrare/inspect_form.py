@@ -176,7 +176,7 @@ def map_category_options(driver):
                                     'name': sub2_text,
                                     'subcategories': sub3_data
                                 }
-                            except:
+                            except Exception:
                                 sub2_data[sub2_id] = {
                                     'name': sub2_text,
                                     'subcategories': []
@@ -186,13 +186,13 @@ def map_category_options(driver):
                             'name': sub1_text,
                             'subcategories': sub2_data
                         }
-                    except:
+                    except Exception:
                         category_map[main_id]['subcategories'][sub1_id] = {
                             'name': sub1_text,
                             'subcategories': {}
                         }
                         
-            except:
+            except Exception:
                 category_map[main_id] = {
                     'name': main_text,
                     'subcategories': {}
@@ -419,7 +419,7 @@ def login_and_navigate(username, password, item_data=None, test_mode=True, map_c
                 print("Handling cookie consent on new page...")
                 cookie_button.click()
                 time.sleep(1)
-            except:
+            except Exception:
                 print("No cookie consent needed on new page")
             
             print(f"11. Final URL: {driver.current_url}")
@@ -580,7 +580,7 @@ def validate_category_selection(driver):
             sub_select = Select(sub_element)
             if not sub_select.first_selected_option.get_attribute('value'):
                 raise ValueError("System Error: Required subcategory not provided for main category {main_value}. Please check category mapping configuration.")
-    except:
+    except Exception:
         pass  # No subcategory element found
 
 def get_category_path(category_map, target_id, path=None):
@@ -1675,9 +1675,9 @@ def edit_item_form(driver, item_id, item_data, test_mode=True, db_session=None):
             cookie_button = driver.find_element(By.CSS_SELECTOR, ".cc-nb-okagree")
             cookie_button.click()
             time.sleep(1)
-        except:
+        except Exception:
             pass
-        
+
         print(f"2. Current URL after navigation: {driver.current_url}")
         
         # Step 2: Extract the existing unique_id from the form (more reliable than generating)

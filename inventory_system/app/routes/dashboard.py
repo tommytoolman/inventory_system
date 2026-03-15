@@ -904,7 +904,7 @@ class DashboardService:
                     import json
                     try:
                         change_data = json.loads(change_data)
-                    except:
+                    except (json.JSONDecodeError, ValueError, TypeError):
                         change_data = {}
 
                 change_desc = self._format_change_description(row.change_type, change_data)

@@ -237,7 +237,7 @@ class EbayImporter:
                     if isinstance(picture_urls, str):
                         try:
                             picture_urls = json.loads(picture_urls)
-                        except:
+                        except (json.JSONDecodeError, ValueError, TypeError):
                             picture_urls = []
                     
                     primary_image = picture_urls[0] if picture_urls and len(picture_urls) > 0 else None
@@ -362,9 +362,9 @@ class EbayImporter:
             # Make sure connection is clean
             try:
                 await conn.rollback()
-            except:
+            except Exception:
                 pass
-                
+
             logger.exception(f"Transaction error for listing {item_id}: {str(e)}")
             return f"Error: {str(e)}"
     

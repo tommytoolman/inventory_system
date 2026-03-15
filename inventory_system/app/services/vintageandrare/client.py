@@ -2025,7 +2025,7 @@ class VintageAndRareClient:
             logger.error(f"Platform entries traceback: {traceback.format_exc()}")
             try:
                 await db_session.rollback()
-            except:
+            except Exception:
                 pass
 
     async def resolve_vr_ids_batch(
@@ -2412,7 +2412,7 @@ class VintageAndRareClient:
                     result = response.json()
                     print(f"✅ JSON response for {item_id}: {result}")
                     return {"success": True, "response": result, "item_id": item_id}
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     # If not JSON, check for success indicators in text
                     response_lower = response_text.lower()
                     if any(keyword in response_lower for keyword in ['success', 'deleted', 'removed', 'ok']):
@@ -2691,9 +2691,9 @@ class VintageAndRareClient:
                 cookie_button = driver.find_element(By.CLASS_NAME, "cc-nb-okagree")
                 cookie_button.click()
                 time.sleep(1)
-            except:
+            except Exception:
                 pass
-            
+
             # Check current URL and page content
             current_url = driver.current_url
             logger.info(f"Current URL: {current_url}")
@@ -2861,7 +2861,7 @@ class VintageAndRareClient:
                     parsed_images = json.loads(additional_images)
                     if isinstance(parsed_images, list):
                         form_data['images'].extend(parsed_images)
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     form_data['images'].append(additional_images)
         
         return form_data

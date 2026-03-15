@@ -4458,7 +4458,7 @@ async def add_product(
                     numeric_part = highest_sku.replace('RIFF-', '')
                     next_sku = f"RIFF-{int(numeric_part) + 1:08d}"
                     error_message += f". Suggested next SKU: {next_sku}"
-                except:
+                except (ValueError, TypeError):
                     pass
 
         return JSONResponse({
@@ -4582,7 +4582,7 @@ async def inspect_payload(
         try:
             additional = json.loads(additional_images)
             images_array.extend(additional)
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             pass
 
     condition_mapping_service = ConditionMappingService(db)
@@ -5018,7 +5018,7 @@ async def save_draft(
             try:
                 urls = json.loads(additional_images_urls)
                 additional_images.extend(urls)
-            except:
+            except (json.JSONDecodeError, ValueError, TypeError):
                 pass
 
         local_media_urls: List[str] = []

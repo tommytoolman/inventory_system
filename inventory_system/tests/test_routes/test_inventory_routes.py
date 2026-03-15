@@ -1443,18 +1443,18 @@ async def test_get_dropbox_folders_processing(mocker):
     # Mock settings dependency with dummy values
     mock_settings = MagicMock()
     mock_settings.DROPBOX_ACCESS_TOKEN = "dummy_token"
-    mocker.patch("app.routes.inventory.get_settings", return_value=mock_settings)
-    
+    mocker.patch("app.routes.inventory_dropbox.get_settings", return_value=mock_settings)
+
     # Mock the jsonable_encoder function that's likely used to convert objects to JSON-serializable dicts
     from fastapi.encoders import jsonable_encoder
-    mocker.patch('app.routes.inventory.jsonable_encoder', side_effect=lambda x: {"status": "processing", "message": "Processing folders..."})
-    
+    mocker.patch('app.routes.inventory_dropbox.jsonable_encoder', side_effect=lambda x: {"status": "processing", "message": "Processing folders..."})
+
     # Mock the JSONResponse constructor to return a predictable response
     from starlette.responses import JSONResponse
     mock_json_response = MagicMock(spec=JSONResponse)
     mock_json_response.status_code = 202
     mock_json_response.body = b'{"status":"processing","message":"Processing folders..."}'
-    mocker.patch('app.routes.inventory.JSONResponse', return_value=mock_json_response)
+    mocker.patch('app.routes.inventory_dropbox.JSONResponse', return_value=mock_json_response)
     
     # Mock request with necessary state attributes
     mock_request = MagicMock(spec=Request)
@@ -1466,7 +1466,7 @@ async def test_get_dropbox_folders_processing(mocker):
     
     # Act: Call the route function
     print("Calling get_dropbox_folders with processing needed")
-    from app.routes.inventory import get_dropbox_folders
+    from app.routes.inventory_dropbox import get_dropbox_folders
     response = await get_dropbox_folders(
         request=mock_request, 
         background_tasks=background_tasks,
@@ -1511,8 +1511,8 @@ async def test_list_dropbox_images(mocker):
     # Mock settings dependency with dummy values
     mock_settings = MagicMock()
     mock_settings.DROPBOX_ACCESS_TOKEN = "dummy_token"
-    mocker.patch("app.routes.inventory.get_settings", return_value=mock_settings)
-    
+    mocker.patch("app.routes.inventory_dropbox.get_settings", return_value=mock_settings)
+
     # Mock the request object with the necessary state attributes
     mock_request = MagicMock(spec=Request)
     mock_request.app = MagicMock()
@@ -1540,7 +1540,7 @@ async def test_list_dropbox_images(mocker):
     
     # Act: Call the route function
     print("Calling list_dropbox_images")
-    from app.routes.inventory import get_dropbox_images
+    from app.routes.inventory_dropbox import get_dropbox_images
     response = await get_dropbox_images(
         request=mock_request,
         folder_path="/images"

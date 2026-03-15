@@ -176,6 +176,8 @@ from app.core.security import require_auth
 # Include routers with authentication
 app.include_router(dashboard.router, prefix="", tags=["dashboard"], dependencies=[require_auth()])
 app.include_router(inventory.router, prefix="/inventory", tags=["inventory"], dependencies=[require_auth()])
+from app.routes import inventory_dropbox
+app.include_router(inventory_dropbox.router, prefix="/inventory", tags=["dropbox"], dependencies=[require_auth()])
 # Import and include inspection router for payload testing
 from app.routes import inventory_inspection
 app.include_router(inventory_inspection.router, dependencies=[require_auth()])

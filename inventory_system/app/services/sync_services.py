@@ -364,11 +364,6 @@ class SyncService:
                 success = await self._handle_removed_listing(event, summary, actions, dry_run)
             elif event.change_type == 'quantity_change':
                 success = await self._handle_quantity_change(event, summary, actions, dry_run)
-            # REDUNDANT — disabled March 2026. order_sale events are handled by
-            # OrderSaleProcessor (app/services/order_sale_processor.py) which runs first
-            # in the scheduler. This dispatch and _handle_order_sale() below are unreachable.
-            # elif event.change_type == 'order_sale':
-            #     success = await self._handle_order_sale(event, summary, actions, dry_run)
 
             if success:
                 event.status = 'processed'

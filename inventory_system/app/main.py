@@ -89,9 +89,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Migration error: {e}")
     
-    # Startup: Initialize stock manager
-    # app.state.stock_manager = await setup_stock_manager()
-   # Try to load Dropbox cache at startup
+    # Try to load Dropbox cache at startup
     try:
         from app.services.dropbox.dropbox_async_service import AsyncDropboxClient
         
@@ -195,7 +193,6 @@ app.include_router(reports.router, prefix="/reports", tags=["reports"], dependen
 app.include_router(insights.router, tags=["insights"], dependencies=[require_auth()])
 app.include_router(orders.router, prefix="/orders", tags=["orders"], dependencies=[require_auth()])
 app.include_router(shipping.router, dependencies=[require_auth()])
-# app.include_router(matching.router, prefix="/matching", tags=["matching"], dependencies=[require_auth()])  # Moved to reports
 app.include_router(settings_routes.router, tags=["settings"], dependencies=[require_auth()])
 app.include_router(admin_router, dependencies=[require_auth()])
 app.include_router(errors_router, dependencies=[require_auth()])

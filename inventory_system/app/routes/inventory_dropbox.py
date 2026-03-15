@@ -623,13 +623,13 @@ async def debug_dropbox_token(
         response = {
             "access_token": {
                 "available": bool(access_token),
-                "preview": f"{access_token[:5]}...{access_token[-5:]}" if access_token and len(access_token) > 10 else None,
+                "preview": "***" if access_token else None,
                 "length": len(access_token) if access_token else 0,
                 "source": "settings" if hasattr(settings, 'DROPBOX_ACCESS_TOKEN') and settings.DROPBOX_ACCESS_TOKEN else "environment" if access_token else None
             },
             "refresh_token": {
                 "available": bool(refresh_token),
-                "preview": f"{refresh_token[:5]}...{refresh_token[-5:]}" if refresh_token and len(refresh_token) > 10 else None,
+                "preview": "***" if refresh_token else None,
                 "length": len(refresh_token) if refresh_token else 0,
                 "source": "settings" if hasattr(settings, 'DROPBOX_REFRESH_TOKEN') and settings.DROPBOX_REFRESH_TOKEN else "environment" if refresh_token else None
             },
@@ -681,7 +681,7 @@ async def debug_dropbox_token(
 
                 response["refresh_result"] = {
                     "success": True,
-                    "new_token_preview": f"{new_token[:5]}...{new_token[-5:]}",
+                    "new_token_preview": "***",
                     "new_token_length": len(new_token),
                     "scan_initiated": True
                 }
@@ -915,7 +915,7 @@ async def force_refresh_dropbox_token(
             return {
                 "status": "success",
                 "message": "Successfully refreshed access token",
-                "new_token_preview": f"{new_token[:5]}...{new_token[-5:]}",
+                "new_token_preview": "***",
                 "new_token_length": len(new_token),
                 "scan_initiated": start_scan
             }
@@ -923,7 +923,7 @@ async def force_refresh_dropbox_token(
             return {
                 "status": "error",
                 "message": "Failed to refresh access token",
-                "refresh_token_preview": f"{refresh_token[:5]}...{refresh_token[-5:]}" if len(refresh_token) > 10 else None
+                "refresh_token_available": bool(refresh_token)
             }
 
     except Exception as e:
@@ -946,8 +946,8 @@ async def test_dropbox_credentials(
         "app_secret_available": bool(settings.DROPBOX_APP_SECRET),
         "refresh_token_available": bool(settings.DROPBOX_REFRESH_TOKEN),
         "access_token_available": bool(settings.DROPBOX_ACCESS_TOKEN),
-        "app_key_preview": settings.DROPBOX_APP_KEY[:5] + "..." if settings.DROPBOX_APP_KEY else None,
-        "refresh_token_preview": settings.DROPBOX_REFRESH_TOKEN[:5] + "..." if settings.DROPBOX_REFRESH_TOKEN else None
+        "app_key_preview": "***" if settings.DROPBOX_APP_KEY else None,
+        "refresh_token_preview": "***" if settings.DROPBOX_REFRESH_TOKEN else None
     }
 
 @router.get("/api/dropbox/debug-cache")
@@ -999,10 +999,10 @@ async def debug_dropbox_credentials(
         "env_app_secret": bool(os.environ.get('DROPBOX_APP_SECRET'))
     }
 
-    # Sample values (first 5 chars only)
+    # Credential availability (no values exposed)
     samples = {
-        "access_token_sample": os.environ.get('DROPBOX_ACCESS_TOKEN', '')[:5] + "..." if os.environ.get('DROPBOX_ACCESS_TOKEN') else None,
-        "refresh_token_sample": os.environ.get('DROPBOX_REFRESH_TOKEN', '')[:5] + "..." if os.environ.get('DROPBOX_REFRESH_TOKEN') else None
+        "access_token_available": bool(os.environ.get('DROPBOX_ACCESS_TOKEN')),
+        "refresh_token_available": bool(os.environ.get('DROPBOX_REFRESH_TOKEN'))
     }
 
     return {
@@ -1228,9 +1228,9 @@ async def perform_dropbox_scan(app, access_token=None):
             app_secret = os.environ.get('DROPBOX_APP_SECRET')
 
         print(f"Access token available: {bool(access_token)}")
-        print(f"Refresh token available: {bool(refresh_token)}{' (starts with: ' + refresh_token[:5] + '...)' if refresh_token else ''}")
-        print(f"App key available: {bool(app_key)}{' (starts with: ' + app_key[:5] + '...)' if app_key else ''}")
-        print(f"App secret available: {bool(app_secret)}{' (starts with: ' + app_secret[:5] + '...)' if app_secret else ''}")
+        print(f"Refresh token available: {bool(refresh_token)}")
+        print(f"App key available: {bool(app_key)}")
+        print(f"App secret available: {bool(app_secret)}")
 
         if not access_token and not refresh_token:
             print("ERROR: No access token or refresh token provided")

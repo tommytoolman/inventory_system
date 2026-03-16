@@ -1,21 +1,23 @@
+from app.database import Base
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Numeric,
-    DateTime,
-    Boolean,
     JSON,
+    Boolean,
+    Column,
+    DateTime,
     ForeignKey,
+    Integer,
+    Numeric,
+    String,
     text,
 )
-from app.database import Base
+from sqlalchemy.dialects.postgresql import UUID
 
 
 class EbayOrder(Base):
     __tablename__ = "ebay_orders"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
     order_id = Column(String, nullable=False)
     extended_order_id = Column(String)
     order_status = Column(String)

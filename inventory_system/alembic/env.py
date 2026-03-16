@@ -2,22 +2,50 @@
 import asyncio
 from logging.config import fileConfig
 
+from alembic import context
+from app.core.config import get_settings
+from app.database import Base
+
+# Import all models so Alembic sees them for autogenerate
+from app.models import (  # noqa: F401
+    ActivityLog,
+    EbayListing,
+    EbayOrder,
+    Job,
+    ListingStatsHistory,
+    Order,
+    PlatformCommon,
+    PlatformPreference,
+    Product,
+    ReverbHistoricalListing,
+    ReverbListing,
+    ReverbOrder,
+    Sale,
+    Shipment,
+    ShippingProfile,
+    ShopifyListing,
+    ShopifyOrder,
+    SyncErrorRecord,
+    SyncEvent,
+    SyncStats,
+    Tenant,
+    TenantCredential,
+    TenantUsage,
+    TenantUser,
+    TenantWebhook,
+    User,
+    VRJob,
+    VRListing,
+    WooCommerceListing,
+    WooCommerceOrder,
+    WooCommerceStore,
+)
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from alembic import context
-
-from app.core.config import get_settings
-from app.database import Base
-from app.models.ebay import EbayListing
-from app.models.product import Product
-from app.models.platform_common import PlatformCommon
-from app.models.reverb import ReverbListing
-from app.models.vr import VRListing
-from app.models.shopify import ShopifyListing
-
 settings = get_settings()
+
 
 def _ensure_async_driver(url: str) -> str:
     """Convert sync Postgres URLs to asyncpg for Alembic."""
@@ -32,6 +60,7 @@ def _ensure_async_driver(url: str) -> str:
         normalized = normalized.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
     return normalized
 
+
 # this is the Alembic Config object
 config = context.config
 
@@ -41,6 +70,7 @@ if config.config_file_name is not None:
 
 # Set target metadata
 target_metadata = Base.metadata
+
 
 def include_object_filter(object, name, type_, reflected, compare_to):
     """
@@ -57,10 +87,11 @@ def include_object_filter(object, name, type_, reflected, compare_to):
         # Include all other objects (tables, columns, indexes, etc.)
         return True
 
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     # url = config.get_main_option("sqlalchemy.url") # deprecated for ser
-    url = _ensure_async_driver(settings.DATABASE_URL) # Get URL from settings
+    url = _ensure_async_driver(settings.DATABASE_URL)  # Get URL from settings
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -71,17 +102,19 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
+
 def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
-        include_object=include_object_filter
+        include_object=include_object_filter,
     )
 
     with context.begin_transaction():
         context.run_migrations()
+
 
 async def run_async_migrations() -> None:
     """Run migrations in async mode.
@@ -104,8 +137,8 @@ async def run_async_migrations() -> None:
     # Create the async engine using the MODIFIED configuration dictionary
     # which now contains the correct database URL from settings.
     connectable = async_engine_from_config(
-        alembic_config_section, # Use the dictionary we prepared
-        prefix="sqlalchemy.",     # Standard prefix for SQLAlchemy keys
+        alembic_config_section,  # Use the dictionary we prepared
+        prefix="sqlalchemy.",  # Standard prefix for SQLAlchemy keys
         poolclass=pool.NullPool,  # Use NullPool for migrations
     )
 
@@ -122,6 +155,7 @@ async def run_async_migrations() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     asyncio.run(run_async_migrations())
+
 
 if context.is_offline_mode():
     run_migrations_offline()

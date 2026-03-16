@@ -1,23 +1,26 @@
+from app.database import Base
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Numeric,
-    DateTime,
-    Boolean,
     JSON,
+    Boolean,
+    Column,
+    DateTime,
     ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
     text,
 )
-from app.database import Base
+from sqlalchemy.dialects.postgresql import UUID
 
 
 class ShopifyOrder(Base):
     __tablename__ = "shopify_orders"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
     # Shopify order identifiers
-    shopify_order_id = Column(String, nullable=False, unique=True)  # gid://shopify/Order/...
+    shopify_order_id = Column(String, nullable=False)  # gid://shopify/Order/...
     order_name = Column(String)  # #1001, #1002, etc.
 
     # Order status
@@ -88,3 +91,5 @@ class ShopifyOrder(Base):
     # Sale processing for inventory management
     sale_processed = Column(Boolean, nullable=False, server_default=text("false"))
     sale_processed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "shopify_order_id", name="uq_shopify_order_per_tenant"),)

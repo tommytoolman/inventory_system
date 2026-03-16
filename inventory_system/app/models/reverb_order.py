@@ -1,21 +1,23 @@
+from app.database import Base
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Numeric,
-    DateTime,
-    Boolean,
     JSON,
+    Boolean,
+    Column,
+    DateTime,
     ForeignKey,
+    Integer,
+    Numeric,
+    String,
     text,
 )
-from app.database import Base
+from sqlalchemy.dialects.postgresql import UUID
 
 
 class ReverbOrder(Base):
     __tablename__ = "reverb_orders"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
     order_uuid = Column(String, nullable=False)
     order_number = Column(String)
     order_bundle_id = Column(String)

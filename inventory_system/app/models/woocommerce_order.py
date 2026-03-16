@@ -6,9 +6,9 @@ Tracks orders received from WooCommerce, following the same pattern
 as ReverbOrder and ShopifyOrder.
 """
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, text, TIMESTAMP
+from sqlalchemy import TIMESTAMP, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSONB
 
 from ..database import Base
 
@@ -18,15 +18,17 @@ class WooCommerceOrder(Base):
     Model for WooCommerce orders.
     Stores order data received via API polling or webhooks.
     """
+
     __tablename__ = "woocommerce_orders"
 
     id = Column(Integer, primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
 
     # Multi-tenant: optional link to WooCommerceStore (nullable for backward compat)
     wc_store_id = Column(Integer, ForeignKey("woocommerce_stores.id"), nullable=True, index=True)
 
     # WooCommerce order identifiers
-    wc_order_id = Column(String(50), unique=True, nullable=False, index=True)
+    wc_order_id = Column(String(50), nullable=False, index=True)
     order_number = Column(String(50), nullable=True)
     order_key = Column(String(100), nullable=True)
 
@@ -74,17 +76,15 @@ class WooCommerceOrder(Base):
     wc_created_at = Column(DateTime, nullable=True)
     wc_modified_at = Column(DateTime, nullable=True)
 
-    created_at = Column(
-        TIMESTAMP(timezone=False),
-        server_default=text("timezone('utc', now())"),
-        nullable=False
-    )
+    created_at = Column(TIMESTAMP(timezone=False), server_default=text("timezone('utc', now())"), nullable=False)
     updated_at = Column(
         TIMESTAMP(timezone=False),
         server_default=text("timezone('utc', now())"),
         onupdate=text("timezone('utc', now())"),
-        nullable=False
+        nullable=False,
     )
 
     # Relationships
     wc_store = relationship("WooCommerceStore", back_populates="orders")
+
+    __table_args__ = (UniqueConstraint("tenant_id", "wc_order_id", name="uq_wc_order_per_tenant"),)

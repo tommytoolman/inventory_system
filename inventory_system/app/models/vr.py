@@ -1,23 +1,38 @@
 # app.models.vr.py
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Optional, Dict, Any
+from datetime import datetime, timezone  # noqa: F401
+from enum import Enum  # noqa: F401
+from typing import Any, Dict, Optional  # noqa: F401
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, text, TIMESTAMP, UniqueConstraint
+from sqlalchemy import (  # noqa: F401
+    TIMESTAMP,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSONB
-# from app.database import Base # Assuming your Base is in app.database
 
 from ..database import Base
 
+# from app.database import Base # Assuming your Base is in app.database
+
+
 UTC_NOW = text("now() AT TIME ZONE 'utc'")
+
 
 class VRListing(Base):
     __tablename__ = "vr_listings"
 
     id = Column(Integer, primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
     platform_id = Column(Integer, ForeignKey("platform_common.id"))
-    
+
     # V&R specific fields
     in_collective = Column(Boolean, default=False)
     in_inventory = Column(Boolean, default=True)
@@ -32,14 +47,14 @@ class VRListing(Base):
 
     created_at = Column(
         TIMESTAMP(timezone=False),
-        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
-        nullable=False
+        server_default=text("timezone('utc', now())"),  # Use standard PG function via text()
+        nullable=False,
     )
     updated_at = Column(
         TIMESTAMP(timezone=False),
-        server_default=text("timezone('utc', now())"), # Use standard PG function via text()
-        onupdate=text("timezone('utc', now())"),      # Use standard PG function via text() for ON UPDATE
-        nullable=False
+        server_default=text("timezone('utc', now())"),  # Use standard PG function via text()
+        onupdate=text("timezone('utc', now())"),  # Use standard PG function via text() for ON UPDATE
+        nullable=False,
     )
 
     # Add enhanced fields (similar to ReverbListing)
@@ -47,20 +62,21 @@ class VRListing(Base):
     inventory_quantity = Column(Integer, default=1)
     vr_state = Column(String)  # Status on V&R
     last_synced_at = Column(DateTime)
-    
+
     # Optional: Flexible storage for other attributes
     extended_attributes = Column(JSONB, default={})
 
     # Relationships
     platform_listing = relationship("PlatformCommon", back_populates="vr_listing")
 
+
 class VRAcceptedBrand(Base):
     __tablename__ = "vr_accepted_brands"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True) # Your internal DB PK
-    vr_brand_id = Column(Integer, nullable=True, unique=True, index=True) # V&R's own ID for the brand, can be null
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)  # Your internal DB PK
+    vr_brand_id = Column(Integer, nullable=True, unique=True, index=True)  # V&R's own ID for the brand, can be null
     name = Column(String, nullable=False, unique=True, index=True)
-    name_normalized = Column(String, nullable=False, unique=True, index=True) # For case-insensitive lookups
+    name_normalized = Column(String, nullable=False, unique=True, index=True)  # For case-insensitive lookups
 
     # Optional: Add a UniqueConstraint if vr_brand_id should be unique when not null
     # __table_args__ = (UniqueConstraint('vr_brand_id', name='uq_vr_brand_id_not_null'),)
@@ -68,4 +84,3 @@ class VRAcceptedBrand(Base):
 
     def __repr__(self):
         return f"<VRAcceptedBrand(id={self.id}, name='{self.name}', vr_brand_id={self.vr_brand_id})>"
-    

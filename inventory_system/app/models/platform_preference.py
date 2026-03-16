@@ -1,14 +1,16 @@
 # app/models/platform_preference.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from sqlalchemy.sql import func
 from app.database import Base
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
 
 
 class PlatformPreference(Base):
     __tablename__ = "platform_preferences"
 
     id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True, nullable=False, index=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
+    username = Column(String, nullable=False, index=True)
     show_ebay = Column(Boolean, default=True, nullable=False)
     show_reverb = Column(Boolean, default=True, nullable=False)
     show_shopify = Column(Boolean, default=True, nullable=False)
@@ -16,6 +18,8 @@ class PlatformPreference(Base):
     show_woocommerce = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (UniqueConstraint("tenant_id", "username", name="uq_preference_username_per_tenant"),)
 
     # Map between platform slugs used in the codebase and column names
     PLATFORM_COLUMN_MAP = {

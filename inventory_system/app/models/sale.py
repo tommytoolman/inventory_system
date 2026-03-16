@@ -1,9 +1,9 @@
 # app/models/sale.py
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone  # noqa: F401
 
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, text, TIMESTAMP
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import TIMESTAMP, Column, Float, ForeignKey, Integer, String, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -15,6 +15,7 @@ class Sale(Base):
     __tablename__ = "sales"
 
     id = Column(Integer, primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
 
     created_at = Column(
         TIMESTAMP(timezone=False),

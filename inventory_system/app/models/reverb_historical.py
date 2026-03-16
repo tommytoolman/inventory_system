@@ -6,10 +6,10 @@ NOT part of active inventory (products/reverb_listings tables).
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Index
-from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint  # noqa: F401
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 
 class ReverbHistoricalListing(Base):
@@ -19,10 +19,12 @@ class ReverbHistoricalListing(Base):
     This table stores ~5000 historical listings that are NOT in active inventory,
     providing velocity and pricing benchmarks for inventory optimization.
     """
+
     __tablename__ = "reverb_historical_listings"
 
     id = Column(Integer, primary_key=True)
-    reverb_listing_id = Column(String, unique=True, nullable=False, index=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
+    reverb_listing_id = Column(String, nullable=False, index=True)
 
     # Core product info
     title = Column(String)
@@ -77,9 +79,10 @@ class ReverbHistoricalListing(Base):
 
     # Composite indexes for common queries
     __table_args__ = (
-        Index('ix_reverb_historical_category_outcome', 'category_root', 'outcome'),
-        Index('ix_reverb_historical_sold_date', 'sold_at', 'category_root'),
-        Index('ix_reverb_historical_brand_category', 'brand', 'category_root'),
+        UniqueConstraint("tenant_id", "reverb_listing_id", name="uq_reverb_historical_listing_per_tenant"),
+        Index("ix_reverb_historical_category_outcome", "category_root", "outcome"),
+        Index("ix_reverb_historical_sold_date", "sold_at", "category_root"),
+        Index("ix_reverb_historical_brand_category", "brand", "category_root"),
     )
 
     def __repr__(self):

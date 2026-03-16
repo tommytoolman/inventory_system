@@ -6,9 +6,11 @@ Stores daily snapshots of listing engagement metrics (views, watches)
 for trend analysis and business intelligence across all platforms.
 """
 
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, TIMESTAMP, text, Index
+from datetime import datetime  # noqa: F401
+
 from app.database import Base
+from sqlalchemy import TIMESTAMP, Column, Float, ForeignKey, Index, Integer, String, text
+from sqlalchemy.dialects.postgresql import UUID
 
 
 class ListingStatsHistory(Base):
@@ -18,9 +20,11 @@ class ListingStatsHistory(Base):
     One row per listing per snapshot (typically daily).
     Supports multiple platforms (Reverb, eBay, etc.)
     """
+
     __tablename__ = "listing_stats_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
 
     # Platform identification
     platform = Column(String(50), nullable=False, index=True)  # 'reverb', 'ebay', etc.
@@ -45,10 +49,7 @@ class ListingStatsHistory(Base):
 
     # Composite index for efficient queries
     __table_args__ = (
-        Index(
-            'ix_listing_stats_history_platform_listing_date',
-            'platform', 'platform_listing_id', 'recorded_at'
-        ),
+        Index("ix_listing_stats_history_platform_listing_date", "platform", "platform_listing_id", "recorded_at"),
     )
 
     def __repr__(self):

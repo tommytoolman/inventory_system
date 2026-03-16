@@ -7,11 +7,11 @@ platform_common table for shared attributes across platforms.
 Follows the same pattern as ShopifyListing / ReverbListing.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone  # noqa: F401
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, text, TIMESTAMP
+from sqlalchemy import TIMESTAMP, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSONB
 
 from ..database import Base
 
@@ -23,10 +23,12 @@ class WooCommerceListing(Base):
     Links to platform_common via platform_id for shared product linkage.
     Stores WooCommerce-specific attributes for each listing.
     """
+
     __tablename__ = "woocommerce_listings"
 
     # Primary key and relationship
     id = Column(Integer, primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
     platform_id = Column(Integer, ForeignKey("platform_common.id"), index=True)
 
     # Multi-tenant: optional link to WooCommerceStore (nullable for backward compat)
@@ -69,16 +71,12 @@ class WooCommerceListing(Base):
     wc_modified_at = Column(DateTime, nullable=True)
 
     # Local timestamps
-    created_at = Column(
-        TIMESTAMP(timezone=False),
-        server_default=text("timezone('utc', now())"),
-        nullable=False
-    )
+    created_at = Column(TIMESTAMP(timezone=False), server_default=text("timezone('utc', now())"), nullable=False)
     updated_at = Column(
         TIMESTAMP(timezone=False),
         server_default=text("timezone('utc', now())"),
         onupdate=text("timezone('utc', now())"),
-        nullable=False
+        nullable=False,
     )
     last_synced_at = Column(DateTime, nullable=True)
 

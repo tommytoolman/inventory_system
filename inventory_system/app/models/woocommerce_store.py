@@ -6,7 +6,8 @@ WooCommerce store. Falls back to environment variables if no store
 record exists (backward compatibility with single-tenant deployment).
 """
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, text, TIMESTAMP
+from sqlalchemy import TIMESTAMP, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -18,6 +19,7 @@ class WooCommerceStore(Base):
     __tablename__ = "woocommerce_stores"
 
     id = Column(Integer, primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True)
 
     # Human-readable label (e.g. "Rockers Guitars WC Store")
     name = Column(String(255), nullable=False)

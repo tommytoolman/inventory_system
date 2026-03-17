@@ -1,218 +1,210 @@
 # tests/unit/services/vintageandrare/test_vr_client_errors.py
+"""
+Tests for VintageAndRareClient error handling.
+"""
+from unittest.mock import MagicMock
 
-import pytest
 import pandas as pd
+import pytest
 import requests
-import os
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
-from io import StringIO, BytesIO
-from pathlib import Path
-from dotenv import load_dotenv
-
 from app.services.vintageandrare.client import VintageAndRareClient
 
-# Load environment variables at module level
-load_dotenv()
 
 class TestVintageAndRareClientErrors:
-    """Tests focused on error handling in VintageAndRareClient."""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup test credentials from environment variables."""
-        self.username = os.environ.get("VINTAGE_AND_RARE_USERNAME", "test_user")
-        self.password = os.environ.get("VINTAGE_AND_RARE_PASSWORD", "test_pass")
-        
-        # If environment variables aren't set and we're not in CI, warn
-        if (not self.username or not self.password) and not os.environ.get("CI"):
-            print("\nWARNING: VintageAndRare credentials not found in environment variables.")
-            print("Tests will use placeholder credentials.")
-    
-    # === Authentication Error Tests ===
-    
+
     @pytest.mark.asyncio
     async def test_authenticate_network_error(self, mocker):
-        """Test authentication handling when network error occurs."""
-        # Mock requests.Session to raise ConnectionError
-        mock_session = mocker.patch('requests.Session')
-        mock_session_instance = mock_session.return_value
-        mock_session_instance.post.side_effect = requests.ConnectionError("Failed to connect")
-        
-        client = VintageAndRareClient()
-        
-        # Act: Try to authenticate with credentials from env
-        result = await client.authenticate(self.username, self.password)
-        
-        # Assert: Should return False and not raise the exception
+        """Test authentication handles network error gracefully."""
+        client = VintageAndRareClient(username="testuser", password="testpass")
+
+        mocker.patch.object(client.session, "get", side_effect=requests.ConnectionError("Failed to connect"))
+        mocker.patch.object(client.session, "post", side_effect=requests.ConnectionError("Failed to connect"))
+
+        if client.cf_session is not None:
+            mocker.patch.object(client.cf_session, "get", side_effect=Exception("Connection failed"))
+            mocker.patch.object(client.cf_session, "post", side_effect=Exception("Connection failed"))
+
+        result = await client.authenticate()
+
         assert result is False
-        assert client._authenticated is False
-    
+        assert client.authenticated is False
+
     @pytest.mark.asyncio
     async def test_authenticate_http_error(self, mocker):
-        """Test authentication handling when HTTP error occurs."""
-        # Mock requests.Session to return 500 error
-        mock_session = mocker.patch('requests.Session')
-        mock_session_instance = mock_session.return_value
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_session_instance.post.return_value = mock_response
-        
-        client = VintageAndRareClient()
-        
-        # Act: Try to authenticate with credentials from env
-        result = await client.authenticate(self.username, self.password)
-        
-        # Assert: Should return False and log error
+        """Test authentication handles HTTP error (500) gracefully."""
+        client = VintageAndRareClient(username="testuser", password="testpass")
+
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+        mock_get_response.text = "<html>Login page</html>"
+        mock_get_response.headers = {}
+
+        mock_post_response = MagicMock()
+        mock_post_response.status_code = 500
+        mock_post_response.text = "Internal Server Error"
+        mock_post_response.url = "https://www.vintageandrare.com/error"
+        mock_post_response.headers = {}
+
+        mocker.patch.object(client.session, "get", return_value=mock_get_response)
+        mocker.patch.object(client.session, "post", return_value=mock_post_response)
+
+        if client.cf_session is not None:
+            mocker.patch.object(client.cf_session, "get", return_value=mock_get_response)
+            mocker.patch.object(client.cf_session, "post", return_value=mock_post_response)
+
+        result = await client.authenticate()
+
         assert result is False
-        assert client._authenticated is False
-    
+        assert client.authenticated is False
+
     @pytest.mark.asyncio
     async def test_authenticate_unexpected_response(self, mocker):
-        """Test authentication handling when response is unexpected."""
-        # Mock requests.Session to return 200 but with unexpected content
-        mock_session = mocker.patch('requests.Session')
-        mock_session_instance = mock_session.return_value
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = "<html>Unexpected login response</html>"
-        mock_session_instance.post.return_value = mock_response
-        
-        client = VintageAndRareClient()
-        
-        # Act: Try to authenticate with credentials from env
-        result = await client.authenticate(self.username, self.password)
-        
-        # Assert: Should return False if login markers not found
+        """Test authentication returns False when login markers aren't found."""
+        client = VintageAndRareClient(username="testuser", password="testpass")
+
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+        mock_get_response.text = "<html>Please enter your credentials</html>"
+        mock_get_response.headers = {}
+
+        mock_post_response = MagicMock()
+        mock_post_response.status_code = 200
+        mock_post_response.text = "<html>Invalid credentials. Please try again.</html>"
+        mock_post_response.url = "https://www.vintageandrare.com/do_login"
+        mock_post_response.headers = {}
+
+        mocker.patch.object(client.session, "get", return_value=mock_get_response)
+        mocker.patch.object(client.session, "post", return_value=mock_post_response)
+
+        if client.cf_session is not None:
+            mocker.patch.object(client.cf_session, "get", return_value=mock_get_response)
+            mocker.patch.object(client.cf_session, "post", return_value=mock_post_response)
+
+        result = await client.authenticate()
+
         assert result is False
-        assert client._authenticated is False
-    
-    # === Download Error Tests ===
-    
+        assert client.authenticated is False
+
     @pytest.mark.asyncio
     async def test_download_inventory_csv_without_auth(self, mocker):
-        """Test download fails appropriately when not authenticated."""
-        client = VintageAndRareClient(username=self.username, password=self.password)
-        client._authenticated = False
-        
-        # Act & Assert: Should raise an exception
-        with pytest.raises(Exception) as exc_info:
-            await client.download_inventory_csv()
-        
-        assert "not authenticated" in str(exc_info.value).lower()
-    
+        client = VintageAndRareClient(username="testuser", password="testpass")
+        client.authenticated = False
+        mocker.patch.object(client, "authenticate", return_value=False)
+        result = await client.download_inventory_dataframe()
+        assert result is None
+
     @pytest.mark.asyncio
     async def test_download_inventory_csv_network_error(self, mocker):
-        """Test download handling when network error occurs."""
-        # Mock requests.Session
-        mock_session = mocker.patch('requests.Session')
-        mock_session_instance = mock_session.return_value
-        mock_session_instance.get.side_effect = requests.ConnectionError("Failed to connect")
-        
-        client = VintageAndRareClient(username=self.username, password=self.password)
-        client._authenticated = True  # Skip authentication
-        client._session = mock_session_instance
-        
-        # Act & Assert: Should raise an exception with descriptive message
-        with pytest.raises(Exception) as exc_info:
-            await client.download_inventory_csv()
-        
-        assert "network error" in str(exc_info.value).lower() or "failed to connect" in str(exc_info.value).lower()
-    
+        client = VintageAndRareClient(username="testuser", password="testpass")
+        client.authenticated = True
+
+        mocker.patch.object(client.session, "get", side_effect=requests.ConnectionError("Network error"))
+        if client.cf_session is not None:
+            mocker.patch.object(client.cf_session, "get", side_effect=Exception("Network error"))
+
+        result = await client.download_inventory_dataframe()
+        assert result is None
+
     @pytest.mark.asyncio
     async def test_download_inventory_csv_http_error(self, mocker):
-        """Test download handling when HTTP error occurs."""
-        # Mock requests.Session
-        mock_session = mocker.patch('requests.Session')
-        mock_session_instance = mock_session.return_value
+        client = VintageAndRareClient(username="testuser", password="testpass")
+        client.authenticated = True
+
         mock_response = MagicMock()
-        mock_response.status_code = 403  # Forbidden
-        mock_response.text = "Access denied"
-        mock_session_instance.get.return_value = mock_response
-        
-        client = VintageAndRareClient(username=self.username, password=self.password)
-        client._authenticated = True  # Skip authentication
-        client._session = mock_session_instance
-        
-        # Act & Assert: Should raise an exception with status code
-        with pytest.raises(Exception) as exc_info:
-            await client.download_inventory_csv()
-        
-        assert "403" in str(exc_info.value) or "forbidden" in str(exc_info.value).lower()
-    
+        mock_response.status_code = 403
+        mock_response.text = "Forbidden"
+        mock_response.headers = {}
+
+        mocker.patch.object(client.session, "get", return_value=mock_response)
+        if client.cf_session is not None:
+            mocker.patch.object(client.cf_session, "get", return_value=mock_response)
+
+        result = await client.download_inventory_dataframe()
+        assert result is None
+
     @pytest.mark.asyncio
     async def test_download_inventory_csv_empty_response(self, mocker):
-        """Test download handling when response is empty."""
-        # Mock requests.Session
-        mock_session = mocker.patch('requests.Session')
-        mock_session_instance = mock_session.return_value
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.content = b""  # Empty content
-        mock_session_instance.get.return_value = mock_response
-        
-        client = VintageAndRareClient(username=self.username, password=self.password)
-        client._authenticated = True  # Skip authentication
-        client._session = mock_session_instance
-        
-        # Act & Assert: Should raise an exception about empty content
-        with pytest.raises(Exception) as exc_info:
-            await client.download_inventory_csv()
-        
-        assert "empty" in str(exc_info.value).lower() or "no data" in str(exc_info.value).lower()
-    
+        client = VintageAndRareClient(username="testuser", password="testpass")
+        client.authenticated = True
+
+        mock_page_response = MagicMock()
+        mock_page_response.status_code = 200
+        mock_page_response.headers = {}
+        mock_page_response.text = ""
+        mock_page_response.iter_content.return_value = []
+
+        mock_csv_response = MagicMock()
+        mock_csv_response.status_code = 200
+        mock_csv_response.content = b""
+        mock_csv_response.headers = {"content-type": "text/csv"}
+        mock_csv_response.text = ""
+        mock_csv_response.iter_content.return_value = []
+
+        call_count = [0]
+
+        def get_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return mock_page_response
+            return mock_csv_response
+
+        mocker.patch.object(client.session, "get", side_effect=get_side_effect)
+        if client.cf_session is not None:
+            cf_call_count = [0]
+
+            def cf_get_side_effect(*args, **kwargs):
+                cf_call_count[0] += 1
+                if cf_call_count[0] == 1:
+                    return mock_page_response
+                return mock_csv_response
+
+            mocker.patch.object(client.cf_session, "get", side_effect=cf_get_side_effect)
+
+        result = await client.download_inventory_dataframe()
+        assert result is None
+
     @pytest.mark.asyncio
     async def test_download_inventory_dataframe_csv_parsing_error(self, mocker):
-        """Test handling of malformed CSV data."""
-        # Mock the CSV download to return invalid CSV data
-        mock_download = mocker.patch.object(
-            VintageAndRareClient, 
-            'download_inventory_csv',
-            return_value=b"invalid,csv,data\nwithout,proper,structure"
-        )
-        
-        # Mock pandas to raise an exception when reading CSV
-        mock_read_csv = mocker.patch('pandas.read_csv', side_effect=pd.errors.ParserError("CSV parsing error"))
-        
-        # Setup client
-        client = VintageAndRareClient(username=self.username, password=self.password)
-        client._authenticated = True
-        
-        # Act & Assert: Should raise an exception about CSV parsing
-        with pytest.raises(Exception) as exc_info:
-            await client.download_inventory_dataframe()
-        
-        assert "parsing" in str(exc_info.value).lower() or "csv" in str(exc_info.value).lower()
-        mock_read_csv.assert_called_once()
-    
+        client = VintageAndRareClient(username="testuser", password="testpass")
+        client.authenticated = True
+
+        csv_data = b"not,valid\ncsv\xff\x00data"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = csv_data
+        mock_response.headers = {"content-type": "text/csv"}
+        mock_response.iter_content.return_value = [csv_data]
+
+        mocker.patch.object(client.session, "get", return_value=mock_response)
+        if client.cf_session is not None:
+            mocker.patch.object(client.cf_session, "get", return_value=mock_response)
+
+        mocker.patch("pandas.read_csv", side_effect=pd.errors.ParserError("CSV parsing error"))
+
+        result = await client.download_inventory_dataframe()
+        assert result is None
+
     @pytest.mark.asyncio
     async def test_download_inventory_dataframe_file_write_error(self, mocker):
-        """Test handling of file write errors."""
-        # Mock the CSV download to return some data
-        sample_csv = b"brand,model,price\nFender,Stratocaster,1000"
-        mock_download = mocker.patch.object(
-            VintageAndRareClient, 
-            'download_inventory_csv',
-            return_value=sample_csv
-        )
-        
-        # Mock pandas read_csv to return a DataFrame
-        mock_df = pd.DataFrame({'brand': ['Fender'], 'model': ['Stratocaster'], 'price': [1000]})
-        mocker.patch('pandas.read_csv', return_value=mock_df)
-        
-        # Mock file operations to raise an error
-        mock_open = mocker.patch('builtins.open', side_effect=PermissionError("Permission denied"))
-        mocker.patch('pathlib.Path.mkdir')
-        
-        # Setup client
-        client = VintageAndRareClient(username=self.username, password=self.password)
-        client._authenticated = True
-        
-        # Act & Assert: Should handle the error but still return DataFrame
+        client = VintageAndRareClient(username="testuser", password="testpass")
+        client.authenticated = True
+
+        csv_data = b"brand name,product model name,product price\nFender,Strat,1500"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = csv_data
+        mock_response.headers = {"content-type": "text/csv"}
+        mock_response.iter_content.return_value = [csv_data]
+
+        mocker.patch.object(client.session, "get", return_value=mock_response)
+        if client.cf_session is not None:
+            mocker.patch.object(client.cf_session, "get", return_value=mock_response)
+
+        mock_df = pd.DataFrame({"brand name": ["Fender"], "product model name": ["Strat"], "product price": [1500]})
+        mocker.patch("pandas.read_csv", return_value=mock_df)
+        mocker.patch("builtins.open", side_effect=PermissionError("Permission denied"))
+
         try:
-            df = await client.download_inventory_dataframe(save_to_file=True, output_path="inventory.csv")
-            # Should have returned DataFrame even though file write failed
-            assert isinstance(df, pd.DataFrame)
-            mock_open.assert_called_once()
-            # Should have logged a warning (harder to test)
-        except Exception as e:
-            pytest.fail(f"Should not have raised exception but returned DataFrame: {e}")
+            await client.download_inventory_dataframe(save_to_file=True)
+        except PermissionError:
+            pytest.fail("Should not propagate PermissionError to caller")

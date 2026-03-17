@@ -1,60 +1,3 @@
-# ─── Python ───────────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
-.eggs/
-
-# ─── Virtual Environment ──────────────────────────────────
-venv/
-.venv/
-env/
-ENV/
-
-# ─── Environment / Secrets ────────────────────────────────
-.env
-.env.*
-!.env.example
-*.env
-secrets.json
-credentials.json
-
-# ─── Database Files ───────────────────────────────────────
-*.db
-*.sqlite
-*.sqlite3
-
-# ─── Large Data / Exports ─────────────────────────────────
-# These contain exported DB records (products, orders, customers)
-inventory_system/data_export/
-# Raw platform data files (CSV dumps, API exports)
-inventory_system/data/reverb/
-inventory_system/data/vr/
-inventory_system/data/website_export/
-inventory_system/data/ebay/
-
-# ─── Snapshots (460MB — version-controlled separately) ────
-snapshots/
-
-# ─── Runtime / Temp ───────────────────────────────────────
-inventory_system/logs/
-inventory_system/tmp/
-inventory_system/_scratch/
-inventory_system/app/cache/
-tmp/
-*.log
-*.tmp
-
-# ─── Node / TypeScript ────────────────────────────────────
-node_modules/
-dist/
-*.js.map
-
 # ─── IDE / OS ─────────────────────────────────────────────
 .idea/
 .vscode/
@@ -68,9 +11,39 @@ Thumbs.db
 .coverage
 htmlcov/
 .tox/
+inventory_system/test_results/
+
+# ─── Python ───────────────────────────────────────────────
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# ─── Local data / exports ─────────────────────────────────
+inventory_system/data/ebay/
+inventory_system/data/vr/
+inventory_system/data/website_export/
+inventory_system/data_export/
+inventory_system/riff_test.db
+inventory_system/tmp/
+logs/
+
+# ─── Snapshots (large, external storage) ──────────────────
+snapshots/
+
+# ─── Discord logger node_modules (Windows long-path issue) ─
+discord-logger/node_modules/
 
 # ─── Railway DB Audit (contains connection metadata) ──────
 inventory_system/railway_db_audit.json
 
 # ─── Large SQL Backup Files (>50MB — use external storage) ─
 inventory_system/scripts/backup/db/*.sql
+
+# ─── Scratch / debug files ────────────────────────────────
+*.txt.patch
+*_patch.txt
+run_tests_now.txt

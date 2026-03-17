@@ -1,49 +1,7 @@
-# ─── IDE / OS ─────────────────────────────────────────────
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-
-# ─── Test Artifacts ───────────────────────────────────────
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-inventory_system/test_results/
-
-# ─── Python ───────────────────────────────────────────────
-venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-
-# ─── Local data / exports ─────────────────────────────────
-inventory_system/data/ebay/
-inventory_system/data/vr/
-inventory_system/data/website_export/
-inventory_system/data_export/
-inventory_system/riff_test.db
-inventory_system/tmp/
-logs/
-
-# ─── Snapshots (large, external storage) ──────────────────
-snapshots/
-
-# ─── Discord logger node_modules (Windows long-path issue) ─
-discord-logger/node_modules/
-
-# ─── Railway DB Audit (contains connection metadata) ──────
-inventory_system/railway_db_audit.json
-
-# ─── Large SQL Backup Files (>50MB — use external storage) ─
-inventory_system/scripts/backup/db/*.sql
-
 # ─── Scratch / debug files ────────────────────────────────
 *.txt.patch
 *_patch.txt
 run_tests_now.txt
+
+# ─── Claude IDE local config ──────────────────────────────
+.claude/settings.local.json

@@ -66,6 +66,7 @@ class ManufacturingCountry(str, Enum):
     CZECH_REPUBLIC = "CZ"
     RUSSIA = "RU"
     VIETNAM = "VN"
+    PANAMA = "PA"
     OTHER = "OTHER"
 
 

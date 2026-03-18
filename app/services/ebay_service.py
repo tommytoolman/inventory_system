@@ -736,6 +736,11 @@ class EbayService:
             ManufacturingCountry.AUSTRALIA: "Australia",
             ManufacturingCountry.NEW_ZEALAND: "New Zealand",
             ManufacturingCountry.BRAZIL: "Brazil",
+            ManufacturingCountry.CZECH_REPUBLIC: "Czech Republic",
+            ManufacturingCountry.RUSSIA: "Russia",
+            ManufacturingCountry.VIETNAM: "Vietnam",
+            ManufacturingCountry.TAIWAN: "Taiwan",
+            ManufacturingCountry.PANAMA: "Panama",
             ManufacturingCountry.OTHER: "Unknown",
         }
         return mapping.get(country)

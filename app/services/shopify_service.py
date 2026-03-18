@@ -216,6 +216,8 @@ class ShopifyService:
             ManufacturingCountry.CZECH_REPUBLIC: "Czech Republic",
             ManufacturingCountry.RUSSIA: "Russia",
             ManufacturingCountry.VIETNAM: "Vietnam",
+            ManufacturingCountry.TAIWAN: "Taiwan",
+            ManufacturingCountry.PANAMA: "Panama",
             ManufacturingCountry.OTHER: "Other",
         }
         return mapping.get(country)

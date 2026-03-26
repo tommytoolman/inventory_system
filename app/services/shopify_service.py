@@ -1404,27 +1404,95 @@ class ShopifyService:
         """Outbound action to mark a product as sold on Shopify because it sold elsewhere."""
         logger.info(f"Received request to mark Shopify product {external_id} as sold.")
         try:
-            # 1. Construct the GID from the legacy ID, as you suggested.
+            # 1. Construct the GID from the legacy ID.
             product_gid = f"gid://shopify/Product/{external_id}"
 
-            # 2. Call the existing, proven client method.
+            # 2. Set inventory to 0.
             result = await self.client.mark_product_as_sold(product_gid)
 
             success = result.get("success", False)
             if success:
-                listing_stmt = select(ShopifyListing).where(ShopifyListing.shopify_legacy_id == str(external_id))
+                # 3. Update local DB listing status.
+                listing_stmt = (
+                    select(ShopifyListing, Product)
+                    .join(PlatformCommon, PlatformCommon.id == ShopifyListing.platform_id)
+                    .join(Product, Product.id == PlatformCommon.product_id)
+                    .where(ShopifyListing.shopify_legacy_id == str(external_id))
+                )
                 listing_result = await self.db.execute(listing_stmt)
-                listing = listing_result.scalar_one_or_none()
+                row = listing_result.first()
+                listing = row[0] if row else None
+                product = row[1] if row else None
+
                 if listing:
                     listing.status = 'archived'
                     listing.last_synced_at = datetime.utcnow()
                     listing.updated_at = datetime.utcnow()
                     self.db.add(listing)
 
+                # 4. Apply sold-product template — skip for stocked items (they de-increment, not sell out).
+                is_stocked = product.is_stocked_item if product else False
+                if not is_stocked:
+                    import asyncio
+                    loop = asyncio.get_running_loop()
+                    template_result = await loop.run_in_executor(
+                        None,
+                        self.client.update_product,
+                        {"id": product_gid, "templateSuffix": "sold-product"},
+                    )
+                    if template_result and template_result.get("product"):
+                        logger.info(f"Applied sold-product template to Shopify product {external_id}.")
+                    else:
+                        logger.warning(f"Template change may have failed for Shopify product {external_id}: {template_result}")
+                else:
+                    logger.info(f"Skipping sold-product template for stocked item {external_id}.")
+
             return success
-            
+
         except Exception as e:
             logger.error(f"Exception while updating Shopify product {external_id}: {e}", exc_info=True)
+            return False
+
+    async def apply_sold_template(self, external_id: str) -> bool:
+        """Apply the sold-product template to a Shopify listing.
+
+        Called when an item sells ON Shopify (inventory is already handled by Shopify).
+        Skipped for stocked items (is_stocked_item=True) as they de-increment, not sell out.
+        """
+        logger.info(f"Applying sold-product template to Shopify product {external_id}.")
+        try:
+            product_gid = f"gid://shopify/Product/{external_id}"
+
+            # Check is_stocked_item before applying template.
+            listing_stmt = (
+                select(ShopifyListing, Product)
+                .join(PlatformCommon, PlatformCommon.id == ShopifyListing.platform_id)
+                .join(Product, Product.id == PlatformCommon.product_id)
+                .where(ShopifyListing.shopify_legacy_id == str(external_id))
+            )
+            row = (await self.db.execute(listing_stmt)).first()
+            product = row[1] if row else None
+
+            if product and product.is_stocked_item:
+                logger.info(f"Skipping sold-product template for stocked item {external_id}.")
+                return True
+
+            import asyncio
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,
+                self.client.update_product,
+                {"id": product_gid, "templateSuffix": "sold-product"},
+            )
+            if result and result.get("product"):
+                logger.info(f"Applied sold-product template to Shopify product {external_id}.")
+                return True
+            else:
+                logger.warning(f"sold-product template change failed for {external_id}: {result}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Exception applying sold-product template to {external_id}: {e}", exc_info=True)
             return False
 
     async def update_listing_price(self, external_id: str, new_price: float) -> bool:

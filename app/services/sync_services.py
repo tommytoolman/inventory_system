@@ -1350,7 +1350,7 @@ class SyncService:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for i, res in enumerate(results):
                 platform_name, external_id, sku = task_map.get(i, ("Unknown", "N/A", "N/A"))
-                
+
                 if isinstance(res, Exception) or res is False:
                     failed_count += 1
                     error_msg = (
@@ -1364,7 +1364,26 @@ class SyncService:
                     action_log.append(success_msg)
                     logger.info(success_msg)
                     successful_platforms.append(platform_name)
-        
+
+        # If the sale originated on Shopify, apply the sold-product template to the Shopify listing.
+        # (Inventory is already handled by Shopify; we only need the template change.)
+        if not dry_run and "shopify" in source_platforms:
+            shopify_service = self.platform_services.get("shopify")
+            shopify_link = next(
+                (lnk for lnk in all_platform_links if lnk.platform_name == "shopify"),
+                None,
+            )
+            if shopify_service and shopify_link and hasattr(shopify_service, "apply_sold_template"):
+                try:
+                    await shopify_service.apply_sold_template(shopify_link.external_id)
+                    action_log.append(
+                        f"[SUCCESS] Product #{product.id} (SKU: {product.sku}) -> Applied sold-product template on Shopify."
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to apply sold-product template for product {product.id} on Shopify: {e}"
+                    )
+
         return successful_platforms, action_log, failed_count
 
     async def _get_current_specialist_prices(self, product_id: int) -> Dict[str, Optional[float]]:
